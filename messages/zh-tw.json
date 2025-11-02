@@ -2,10 +2,10 @@
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"hello_world": "Hello, {name} from zh-tw!",
 	"hello_wld2": "Hello, {name} from zh-tw!",
-	"zippy_whole_elephant_support": "打开项目",
+	"zippy_whole_elephant_support": "打开目录",
 	"helpful_mean_jurgen_roam": "若该目录已存在项目即打开，否则自动新建并打开。",
 	"patient_lower_polecat_learn": "设置",
-	"gross_tidy_turtle_cook": "打开",
+	"gross_tidy_turtle_cook": "打开目录",
 	"agent_clear_termite_slide": "目录{path}有内容，您确认要在此目录创建unigen项目吗？",
 	"large_odd_mink_tear": "目录非空",
 	"salty_flaky_worm_exhale": "加载项目中"

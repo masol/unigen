@@ -96,6 +96,7 @@
 		"@tauri-apps/plugin-opener": "^2.5.2",
 		"@tauri-apps/plugin-os": "^2.3.2",
 		"@tauri-apps/plugin-sql": "^2.3.1",
+		"bits-ui": "^2.14.2",
 		"dayjs": "^1.11.18",
 		"elkjs": "^0.8.2",
 		"json5": "^2.2.3",

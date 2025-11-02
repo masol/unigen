@@ -61,7 +61,7 @@
 	// ==================== 副作用 ====================
 	$effect(() => {
 		if (currentId) {
-			console.log('Project changed:', currentId);
+			console.log('@TODO: Project changed:', currentId);
 		} else {
 			views.clear();
 			curView = null;

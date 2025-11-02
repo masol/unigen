@@ -113,7 +113,7 @@ class AppDB {
             [this.#latest]
         );
 
-        console.log("chkChange results=", results);
+        // console.log("chkChange results=", results);
 
         if (results.length > 0) {
             // 提取唯一的 key 并为每个 key 触发一次事件

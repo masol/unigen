@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Motion } from 'svelte-motion';
-	import IconFolderGit from '~icons/lucide/folder-git';
+	import IconFolderOpen from '~icons/lucide/folder-open';
 	import { t } from '$lib/stores/config/ipc/i18n.svelte';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { projectStore } from '$lib/stores/project/project.svelte';
@@ -50,7 +50,7 @@
 			class="absolute top-1/2 right-0 btn min-w-[140px] -translate-y-1/2 preset-filled-primary-500"
 			onclick={createNewProject}
 		>
-			<IconFolderGit class="size-5" />
+			<IconFolderOpen class="size-5" />
 			<span>{t('gross_tidy_turtle_cook')}</span>
 		</button>
 	</Motion>

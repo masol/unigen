@@ -1,14 +1,4 @@
 <script lang="ts">
-	/**
-	 * 📦 数据来源说明
-	 *
-	 * 组件当前使用内部假数据。实际使用时,请将数据替换为外部 Store:
-	 *
-	 * 示例:
-	 * import { vaultStore } from '$lib/stores/vaultStore';
-	 * let data = vaultStore.data; // 替换下方的假数据定义
-	 */
-
 	import { createToaster, Dialog, Portal, Toast } from '@skeletonlabs/skeleton-svelte';
 	import IconFolderGit from '~icons/lucide/folder-git';
 	import IconX from '~icons/lucide/x';
@@ -20,14 +10,15 @@
 	import { setContext } from 'svelte';
 	import { softinfo } from '$lib/utils/softinfo';
 	import LangSel from '../LangSel.svelte';
+	import { projectStore } from '$lib/stores/project/project.svelte';
 
 	// Props
 	interface Props {
 		/**
-		 * 控制对话框的初始打开状态
+		 * 控制对话框的打开状态
 		 * @default false
 		 */
-		defaultOpen?: boolean;
+		open?: boolean;
 
 		/**
 		 * 对话框是否可用户关闭--默认true.这一属性不影响程序关闭．
@@ -42,7 +33,7 @@
 		onOpenChange?: (open: boolean) => void;
 	}
 
-	let { defaultOpen = false, closeable = true, onOpenChange }: Props = $props();
+	let { open = $bindable(false), closeable = true, onOpenChange }: Props = $props();
 
 	// 为对话框创建独立的 toaster 实例
 	const dialogToaster = createToaster({
@@ -52,30 +43,51 @@
 	// 在组件初始化时设置 context
 	setContext('dialogToaster', dialogToaster);
 
+	let cachedId: string | null = null;
+
+	// 使用 $derived 来追踪 currentId
+	const currentId = $derived(projectStore.currentId);
+
 	// 关闭对话框时清空全部toaster
 	function handleOpenChange(param: Record<string, any>) {
 		const isOpen = param.open;
+		open = isOpen;
 
-		// 清空 toaster
-		if (!isOpen) {
-			dialogToaster.dismiss();
+		dialogToaster.dismiss();
+
+		if (isOpen) {
+			// 对话框打开时，缓存当前项目ID
+			cachedId = currentId;
+			console.log('Dialog opened, cached ID:', cachedId);
+		} else {
+			// 对话框关闭时，清空缓存
+			cachedId = null;
 		}
 
 		// 调用外部回调
 		onOpenChange?.(isOpen);
 	}
 
+	// 监听项目ID变化，如果变化则关闭对话框
+	$effect(() => {
+		// 只有当对话框打开且项目ID发生变化时才关闭
+		if (open && cachedId !== null && currentId && currentId !== cachedId) {
+			console.log('Project changed from', cachedId, 'to', currentId, '- closing dialog');
+			open = false;
+		}
+	});
+
 	const repositories = $derived(repositoryStore.repositories);
 	const isEmpty = $derived(repositories.length === 0);
 </script>
 
-<Dialog
-	{defaultOpen}
-	closeOnEscape={false}
-	closeOnInteractOutside={false}
-	onOpenChange={handleOpenChange}
->
-	<Dialog.Trigger class="flex w-full items-center gap-3 px-3 py-2">
+<Dialog {open} closeOnEscape={false} closeOnInteractOutside={false} onOpenChange={handleOpenChange}>
+	<Dialog.Trigger
+		class="flex w-full items-center gap-3 px-3 py-2"
+		onclick={() => {
+			open = true;
+		}}
+	>
 		<IconFolderGit class="size-4 flex-shrink-0 text-surface-500" />
 		<span class="text-surface-900-50 text-sm whitespace-nowrap">
 			{isEmpty ? 'Add Project...' : 'Manage Projects...'}
@@ -93,6 +105,9 @@
 					<Dialog.CloseTrigger
 						class="absolute top-4 right-4 z-10 btn-icon preset-tonal"
 						aria-label="关闭对话框"
+						onclick={() => {
+							open = false;
+						}}
 					>
 						<IconX class="size-5" />
 					</Dialog.CloseTrigger>

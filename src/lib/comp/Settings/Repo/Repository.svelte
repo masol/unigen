@@ -11,9 +11,11 @@
 	import IconCheck from '~icons/lucide/check';
 	import IconFolderGit from '~icons/lucide/folder-git';
 	import IconAlertCircle from '~icons/lucide/alert-circle';
-	import { repositoryStore } from '../../../stores/config/ipc/repository.svelte';
+	import { repositoryStore, type Repository } from '../../../stores/config/ipc/repository.svelte';
 	import RepoDialog from './RepoDialog.svelte';
 	import { projectStore } from '$lib/stores/project/project.svelte';
+	import { t } from '$lib/stores/config/ipc/i18n.svelte';
+	import { loadingStore } from '$lib/stores/loading.svelte';
 
 	// State
 	let isHovered = $state(false);
@@ -25,10 +27,12 @@
 	const isEmpty = $derived(repositories.length === 0);
 
 	// Event handlers
-	async function handleRepositorySelect(id: string) {
+	async function handleRepositorySelect(repo: Repository) {
 		// await projectStore.setCurrentRepository(id);
+		loadingStore.show(t('salty_flaky_worm_exhale'));
+		const loaded = await projectStore.loadPath(repo.path);
+		loadingStore.hide();
 	}
-
 </script>
 
 <div class="inline-flex">
@@ -84,7 +88,7 @@
 									currentId
 										? 'cursor-default bg-surface-200 ring-1 ring-primary-500/20 ring-inset dark:bg-surface-800'
 										: 'hover:bg-surface-200 hover:shadow-sm dark:hover:bg-surface-800'}"
-									onclick={() => handleRepositorySelect(repo.id)}
+									onclick={() => handleRepositorySelect(repo)}
 									disabled={repo.id === currentId}
 									aria-current={repo.id === currentId ? 'true' : undefined}
 								>
