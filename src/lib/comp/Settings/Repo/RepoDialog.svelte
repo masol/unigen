@@ -112,7 +112,7 @@
 						<!-- 版本信息 -->
 						<div class="space-y-4 border-b border-surface-200/30 p-6">
 							<Dialog.Title class="pr-12 text-2xl font-bold">
-								vlogi.cc
+								unigen.cc
 								<span class="align-super text-xs opacity-50">
 									v{softinfo.version}
 								</span>

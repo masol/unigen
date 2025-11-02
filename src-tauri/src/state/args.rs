@@ -9,12 +9,13 @@ use tracing::Level;
     name = env!("CARGO_PKG_NAME"),
     version = env!("CARGO_PKG_VERSION"),
     about = env!("CARGO_PKG_DESCRIPTION"),
-    long_about = r#"vlogi.cc is an all-in-one multi-agent automation platform..."#
+    long_about = r#"Unigen is a generative task planning and execution tool for everyday users. Humans curate and maintain workflows, while the computer executes them, enabling the automation of complex tasks such as writing and programming."#
 )]
+
 pub struct Args {
     /// Project directory path
     ///
-    /// If not specified, uses the current working directory
+    /// If specified, opens this directory directly.
     #[arg(value_parser = parse_writable_dir)]
     pub project: Option<PathBuf>,
 
@@ -22,7 +23,7 @@ pub struct Args {
     #[arg(short, long)]
     pub debug: bool,
 
-    /// Log level: TRACE, DEBUG, INFO, WARN, ERROR
+    /// Log level(sase-insensitive): TRACE, DEBUG, INFO, WARN, ERROR
     ///
     /// Defaults to 'DEBUG' in debug builds and 'WARN' in release builds.
     /// Overridden by --debug flag.
@@ -36,7 +37,7 @@ pub struct Args {
 
     /// Log file path
     ///
-    /// If not specified, logs only to console.
+    /// If not specified, logs only to terminal.
     #[arg(
         long = "log-file",
         value_name = "FILE",
@@ -71,7 +72,6 @@ impl Args {
             self.log_level
         }
     }
-
 }
 
 impl Default for Args {

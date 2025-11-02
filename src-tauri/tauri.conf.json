@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "vlogi",
+  "productName": "unigen",
   "version": "0.1.0",
-  "identifier": "vlogi.cc",
+  "identifier": "unigen.cc",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",

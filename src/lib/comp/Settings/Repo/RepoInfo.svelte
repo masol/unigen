@@ -3,6 +3,8 @@
 	import IconFolderOpen from '~icons/lucide/folder-open';
 	import IconExternalLink from '~icons/lucide/external-link';
 	import IconFolderX from '~icons/lucide/folder-x';
+	import dayjs from 'dayjs';
+	import { localeStore } from '$lib/stores/config/ipc/i18n.svelte';
 
 	// 从 store 获取选中的项目
 	let selectedRepo = $derived(
@@ -57,7 +59,7 @@
 				<!-- 版本号 -->
 				<div class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
 					<div class="flex items-center gap-2">
-						<span class="opacity-60" title="创建项目的vlogi的版本号">🏷️</span>
+						<span class="opacity-60" title="创建项目的unigen的版本号">🏷️</span>
 						<span class="text-xs whitespace-nowrap opacity-80">版本号:</span>
 					</div>
 					<div class="min-w-0 text-right">
@@ -69,18 +71,21 @@
 
 				<!-- 创建时间 -->
 				{#if selectedRepo.ctime}
+					{@const timestampMs = selectedRepo.ctime * 1000}
 					<div class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
 						<div class="flex items-center gap-2">
 							<span class="opacity-60" title="创建时间">🕐</span>
 							<span class="text-xs whitespace-nowrap opacity-80">创建时间:</span>
 						</div>
 						<div class="min-w-0 text-right">
-							<span
-								class="block truncate font-mono text-xs"
-								title={new Date(selectedRepo.ctime).toLocaleString('zh-CN')}
-							>
-								{new Date(selectedRepo.ctime).toLocaleString('zh-CN')}
-							</span>
+							{#key localeStore.lang}
+								<span
+									class="block truncate font-mono text-xs"
+									title={dayjs(timestampMs).format('YYYY-MM-DD HH:mm:ss')}
+								>
+									{dayjs(timestampMs).fromNow()}
+								</span>
+							{/key}
 						</div>
 					</div>
 				{/if}

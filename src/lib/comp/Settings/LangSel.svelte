@@ -28,7 +28,7 @@
 		const target = event.target as HTMLSelectElement;
 		currentLocale = target.value;
 
-        console.log("setLocale")
+        console.log("setLocale:",currentLocale)
         localeStore.setLocale(currentLocale);
 	}
 </script>

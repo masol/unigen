@@ -57,11 +57,11 @@ export class ProjectStore {
         }
 
         let metaInfo: Repository | null = null;
-        let metaFile, vlogiDir, gitdata;
+        let metaFile, unigenDir, gitdata;
         try {
-            [metaFile, vlogiDir, gitdata] = await Promise.all([
-                join(path, "vlogi", "meta.json5"),
-                join(path, "vlogi"),
+            [metaFile, unigenDir, gitdata] = await Promise.all([
+                join(path, "unigen", "meta.json5"),
+                join(path, "unigen"),
                 join(path, "gitdata"),
             ]);
             const content = await readTextFile(metaFile);
@@ -116,7 +116,7 @@ export class ProjectStore {
 
 
             try {
-                await pMap([vlogiDir, gitdata], async (dir) => {
+                await pMap([unigenDir, gitdata], async (dir) => {
                     try {
                         // 省掉了exists调用．
                         await mkdir(dir!, { recursive: true })
@@ -160,7 +160,7 @@ export class ProjectStore {
         let prjdbPath, gitdata;
         try {
             [prjdbPath, gitdata] = await Promise.all([
-                join(repo.path, "vlogi", "proj.db"),
+                join(repo.path, "unigen", "proj.db"),
                 join(repo.path, "gitdata"),
             ]);
             await Promise.all([

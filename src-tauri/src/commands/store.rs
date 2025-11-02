@@ -60,7 +60,7 @@ pub fn is_pid_valid(pid: u32) -> Result<bool, String> {
 
 use std::env;
 use sysinfo::{Pid, System};
-// 判断给定的pid是否对应一个有效的vlogi.cc程序(与当前版本使用相同路径启动)．
+// 判断给定的pid是否对应一个有效的unigen.cc程序(与当前版本使用相同路径启动)．
 fn validate_pid(pid: u32) -> bool {
     // 创建系统信息对象
     let mut sys = System::new_all();
