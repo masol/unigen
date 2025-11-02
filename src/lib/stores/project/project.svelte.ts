@@ -4,18 +4,21 @@ import { isEmpty } from "remeda";
 import { repositoryStore, Item2Repo, type Repository } from "../config/ipc/repository.svelte";
 import { invoke } from "@tauri-apps/api/core";
 import { join } from '@tauri-apps/api/path';
-import { /*exists,*/ mkdir, readDir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { /*exists,*/ exists, mkdir, readDir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import JSON5 from 'json5';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { t } from '$lib/stores/config/ipc/i18n.svelte';
 import { logger } from "$lib/utils/logger";
 import pMap from "p-map";
+import { CfgDB } from "$lib/utils/appdb/cfgdb";
 
 
 const KEYNAME = "recent";
 
 export class ProjectStore {
     currentId = $state('');
+
+    private prjdb: CfgDB | null = null;
 
     // Derived
     get currentRepository() {
@@ -146,13 +149,74 @@ export class ProjectStore {
         if (repo.id === this.currentId) {
             return true;
         }
+
         if (await this.focusRepository(repo)) {
             return false; // 被其它窗口打开了，返回false.
         }
 
+        await this.close();
+
+        // 首先尝试打开或新建DB文件．
+        let prjdbPath, gitdata;
+        try {
+            [prjdbPath, gitdata] = await Promise.all([
+                join(repo.path, "vlogi", "proj.db"),
+                join(repo.path, "gitdata"),
+            ]);
+            await Promise.all([
+                (async () => {
+                    const dbExist = await exists(prjdbPath);
+                    const projdb = new CfgDB();
+                    // 项目数据库不存在，开始初始化之．
+                    await projdb.init(`sqlite:${prjdbPath}`, !dbExist);
+                })(),
+                (async () => {
+                    const gitOk = await invoke("ensure_git", { path: gitdata });
+                    if (!gitOk) {
+                        const msg = '无法创建项目的git数据'
+                        logger.error(msg)
+                        throw new Error(msg)
+                    }
+                })(),
+            ])
+        } catch (e) {
+            void (e);
+            logger.error("loadRepository dir error:", e as Error)
+        }
+
+        /*
+        // 主动通知(project依赖其它项)其它组件开始更新数据和状态．
+        */
+
+
+        // 最后，更新repository配置．
+        await repositoryStore.updateRepository(repo.id,repo);
+        this.currentId = repo.id;
+
         logger.info("try to load repository!!")
 
         return true;
+    }
+
+
+    private async close() {
+
+
+        // 打开了项目，因此更新repo的owner为0．
+        if (this.currentId) {
+            repositoryStore.updateRepository(this.currentId, {
+                owner: 0
+            })
+            this.currentId = "";
+        }
+
+        // 其它数据库Model依赖prjdb,无需关闭，直接设置为null即可．
+        // .... = null;
+        // 最后，关闭prjdb.
+        if (this.prjdb) {
+            await this.prjdb.close();
+            this.prjdb = null;
+        }
     }
 
 }

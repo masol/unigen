@@ -18,6 +18,7 @@
 	import IconTrash2 from '~icons/lucide/trash-2';
 	import { repositoryStore } from '$lib/stores/config/ipc/repository.svelte';
 	import { getContext } from 'svelte';
+	import { Motion } from 'svelte-motion';
 
 	// // 直接使用 ReturnType 推断类型
 	type ToastStore = ReturnType<typeof import('@skeletonlabs/skeleton-svelte').createToaster>;
@@ -231,17 +232,20 @@
 						<div class="min-w-0 flex-1">
 							{#if editingProjectId === project.id}
 								<!-- 编辑模式：显示输入框（移除了 Popover 包装） -->
-								<input
-									type="text"
-									data-editing-input={project.id}
-									bind:value={editingName}
-									onkeydown={(e) => handleEditKeydown(e, project.id)}
-									onclick={handleInputClick}
-									class="rounded-token input w-full px-2 py-1 text-sm font-medium"
-									placeholder="项目名称"
-									aria-label="编辑项目名称"
-									title="按 Enter 提交，按 Esc 取消"
-								/>
+								<Motion let:motion whileFocus={{ scale: 1.1 }}>
+									<input
+										type="text"
+										data-editing-input={project.id}
+										bind:value={editingName}
+										onkeydown={(e) => handleEditKeydown(e, project.id)}
+										onclick={handleInputClick}
+										class="rounded-token input w-full px-2 py-1 text-sm font-medium"
+										placeholder="项目名称"
+										aria-label="编辑项目名称"
+										title="按 Enter 提交，按 Esc 取消"
+										use:motion
+									/>
+								</Motion>
 							{:else}
 								<!-- 显示模式 -->
 								<div class="truncate font-medium">{project.name}</div>

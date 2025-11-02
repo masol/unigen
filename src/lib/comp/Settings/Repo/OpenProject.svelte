@@ -4,6 +4,7 @@
 	import { t } from '$lib/stores/config/ipc/i18n.svelte';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { projectStore } from '$lib/stores/project/project.svelte';
+	import { loadingStore } from '$lib/stores/loading.svelte';
 
 	// Prints file path or URI
 	async function createNewProject() {
@@ -16,12 +17,12 @@
 		});
 
 		if (file) {
+			loadingStore.show(t('salty_flaky_worm_exhale'));
 			const loaded = await projectStore.loadPath(file);
-			console.log('loadPath=', loaded);
+			loadingStore.hide();
 		}
 
 		processing = false;
-		console.log('file=', file);
 	}
 
 	let processing = $state(false);

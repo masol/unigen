@@ -37,7 +37,7 @@ export function Item2Repo(item: ConfigItem): Repository {
 }
 export function Repo2Value(repo: Repository): RepoValue {
     return {
-        name: repo.id,
+        name: repo.name,
         path: repo.path,
         ver: repo.ver || softinfo.version,
         owner: repo.owner || 0,
@@ -118,7 +118,13 @@ class RepositoryStore {
         this.repositories = this.repositories.map(repo =>
             repo.id === id ? { ...repo, ...updates } : repo
         );
-        await this.updateDb(id, Repo2Value(updates as Repository));
+        let repo = this.repositories.find(repo => repo.id === id);
+        if (!repo) {
+            repo = { id, ctime: Math.floor(Date.now() / 1000), ...updates } as Repository
+            console.log("repo=", repo)
+            this.repositories.push(repo);
+        }
+        await this.updateDb(id, Repo2Value(repo as Repository));
     }
 
     // 从数据库中加载lang配置，如果数据库未配置，则返回false.
