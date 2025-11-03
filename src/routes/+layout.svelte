@@ -6,8 +6,9 @@
 	import Sidebar from '$lib/comp/Sidebar.svelte';
 	import Statusbar from '$lib/comp/Statusbar.svelte';
 	import { Toast, createToaster } from '@skeletonlabs/skeleton-svelte';
-	import Backdrop from '$lib/comp/Backdrop.svelte';
+	import Backdrop from '$lib/comp/feedback/Backdrop.svelte';
 	import { loadingStore } from '$lib/stores/loading.svelte';
+	import { message } from '@tauri-apps/plugin-dialog';
 
 	const toaster = createToaster({
 		placement: 'top'
@@ -18,11 +19,18 @@
 
 	let inited = $state(false);
 	onMount(async () => {
-		loadingStore.show("Initializing, please wait")
+		loadingStore.show('Initializing, please wait');
 		window.addEventListener('contextmenu', (e) => {
 			e.preventDefault();
 		});
-		await init();
+		try {
+			await init();
+		} catch (e) {
+			await message(e instanceof Error ? e.message : String(e), {
+				title: 'Initialize Failed',
+				kind: 'error'
+			});
+		}
 		inited = true;
 		loadingStore.hide();
 	});

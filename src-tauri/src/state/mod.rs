@@ -4,9 +4,9 @@ pub mod args;
 
 use self::app_handle::AppHandleState;
 use self::app_states::AppStates;
-use notify::RecommendedWatcher;
-use notify_debouncer_full::{Debouncer, NoCache};  // 改为 NoCache
-use std::sync::Mutex;
+// use notify::RecommendedWatcher;
+// use notify_debouncer_full::{Debouncer, NoCache};  // 改为 NoCache
+// use std::sync::Mutex;
 use std::sync::OnceLock;
 
 /// 全局状态结构体
@@ -25,9 +25,8 @@ pub struct GlobalState {
 
     /// 命令行参数（不可变，天然线程安全）
     pub args: args::Args,
-
-    /// 文件监听器（使用 Mutex 保护可变访问，设置为None会停止监听－－可以重新调用setup_config_watcher再次监听．）
-    pub config_watcher: Mutex<Option<Debouncer<RecommendedWatcher, NoCache>>>,  // 改为 NoCache
+    // 文件监听器（使用 Mutex 保护可变访问，设置为None会停止监听－－可以重新调用setup_config_watcher再次监听．）
+    // pub config_watcher: Mutex<Option<Debouncer<RecommendedWatcher, NoCache>>>,  // 改为 NoCache
     // 其他字段示例：
     // pub db: Arc<DbPool>,           // Arc 包装的数据库连接池
     // pub config: RwLock<Config>,    // RwLock 保护的可变配置
@@ -44,11 +43,17 @@ unsafe impl Sync for GlobalState {}
 impl GlobalState {
     /// 创建全局状态（仅构造，不初始化）
     pub fn new() -> Self {
+        let args = args::Args::new();
+
+        // 处理 kill 命令（如果设置了 --kill，这里会直接退出进程）
+        args.handle_kill_if_requested();
+
+        // 如果执行到这里，说明没有设置 --kill，继续正常初始化
         Self {
             app_handle: AppHandleState::new(),
-            args: args::Args::new(),
+            args,
             app_states: AppStates::new(),
-            config_watcher: Mutex::new(None),
+            // config_watcher: Mutex::new(None),
         }
     }
 

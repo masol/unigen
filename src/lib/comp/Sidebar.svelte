@@ -85,7 +85,7 @@
 		{@const IconComponent = item.icon}
 		{@const CustomComponent = item.component}
 
-		<div class="flex w-full items-center justify-center">
+		<div class="flex w-full items-center justify-center hover:bg-surface-200-800 hover:text-surface-900-100">
 			<Tooltip openDelay={200} closeDelay={0} positioning={{ placement: 'right', gutter: 8 }}>
 				{#if CustomComponent}
 					<!-- 使用自定义组件作为 Trigger -->

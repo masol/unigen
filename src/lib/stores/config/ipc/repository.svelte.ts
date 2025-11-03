@@ -121,7 +121,6 @@ class RepositoryStore {
         let repo = this.repositories.find(repo => repo.id === id);
         if (!repo) {
             repo = { id, ctime: Math.floor(Date.now() / 1000), ...updates } as Repository
-            console.log("repo=", repo)
             this.repositories.push(repo);
         }
         await this.updateDb(id, Repo2Value(repo as Repository));

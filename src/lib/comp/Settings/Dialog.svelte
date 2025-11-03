@@ -1,11 +1,11 @@
 <script lang="ts">
-	import IconMdiPlus from '~icons/mdi/plus';
+	import IconSettings from '~icons/carbon/settings';
 	import { Dialog, Portal } from '@skeletonlabs/skeleton-svelte';
 </script>
 
 <Dialog>
 	<Dialog.Trigger>
-		<IconMdiPlus />
+		<IconSettings />
 	</Dialog.Trigger>
 	<Portal>
 		<Dialog.Backdrop class="fixed inset-0 z-50 bg-surface-50-950/50" />

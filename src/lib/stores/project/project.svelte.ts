@@ -1,7 +1,7 @@
 import { appDB } from "$lib/utils/appdb";
 import { softinfo } from "$lib/utils/softinfo";
 import { isEmpty } from "remeda";
-import { repositoryStore, Item2Repo, type Repository } from "../config/ipc/repository.svelte";
+import { repositoryStore, type Repository } from "../config/ipc/repository.svelte";
 import { invoke } from "@tauri-apps/api/core";
 import { join } from '@tauri-apps/api/path';
 import { /*exists,*/ exists, mkdir, readDir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
@@ -14,6 +14,8 @@ import { CfgDB } from "$lib/utils/appdb/cfgdb";
 
 
 const KEYNAME = "recent";
+const METADIR = "ugmeta";
+const GITDATADIR = "gitdata";
 
 export class ProjectStore {
     currentId = $state('');
@@ -39,11 +41,15 @@ export class ProjectStore {
             sucOpend = await this.loadPath(softinfo.prjarg);
         }
 
+        // console.log("repositoryStore.openedRepo=", repositoryStore.openedRepos())
         if (!sucOpend && repositoryStore.openedRepos() === 0) {
-            // 首次打开，读取配置opened project.
+            // 打开地一个unigen，读取配置opened project.
             const recent = await appDB.getConfigsByKey(KEYNAME);
+            // logger.info("recent=", recent)
             if (recent && recent.length > 0) {
-                sucOpend = await this.loadRepository(Item2Repo(recent[0]));
+                const repo: Repository = (recent[0].value) as unknown as Repository;
+                // logger.info("repo=", repo, recent)
+                sucOpend = await this.loadRepository(repo);
             }
         }
     }
@@ -60,9 +66,9 @@ export class ProjectStore {
         let metaFile, unigenDir, gitdata;
         try {
             [metaFile, unigenDir, gitdata] = await Promise.all([
-                join(path, "unigen", "meta.json5"),
-                join(path, "unigen"),
-                join(path, "gitdata"),
+                join(path, METADIR, "meta.json5"),
+                join(path, METADIR),
+                join(path, GITDATADIR),
             ]);
             const content = await readTextFile(metaFile);
 
@@ -70,7 +76,7 @@ export class ProjectStore {
             logger.info("readed meta content=", content)
         } catch (e) {
             void (e);
-            // logger.error("error:", e as Error)
+            logger.error("error:", e as Error)
         }
 
         if (!metaInfo || isEmpty(metaInfo)) {
@@ -112,6 +118,7 @@ export class ProjectStore {
                 ver: softinfo.version,
                 ctime: Math.floor(Date.now() / 1000)
             }
+            logger.info("创建新项目在路径:", path)
             // 开始尝试写入文件
 
 
@@ -160,8 +167,8 @@ export class ProjectStore {
         let prjdbPath, gitdata;
         try {
             [prjdbPath, gitdata] = await Promise.all([
-                join(repo.path, "unigen", "proj.db"),
-                join(repo.path, "gitdata"),
+                join(repo.path, METADIR, "proj.db"),
+                join(repo.path, GITDATADIR),
             ]);
             await Promise.all([
                 (async () => {
@@ -189,19 +196,18 @@ export class ProjectStore {
         */
 
 
+        // 保存最近打开，无需通知其它－－也无需锁定，保存最后打开的即可．
+        await appDB.upsertByKey(KEYNAME, JSON.stringify(repo), false);
         // 最后，更新repository配置．
-        await repositoryStore.updateRepository(repo.id,repo);
+        repo.owner = softinfo.pid;
+        await repositoryStore.updateRepository(repo.id, repo);
         this.currentId = repo.id;
-
-        logger.info("try to load repository!!")
 
         return true;
     }
 
 
     private async close() {
-
-
         // 打开了项目，因此更新repo的owner为0．
         if (this.currentId) {
             repositoryStore.updateRepository(this.currentId, {

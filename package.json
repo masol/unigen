@@ -101,6 +101,7 @@
 		"elkjs": "^0.8.2",
 		"json5": "^2.2.3",
 		"mitt": "^3.0.1",
+		"mqtt": "^5.14.1",
 		"p-map": "^7.0.3",
 		"remeda": "^2.32.0",
 		"rete-auto-arrange-plugin": "^2.0.2",

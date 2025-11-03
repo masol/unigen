@@ -20,6 +20,13 @@ This is a SvelteKit + Tauri application with the following structure:
 - `static/` - Static assets served at build time
 - `build/` and `dist/` - Build output directories
 
+## UI/UX Stack
+
+- **Animations**: `svelte-motion` (v0.12.2) for component animations and transitions
+- **Headless UI**: `bits-ui` (v2.14.2) for accessible, unstyled UI components  
+- **Component Library**: `@skeletonlabs/skeleton` (v4.1.5) as the primary UI framework
+- **Styling**: Tailwind CSS (v4.1.16) for utility-first styling
+
 ## Build, Test, and Development Commands
 
 ```bash

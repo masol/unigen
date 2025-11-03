@@ -36,22 +36,6 @@ pub fn init_sql_plugin() -> tauri_plugin_sql::Builder {
                     ",
                 kind: MigrationKind::Up,
             },
-            Migration {
-                version: 3,
-                description: "create change table with ctime",
-                sql: "
-                        CREATE TABLE IF NOT EXISTS change (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            key TEXT NOT NULL,
-                            cfgid TEXT,
-                            ctime INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-                        );
-                        
-                        CREATE INDEX IF NOT EXISTS idx_change_key ON change(key);
-                        CREATE INDEX IF NOT EXISTS idx_change_ctime ON change(ctime);
-                    ",
-                kind: MigrationKind::Up,
-            },
         ],
     )
 }

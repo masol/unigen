@@ -16,7 +16,8 @@ path = "src/main.rs"
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "unigen_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+#crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -27,8 +28,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1.4", features = ["rt-multi-thread", "sync", "macros"] }
 clap = { version = "4.5.48", features = ["derive"] }
-directories = "6.0.0"
-config = { version = "0.15.18", features = ["async", "convert_case", "json", "json5", "toml", "yaml"] }
 tempfile = "3.23.0"
 tracing = { version = "0.1.41", features = ["release_max_level_warn"] }
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
@@ -42,8 +41,9 @@ tauri-plugin-notification = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 sqlx = { version = "0.8.6", features = ["sqlite"] }
 parking_lot = "0.12.5"
-notify = "8.2.0"
-notify-debouncer-full = "0.6.0"
-filetime = "0.2.26"
-sysinfo = "0.37.2"
 git2 = "0.20.2"
+fs2 = "0.4.3"
+rumqttd = "0.20.0"
+toml = "0.9.8"
+libc = "0.2.177"
+rumqttc = "0.25.0"

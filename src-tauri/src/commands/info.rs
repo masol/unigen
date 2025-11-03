@@ -1,5 +1,5 @@
 // src/commands/info.rs
-use crate::state::GlobalState;
+use crate::{state::GlobalState, utils::appmode::chk_and_boot_mqtt};
 use serde::Serialize;
 use tracing::{debug, error, info, trace, warn};
 
@@ -30,6 +30,10 @@ pub async fn get_soft_info() -> Result<PkgInfoResponse, String> {
     })
 }
 
+#[tauri::command]
+pub async fn boot_mqtt() -> Result<bool, String> {
+    Ok(chk_and_boot_mqtt())
+}
 
 #[tauri::command]
 pub fn log_message(level: String, message: String) {
@@ -48,7 +52,7 @@ pub fn log_message(level: String, message: String) {
 pub fn log_message_with_span(level: String, message: String, span_name: String) {
     let span = tracing::info_span!("frontend", name = %span_name);
     let _enter = span.enter();
-    
+
     match level.to_lowercase().as_str() {
         "trace" => trace!("{}", message),
         "debug" => debug!("{}", message),

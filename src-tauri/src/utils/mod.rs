@@ -3,8 +3,10 @@
 // use crate::state::{self, GlobalState};
 
 pub mod sql;
-pub mod file_watcher;
-pub mod message;
+// pub mod file_watcher;
+// pub mod message;
+pub mod appmode;
+pub mod filelock;
 
 mod trace;
 // mod webview;

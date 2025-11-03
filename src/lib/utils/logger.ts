@@ -19,7 +19,7 @@ type PrimitiveSerializable = string | number | boolean | null | undefined;
 /**
  * 对象类型（排除 null）
  */
-type ObjectType = Record<string, unknown> | unknown[];
+type ObjectType = object | Record<string, unknown> | unknown[];
 
 /**
  * 可序列化的值类型
