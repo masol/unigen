@@ -5,6 +5,11 @@
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { projectStore } from '$lib/stores/project/project.svelte';
 	import { loadingStore } from '$lib/stores/loading.svelte';
+	import { getContext } from 'svelte';
+	import { logger } from '$lib/utils/logger';
+
+	type ToastStore = ReturnType<typeof import('@skeletonlabs/skeleton-svelte').createToaster>;
+	const toaster = getContext<ToastStore>('toaster');
 
 	// Prints file path or URI
 	async function createNewProject() {
@@ -18,7 +23,13 @@
 
 		if (file) {
 			loadingStore.show(t('salty_flaky_worm_exhale'));
-			const loaded = await projectStore.loadPath(file);
+			const loadedResult = await projectStore.loadPath(file);
+			if (!loadedResult.success && loadedResult.error) {
+				toaster.error({
+					description: loadedResult.error
+				});
+				logger.error("load failed!~!")
+			}
 			loadingStore.hide();
 		}
 

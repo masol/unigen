@@ -5,7 +5,10 @@
 	import dayjs from 'dayjs';
 	import { localeStore, t } from '$lib/stores/config/ipc/i18n.svelte';
 	import { projectStore } from '$lib/stores/project/project.svelte';
-	import { loadingStore } from '$lib/stores/loading.svelte';
+	import { loadingStore } from '$lib/stores/loading.svelte';	
+	import { getContext } from 'svelte';
+	type ToastStore = ReturnType<typeof import('@skeletonlabs/skeleton-svelte').createToaster>;
+	const toaster = getContext<ToastStore>('toaster');
 
 	// 从 store 获取选中的项目
 	let selectedRepo = $derived(
@@ -18,7 +21,12 @@
 		if (selectedRepo && selectedRepo.path) {
 			processing = true;
 			loadingStore.show(t('salty_flaky_worm_exhale'));
-			const loaded = await projectStore.loadPath(selectedRepo.path);
+			const loadedResult = await projectStore.loadPath(selectedRepo.path);
+			if (!loadedResult.success && loadedResult.error) {
+				toaster.error({
+					description: loadedResult.error
+				});
+			}
 			loadingStore.hide();
 			processing = false;
 		}

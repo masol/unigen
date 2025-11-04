@@ -2,10 +2,16 @@ import mqtt, { type MqttClient } from 'mqtt';
 import { softinfo } from '../softinfo';
 import { logger } from '../logger';
 import { eventBus } from '../evt';
+import { projectStore } from '$lib/stores/project/project.svelte';
+import { invoke } from '@tauri-apps/api/core';
 
 type ConfigData = {
     key: string;
     cfgid: string | null
+}
+
+type FocusData = {
+    path: string;
 }
 
 interface EventBusMessage {
@@ -118,6 +124,17 @@ export class Mqtt {
                     eventBus.emit(`cfgchanged:${data.key}`, data)
                 }
                 break;
+            case 'focus':
+                {
+                    const data = msg.data as FocusData;
+                    const currentRepo = projectStore.currentRepository;
+                    if (currentRepo && currentRepo.path === data.path) {
+                        logger.debug("focus project for path:", data.path)
+                        // not await
+                        invoke("focus_project")
+                    }
+                }
+                break;
             default:
                 logger.warn("未处理的消息:", msg)
         }
@@ -155,10 +172,10 @@ export class Mqtt {
     /**
      * 发送焦点通知
      */
-    emit_focus(focusData: Record<string, unknown>): void {
+    async emit_focus(focusData: Record<string, unknown>): Promise<boolean> {
         if (!this.isConnected || !this.client) {
             console.error('MQTT未连接，无法发送焦点消息');
-            return;
+            return false;
         }
 
         const message: EventBusMessage = {
@@ -167,18 +184,25 @@ export class Mqtt {
             data: focusData,
         };
 
-        this.client.publish(
-            this.channel,
-            JSON.stringify(message),
-            { qos: 0 },
-            (err) => {
-                if (err) {
-                    console.error('发送焦点消息失败:', err);
-                } else {
-                    console.log('焦点消息已发送:', message);
+        const client = this.client;
+
+        return new Promise<boolean>((resolve) => {
+            client.publish(
+                this.channel,
+                JSON.stringify(message),
+                { qos: 0 },
+                (err) => {
+                    if (err) {
+                        console.error('发送焦点消息失败:', err);
+                        resolve(false);
+                    } else {
+                        console.log('焦点消息已发送:', message);
+                        resolve(true);
+                    }
                 }
-            }
-        );
+            );
+
+        })
     }
 
     /**

@@ -55,7 +55,12 @@
 	async function handleOpen() {
 		if (project.path) {
 			loadingStore.show(t('salty_flaky_worm_exhale'));
-			const loaded = await projectStore.loadPath(project.path);
+			const loadedResult = await projectStore.loadPath(project.path);
+			if (!loadedResult.success && loadedResult.error) {
+				toaster.error({
+					description: loadedResult.error
+				});
+			}
 			loadingStore.hide();
 		}
 	}

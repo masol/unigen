@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 /// 尝试在指定路径上获取文件锁，成功返回 File（RAII 锁持有者），失败返回 None
-fn acquire_lock<P: AsRef<Path>>(path: P) -> Option<File> {
+pub fn acquire_lock<P: AsRef<Path>>(path: P) -> Option<File> {
     let path = path.as_ref();
 
     let mut file = match OpenOptions::new()

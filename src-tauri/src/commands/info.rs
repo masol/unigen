@@ -31,7 +31,7 @@ pub async fn get_soft_info() -> Result<PkgInfoResponse, String> {
 }
 
 #[tauri::command]
-pub async fn boot_mqtt() -> Result<bool, String> {
+pub fn boot_mqtt() -> Result<bool, String> {
     Ok(chk_and_boot_mqtt())
 }
 

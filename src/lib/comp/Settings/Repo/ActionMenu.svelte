@@ -89,7 +89,7 @@
 					<DropdownMenu.Item
 						class="rounded-container-token flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:bg-transparent data-[highlighted]:data-[disabled]:bg-transparent data-[disabled]:dark:hover:bg-transparent data-[highlighted]:data-[disabled]:dark:bg-transparent [&:not([data-disabled])]:cursor-pointer [&:not([data-disabled])]:text-error-600 [&:not([data-disabled])]:hover:bg-error-50 [&:not([data-disabled])]:data-[highlighted]:bg-error-50 [&:not([data-disabled])]:dark:text-error-400 [&:not([data-disabled])]:dark:hover:bg-error-900/20 [&:not([data-disabled])]:dark:data-[highlighted]:bg-error-900/20"
 						onSelect={onRemove}
-						disabled={project.owner !== 0 || project.id === projectStore.currentId}
+						disabled={project.id === projectStore.currentId}
 					>
 						<IconTrash2 class="size-4" />
 						<span>从列表中移除</span>

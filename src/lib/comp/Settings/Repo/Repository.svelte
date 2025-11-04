@@ -16,6 +16,9 @@
 	import { projectStore } from '$lib/stores/project/project.svelte';
 	import { t } from '$lib/stores/config/ipc/i18n.svelte';
 	import { loadingStore } from '$lib/stores/loading.svelte';
+	import { getContext } from 'svelte';
+	type ToastStore = ReturnType<typeof import('@skeletonlabs/skeleton-svelte').createToaster>;
+	const toaster = getContext<ToastStore>('toaster');
 
 	// State
 	let isHovered = $state(false);
@@ -30,7 +33,12 @@
 	async function handleRepositorySelect(repo: Repository) {
 		// await projectStore.setCurrentRepository(id);
 		loadingStore.show(t('salty_flaky_worm_exhale'));
-		const loaded = await projectStore.loadPath(repo.path);
+		const loadedResult = await projectStore.loadPath(repo.path);
+		if (!loadedResult.success && loadedResult.error) {
+			toaster.error({
+				description: loadedResult.error
+			});
+		}
 		loadingStore.hide();
 	}
 </script>
