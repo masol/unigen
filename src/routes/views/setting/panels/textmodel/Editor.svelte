@@ -18,7 +18,6 @@
 
 	let { initialData, onSave, onCancel }: Props = $props();
 
-	// 创建 LLMTag 的 Zod schema
 	const llmTagSchema = z.enum(['fast', 'powerful', 'balanced']) satisfies z.ZodType<LLMTag>;
 
 	const modelSchema = z.object({
@@ -29,7 +28,7 @@
 		weight: z.number().int().min(1).max(30)
 	});
 
-	const { form, enhance, errors, delayed } = superForm<LLMConfig>(
+	const { form, enhance, errors, delayed, validateForm } = superForm<LLMConfig>(
 		{
 			id: initialData?.id ?? crypto.randomUUID(),
 			provider: initialData?.provider ?? 'qianwen',
@@ -42,51 +41,34 @@
 			SPA: true,
 			validators: zodClient(modelSchema as any),
 			dataType: 'json',
-			resetForm: false, // 关键：防止表单在错误时重置
-			onUpdate: async ({ form }) => {
-				// 清空之前的错误
-				errors.set({});
+			resetForm: false,
+			// 改用 onSubmit
+			async onSubmit({ formData, cancel }) {
+				// 强制验证，不管是否修改过
+				const isValid = await validateForm();
 
-				const result = modelSchema.safeParse(form.data);
-				console.log('result=', result);
-
-				if (!result.success) {
-					const fieldErrors = result.error.flatten().fieldErrors;
-
-					// 正确设置错误信息
-					const newErrors: Record<string, string[]> = {};
-					Object.entries(fieldErrors).forEach(([key, value]) => {
-						if (value && value.length > 0) {
-							newErrors[key] = value;
-						}
-					});
-
-					// 一次性更新所有错误
-					errors.set(newErrors);
-
-					console.log('设置的错误:', newErrors);
-
-					// 返回 { valid: false } 阻止表单提交和重置
-					return { valid: false };
+				if (!isValid) {
+					cancel();
+					console.log('表单验证失败');
+					return;
 				}
 
-				const config = form.data as LLMConfig;
-				console.log('config=', config);
+				// Schema 已经自动验证过了，这里只做 API 验证
+				const config = $form as LLMConfig;
+				// console.log('config=', config);
 
 				try {
-					// 只要正确，视为可以访问。
 					await listModels(config);
+					// 验证成功，调用 onSave
+					onSave(config);
 				} catch (e) {
+					// API 验证失败
+					cancel(); // 取消提交
 					errors.set({
-						apiKey: ['请检查 API Key 是否有效，无法请求模型提供商。']
+						apiKey: ['请检查 API Key 是否有效，无法请求模型服务商。']
 					});
-					console.log("error:",e)
-					// 返回 { valid: false } 阻止表单提交
-					return { valid: false };
+					// console.log('API 验证错误:', e);
 				}
-
-				// 验证成功，调用 onSave
-				onSave(config);
 			}
 		}
 	);
@@ -128,7 +110,7 @@
 	const handleProviderChange = () => {
 		modelsFetched = false;
 		availableModels = [];
-		$form.name = ''; // 修改：使用 name 而不是 model
+		$form.name = '';
 		dropdownError = '';
 	};
 
@@ -143,11 +125,10 @@
 	};
 
 	const selectModel = (model: string) => {
-		$form.name = model; // 修改：使用 name 而不是 model
+		$form.name = model;
 		modelsDropdownOpen = false;
 		highlightedIndex = -1;
 		dropdownError = '';
-		// 清除模型字段的错误
 		errors.update((prev) => {
 			const { name, ...rest } = prev;
 			return rest;
@@ -191,7 +172,6 @@
 	};
 
 	const handleModelInputBlur = (e: FocusEvent) => {
-		// 使用 setTimeout 延迟关闭，以便点击下拉选项时能够触发
 		setTimeout(() => {
 			if (!modelInputRef?.contains(document.activeElement)) {
 				modelsDropdownOpen = false;
@@ -200,7 +180,6 @@
 		}, 150);
 	};
 
-	// @todo: 使用flexsearch来搜索和排序！
 	const filteredModels = $derived(
 		availableModels.filter((m) => m.toLowerCase().includes($form.name.toLowerCase()))
 	);
@@ -213,162 +192,187 @@
 </script>
 
 <form method="POST" use:enhance class="space-y-5">
-	<label class="label">
-		<span class="text-surface-900 dark:text-surface-50">模型提供商</span>
-		<select
-			name="provider"
-			bind:value={$form.provider}
-			onchange={handleProviderChange}
-			class="select"
-		>
-			{#each ProviderNames as pname}
-				<option value={pname}>{t(pname)}</option>
-			{/each}
-		</select>
-		{#if $errors.provider}
-			<span class="text-sm text-error-500"
-				>{Array.isArray($errors.provider) ? $errors.provider[0] : String($errors.provider)}</span
+	<!-- 模型提供商 -->
+	<div class="form-field">
+		<label class="label">
+			<span class="text-surface-900 dark:text-surface-50">模型提供商</span>
+			<select
+				name="provider"
+				bind:value={$form.provider}
+				onchange={handleProviderChange}
+				class="select"
 			>
-		{/if}
-	</label>
-
-	<label class="label">
-		<span class="text-surface-900 dark:text-surface-50">API Key</span>
-		<div class="relative">
-			<input
-				name="apiKey"
-				type={showApiKey ? 'text' : 'password'}
-				bind:value={$form.apiKey}
-				class="input pr-10"
-				class:input-error={$errors.apiKey}
-				placeholder="sk-..."
-			/>
-			<button
-				type="button"
-				onclick={() => (showApiKey = !showApiKey)}
-				class="absolute top-1/2 right-3 -translate-y-1/2 text-surface-600 transition-colors hover:text-surface-900 dark:text-surface-400 dark:hover:text-surface-100"
-				aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
-			>
-				{#if showApiKey}
-					<IconViewOff class="h-5 w-5" />
-				{:else}
-					<IconView class="h-5 w-5" />
-				{/if}
-			</button>
-		</div>
-		{#if $errors.apiKey}
-			<span class="text-sm text-error-500"
-				>{Array.isArray($errors.apiKey) ? $errors.apiKey[0] : String($errors.apiKey)}</span
-			>
-		{/if}
-	</label>
-
-	<label class="label">
-		<span class="text-surface-900 dark:text-surface-50">模型</span>
-		<div class="relative">
-			<input
-				bind:this={modelInputRef}
-				name="name"
-				type="text"
-				bind:value={$form.name}
-				placeholder="输入或选择模型"
-				class="input pr-10"
-				class:input-error={$errors.name}
-				onkeydown={handleModelInputKeydown}
-				onblur={handleModelInputBlur}
-			/>
-			<button
-				type="button"
-				onclick={toggleModelsDropdown}
-				class="absolute top-1/2 right-3 -translate-y-1/2 text-surface-600 transition-transform duration-200 dark:text-surface-400"
-				class:rotate-180={modelsDropdownOpen}
-				aria-label="展开模型列表"
-			>
-				<IconChevronDown class="h-5 w-5" />
-			</button>
-
-			{#if modelsDropdownOpen}
-				<div
-					class="animate-in fade-in slide-in-from-top-2 absolute z-10 mt-1 max-h-60 w-full overflow-auto card bg-surface-50 shadow-lg duration-150 dark:bg-surface-800"
-				>
-					{#if dropdownError}
-						<div class="p-4 text-center text-error-500">
-							{dropdownError}
-						</div>
-					{:else if loadingModels}
-						<div class="flex items-center justify-center p-8">
-							<Wave size="40" color="#3b82f6" unit="px" duration="1s" />
-						</div>
-					{:else if filteredModels.length > 0}
-						{#each filteredModels as model, index}
-							<button
-								type="button"
-								onclick={() => selectModel(model)}
-								class="w-full px-4 py-3 text-left transition-colors hover:bg-surface-200 dark:hover:bg-surface-700"
-								class:bg-primary-500={$form.name === model}
-								class:text-white={$form.name === model}
-								class:bg-surface-200={highlightedIndex === index && $form.name !== model}
-								class:dark:bg-surface-700={highlightedIndex === index && $form.name !== model}
-							>
-								{model}
-							</button>
-						{/each}
-					{:else}
-						<div class="p-4 text-center text-surface-500">
-							{availableModels.length === 0 ? '暂无可用模型' : '无匹配结果'}
-						</div>
-					{/if}
-				</div>
+				{#each ProviderNames as pname}
+					<option value={pname}>{t(pname)}</option>
+				{/each}
+			</select>
+		</label>
+		<div class="error-container">
+			{#if $errors.provider}
+				<span class="error-message">
+					{Array.isArray($errors.provider) ? $errors.provider[0] : String($errors.provider)}
+				</span>
 			{/if}
 		</div>
-		{#if $errors.name}
-			<span class="text-sm text-error-500"
-				>{Array.isArray($errors.name) ? $errors.name[0] : String($errors.name)}</span
-			>
-		{/if}
-	</label>
+	</div>
 
-	<label class="label">
-		<span class="text-surface-900 dark:text-surface-50">模型标签</span>
-		<select name="tag" bind:value={$form.tag} class="select">
-			{#each tagOptions as option}
-				<option value={option.value}>{option.label}</option>
-			{/each}
-		</select>
-		{#if $errors.tag}
-			<span class="text-sm text-error-500"
-				>{Array.isArray($errors.tag) ? $errors.tag[0] : String($errors.tag)}</span
-			>
-		{/if}
-	</label>
-
-	<label class="label">
-		<span class="text-surface-900 dark:text-surface-50">权重 (1 - 30)</span>
-		<div class="flex items-center gap-3">
-			<input
-				type="range"
-				name="weight"
-				min="1"
-				max="30"
-				step="1"
-				bind:value={$form.weight}
-				class="range flex-1"
-			/>
-			<input
-				type="number"
-				bind:value={$form.weight}
-				min="1"
-				max="30"
-				step="1"
-				class="input w-20 text-center"
-			/>
+	<!-- API Key -->
+	<div class="form-field">
+		<label class="label">
+			<span class="text-surface-900 dark:text-surface-50">API Key</span>
+			<div class="relative">
+				<input
+					name="apiKey"
+					type={showApiKey ? 'text' : 'password'}
+					bind:value={$form.apiKey}
+					class="input pr-10"
+					class:input-error={$errors.apiKey}
+					placeholder="sk-..."
+				/>
+				<button
+					type="button"
+					onclick={() => (showApiKey = !showApiKey)}
+					class="absolute top-1/2 right-3 -translate-y-1/2 text-surface-600 transition-colors hover:text-surface-900 dark:text-surface-400 dark:hover:text-surface-100"
+					aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
+				>
+					{#if showApiKey}
+						<IconViewOff class="h-5 w-5" />
+					{:else}
+						<IconView class="h-5 w-5" />
+					{/if}
+				</button>
+			</div>
+		</label>
+		<div class="error-container">
+			{#if $errors.apiKey}
+				<span class="error-message">
+					{Array.isArray($errors.apiKey) ? $errors.apiKey[0] : String($errors.apiKey)}
+				</span>
+			{/if}
 		</div>
-		{#if $errors.weight}
-			<span class="text-sm text-error-500"
-				>{Array.isArray($errors.weight) ? $errors.weight[0] : String($errors.weight)}</span
-			>
-		{/if}
-	</label>
+	</div>
+
+	<!-- 模型 -->
+	<div class="form-field">
+		<label class="label">
+			<span class="text-surface-900 dark:text-surface-50">模型</span>
+			<div class="relative">
+				<input
+					bind:this={modelInputRef}
+					name="name"
+					type="text"
+					bind:value={$form.name}
+					placeholder="输入或选择模型"
+					class="input pr-10"
+					class:input-error={$errors.name}
+					onkeydown={handleModelInputKeydown}
+					onblur={handleModelInputBlur}
+				/>
+				<button
+					type="button"
+					onclick={toggleModelsDropdown}
+					class="absolute top-1/2 right-3 -translate-y-1/2 text-surface-600 transition-transform duration-200 dark:text-surface-400"
+					class:rotate-180={modelsDropdownOpen}
+					aria-label="展开模型列表"
+				>
+					<IconChevronDown class="h-5 w-5" />
+				</button>
+
+				{#if modelsDropdownOpen}
+					<div
+						class="animate-in fade-in slide-in-from-top-2 absolute z-10 mt-1 max-h-60 w-full overflow-auto card bg-surface-50 shadow-lg duration-150 dark:bg-surface-800"
+					>
+						{#if dropdownError}
+							<div class="p-4 text-center text-error-500">
+								{dropdownError}
+							</div>
+						{:else if loadingModels}
+							<div class="flex items-center justify-center p-8">
+								<Wave size="40" color="#3b82f6" unit="px" duration="1s" />
+							</div>
+						{:else if filteredModels.length > 0}
+							{#each filteredModels as model, index}
+								<button
+									type="button"
+									onclick={() => selectModel(model)}
+									class="w-full px-4 py-3 text-left transition-colors hover:bg-surface-200 dark:hover:bg-surface-700"
+									class:bg-primary-500={$form.name === model}
+									class:text-white={$form.name === model}
+									class:bg-surface-200={highlightedIndex === index && $form.name !== model}
+									class:dark:bg-surface-700={highlightedIndex === index && $form.name !== model}
+								>
+									{model}
+								</button>
+							{/each}
+						{:else}
+							<div class="p-4 text-center text-surface-500">
+								{availableModels.length === 0 ? '暂无可用模型' : '无匹配结果'}
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</div>
+		</label>
+		<div class="error-container">
+			{#if $errors.name}
+				<span class="error-message">
+					{Array.isArray($errors.name) ? $errors.name[0] : String($errors.name)}
+				</span>
+			{/if}
+		</div>
+	</div>
+
+	<!-- 模型标签 -->
+	<div class="form-field">
+		<label class="label">
+			<span class="text-surface-900 dark:text-surface-50">模型标签</span>
+			<select name="tag" bind:value={$form.tag} class="select">
+				{#each tagOptions as option}
+					<option value={option.value}>{option.label}</option>
+				{/each}
+			</select>
+		</label>
+		<div class="error-container">
+			{#if $errors.tag}
+				<span class="error-message">
+					{Array.isArray($errors.tag) ? $errors.tag[0] : String($errors.tag)}
+				</span>
+			{/if}
+		</div>
+	</div>
+
+	<!-- 权重 -->
+	<div class="form-field">
+		<label class="label">
+			<span class="text-surface-900 dark:text-surface-50">权重 (1 - 30)</span>
+			<div class="flex items-center gap-3">
+				<input
+					type="range"
+					name="weight"
+					min="1"
+					max="30"
+					step="1"
+					bind:value={$form.weight}
+					class="range flex-1"
+				/>
+				<input
+					type="number"
+					bind:value={$form.weight}
+					min="1"
+					max="30"
+					step="1"
+					class="input w-20 text-center"
+				/>
+			</div>
+		</label>
+		<div class="error-container">
+			{#if $errors.weight}
+				<span class="error-message">
+					{Array.isArray($errors.weight) ? $errors.weight[0] : String($errors.weight)}
+				</span>
+			{/if}
+		</div>
+	</div>
 
 	<footer class="flex justify-end gap-3 border-t border-surface-200 pt-4 dark:border-surface-700">
 		<button type="button" onclick={onCancel} class="btn preset-outlined" disabled={$delayed}>
@@ -383,3 +387,38 @@
 		</button>
 	</footer>
 </form>
+
+<style>
+	.form-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.error-container {
+		min-height: 1.5rem;
+	}
+
+	.error-message {
+		display: block;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: rgb(239 68 68);
+		animation: errorFadeIn 0.2s ease-in-out;
+	}
+
+	@keyframes errorFadeIn {
+		from {
+			opacity: 0;
+			transform: translateY(-4px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	:global(.dark) .error-message {
+		color: rgb(248 113 113);
+	}
+</style>
