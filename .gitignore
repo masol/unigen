@@ -31,3 +31,6 @@ storybook-static
 
 # 忽略 Rust 编译及分析临时文件
 /target/rust-analyzer/
+
+# 忽略vite rollup-plugin-visualizer产生的文件。
+/stats.html

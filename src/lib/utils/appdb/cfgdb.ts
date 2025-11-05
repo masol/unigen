@@ -1,9 +1,9 @@
 import Database from '@tauri-apps/plugin-sql';
 import JSON5 from 'json5'
 
-export type ConfigItem = {
+export type ConfigItem<T = Record<string, unknown>> = {
     id: string,
-    value: Record<string, unknown>,
+    value: T,
     created_at: number,
     updated_at: number
 }

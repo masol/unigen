@@ -1,28 +1,17 @@
 <script lang="ts">
-	import { writable } from 'svelte/store';
 	import IconTrash from '~icons/lucide/trash-2';
 	import IconEdit from '~icons/lucide/pen-line';
 	import IconToggleLeft from '~icons/lucide/toggle-left';
 	import IconToggleRight from '~icons/lucide/toggle-right';
 	import IconSparkles from '~icons/lucide/sparkles';
-	import IconPlus from '~icons/lucide/plus';
 	import IconZap from '~icons/lucide/zap';
 	import IconBrain from '~icons/lucide/brain';
 	import IconScale from '~icons/lucide/scale';
-
 	import ModelEditor from './Dialog.svelte';
+	import { llmStore } from '$lib/stores/config/ipc/llms.svelte';
+	import { type LLMConfig } from '$lib/utils/llms/index.type';
 
 	type ModelCapability = 'fast' | 'powerful' | 'balanced';
-
-	interface ModelConfig {
-		id: string;
-		provider: string;
-		modelName: string;
-		weight: number;
-		enabled: boolean;
-		capability: ModelCapability;
-		vendor?: string;
-	}
 
 	const capabilityConfig = {
 		fast: {
@@ -51,60 +40,19 @@
 		}
 	};
 
-	const modelConfigs = writable<ModelConfig[]>([
-		{
-			id: '1',
-			provider: 'OpenAI Official',
-			modelName: 'gpt-4-turbo',
-			weight: 5,
-			enabled: true,
-			capability: 'powerful',
-			vendor: 'OpenAI'
-		},
-		{
-			id: '2',
-			provider: 'Azure OpenAI',
-			modelName: 'gpt-4',
-			weight: 3,
-			enabled: true,
-			capability: 'powerful',
-			vendor: 'OpenAI'
-		},
-		{
-			id: '3',
-			provider: 'Anthropic Official',
-			modelName: 'claude-3-haiku',
-			weight: 8,
-			enabled: false,
-			capability: 'fast'
-		},
-		{
-			id: '4',
-			provider: 'Google Vertex AI',
-			modelName: 'gemini-pro',
-			weight: 4,
-			enabled: true,
-			capability: 'balanced'
-		},
-		{
-			id: '5',
-			provider: 'Cloudflare Workers AI',
-			modelName: 'gpt-3.5-turbo',
-			weight: 6,
-			enabled: true,
-			capability: 'fast',
-			vendor: 'OpenAI'
-		}
-	]);
+	const modelConfigs = $derived<LLMConfig[]>(llmStore.llms);
 
 	function toggleEnabled(id: string) {
-		modelConfigs.update((configs) =>
-			configs.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c))
-		);
+		const llm = llmStore.find(id);
+
+		if (llm) {
+			llm.enabled = !llm.enabled;
+			llmStore.upsert(llm);
+		}
 	}
 
 	function deleteModel(id: string) {
-		modelConfigs.update((configs) => configs.filter((c) => c.id !== id));
+		llmStore.removeById(id);
 	}
 
 	function editModel(id: string) {
@@ -126,7 +74,7 @@
 			<IconSparkles class="h-7 w-7 text-primary-500"></IconSparkles>
 			<h2 class="text-2xl font-semibold text-surface-900 dark:text-surface-50">模型配置</h2>
 			<span class="text-sm text-surface-500 dark:text-surface-400">
-				{$modelConfigs.length} 个模型
+				{modelConfigs.length} 个模型
 			</span>
 		</div>
 		<ModelEditor bind:open={editorOpen} {modelId}></ModelEditor>
@@ -144,30 +92,30 @@
 	</div>
 
 	<div class="grid gap-3">
-		{#each $modelConfigs as config (config.id)}
-			{@const capConfig = capabilityConfig[config.capability]}
+		{#each modelConfigs as config (config.id)}
+			{@const capConfig = capabilityConfig[config.tag]}
 			<div
 				class="group relative rounded-xl border border-surface-200
                bg-surface-50 shadow-sm transition-all duration-300
                hover:shadow-xl {capConfig.hoverShadow}
                dark:border-surface-700 dark:bg-surface-800
-               hover:border-{config.capability === 'fast'
+               hover:border-{config.tag === 'fast'
 					? 'sky'
-					: config.capability === 'powerful'
+					: config.tag === 'powerful'
 						? 'purple'
 						: 'emerald'}-300
-               dark:hover:border-{config.capability === 'fast'
+               dark:hover:border-{config.tag === 'fast'
 					? 'sky'
-					: config.capability === 'powerful'
+					: config.tag === 'powerful'
 						? 'purple'
 						: 'emerald'}-600
                {!config.enabled ? 'opacity-60' : ''}"
 			>
 				<div
 					class="absolute inset-0 rounded-xl bg-gradient-to-br opacity-0 transition-opacity duration-300
-                    group-hover:opacity-100 {config.capability === 'fast'
+                    group-hover:opacity-100 {config.tag === 'fast'
 						? 'from-sky-50/50 to-transparent dark:from-sky-950/20'
-						: config.capability === 'powerful'
+						: config.tag === 'powerful'
 							? 'from-purple-50/50 to-transparent dark:from-purple-950/20'
 							: 'from-emerald-50/50 to-transparent dark:from-emerald-950/20'}"
 				></div>
@@ -198,30 +146,30 @@
 							>
 								{capConfig.label}
 							</span>
-							{#if config.vendor}
+							<!-- {#if config.vendor}
 								<span
 									class="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs
                              font-medium text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400"
 								>
 									{config.vendor}
 								</span>
-							{/if}
+							{/if} -->
 						</div>
 						<div class="flex items-center gap-4">
 							<h3
 								class="truncate font-mono text-base font-semibold text-surface-900 dark:text-surface-50"
 							>
-								{config.modelName}
+								{config.name}
 							</h3>
 							<span class="h-1 w-1 rounded-full bg-surface-400"></span>
-							<span
+							<!-- <span
 								class="flex items-center gap-1.5 text-sm text-surface-600 dark:text-surface-400"
 							>
 								权重:
 								<span class="font-semibold text-surface-900 dark:text-surface-100">
 									{config.weight}
 								</span>
-							</span>
+							</span> -->
 						</div>
 					</div>
 
@@ -270,7 +218,7 @@
 		{/each}
 	</div>
 
-	{#if $modelConfigs.length === 0}
+	{#if modelConfigs.length === 0}
 		<div class="py-16 text-center">
 			<IconSparkles class="mx-auto mb-4 h-16 w-16 text-surface-300 dark:text-surface-700"
 			></IconSparkles>

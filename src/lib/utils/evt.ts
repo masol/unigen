@@ -5,6 +5,8 @@ import mitt from 'mitt';
 
 // 当前支持的消息类型.
 type Events = {
+	'llms.removed': { id: string | null };
+	'llms.upsert': Record<string, unknown> | undefined; //LLMConfig 或 整体reset.
 	'repo.removed': { id: string | null };
 	'repo.reset': { length: number };
 	'cfgchanged:*': { key: string };

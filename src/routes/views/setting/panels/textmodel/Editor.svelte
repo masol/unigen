@@ -1,57 +1,92 @@
 <script lang="ts">
 	import { superForm } from 'sveltekit-superforms';
+	import { zodClient } from 'sveltekit-superforms/adapters';
 	import { z } from 'zod';
-	import { Clock,Wave } from 'svelte-loading-spinners';
+	import { Clock, Wave } from 'svelte-loading-spinners';
 	import IconChevronDown from '~icons/carbon/chevron-down';
 	import IconView from '~icons/carbon/view';
 	import IconViewOff from '~icons/carbon/view-off';
-	import type { ModelConfig } from './types';
+	import { listModels, LLMWrapper, ProviderNames } from '$lib/utils/llms/instance';
+	import { t } from '$lib/stores/config/ipc/i18n.svelte';
+	import type { LLMConfig, LLMTag } from '$lib/utils/llms/index.type';
 
 	interface Props {
-		initialData?: Partial<ModelConfig>;
-		onSave: (config: ModelConfig) => void;
+		initialData?: Partial<LLMConfig>;
+		onSave: (config: LLMConfig) => void;
 		onCancel: () => void;
 	}
 
 	let { initialData, onSave, onCancel }: Props = $props();
 
+	// 创建 LLMTag 的 Zod schema
+	const llmTagSchema = z.enum(['fast', 'powerful', 'balanced']) satisfies z.ZodType<LLMTag>;
+
 	const modelSchema = z.object({
-		provider: z.enum(['openai', 'anthropic', 'google', 'azure']),
-		apiKey: z.string().min(1, '请输入 API Key'),
-		model: z.string().min(1, '请选择模型'),
-		tag: z.enum(['speed', 'capability', 'balanced']),
+		provider: z.string(),
+		apiKey: z.string().min(3, '请输入 API Key'),
+		name: z.string().min(3, '请选择模型'),
+		tag: llmTagSchema,
 		weight: z.number().int().min(1).max(30)
 	});
 
-	const { form, enhance, errors, delayed } = superForm<ModelConfig>(
+	const { form, enhance, errors, delayed } = superForm<LLMConfig>(
 		{
-			provider: initialData?.provider ?? 'openai',
+			id: initialData?.id ?? crypto.randomUUID(),
+			provider: initialData?.provider ?? 'qianwen',
 			apiKey: initialData?.apiKey ?? '',
-			model: initialData?.model ?? '',
+			name: initialData?.name ?? '',
 			tag: initialData?.tag ?? 'balanced',
 			weight: initialData?.weight ?? 1
 		},
 		{
 			SPA: true,
-			validators: false,
+			validators: zodClient(modelSchema as any),
 			dataType: 'json',
+			resetForm: false, // 关键：防止表单在错误时重置
 			onUpdate: async ({ form }) => {
+				// 清空之前的错误
+				errors.set({});
+
 				const result = modelSchema.safeParse(form.data);
+				console.log('result=', result);
+
 				if (!result.success) {
 					const fieldErrors = result.error.flatten().fieldErrors;
+
+					// 正确设置错误信息
+					const newErrors: Record<string, string[]> = {};
 					Object.entries(fieldErrors).forEach(([key, value]) => {
 						if (value && value.length > 0) {
-							errors.update((prev) => ({
-								...prev,
-								[key]: value
-							}));
+							newErrors[key] = value;
 						}
 					});
-					return;
+
+					// 一次性更新所有错误
+					errors.set(newErrors);
+
+					console.log('设置的错误:', newErrors);
+
+					// 返回 { valid: false } 阻止表单提交和重置
+					return { valid: false };
 				}
 
-				await new Promise((resolve) => setTimeout(resolve, 1500));
-				onSave(form.data as ModelConfig);
+				const config = form.data as LLMConfig;
+				console.log('config=', config);
+
+				try {
+					// 只要正确，视为可以访问。
+					await listModels(config);
+				} catch (e) {
+					errors.set({
+						apiKey: ['请检查 API Key 是否有效，无法请求模型提供商。']
+					});
+					console.log("error:",e)
+					// 返回 { valid: false } 阻止表单提交
+					return { valid: false };
+				}
+
+				// 验证成功，调用 onSave
+				onSave(config);
 			}
 		}
 	);
@@ -76,17 +111,15 @@
 		dropdownError = '';
 		loadingModels = true;
 		try {
-			await new Promise((resolve) => setTimeout(resolve, 800));
-			const { provider } = $form;
-			availableModels =
-				provider === 'openai'
-					? ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo']
-					: provider === 'anthropic'
-						? ['claude-3-5-sonnet', 'claude-3-5-haiku', 'claude-3-opus']
-						: provider === 'google'
-							? ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash']
-							: ['azure-gpt-4', 'azure-gpt-35-turbo'];
-			modelsFetched = true;
+			const llmcfg: LLMConfig = {
+				id: crypto.randomUUID(),
+				provider: $form.provider,
+				apiKey: $form.apiKey
+			} as LLMConfig;
+			availableModels = await listModels(llmcfg);
+			modelsFetched = availableModels.length > 0;
+		} catch (e) {
+			dropdownError = e instanceof Error ? e.message : String(e);
 		} finally {
 			loadingModels = false;
 		}
@@ -95,7 +128,7 @@
 	const handleProviderChange = () => {
 		modelsFetched = false;
 		availableModels = [];
-		$form.model = '';
+		$form.name = ''; // 修改：使用 name 而不是 model
 		dropdownError = '';
 	};
 
@@ -110,10 +143,15 @@
 	};
 
 	const selectModel = (model: string) => {
-		$form.model = model;
+		$form.name = model; // 修改：使用 name 而不是 model
 		modelsDropdownOpen = false;
 		highlightedIndex = -1;
 		dropdownError = '';
+		// 清除模型字段的错误
+		errors.update((prev) => {
+			const { name, ...rest } = prev;
+			return rest;
+		});
 	};
 
 	const handleModelInputKeydown = (e: KeyboardEvent) => {
@@ -162,21 +200,15 @@
 		}, 150);
 	};
 
+	// @todo: 使用flexsearch来搜索和排序！
 	const filteredModels = $derived(
-		availableModels.filter((m) => m.toLowerCase().includes($form.model.toLowerCase()))
+		availableModels.filter((m) => m.toLowerCase().includes($form.name.toLowerCase()))
 	);
 
 	const tagOptions = [
-		{ value: 'speed', label: '速度优先' },
-		{ value: 'capability', label: '能力优先' },
+		{ value: 'fast', label: '速度优先' },
+		{ value: 'powerful', label: '能力优先' },
 		{ value: 'balanced', label: '平衡' }
-	] as const;
-
-	const providerOptions = [
-		{ value: 'openai', label: 'OpenAI' },
-		{ value: 'anthropic', label: 'Anthropic' },
-		{ value: 'google', label: 'Google AI' },
-		{ value: 'azure', label: 'Azure OpenAI' }
 	] as const;
 </script>
 
@@ -189,12 +221,14 @@
 			onchange={handleProviderChange}
 			class="select"
 		>
-			{#each providerOptions as option}
-				<option value={option.value}>{option.label}</option>
+			{#each ProviderNames as pname}
+				<option value={pname}>{t(pname)}</option>
 			{/each}
 		</select>
 		{#if $errors.provider}
-			<span class="text-sm text-error-500">{String($errors.provider)}</span>
+			<span class="text-sm text-error-500"
+				>{Array.isArray($errors.provider) ? $errors.provider[0] : String($errors.provider)}</span
+			>
 		{/if}
 	</label>
 
@@ -206,6 +240,7 @@
 				type={showApiKey ? 'text' : 'password'}
 				bind:value={$form.apiKey}
 				class="input pr-10"
+				class:input-error={$errors.apiKey}
 				placeholder="sk-..."
 			/>
 			<button
@@ -215,14 +250,16 @@
 				aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
 			>
 				{#if showApiKey}
-					<IconView class="h-5 w-5" />
-				{:else}
 					<IconViewOff class="h-5 w-5" />
+				{:else}
+					<IconView class="h-5 w-5" />
 				{/if}
 			</button>
 		</div>
 		{#if $errors.apiKey}
-			<span class="text-sm text-error-500">{String($errors.apiKey)}</span>
+			<span class="text-sm text-error-500"
+				>{Array.isArray($errors.apiKey) ? $errors.apiKey[0] : String($errors.apiKey)}</span
+			>
 		{/if}
 	</label>
 
@@ -231,11 +268,12 @@
 		<div class="relative">
 			<input
 				bind:this={modelInputRef}
-				name="model"
+				name="name"
 				type="text"
-				bind:value={$form.model}
+				bind:value={$form.name}
 				placeholder="输入或选择模型"
 				class="input pr-10"
+				class:input-error={$errors.name}
 				onkeydown={handleModelInputKeydown}
 				onblur={handleModelInputBlur}
 			/>
@@ -267,10 +305,10 @@
 								type="button"
 								onclick={() => selectModel(model)}
 								class="w-full px-4 py-3 text-left transition-colors hover:bg-surface-200 dark:hover:bg-surface-700"
-								class:bg-primary-500={$form.model === model}
-								class:text-white={$form.model === model}
-								class:bg-surface-200={highlightedIndex === index && $form.model !== model}
-								class:dark:bg-surface-700={highlightedIndex === index && $form.model !== model}
+								class:bg-primary-500={$form.name === model}
+								class:text-white={$form.name === model}
+								class:bg-surface-200={highlightedIndex === index && $form.name !== model}
+								class:dark:bg-surface-700={highlightedIndex === index && $form.name !== model}
 							>
 								{model}
 							</button>
@@ -283,8 +321,10 @@
 				</div>
 			{/if}
 		</div>
-		{#if $errors.model}
-			<span class="text-sm text-error-500">{String($errors.model)}</span>
+		{#if $errors.name}
+			<span class="text-sm text-error-500"
+				>{Array.isArray($errors.name) ? $errors.name[0] : String($errors.name)}</span
+			>
 		{/if}
 	</label>
 
@@ -296,7 +336,9 @@
 			{/each}
 		</select>
 		{#if $errors.tag}
-			<span class="text-sm text-error-500">{String($errors.tag)}</span>
+			<span class="text-sm text-error-500"
+				>{Array.isArray($errors.tag) ? $errors.tag[0] : String($errors.tag)}</span
+			>
 		{/if}
 	</label>
 
@@ -322,7 +364,9 @@
 			/>
 		</div>
 		{#if $errors.weight}
-			<span class="text-sm text-error-500">{String($errors.weight)}</span>
+			<span class="text-sm text-error-500"
+				>{Array.isArray($errors.weight) ? $errors.weight[0] : String($errors.weight)}</span
+			>
 		{/if}
 	</label>
 
