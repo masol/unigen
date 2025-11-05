@@ -1,11 +1,11 @@
 <script lang="ts">
-	import IconSettings from '~icons/carbon/settings';
+	import IconCommand from '~icons/carbon/mac-command';
 	import { Dialog, Portal } from '@skeletonlabs/skeleton-svelte';
 </script>
 
 <Dialog>
-	<Dialog.Trigger>
-		<IconSettings />
+	<Dialog.Trigger disabled={true}>
+		<IconCommand />
 	</Dialog.Trigger>
 	<Portal>
 		<Dialog.Backdrop class="fixed inset-0 z-50 bg-surface-50-950/50" />

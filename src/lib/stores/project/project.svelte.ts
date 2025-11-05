@@ -10,8 +10,9 @@ import { ask } from '@tauri-apps/plugin-dialog';
 import { t } from '$lib/stores/config/ipc/i18n.svelte';
 import { logger } from "$lib/utils/logger";
 import pMap from "p-map";
-import { CfgDB } from "$lib/utils/appdb/cfgdb";
 import { mqttInstance } from "$lib/utils/appdb/mqtt";
+import { projectBase } from "$lib/utils/appdb/project";
+import { viewStore } from "./view.svelte";
 
 
 const KEYNAME = "recent";
@@ -21,8 +22,6 @@ const GITDATADIR = "gitdata";
 export type RepoLoadResult = { success: boolean, error?: string }
 export class ProjectStore {
     currentId = $state('');
-
-    private prjdb: CfgDB | null = null;
 
     // Derived
     get currentRepository() {
@@ -35,7 +34,11 @@ export class ProjectStore {
         let sucOpend = false;
         // 首先检查是否有命令行请求打开/新建．
         if (softinfo.prjarg) {
-            sucOpend = (await this.loadPath(softinfo.prjarg)).success;
+            const argLoadResult = (await this.loadPath(softinfo.prjarg))
+            sucOpend = argLoadResult.success;
+            //@todo: 是否提示无法加载项目?
+            logger.error(argLoadResult.error)
+            return; // 命令行加载失败,不再继续,直接返回.
         }
 
         // console.log("repositoryStore.openedRepo=", repositoryStore.openedRepos())
@@ -57,7 +60,7 @@ export class ProjectStore {
     async loadPath(path: string): Promise<RepoLoadResult> {
         const repo = repositoryStore.repositories.find(r => r.path === path)
         if (repo) {
-            return this.loadRepository(repo);
+            return await this.loadRepository(repo);
         }
 
         let metaInfo: Repository | null = null;
@@ -186,6 +189,7 @@ export class ProjectStore {
         }
 
         await this.close();
+        projectBase.prjPath = repo.path;
         const locked = await invoke("lock_project", { path: repo.path });
         if (!locked) {
             return {
@@ -204,9 +208,8 @@ export class ProjectStore {
             await Promise.all([
                 (async () => {
                     const dbExist = await exists(prjdbPath);
-                    const projdb = new CfgDB();
-                    // 项目数据库不存在，开始初始化之．
-                    await projdb.init(`sqlite:${prjdbPath}`, !dbExist);
+                    // 初始化项目目录．
+                    await projectBase.reinitdb(`sqlite:${prjdbPath}`, !dbExist);
                 })(),
                 (async () => {
                     const gitOk = await invoke("ensure_git", { path: gitdata });
@@ -225,6 +228,7 @@ export class ProjectStore {
         /*
         // 主动通知(project依赖其它项)其它组件开始更新数据和状态．
         */
+        await viewStore.init();
 
 
         // 保存最近打开，无需通知其它－－也无需锁定，保存最后打开的即可．
@@ -245,16 +249,8 @@ export class ProjectStore {
             await invoke("unlock_project");
             this.currentId = "";
         }
-
-        // 其它数据库Model依赖prjdb,无需关闭，直接设置为null即可．
-        // .... = null;
-        // 最后，关闭prjdb.
-        if (this.prjdb) {
-            await this.prjdb.close();
-            this.prjdb = null;
-        }
+        await projectBase.close();
     }
-
 }
 
 

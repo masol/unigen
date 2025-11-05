@@ -28,7 +28,6 @@
 				toaster.error({
 					description: loadedResult.error
 				});
-				logger.error("load failed!~!")
 			}
 			loadingStore.hide();
 		}

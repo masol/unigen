@@ -33,10 +33,16 @@
 	async function handleRepositorySelect(repo: Repository) {
 		// await projectStore.setCurrentRepository(id);
 		loadingStore.show(t('salty_flaky_worm_exhale'));
-		const loadedResult = await projectStore.loadPath(repo.path);
-		if (!loadedResult.success && loadedResult.error) {
+		try {
+			const loadedResult = await projectStore.loadPath(repo.path);
+			if (!loadedResult.success && loadedResult.error) {
+				toaster.error({
+					description: loadedResult.error
+				});
+			}
+		} catch (e) {
 			toaster.error({
-				description: loadedResult.error
+				description: `加载项目${repo.name}时发生错误:${e}`
 			});
 		}
 		loadingStore.hide();

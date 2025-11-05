@@ -3,7 +3,7 @@
 	import { Window } from '@tauri-apps/api/window';
 	import PanelToggle from './Paneltoggle.svelte';
 	import LeftTabs from './LeftTabs.svelte';
-	import DynamicTabs from './DynamicTabs.svelte';
+	import ViewTabs from './ViewTabs.svelte';
 	import { leftPanel } from '../stores/config/prj/panel.svelte';
 
 	import IconMdiWindowMinimize from '~icons/mdi/window-minimize';
@@ -214,7 +214,7 @@
 	role="toolbar"
 >
 	<!-- toggle Left panel & LeftTabs -->
-	<div class="relative z-10 flex min-w-0 items-center gap-2 rounded px-1">
+	<div class="flex relative z-10 flex min-w-0 items-center gap-2 rounded px-1">
 		<PanelToggle size="sm" />
 		{#if leftPanel.show}
 			<div class="overflow-hidden transition-all duration-200" style="width: {leftTabsWidth()}px;">
@@ -229,7 +229,7 @@
 
 	<!-- Center: Dynamic tabs -->
 	<div class="relative z-10 flex min-w-0 flex-1" style="margin-right: {controlsWidth}px;">
-		<DynamicTabs />
+		<ViewTabs />
 	</div>
 
 	<!-- Right: window controls - 占位元素 -->
@@ -242,17 +242,17 @@
 		<!-- 这个是占位用的，实际内容在 fixed 元素中 -->
 	</div>
 </div>
-
 <!-- Right: window controls - Fixed 位置 -->
 <div
 	bind:this={controlsRef}
-	class="pointer-events-auto fixed top-0 right-0 flex items-center gap-1 bg-surface-100/80 px-2 dark:bg-surface-800/80"
+	class="pointer-events-auto fixed top-0 right-0 flex items-center gap-1 px-2"
 	style="height: var(--tb-height); z-index: 9999;"
 >
 	<Motion let:motion whileHover={{ scale: 1.2 }} whileTap={{ rotate: 45 }}>
 		<button
 			class="variant-ghost btn grid size-8 place-items-center rounded-md btn-sm
-             hover:bg-surface-200 dark:hover:bg-surface-700"
+             transition-colors duration-200
+             hover:bg-surface-200/50 dark:hover:bg-surface-700/50"
 			type="button"
 			aria-label="Minimize window"
 			onclick={minimize}
@@ -265,7 +265,8 @@
 	<Motion let:motion whileHover={{ scale: 1.2 }} whileTap={{ rotate: 45 }}>
 		<button
 			class="variant-ghost btn grid size-8 place-items-center rounded-md btn-sm
-             hover:bg-surface-200 dark:hover:bg-surface-700"
+             transition-colors duration-200
+             hover:bg-surface-200/50 dark:hover:bg-surface-700/50"
 			type="button"
 			aria-label={isMax ? 'Restore window' : 'Maximize window'}
 			onclick={toggleMaximize}
@@ -282,6 +283,7 @@
 	<Motion let:motion whileHover={{ scale: 1.2 }} whileTap={{ rotate: 45 }}>
 		<button
 			class="variant-ghost btn grid size-8 place-items-center rounded-md btn-sm
+             transition-colors duration-200
              hover:bg-error-500/90 hover:text-white"
 			type="button"
 			aria-label="Close window"

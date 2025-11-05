@@ -109,7 +109,7 @@
 					disabled={selectedRepo.id === projectStore.currentId || processing}
 				>
 					<IconFolderGit class="size-4" />
-					<span>打开</span>
+					<span>切换</span>
 				</button>
 			</div>
 		</div>

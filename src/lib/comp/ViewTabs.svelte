@@ -1,26 +1,20 @@
 <script lang="ts">
-	import IconMdiPlus from '~icons/mdi/plus';
 	import IconMdiClose from '~icons/mdi/close';
+	import { viewStore, type ViewItemType } from '$lib/stores/project/view.svelte';
+	import IconSettings from '~icons/carbon/settings';
+	import { localeStore, t } from '$lib/stores/config/ipc/i18n.svelte';
 
-	interface Tab {
-		id: string;
-		label: string;
-		closable: boolean;
-	}
+	let dynamicTabs = $derived<ViewItemType[]>(viewStore.tabs);
 
-	let dynamicTabs = $state<Tab[]>([
-		{ id: 'tab-1', label: 'Document 1123123213123123123', closable: true },
-		{ id: 'tab-2', label: 'Document 2', closable: true }
-	]);
-
-	let activeTabId = $state<string>('tab-1');
+	let activeTabId = $derived<string>(viewStore.activeId);
 
 	function selectTab(tabId: string) {
-		activeTabId = tabId;
+		viewStore.setActive(tabId);
 	}
 
-	function closeTab(tabId: string, e: MouseEvent | KeyboardEvent) {
+	async function closeTab(tabId: string, e: MouseEvent | KeyboardEvent) {
 		e.stopPropagation();
+		await viewStore.removeView(tabId);
 		dynamicTabs = dynamicTabs.filter((tab) => tab.id !== tabId);
 
 		if (activeTabId === tabId) {
@@ -30,17 +24,6 @@
 				activeTabId = '';
 			}
 		}
-	}
-
-	function addNewTab() {
-		const newId = `tab-${Date.now()}`;
-		const newTab: Tab = {
-			id: newId,
-			label: `Document ${dynamicTabs.length + 1}`,
-			closable: true
-		};
-		dynamicTabs = [...dynamicTabs, newTab];
-		activeTabId = newId;
 	}
 
 	function onTabKeydown(e: KeyboardEvent, tabId: string) {
@@ -59,13 +42,6 @@
 			e.preventDefault();
 			e.stopPropagation();
 			closeTab(tabId, e);
-		}
-	}
-
-	function onAddKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter' || e.key === ' ') {
-			e.preventDefault();
-			addNewTab();
 		}
 	}
 </script>
@@ -90,7 +66,14 @@
 			onclick={() => selectTab(tab.id)}
 			onkeydown={(e) => onTabKeydown(e, tab.id)}
 		>
-			<span class="max-w-32 truncate">{tab.label}</span>
+			{#if tab.type === 'settings'}
+				<IconSettings></IconSettings>
+			{/if}
+			<span class="max-w-32 truncate"
+				>{#key localeStore.lang}
+					{t(tab.label)}
+				{/key}</span
+			>
 			{#if tab.closable}
 				<span
 					class="grid size-4 place-items-center rounded opacity-0 transition-opacity
@@ -108,16 +91,4 @@
 			{/if}
 		</div>
 	{/each}
-
-	<button
-		class="grid size-7 shrink-0 place-items-center rounded-md
-		       text-surface-600 hover:bg-surface-200
-		       focus-visible:ring-2 focus-visible:ring-primary-500
-		       focus-visible:ring-offset-2 focus-visible:ring-offset-surface-100 dark:text-surface-400 dark:hover:bg-surface-700 dark:focus-visible:ring-offset-surface-800"
-		aria-label="Add new tab"
-		onclick={addNewTab}
-		onkeydown={onAddKeydown}
-	>
-		<IconMdiPlus class="size-4" aria-hidden="true" />
-	</button>
 </div>

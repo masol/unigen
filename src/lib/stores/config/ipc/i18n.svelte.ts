@@ -62,7 +62,12 @@ export function t<K extends MessageKey>(
 ): string {
     const _ = localeStore.lang;
     void (_);
-    return Reflect.apply(m[key as K], null, params) as string;
+    // return Object.hasOwn(m, key) ? Reflect.apply(m[key as K], null, params) as string : key;
+    const fn = m[key as K];
+    if (typeof fn === 'function') {
+        return Reflect.apply(fn, null, params) as string;
+    }
+    return key;
 }
 
 function isValidLocale(str: string): str is Locale {

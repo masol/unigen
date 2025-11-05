@@ -206,7 +206,9 @@ export class CfgDB {
 
     async close() {
         if (this.db) {
-            await this.db.close();
+            // 不能主动close,会关闭连接池.只能依赖GC来被动释放.@todo: 查阅文档以确认GC会释放underline database.
+            // await this.db.close();
+            this.db = null;
         }
     }
 }
