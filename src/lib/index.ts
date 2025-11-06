@@ -6,6 +6,8 @@ import { appDB } from "./utils/appdb/index.js";
 import { repositoryStore } from "./stores/config/ipc/repository.svelte.js";
 import { projectStore } from "./stores/project/project.svelte.js";
 import { mqttInstance } from "./utils/appdb/mqtt.js";
+import { proxy } from "./utils/proxy.js";
+import { llmStore } from "./stores/config/ipc/llms.svelte.js";
 
 export async function init() {
     // 开始初始化mqtt,无需等待，不再依赖softinfo.
@@ -23,5 +25,7 @@ export async function init() {
             await repositoryStore.init();
             await projectStore.init();
         })(),
+        proxy.init(),
+        llmStore.init()
     ]);
 }

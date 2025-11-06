@@ -1,6 +1,6 @@
+use crate::state::{args::Args, GlobalState};
 use std::io;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-use crate::state::{GlobalState, args::Args};
 
 pub fn init() -> Result<(), Box<dyn std::error::Error>> {
     let state = GlobalState::get();

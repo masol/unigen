@@ -1,10 +1,10 @@
+use crate::mqtt::controller::send_shutdown_command;
+use crate::utils::filelock::read_mqtt_pid;
 use clap::Parser;
 use std::fs;
 use std::path::PathBuf;
 use std::process;
 use tempfile::NamedTempFile;
-use crate::utils::filelock::read_mqtt_pid;
-use crate::mqtt::controller::send_shutdown_command;
 
 #[derive(Parser, Debug, Clone)]
 #[command(
@@ -93,9 +93,7 @@ impl Args {
     ///
     /// This should be called early in main() before any other initialization.
     /// If kill flag is set, sends shutdown command and exits the process.
-    pub fn handle_kill_if_requested(
-        &self
-    ) {
+    pub fn handle_kill_if_requested(&self) {
         if !self.kill {
             return;
         }

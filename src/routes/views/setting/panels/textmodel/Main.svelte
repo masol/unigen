@@ -10,8 +10,7 @@
 	import ModelEditor from './Dialog.svelte';
 	import { llmStore } from '$lib/stores/config/ipc/llms.svelte';
 	import { type LLMConfig } from '$lib/utils/llms/index.type';
-
-	type ModelCapability = 'fast' | 'powerful' | 'balanced';
+	import { logger } from '$lib/utils/logger';
 
 	const capabilityConfig = {
 		fast: {
@@ -94,59 +93,60 @@
 	<div class="grid gap-3">
 		{#each modelConfigs as config (config.id)}
 			{@const capConfig = capabilityConfig[config.tag]}
-			<div
-				class="group relative rounded-xl border border-surface-200
+			{#if capConfig}
+				<div
+					class="group relative rounded-xl border border-surface-200
                bg-surface-50 shadow-sm transition-all duration-300
                hover:shadow-xl {capConfig.hoverShadow}
                dark:border-surface-700 dark:bg-surface-800
                hover:border-{config.tag === 'fast'
-					? 'sky'
-					: config.tag === 'powerful'
-						? 'purple'
-						: 'emerald'}-300
-               dark:hover:border-{config.tag === 'fast'
-					? 'sky'
-					: config.tag === 'powerful'
-						? 'purple'
-						: 'emerald'}-600
-               {!config.enabled ? 'opacity-60' : ''}"
-			>
-				<div
-					class="absolute inset-0 rounded-xl bg-gradient-to-br opacity-0 transition-opacity duration-300
-                    group-hover:opacity-100 {config.tag === 'fast'
-						? 'from-sky-50/50 to-transparent dark:from-sky-950/20'
+						? 'sky'
 						: config.tag === 'powerful'
-							? 'from-purple-50/50 to-transparent dark:from-purple-950/20'
-							: 'from-emerald-50/50 to-transparent dark:from-emerald-950/20'}"
-				></div>
+							? 'purple'
+							: 'emerald'}-300
+               dark:hover:border-{config.tag === 'fast'
+						? 'sky'
+						: config.tag === 'powerful'
+							? 'purple'
+							: 'emerald'}-600
+               {!config.enabled ? 'opacity-60' : ''}"
+				>
+					<div
+						class="absolute inset-0 rounded-xl bg-gradient-to-br opacity-0 transition-opacity duration-300
+                    group-hover:opacity-100 {config.tag === 'fast'
+							? 'from-sky-50/50 to-transparent dark:from-sky-950/20'
+							: config.tag === 'powerful'
+								? 'from-purple-50/50 to-transparent dark:from-purple-950/20'
+								: 'from-emerald-50/50 to-transparent dark:from-emerald-950/20'}"
+					></div>
 
-				<div class="relative flex items-center gap-4 p-5">
-					<div class="flex-shrink-0">
-						<div
-							class="flex h-12 w-12 items-center justify-center rounded-xl
+					<div class="relative flex items-center gap-4 p-5">
+						<div class="flex-shrink-0">
+							<div
+								class="flex h-12 w-12 items-center justify-center rounded-xl
                         {capConfig.bg} {capConfig.border} border
                         transition-transform duration-300 group-hover:scale-110"
-						>
-							<capConfig.icon></capConfig.icon>
+							>
+								<capConfig.icon></capConfig.icon>
+							</div>
 						</div>
-					</div>
 
-					<div class="min-w-0 flex-1">
-						<div class="mb-2 flex items-center gap-2">
-							<span
-								class="rounded-full bg-surface-200 px-2.5 py-0.5 text-xs
+						<div class="min-w-0 flex-1">
+							<div class="mb-2 flex items-center gap-2">
+								<span
+									class="rounded-full bg-surface-200 px-2.5 py-0.5 text-xs
                            font-medium text-surface-700
                            dark:bg-surface-700 dark:text-surface-300"
-							>
-								{config.provider}
-							</span>
-							<span
-								class="rounded-full px-2.5 py-0.5 text-xs font-medium
+								>
+									{config.provider}
+								</span>
+								<span
+									class="rounded-full px-2.5 py-0.5 text-xs font-medium
                            {capConfig.bg} {capConfig.color}"
-							>
-								{capConfig.label}
-							</span>
-							<!-- {#if config.vendor}
+								>
+									{capConfig.label}
+								</span>
+								<!-- {#if config.vendor}
 								<span
 									class="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs
                              font-medium text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400"
@@ -154,15 +154,15 @@
 									{config.vendor}
 								</span>
 							{/if} -->
-						</div>
-						<div class="flex items-center gap-4">
-							<h3
-								class="truncate font-mono text-base font-semibold text-surface-900 dark:text-surface-50"
-							>
-								{config.name}
-							</h3>
-							<span class="h-1 w-1 rounded-full bg-surface-400"></span>
-							<!-- <span
+							</div>
+							<div class="flex items-center gap-4">
+								<h3
+									class="truncate font-mono text-base font-semibold text-surface-900 dark:text-surface-50"
+								>
+									{config.name}
+								</h3>
+								<span class="h-1 w-1 rounded-full bg-surface-400"></span>
+								<!-- <span
 								class="flex items-center gap-1.5 text-sm text-surface-600 dark:text-surface-400"
 							>
 								权重:
@@ -170,51 +170,54 @@
 									{config.weight}
 								</span>
 							</span> -->
+							</div>
 						</div>
-					</div>
 
-					<div
-						class="flex items-center gap-2 opacity-60 transition-opacity duration-200 group-hover:opacity-100"
-					>
-						<button
-							onclick={() => toggleEnabled(config.id)}
-							class="rounded-lg p-2.5 transition-all duration-200
-                     {config.enabled
-								? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950'
-								: 'text-surface-400 hover:bg-surface-100 dark:text-surface-600 dark:hover:bg-surface-700'}"
-							title={config.enabled ? '禁用模型' : '启用模型'}
+						<div
+							class="flex items-center gap-2 opacity-60 transition-opacity duration-200 group-hover:opacity-100"
 						>
-							{#if config.enabled}
-								<IconToggleRight class="h-5 w-5"></IconToggleRight>
-							{:else}
-								<IconToggleLeft class="h-5 w-5"></IconToggleLeft>
-							{/if}
-						</button>
+							<button
+								onclick={() => toggleEnabled(config.id)}
+								class="rounded-lg p-2.5 transition-all duration-200
+                     {config.enabled
+									? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950'
+									: 'text-surface-400 hover:bg-surface-100 dark:text-surface-600 dark:hover:bg-surface-700'}"
+								title={config.enabled ? '禁用模型' : '启用模型'}
+							>
+								{#if config.enabled}
+									<IconToggleRight class="h-5 w-5"></IconToggleRight>
+								{:else}
+									<IconToggleLeft class="h-5 w-5"></IconToggleLeft>
+								{/if}
+							</button>
 
-						<button
-							onclick={() => editModel(config.id)}
-							class="rounded-lg p-2.5 text-surface-600 transition-all
+							<button
+								onclick={() => editModel(config.id)}
+								class="rounded-lg p-2.5 text-surface-600 transition-all
                      duration-200 hover:bg-surface-100
                      hover:text-primary-600 dark:text-surface-400
                      dark:hover:bg-surface-700 dark:hover:text-primary-400"
-							title="编辑配置"
-						>
-							<IconEdit class="h-5 w-5"></IconEdit>
-						</button>
+								title="编辑配置"
+							>
+								<IconEdit class="h-5 w-5"></IconEdit>
+							</button>
 
-						<button
-							onclick={() => deleteModel(config.id)}
-							class="rounded-lg p-2.5 text-surface-600 transition-all
+							<button
+								onclick={() => deleteModel(config.id)}
+								class="rounded-lg p-2.5 text-surface-600 transition-all
                      duration-200 hover:bg-error-50
                      hover:text-error-600 dark:text-surface-400
                      dark:hover:bg-error-950 dark:hover:text-error-400"
-							title="删除模型"
-						>
-							<IconTrash class="h-5 w-5"></IconTrash>
-						</button>
+								title="删除模型"
+							>
+								<IconTrash class="h-5 w-5"></IconTrash>
+							</button>
+						</div>
 					</div>
 				</div>
-			</div>
+			{:else}
+				<div>发生错误，配置对象:{JSON.stringify(config)}</div>
+			{/if}
 		{/each}
 	</div>
 

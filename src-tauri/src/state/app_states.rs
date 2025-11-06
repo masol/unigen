@@ -1,8 +1,8 @@
+use crate::utils::filelock::acquire_lock;
 use parking_lot::RwLock;
 use std::fs::File;
 use std::path::Path;
-use std::sync::Arc;
-use crate::utils::filelock::acquire_lock; // 确保路径正确
+use std::sync::Arc; // 确保路径正确
 
 /// 应用状态结构体 - 内部数据
 #[derive(Debug)]

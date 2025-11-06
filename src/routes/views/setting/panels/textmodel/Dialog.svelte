@@ -2,7 +2,8 @@
 	import { Dialog as DialogPrimitive } from 'bits-ui';
 	import IconPlus from '~icons/lucide/plus';
 	import ModelEditor from './Editor.svelte';
-	import type { ModelConfig } from './types';
+	import type { LLMConfig } from '$lib/utils/llms/index.type';
+	import { llmStore } from '$lib/stores/config/ipc/llms.svelte';
 
 	interface Props {
 		modelId?: string;
@@ -10,8 +11,12 @@
 	}
 	let { modelId = '', open = $bindable(false) }: Props = $props();
 
-	const handleSave = (config: ModelConfig) => {
+	const initialData = $derived(llmStore.find(modelId));
+
+	const handleSave = async (config: LLMConfig): Promise<void> => {
 		console.log('保存模型配置:', config);
+		config.enabled = true;
+		await llmStore.upsert(config);
 		open = false;
 	};
 </script>
@@ -55,7 +60,7 @@
 					</DialogPrimitive.Close>
 				</header>
 
-				<ModelEditor onSave={handleSave} onCancel={() => (open = false)} />
+				<ModelEditor {initialData} onSave={handleSave} onCancel={() => (open = false)} />
 			</div>
 		</DialogPrimitive.Content>
 	</DialogPrimitive.Portal>

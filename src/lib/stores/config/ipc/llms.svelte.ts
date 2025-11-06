@@ -1,6 +1,6 @@
 import { appDB } from "$lib/utils/appdb";
 import { eventBus } from "$lib/utils/evt";
-import { llmCenter } from "$lib/utils/llms/center";
+import { llmCenter } from "$lib/utils/llms";
 import { type LLMConfig } from "$lib/utils/llms/index.type";
 
 const KEYNAME = "llms";
@@ -22,7 +22,7 @@ export class LLMStore {
         this.llms = this.llms.filter(r => r.id !== id);
 
         // 主动通知llmCenter，更新llm.
-        llmCenter.removeLLM(oldLLM.tag,id);
+        llmCenter.removeLLM(oldLLM.tag, id);
         // eventBus.emit<"llms.removed">("llms.removed", { id })
         await appDB.remove(id, KEYNAME, true)
     }
@@ -48,7 +48,7 @@ export class LLMStore {
     private async loadFromDB(): Promise<boolean> {
         const cfgs = await appDB.getConfigsByKey(KEYNAME);
         if (cfgs) {
-            const llms: LLMConfig[] = cfgs.map((item) => item.value as LLMConfig);
+            const llms: LLMConfig[] = cfgs.flatMap((item) => item.value as unknown as LLMConfig[]); 
             this.setLLM(llms);
             return true;
         }

@@ -6,13 +6,15 @@
 	import IconChevronDown from '~icons/carbon/chevron-down';
 	import IconView from '~icons/carbon/view';
 	import IconViewOff from '~icons/carbon/view-off';
-	import { listModels, LLMWrapper, ProviderNames } from '$lib/utils/llms/instance';
+	import IconWeb from '~icons/mdi/web';
+	import { listModels, ProviderNames } from '$lib/utils/llms/instance';
 	import { t } from '$lib/stores/config/ipc/i18n.svelte';
 	import type { LLMConfig, LLMTag } from '$lib/utils/llms/index.type';
+	import { nav2Provider } from './utils';
 
 	interface Props {
 		initialData?: Partial<LLMConfig>;
-		onSave: (config: LLMConfig) => void;
+		onSave: (config: LLMConfig) => Promise<void>;
 		onCancel: () => void;
 	}
 
@@ -45,9 +47,10 @@
 			// 改用 onSubmit
 			async onSubmit({ formData, cancel }) {
 				// 强制验证，不管是否修改过
-				const isValid = await validateForm();
+				const validInfo = await validateForm();
 
-				if (!isValid) {
+				if (!validInfo.valid) {
+					errors.set(validInfo.errors);
 					cancel();
 					console.log('表单验证失败');
 					return;
@@ -58,9 +61,17 @@
 				// console.log('config=', config);
 
 				try {
-					await listModels(config);
+					const models = await listModels(config);
+					// console.log('models=', models, $form.name);
+					if (models.indexOf($form.name) < 0) {
+						errors.set({
+							name: ['无效的模型名称！']
+						});
+						cancel();
+						return;
+					}
 					// 验证成功，调用 onSave
-					onSave(config);
+					await onSave(config);
 				} catch (e) {
 					// API 验证失败
 					cancel(); // 取消提交
@@ -189,13 +200,23 @@
 		{ value: 'powerful', label: '能力优先' },
 		{ value: 'balanced', label: '平衡' }
 	] as const;
+
+	let isNaving = $state(false);
+	async function nav2ApikeyWeb() {
+		isNaving = true;
+		try {
+			await nav2Provider($form.provider);
+		} finally {
+			isNaving = false;
+		}
+	}
 </script>
 
 <form method="POST" use:enhance class="space-y-5">
 	<!-- 模型提供商 -->
 	<div class="form-field">
 		<label class="label">
-			<span class="text-surface-900 dark:text-surface-50">模型提供商</span>
+			<span class="text-surface-900 dark:text-surface-50">服务提供商</span>
 			<select
 				name="provider"
 				bind:value={$form.provider}
@@ -216,31 +237,48 @@
 		</div>
 	</div>
 
-	<!-- API Key -->
+	<!-- Api Key -->
 	<div class="form-field">
 		<label class="label">
 			<span class="text-surface-900 dark:text-surface-50">API Key</span>
-			<div class="relative">
-				<input
-					name="apiKey"
-					type={showApiKey ? 'text' : 'password'}
-					bind:value={$form.apiKey}
-					class="input pr-10"
-					class:input-error={$errors.apiKey}
-					placeholder="sk-..."
-				/>
+			<div class="input-group-divider input-group grid-cols-[auto_1fr]">
 				<button
 					type="button"
-					onclick={() => (showApiKey = !showApiKey)}
-					class="absolute top-1/2 right-3 -translate-y-1/2 text-surface-600 transition-colors hover:text-surface-900 dark:text-surface-400 dark:hover:text-surface-100"
-					aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
+					onclick={nav2ApikeyWeb}
+					disabled={isNaving}
+					class="input-group-shim rounded-l px-2 text-surface-600 transition-colors hover:bg-surface-100 hover:text-surface-900 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-surface-100"
+					aria-label="获取 API Key"
+					title="点击跳转到 API Key 获取页面"
 				>
-					{#if showApiKey}
-						<IconViewOff class="h-5 w-5" />
-					{:else}
-						<IconView class="h-5 w-5" />
-					{/if}
+					<IconWeb class="h-5 w-5" />
 				</button>
+
+				<div class="relative w-full">
+					<input
+						name="apiKey"
+						type={showApiKey ? 'text' : 'password'}
+						bind:value={$form.apiKey}
+						class="input pr-10"
+						class:input-error={$errors.apiKey}
+						placeholder="sk-..."
+					/>
+					<button
+						type="button"
+						onclick={(e) => {
+							e.preventDefault();
+							showApiKey = !showApiKey;
+						}}
+						class="absolute top-0 right-0 flex h-full items-center px-3 text-surface-600 transition-colors hover:text-surface-900 dark:text-surface-400 dark:hover:text-surface-100"
+						aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
+						title={showApiKey ? '点击隐藏 API Key' : '点击显示 API Key'}
+					>
+						{#if showApiKey}
+							<IconViewOff class="h-5 w-5" />
+						{:else}
+							<IconView class="h-5 w-5" />
+						{/if}
+					</button>
+				</div>
 			</div>
 		</label>
 		<div class="error-container">
@@ -325,7 +363,7 @@
 	<!-- 模型标签 -->
 	<div class="form-field">
 		<label class="label">
-			<span class="text-surface-900 dark:text-surface-50">模型标签</span>
+			<span class="text-surface-900 dark:text-surface-50">模型能力</span>
 			<select name="tag" bind:value={$form.tag} class="select">
 				{#each tagOptions as option}
 					<option value={option.value}>{option.label}</option>
