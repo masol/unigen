@@ -45,6 +45,10 @@ export default defineConfig({
 		}
 	},
 
+	define: {
+		'process.env': {}
+	},
+
 	optimizeDeps: {
 		exclude: [
 			'$lib/paraglide/runtime.js',

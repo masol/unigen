@@ -15,16 +15,16 @@
 
 	const settingsData: SettingItem[] = [
 		{
-			id: 'system',
-			label: '系统',
+			id: 'network',
+			label: '网络设置',
 			icon: IconWeb,
-			description: 'Unigen系统设置'
+			description: '配置网络连接与代理服务器'
 		},
 		{
 			id: 'llm',
-			label: '语言模型',
+			label: 'LLM模型',
 			icon: IconRobot,
-			description: '配置 AI 对话模型'
+			description: '管理模型服务商与API密钥'
 		}
 	];
 
@@ -60,7 +60,7 @@
 
 						{#if item.description}
 							<span
-								class="text-xs transition-colors {selectedItem === item.id
+								class="text-[9px] transition-colors {selectedItem === item.id
 									? 'text-primary-600/80 dark:text-primary-400/70'
 									: 'text-surface-500 group-hover:text-surface-600 dark:text-surface-400 dark:group-hover:text-surface-300'}"
 							>

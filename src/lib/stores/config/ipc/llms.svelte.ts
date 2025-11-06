@@ -24,7 +24,9 @@ export class LLMStore {
         // 主动通知llmCenter，更新llm.
         llmCenter.removeLLM(oldLLM.tag, id);
         // eventBus.emit<"llms.removed">("llms.removed", { id })
-        await appDB.remove(id, KEYNAME, true)
+        // 所有值存在一条记录(一个id)下！！
+        // await appDB.remove(id, KEYNAME, true)
+        await appDB.upsertByKey(KEYNAME, JSON.stringify(this.llms), true)
     }
 
     async upsert(llm: LLMConfig) {
@@ -48,7 +50,7 @@ export class LLMStore {
     private async loadFromDB(): Promise<boolean> {
         const cfgs = await appDB.getConfigsByKey(KEYNAME);
         if (cfgs) {
-            const llms: LLMConfig[] = cfgs.flatMap((item) => item.value as unknown as LLMConfig[]); 
+            const llms: LLMConfig[] = cfgs.flatMap((item) => item.value as unknown as LLMConfig[]);
             this.setLLM(llms);
             return true;
         }

@@ -10,7 +10,6 @@
 	import ModelEditor from './Dialog.svelte';
 	import { llmStore } from '$lib/stores/config/ipc/llms.svelte';
 	import { type LLMConfig } from '$lib/utils/llms/index.type';
-	import { logger } from '$lib/utils/logger';
 
 	const capabilityConfig = {
 		fast: {
