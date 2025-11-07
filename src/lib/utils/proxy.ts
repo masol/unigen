@@ -1,6 +1,5 @@
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
-import micromatch from 'micromatch';
-// import { logger } from './logger';
+import picomatch from 'picomatch';
 
 export type ProxyType = 'all' | 'http' | 'https';
 
@@ -20,6 +19,8 @@ export interface ProxyConfig {
     acceptInvalidCerts?: boolean;
     acceptInvalidHostnames?: boolean;
     targets?: string[];
+    // 缓存编译后的 matcher 函数
+    matchers?: ((hostname: string) => boolean)[];
 }
 
 let origFetch: (typeof window.fetch) | null = null;
@@ -51,16 +52,16 @@ const extractHostname = (input: string | URL | Request): string | null => {
 };
 
 /**
- * 检查主机名是否匹配代理规则
+ * 检查主机名是否匹配代理规则（使用缓存的 matcher）
  */
 const shouldProxy = (hostname: string): ProxyConfig | null => {
     for (const proxyInfo of proxyInfos) {
-        if (!proxyInfo.targets || proxyInfo.targets.length === 0) {
+        if (!proxyInfo.matchers || proxyInfo.matchers.length === 0) {
             continue;
         }
 
-        // 使用 micromatch 进行模式匹配
-        if (micromatch.isMatch(hostname, proxyInfo.targets)) {
+        // 只要有一个 matcher 匹配即命中
+        if (proxyInfo.matchers.some(matcher => matcher(hostname))) {
             return proxyInfo;
         }
     }
@@ -73,22 +74,19 @@ const shouldProxy = (hostname: string): ProxyConfig | null => {
 const buildProxyOptions = (proxyConfig: ProxyConfig, init?: RequestInit): any => {
     const allProxy: Record<string, any> = {
         url: proxyConfig.url,
-    }
+    };
 
-    // 添加基本认证信息
-    if (proxyConfig.basicAuth) {
+    if (proxyConfig.basicAuth?.username) {
         allProxy.auth = {
             username: proxyConfig.basicAuth.username,
             password: proxyConfig.basicAuth.password || ''
         };
     }
 
-    // 合并超时设置
     if (proxyConfig.connectTimeout) {
         allProxy.connectTimeout = proxyConfig.connectTimeout;
     }
 
-    // 合并证书验证设置
     if (proxyConfig.acceptInvalidCerts !== undefined) {
         allProxy.acceptInvalidCerts = proxyConfig.acceptInvalidCerts;
     }
@@ -103,7 +101,6 @@ const buildProxyOptions = (proxyConfig: ProxyConfig, init?: RequestInit): any =>
         }
     };
 
-    // 合并用户自定义的 init 选项
     if (init) {
         Object.assign(options, init);
     }
@@ -115,59 +112,37 @@ const proxyFetch = async (
     input: string | URL | Request,
     init?: RequestInit,
 ): Promise<Response> => {
-    console.log('Intercepted fetch request:', input, init);
+    // console.log('Intercepted fetch request:', input, init);
 
     if (!origFetch) {
         throw new Error('Original fetch not initialized');
     }
 
-    // 提取主机名
     const hostname = extractHostname(input);
-
     if (!hostname) {
-        console.log('Could not extract hostname, using original fetch');
         return origFetch(input, init);
     }
 
-    // 检查是否需要代理
     const proxyConfig = shouldProxy(hostname);
-
     if (proxyConfig) {
-        console.log(`Hostname "${hostname}" matches proxy pattern, using proxy:`, proxyConfig.url);
-
+        // console.log(`Hostname "${hostname}" matches proxy pattern, using proxy:`, proxyConfig.url);
         try {
-            // 构建代理选项
             const proxyOptions = buildProxyOptions(proxyConfig, init);
-
-            // 统一输入为字符串URL
-            const url = typeof input === 'string'
-                ? input
-                : input instanceof URL
-                    ? input.toString()
-                    : input.url;
-
-            // logger.debug("proxyOptions=", proxyOptions)
-            // 使用 tauriFetch 通过代理发送请求
             return await tauriFetch(input, proxyOptions);
         } catch (error) {
             console.error('Proxy fetch failed, falling back to original fetch:', error);
-            // 代理失败时回退到原始 fetch
             return origFetch(input, init);
         }
     } else {
-        console.log(`Hostname "${hostname}" does not match any proxy pattern, using original fetch`);
+        // console.log(`Hostname "${hostname}" does not match any proxy pattern`);
         return origFetch(input, init);
     }
 };
 
 export class Proxy {
     async init(): Promise<boolean> {
-        // 保存原始的 fetch
         origFetch = window.fetch;
-
-        // 拦截 window.fetch
         window.fetch = proxyFetch;
-
         console.log('Fetch proxy initialized');
         return true;
     }
@@ -175,20 +150,34 @@ export class Proxy {
     setProxies(configs: ProxyConfig[]) {
         proxyInfos = configs
             .filter(c => c.enabled && c.target)
-            .map(c => ({
-                ...c,
-                targets: c.target!.split(";").map(t => t.trim()).filter(t => t.length > 0)
-            }));
+            .map(c => {
+                const targets = c.target!
+                    .split(";")
+                    .map(t => t.trim())
+                    .filter(t => t.length > 0);
+
+                // ✅ 预编译所有 glob 模式为 matcher 函数，并缓存
+                const matchers = targets.map(pattern => {
+                    // 转为小写以支持大小写不敏感匹配（host 是 case-insensitive）
+                    const lowerPattern = pattern.toLowerCase();
+                    const matcher = picomatch(lowerPattern);
+                    return (hostname: string) => matcher(hostname.toLowerCase());
+                });
+
+                return {
+                    ...c,
+                    targets,
+                    matchers
+                };
+            });
 
         console.log('Proxy configurations updated:', proxyInfos);
     }
 
-    // 获取当前代理配置（用于调试）
     getProxies(): ProxyConfig[] {
         return [...proxyInfos];
     }
 
-    // 恢复原始 fetch
     restore(): void {
         if (origFetch) {
             window.fetch = origFetch;

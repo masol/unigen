@@ -32,18 +32,18 @@ export default defineConfig({
 		})] : [])
 	],
 
-	resolve: {
-		alias: {
-			// 使用空模块路径来禁用 Node.js 模块
-			fs: 'node:fs',
-			path: 'node:path',
-			crypto: 'node:crypto',
-			stream: 'node:stream',
-			util: 'node:util',
-			buffer: 'node:buffer'
-			// 注意：ejs 不是 Node.js 内置模块，如果不需要直接在 external 中排除
-		}
-	},
+	// resolve: {
+	// 	alias: {
+	// 		// 使用空模块路径来禁用 Node.js 模块
+	// 		fs: 'node:fs',
+	// 		path: 'node:path',
+	// 		crypto: 'node:crypto',
+	// 		stream: 'node:stream',
+	// 		util: 'node:util',
+	// 		buffer: 'node:buffer'
+	// 		// 注意：ejs 不是 Node.js 内置模块，如果不需要直接在 external 中排除
+	// 	}
+	// },
 
 	define: {
 		'process.env': {}
@@ -53,6 +53,7 @@ export default defineConfig({
 		exclude: [
 			'$lib/paraglide/runtime.js',
 			'$lib/paraglide/messages.js',
+			'@vinejs/vine'
 			// 排除 LangChain 避免预构建错误
 		],
 		esbuildOptions: {
@@ -69,6 +70,7 @@ export default defineConfig({
 		chunkSizeWarningLimit: 1000,
 
 		rollupOptions: {
+			external: ['@vinejs/vine'], 
 			output: {
 				// 使用对象形式更可靠
 				manualChunks(id) {
@@ -84,6 +86,10 @@ export default defineConfig({
 						if (id.includes('@zag-js/')) return 'zag-ui';
 					}
 				}
+			},
+			treeshake: {
+				moduleSideEffects: false,
+				propertyReadSideEffects: false
 			}
 		},
 
