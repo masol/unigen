@@ -1,23 +1,44 @@
-<!-- src/routes/settings/+page.svelte -->
 <script lang="ts">
-	import SettingsList from './SettingsList.svelte';
-	import SettingsPanel from './SettingsPanel.svelte';
+	import { navStore, ENTITIES, TRANSFORM, WORKFLOW } from '$lib/stores/navpanel/nav.svelte';
+	import EntityComp from './entities/main.svelte';
 
+	let currentNav = $derived(navStore.current);
 	let scrollY = $state(0);
-
 	function handleScroll(e: Event) {
 		scrollY = (e.target as HTMLElement).scrollTop;
 	}
+
+	const navList = $state([
+		{
+			id: ENTITIES
+		},
+		{
+			id: TRANSFORM
+		},
+		{
+			id: WORKFLOW
+		}
+	]);
 </script>
 
-<div class="flex h-full flex-col bg-surface-50 dark:bg-surface-900">
+<!-- <div class="p-4">
+					<h2 class="text-lg font-semibold text-surface-900 dark:text-surface-100">Left Panel</h2>
+					<p class="mt-2 text-sm text-surface-600 dark:text-surface-400">
+						Additional content goes here
+					</p>
+				</div> -->
+
+<div
+	class="flex h-full flex-col border-r border-surface-200 bg-surface-50 dark:border-surface-700 dark:bg-surface-900"
+>
 	<!-- 顶部标题栏（sticky） -->
 	<!-- <header
 		class="sticky top-0 z-10 border-b border-surface-200 bg-white/95 backdrop-blur-sm transition-all duration-200 dark:border-surface-700 dark:bg-surface-800/95"
 		class:shadow-lg={scrollY > 10}
 		class:border-surface-300={scrollY > 10}
 	>
-		<div class="mx-auto flex h-11 max-w-full items-center justify-between px-6">
+		<div class="mx-auto flex h-11 max-w-full items-center justify-between">
+			<input class="w-full" />
 			<div class="flex-1">
 				{#if hasChanges}
 					<div class="flex gap-2" transition:fade={{ duration: 200 }}>
@@ -53,19 +74,25 @@
 	<!-- 主内容区域 -->
 	<div class="flex min-h-0 flex-1">
 		<!-- 左侧树形导航 -->
-		<aside
-			class="w-64 flex-shrink-0 overflow-y-auto border-r border-surface-200 bg-white dark:border-surface-700 dark:bg-surface-800"
-		>
-			<div class="p-4">
-				<SettingsList />
+		{#each navList as nav (nav.id)}
+			<div
+				id={`nav-${nav.id}`}
+				role="tabpanel"
+				aria-labelledby={`nav-${nav.id}`}
+				tabindex={currentNav === nav.id ? 0 : -1}
+				class="relative h-full w-full overflow-auto"
+				style:display={currentNav === nav.id ? 'block' : 'none'}
+			>
+				{nav.id}
+				<!-- 动态组件渲染 - 使用导入的组件 -->
+				{#if nav.id === ENTITIES}
+					<EntityComp></EntityComp>
+				{:else if nav.id === WORKFLOW}
+					<!-- <OpenView /> -->
+				{:else if nav.id === TRANSFORM}
+					<!-- <SettingView /> -->
+				{/if}
 			</div>
-		</aside>
-
-		<!-- 右侧设置面板 -->
-		<main class="flex-1 overflow-y-auto" onscroll={handleScroll}>
-			<div class="mx-auto max-w-4xl p-6">
-				<SettingsPanel />
-			</div>
-		</main>
+		{/each}
 	</div>
 </div>

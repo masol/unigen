@@ -134,7 +134,7 @@ pub fn chk_and_boot_mqtt() -> bool {
             std::mem::forget(child);
 
             // 可选：短暂等待确认子进程启动成功
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            std::thread::sleep(std::time::Duration::from_millis(1000));
 
             // 再次检查是否真的启动成功
             if mqtt_is_running() {

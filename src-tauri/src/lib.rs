@@ -80,9 +80,11 @@ async fn initialize_app_async(app_handle: tauri::AppHandle) {
     tracing::info!("✅ SQL 后置初始化成功");
 
     // 3. 检查并启动mqtt.
-    if !chk_and_boot_mqtt() {
-        tracing::warn!("无法启动mqtt服务...")
-    }
+    tokio::spawn(async move {
+        if !chk_and_boot_mqtt() {
+            tracing::warn!("无法启动mqtt服务...")
+        }
+    });
 
     // 3. 其他初始化任务
     // if let Err(e) = warm_up_cache().await {

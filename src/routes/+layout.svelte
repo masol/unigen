@@ -3,7 +3,7 @@
 	import { init } from '$lib/index.js';
 	import { onMount, setContext } from 'svelte';
 	import Titlebar from '$lib/comp/Titlebar.svelte';
-	import Sidebar from '$lib/comp/Sidebar.svelte';
+	import Sidebar from '$lib/comp/sidebar/main.svelte';
 	import Statusbar from '$lib/comp/Statusbar.svelte';
 	import { Toast, createToaster } from '@skeletonlabs/skeleton-svelte';
 	import Backdrop from '$lib/comp/feedback/Backdrop.svelte';

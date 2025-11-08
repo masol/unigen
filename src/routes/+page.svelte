@@ -2,7 +2,8 @@
 	import { onMount } from 'svelte';
 	import { Pane, Splitpanes } from 'svelte-splitpanes';
 	import { leftPanel, rightPanel, calcMainSize } from '$lib/stores/config/prj/panel.svelte';
-	import View from './view.svelte';
+	import View from './views/main.svelte';
+	import NavPanel from './navpanel/main.svelte';
 
 	let splitpanesContainer: HTMLElement | undefined = $state();
 	let isResizing = $state(false);
@@ -138,12 +139,7 @@
 				class:opacity-100={leftPanel.show}
 				class:pointer-events-none={!leftPanel.show}
 			>
-				<div class="p-4">
-					<h2 class="text-lg font-semibold text-surface-900 dark:text-surface-100">Left Panel</h2>
-					<p class="mt-2 text-sm text-surface-600 dark:text-surface-400">
-						Additional content goes here
-					</p>
-				</div>
+				<NavPanel></NavPanel>
 			</aside>
 		</Pane>
 
