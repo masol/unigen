@@ -9,8 +9,8 @@ export class PanelStore {
     }
 }
 
-export const leftPanel = new PanelStore(true, 20);
-export const rightPanel = new PanelStore(true, 20);
+export const leftPanel = new PanelStore(true, 25);
+export const rightPanel = new PanelStore(false, 20);
 
 export function calcMainSize() {
     let mainSize = 100;

@@ -131,7 +131,8 @@ const proxyFetch = async (
             return await tauriFetch(input, proxyOptions);
         } catch (error) {
             console.error('Proxy fetch failed, falling back to original fetch:', error);
-            return origFetch(input, init);
+            // return origFetch(input, init);
+            throw error;
         }
     } else {
         // console.log(`Hostname "${hostname}" does not match any proxy pattern`);

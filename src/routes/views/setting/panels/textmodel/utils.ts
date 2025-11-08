@@ -9,7 +9,8 @@ const ApikeyURL: Record<string, string> = {
     "openai": "https://platform.openai.com/api-keys",
     "openrouter": "https://openrouter.ai/settings/keys",
     "groq": "https://console.groq.com/keys",
-    "moonshot": "https://platform.moonshot.cn/console/api-keys"
+    "moonshot": "https://platform.moonshot.cn/console/api-keys",
+    "poe": "https://poe.com/api_key"
 }
 
 export async function nav2Provider(provider: string) {

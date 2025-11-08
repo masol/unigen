@@ -20,5 +20,16 @@
 	"groq": "Groq",
 	"moonshot": "月之暗面",
 	"zhipu": "智谱清言",
-	"openrouter": "OpenRouter"
+	"openrouter": "OpenRouter",
+	"tag_fast": "文本模型(速度)",
+	"tag_powerful": "文本模型(能力)",
+	"tag_balanced": "文本模型",
+	"tag_image": "文生图",
+	"tag_image_modify": "文修图",
+	"tag_video": "视频合成",
+	"tag_video_modify": "视频修改",
+	"tag_speech_modify": "语音修改",
+	"tag_speech": "语音合成",
+	"tag_music": "音乐合成",
+	"tag_music_modify": "音乐修改"
 }

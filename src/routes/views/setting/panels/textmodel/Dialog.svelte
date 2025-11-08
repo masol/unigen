@@ -42,6 +42,7 @@
 		/>
 
 		<DialogPrimitive.Content
+			escapeKeydownBehavior="ignore"
 			class="fixed top-1/2 left-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 transition-all duration-200 data-[state=closed]:scale-95 data-[state=closed]:opacity-0 data-[state=open]:scale-100 data-[state=open]:opacity-100"
 		>
 			<div class="space-y-6 card bg-surface-50 p-8 shadow-2xl dark:bg-surface-900">

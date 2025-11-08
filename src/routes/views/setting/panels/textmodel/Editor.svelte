@@ -7,9 +7,9 @@
 	import IconView from '~icons/carbon/view';
 	import IconViewOff from '~icons/carbon/view-off';
 	import IconWeb from '~icons/mdi/web';
-	import { listModels, ProviderNames } from '$lib/utils/llms/instance';
-	import { t } from '$lib/stores/config/ipc/i18n.svelte';
-	import type { LLMConfig, LLMTag } from '$lib/utils/llms/index.type';
+	import { listModels, ProviderNames } from '$lib/utils/llms/providers';
+	import { localeStore, t } from '$lib/stores/config/ipc/i18n.svelte';
+	import { validTags, type LLMConfig, type LLMTag } from '$lib/utils/llms/index.type';
 	import { nav2Provider } from './utils';
 
 	interface Props {
@@ -20,14 +20,14 @@
 
 	let { initialData, onSave, onCancel }: Props = $props();
 
-	const llmTagSchema = z.enum(['fast', 'powerful', 'balanced']) satisfies z.ZodType<LLMTag>;
+	const llmTagSchema = z.enum(validTags) satisfies z.ZodType<LLMTag>;
 
 	const modelSchema = z.object({
 		provider: z.string(),
 		apiKey: z.string().min(3, '请输入 API Key'),
 		name: z.string().min(3, '请选择模型'),
-		tag: llmTagSchema,
-		weight: z.number().int().min(1).max(30)
+		tag: llmTagSchema
+		// weight: z.number().int().min(1).max(30)
 	});
 
 	const { form, enhance, errors, delayed, validateForm } = superForm<LLMConfig>(
@@ -36,8 +36,8 @@
 			provider: initialData?.provider ?? 'qianwen',
 			apiKey: initialData?.apiKey ?? '',
 			name: initialData?.name ?? '',
-			tag: initialData?.tag ?? 'balanced',
-			weight: initialData?.weight ?? 1
+			tag: initialData?.tag ?? 'balanced'
+			// weight: initialData?.weight ?? 1
 		},
 		{
 			SPA: true,
@@ -61,7 +61,7 @@
 				// console.log('config=', config);
 
 				try {
-					const models = await listModels(config);
+					const models = availableModels.length > 0 ? availableModels : await listModels(config);
 					// console.log('models=', models, $form.name);
 					if (models.indexOf($form.name) < 0) {
 						errors.set({
@@ -146,6 +146,20 @@
 		});
 	};
 
+	const scrollToHighlighted = () => {
+		if (highlightedIndex >= 0) {
+			const elementId = `availableModel-${highlightedIndex}`;
+			const element = document.getElementById(elementId);
+
+			if (element) {
+				element.scrollIntoView({
+					block: 'nearest',
+					behavior: 'smooth'
+				});
+			}
+		}
+	};
+
 	const handleModelInputKeydown = (e: KeyboardEvent) => {
 		if (!modelsDropdownOpen) {
 			if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
@@ -163,10 +177,22 @@
 			case 'ArrowDown':
 				e.preventDefault();
 				highlightedIndex = Math.min(highlightedIndex + 1, filteredModels.length - 1);
+				scrollToHighlighted();
 				break;
 			case 'ArrowUp':
 				e.preventDefault();
 				highlightedIndex = Math.max(highlightedIndex - 1, 0);
+				scrollToHighlighted();
+				break;
+			case 'PageUp':
+				e.preventDefault();
+				highlightedIndex = Math.max(highlightedIndex - 6, 0);
+				scrollToHighlighted();
+				break;
+			case 'PageDown':
+				e.preventDefault();
+				highlightedIndex = Math.min(highlightedIndex + 6, filteredModels.length - 1);
+				scrollToHighlighted();
 				break;
 			case 'Enter':
 				e.preventDefault();
@@ -187,6 +213,8 @@
 			if (!modelInputRef?.contains(document.activeElement)) {
 				modelsDropdownOpen = false;
 				highlightedIndex = -1;
+			} else {
+				modelsDropdownOpen = true;
 			}
 		}, 150);
 	};
@@ -194,12 +222,6 @@
 	const filteredModels = $derived(
 		availableModels.filter((m) => m.toLowerCase().includes($form.name.toLowerCase()))
 	);
-
-	const tagOptions = [
-		{ value: 'fast', label: '速度优先' },
-		{ value: 'powerful', label: '能力优先' },
-		{ value: 'balanced', label: '平衡' }
-	] as const;
 
 	let isNaving = $state(false);
 	async function nav2ApikeyWeb() {
@@ -332,6 +354,7 @@
 							{#each filteredModels as model, index}
 								<button
 									type="button"
+									id={`availableModel-${index}`}
 									onclick={() => selectModel(model)}
 									class="w-full px-4 py-3 text-left transition-colors hover:bg-surface-200 dark:hover:bg-surface-700"
 									class:bg-primary-500={$form.name === model}
@@ -363,10 +386,14 @@
 	<!-- 模型标签 -->
 	<div class="form-field">
 		<label class="label">
-			<span class="text-surface-900 dark:text-surface-50">模型能力</span>
+			<span class="text-surface-900 dark:text-surface-50">模型类别</span>
 			<select name="tag" bind:value={$form.tag} class="select">
-				{#each tagOptions as option}
-					<option value={option.value}>{option.label}</option>
+				{#each validTags as option}
+					<option value={option}
+						>{#key localeStore.lang}
+							{t(`tag_${option}`)}
+						{/key}</option
+					>
 				{/each}
 			</select>
 		</label>
@@ -380,7 +407,7 @@
 	</div>
 
 	<!-- 权重 -->
-	<div class="form-field">
+	<!-- <div class="form-field">
 		<label class="label">
 			<span class="text-surface-900 dark:text-surface-50">权重 (1 - 30)</span>
 			<div class="flex items-center gap-3">
@@ -410,7 +437,7 @@
 				</span>
 			{/if}
 		</div>
-	</div>
+	</div> -->
 
 	<footer class="flex justify-end gap-3 border-t border-surface-200 pt-4 dark:border-surface-700">
 		<button type="button" onclick={onCancel} class="btn preset-outlined" disabled={$delayed}>

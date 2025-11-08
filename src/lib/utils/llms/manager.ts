@@ -15,6 +15,20 @@ interface InstanceState {
     consecutiveErrors: number;
 }
 
+export type InstanceStatus = {
+    id: string;
+    name: string;
+    provider: string;
+    isAvailable: boolean;
+    errorCount: number;
+    successRate: number;
+    averageResponseTime: number;
+    totalCalls: number;
+    consecutiveErrors: number;
+    lastError?: string;
+    lastSuccessTime?: number;
+}
+
 export class LLMManager {
     private instances: Map<string, InstanceState> = new Map();
     private currentIndex: number = 0;
@@ -316,19 +330,7 @@ export class LLMManager {
     /**
      * 获取所有实例状态
      */
-    getInstancesStatus(): Array<{
-        id: string;
-        name: string;
-        provider: string;
-        isAvailable: boolean;
-        errorCount: number;
-        successRate: number;
-        averageResponseTime: number;
-        totalCalls: number;
-        consecutiveErrors: number;
-        lastError?: string;
-        lastSuccessTime?: number;
-    }> {
+    getInstancesStatus(): Array<InstanceStatus> {
         return Array.from(this.instances.values()).map(state => ({
             id: state.config.id,
             name: state.config.name,

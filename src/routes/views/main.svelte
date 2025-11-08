@@ -29,12 +29,10 @@
 					<IconFolder class="h-16 w-16 opacity-50" />
 					<div class="text-center">
 						<h3 class="text-lg font-medium text-surface-700-300">暂无视图</h3>
-						<p class="mt-1 text-sm">点击上方 "+" 按钮创建新视图</p>
+						<p class="mt-1 text-sm">
+							请点击左侧边栏上方的按钮，打开导航面板，然后点击条目打开对应的视图。
+						</p>
 					</div>
-					<button type="button" class="variant-filled-primary btn">
-						<IconPlus class="h-5 w-5" />
-						<span>创建视图</span>
-					</button>
 				</div>
 			{:else}
 				<!-- 视图容器 -->

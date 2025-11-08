@@ -22,7 +22,7 @@
 		},
 		{
 			id: 'llm',
-			label: 'LLM模型',
+			label: 'AI 模型',
 			icon: IconRobot,
 			description: '管理模型服务商与API密钥'
 		}

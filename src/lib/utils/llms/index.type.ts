@@ -1,7 +1,14 @@
 import type { BaseMessage } from "@langchain/core/messages";
 
 
-export type LLMTag = 'fast' | 'powerful' | 'balanced';
+export const validTags = [
+    'fast', 'powerful', 'balanced',
+    'image', 'image_modify', 'video', 'video_modify',
+    'speech', 'speech_modify', 'music', 'music_modify'
+] as const;
+
+
+export type LLMTag = typeof validTags[number];
 
 // 简化的LLM配置
 export interface LLMConfig {

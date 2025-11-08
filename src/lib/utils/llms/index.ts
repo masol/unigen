@@ -1,35 +1,30 @@
-import { LLMManager } from './manager.js';
+import { LLMManager, type InstanceStatus } from './manager.js';
 import type { LLMConfig } from './index.type.js';
 import { logger } from '../logger.js';
 import type { LLMTag } from './index.type.js';
+
+
 
 // LLM 中心管理类
 export class LLMCenter {
     private managers: Map<LLMTag, LLMManager> = new Map();
 
-    constructor() {
-        // 初始化三个管理器
-        this.managers.set('fast', new LLMManager());
-        this.managers.set('powerful', new LLMManager());
-        this.managers.set('balanced', new LLMManager());
-    }
-
     /**
-     * 只读访问器 - fast 管理器
+     * 只读访问器 - fast 文本模型管理器
      */
     get fast(): LLMManager {
         return this.managers.get('fast')!;
     }
 
     /**
-     * 只读访问器 - powerful 管理器
+     * 只读访问器 - powerful 文本模型管理器
      */
     get powerful(): LLMManager {
         return this.managers.get('powerful')!;
     }
 
     /**
-     * 只读访问器 - balanced 管理器
+     * 只读访问器 - balanced 文本模型管理器
      */
     get balanced(): LLMManager {
         return this.managers.get('balanced')!;
@@ -42,11 +37,8 @@ export class LLMCenter {
         console.log(`LLMCenter 开始初始化，共 ${configs.length} 个配置...`);
 
         // 按 tag 分组配置
-        const configsByTag: Record<LLMTag, LLMConfig[]> = {
-            fast: [],
-            powerful: [],
-            balanced: []
-        };
+        const configsByTag: { [K in LLMTag]: LLMConfig[] } = {
+        } as { [K in LLMTag]: LLMConfig[] };
 
         for (const config of configs) {
             if (!config.enabled) {
@@ -55,18 +47,17 @@ export class LLMCenter {
             }
 
             const tag = config.tag as LLMTag;
-            if (tag && configsByTag[tag]) {
-                configsByTag[tag].push(config);
-            } else {
-                console.warn(`配置 ${config.name} 的 tag "${config.tag}" 无效，跳过`);
+            if (!configsByTag[tag]) {
+                configsByTag[tag] = []
             }
+            configsByTag[tag].push(config);
         }
 
         // 初始化各个管理器
         for (const [tag, tagConfigs] of Object.entries(configsByTag) as [LLMTag, LLMConfig[]][]) {
             if (tagConfigs.length > 0) {
                 console.log(`初始化 ${tag} 管理器，配置数量: ${tagConfigs.length}`);
-                const manager = this.managers.get(tag)!;
+                const manager = this.ensureMananger(tag);
                 manager.init(tagConfigs);
             }
         }
@@ -75,36 +66,33 @@ export class LLMCenter {
         this.printSummary();
     }
 
-    /**
-     * 添加 LLM 实例到对应的管理器
-     */
-    addLLM(config: LLMConfig): boolean {
-        const tag = config.tag as LLMTag;
-        const manager = this.managers.get(tag);
+    private ensureMananger(tag: LLMTag): LLMManager {
+        let manager = this.managers.get(tag);
 
-        if (!manager) {
-            console.error(`无效的 tag: ${config.tag}`);
-            return false;
-        }
-
-        return manager.addLLM(config);
-    }
-
-    /**
-     * 从指定管理器删除 LLM 实例
-     */
-    removeLLM(tag: LLMTag, id: string): boolean {
-        const manager = this.managers.get(tag);
         if (!manager) {
             console.error(`无效的 tag: ${tag}`);
-            return false;
+            manager = new LLMManager();
+            this.managers.set(tag, manager);
         }
-
-        return manager.removeLLM(id);
+        return manager
     }
 
     /**
-     * 删除所有 LLM 实例
+     * 添加 LLM 接口实例到对应的管理器
+     */
+    addLLM(config: LLMConfig): boolean {
+        return this.ensureMananger(config.tag).addLLM(config);
+    }
+
+    /**
+     * 从指定管理器删除 LLM 接口实例
+     */
+    removeLLM(tag: LLMTag, id: string): boolean {
+        return this.ensureMananger(tag).removeLLM(id);
+    }
+
+    /**
+     * 删除所有 LLM 接口实例
      */
     removeAllLLMs(): void {
         this.managers.forEach((manager, tag) => {
@@ -125,39 +113,39 @@ export class LLMCenter {
      * 获取所有管理器的状态摘要
      */
     getAllStatus(): Record<LLMTag, ReturnType<LLMManager['getInstancesStatus']>> {
-        return {
-            fast: this.fast.getInstancesStatus(),
-            powerful: this.powerful.getInstancesStatus(),
-            balanced: this.balanced.getInstancesStatus()
-        };
+        const result: { [K in LLMTag]: InstanceStatus[] } = {} as { [K in LLMTag]: InstanceStatus[] };
+        for (const [key, manager] of this.managers) {
+            result[key] = manager.getInstancesStatus();
+        }
+        return result;
     }
 
     /**
      * 获取统计摘要
      */
     getSummary(): {
-        fast: { total: number; available: number };
-        powerful: { total: number; available: number };
-        balanced: { total: number; available: number };
+        summary: { [K in LLMTag]: { total: number; available: number } }
         totalInstances: number;
         totalAvailable: number;
     } {
-        const fastTotal = this.fast.getInstanceCount();
-        const fastAvailable = this.fast.getAvailableInstanceCount();
+        let ret = { summary: {} as { [K in LLMTag]: { total: number; available: number } }, totalInstances: 0, totalAvailable: 0 };
 
-        const powerfulTotal = this.powerful.getInstanceCount();
-        const powerfulAvailable = this.powerful.getAvailableInstanceCount();
+        for (const [key, manager] of this.managers) {
+            const manager = this.managers.get(key);
+            if (!manager) {
+                continue;
+            }
+            const total = manager.getInstanceCount();
+            const available = manager.getAvailableInstanceCount();
+            ret.summary[key] = {
+                total,
+                available
+            }
+            ret.totalInstances += total;
+            ret.totalAvailable += available;
+        }
 
-        const balancedTotal = this.balanced.getInstanceCount();
-        const balancedAvailable = this.balanced.getAvailableInstanceCount();
-
-        return {
-            fast: { total: fastTotal, available: fastAvailable },
-            powerful: { total: powerfulTotal, available: powerfulAvailable },
-            balanced: { total: balancedTotal, available: balancedAvailable },
-            totalInstances: fastTotal + powerfulTotal + balancedTotal,
-            totalAvailable: fastAvailable + powerfulAvailable + balancedAvailable
-        };
+        return ret;
     }
 
     /**
@@ -166,9 +154,9 @@ export class LLMCenter {
     printSummary(): void {
         const summary = this.getSummary();
         logger.info('\n========== LLMCenter 统计摘要 ==========');
-        logger.info(`Fast 管理器: ${summary.fast.available}/${summary.fast.total} 可用`);
-        logger.info(`Powerful 管理器: ${summary.powerful.available}/${summary.powerful.total} 可用`);
-        logger.info(`Balanced 管理器: ${summary.balanced.available}/${summary.balanced.total} 可用`);
+        for (const [key, value] of Object.entries(summary.summary)) {
+            logger.info(`${key} 管理器: ${value.available}/${value.total} 可用`);
+        }
         logger.info(`总计: ${summary.totalAvailable}/${summary.totalInstances} 可用`);
         logger.info('======================================\n');
     }
@@ -203,49 +191,49 @@ export class LLMCenter {
     /**
      * 获取最佳性能的实例（跨所有管理器）
      */
-    getBestPerformingInstance(): {
-        tag: LLMTag;
-        instanceId: string;
-    } | null {
-        const candidates: Array<{ tag: LLMTag; instanceId: string; manager: LLMManager }> = [];
+    // getBestPerformingInstance(): {
+    //     tag: LLMTag;
+    //     instanceId: string;
+    // } | null {
+    //     const candidates: Array<{ tag: LLMTag; instanceId: string; manager: LLMManager }> = [];
 
-        for (const [tag, manager] of this.managers.entries()) {
-            const bestId = manager.getBestPerformingInstance();
-            if (bestId) {
-                candidates.push({ tag, instanceId: bestId, manager });
-            }
-        }
+    //     for (const [tag, manager] of this.managers.entries()) {
+    //         const bestId = manager.getBestPerformingInstance();
+    //         if (bestId) {
+    //             candidates.push({ tag, instanceId: bestId, manager });
+    //         }
+    //     }
 
-        if (candidates.length === 0) {
-            return null;
-        }
+    //     if (candidates.length === 0) {
+    //         return null;
+    //     }
 
-        // 如果只有一个候选，直接返回
-        if (candidates.length === 1) {
-            return { tag: candidates[0].tag, instanceId: candidates[0].instanceId };
-        }
+    //     // 如果只有一个候选，直接返回
+    //     if (candidates.length === 1) {
+    //         return { tag: candidates[0].tag, instanceId: candidates[0].instanceId };
+    //     }
 
-        // 比较候选实例的性能
-        let best = candidates[0];
-        let bestStats = best.manager.getInstancesStatus()
-            .find(s => s.id === best.instanceId)!;
+    //     // 比较候选实例的性能
+    //     let best = candidates[0];
+    //     let bestStats = best.manager.getInstancesStatus()
+    //         .find(s => s.id === best.instanceId)!;
 
-        for (let i = 1; i < candidates.length; i++) {
-            const candidate = candidates[i];
-            const stats = candidate.manager.getInstancesStatus()
-                .find(s => s.id === candidate.instanceId)!;
+    //     for (let i = 1; i < candidates.length; i++) {
+    //         const candidate = candidates[i];
+    //         const stats = candidate.manager.getInstancesStatus()
+    //             .find(s => s.id === candidate.instanceId)!;
 
-            // 比较成功率和响应时间
-            if (stats.successRate > bestStats.successRate ||
-                (stats.successRate === bestStats.successRate &&
-                    stats.averageResponseTime < bestStats.averageResponseTime)) {
-                best = candidate;
-                bestStats = stats;
-            }
-        }
+    //         // 比较成功率和响应时间
+    //         if (stats.successRate > bestStats.successRate ||
+    //             (stats.successRate === bestStats.successRate &&
+    //                 stats.averageResponseTime < bestStats.averageResponseTime)) {
+    //             best = candidate;
+    //             bestStats = stats;
+    //         }
+    //     }
 
-        return { tag: best.tag, instanceId: best.instanceId };
-    }
+    //     return { tag: best.tag, instanceId: best.instanceId };
+    // }
 
     /**
      * 检查是否有可用的实例
@@ -263,7 +251,7 @@ export class LLMCenter {
     }
 
     /**
-     * 获取第一个有可用实例的管理器（速度优先）
+     * 获取第一个有可用文本模型实例的管理器（速度优先）
      * 默认顺序: fast -> balanced -> powerful
      * @param order 查找顺序，可以是完整的三个标签数组，或者只提供前两个
      * @returns 第一个有可用实例的管理器，如果都没有则返回 null
@@ -275,7 +263,7 @@ export class LLMCenter {
     }
 
     /**
-     * 获取第一个有可用实例的管理器（性能优先）
+     * 获取第一个有可用文本模型实例的管理器（性能优先）
      * 默认顺序: powerful -> balanced -> fast
      * @param order 查找顺序，可以是完整的三个标签数组，或者只提供前两个
      * @returns 第一个有可用实例的管理器，如果都没有则返回 null
@@ -287,7 +275,7 @@ export class LLMCenter {
     }
 
     /**
-     * 根据指定顺序获取第一个有可用实例的管理器（私有方法）
+     * 根据指定顺序获取第一个有可用文本模型实例的管理器（私有方法）
      */
     private getFirstAvailableByOrder(
         order: [LLMTag, LLMTag, LLMTag] | [LLMTag, LLMTag]
