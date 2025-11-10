@@ -6,10 +6,10 @@ import { isArray } from "remeda";
 
 const KEYNAME = "views";
 
-export type ViewType = "settings" | "prompt" | "flow"
+export type ViewType = "settings" | "entgeneral" | "function" | "flow"
 export type ViewItemType = {
     id: string;
-    label: string; // 这里传入的是key，调用者通过t[key]来渲染。
+    label: string; // 这里传入的是key，通过t[key]来渲染。
     closable: boolean;
     docId?: string; // 存储的文档id.
     type: ViewType; // 视口类型.

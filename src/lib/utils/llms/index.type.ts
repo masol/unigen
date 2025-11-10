@@ -19,6 +19,8 @@ export interface LLMConfig {
     tag: LLMTag;
     // weight: number; // 暂未启用。防止干扰试听。
     enabled?: boolean;
+    temperature?: number;
+    maxTokens?: number;
     [key: string]: unknown;
 };
 

@@ -15,5 +15,10 @@
 	"tag_video_modify": "视频修改",
 	"tag_speech_modify": "语音修改",
 	"tag_speech": "语音合成",
-	"tag_music_modify": "音乐修改"
+	"tag_music_modify": "音乐修改",
+	"baichuan": "百川",
+	"deepinfra": "DeepInfra",
+	"entities": "AI输出定义",
+	"transformer": "",
+	"flowchart": "流程图"
 }

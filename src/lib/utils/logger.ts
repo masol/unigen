@@ -215,21 +215,27 @@ class Logger {
      * 记录 trace 级别日志
      */
     trace(...args: Serializable[]): void {
-        void this.sendLog('trace', ...args);
+        if (!import.meta.env.PROD) {
+            void this.sendLog('trace', ...args);
+        }
     }
 
     /**
      * 记录 debug 级别日志
      */
     debug(...args: Serializable[]): void {
-        void this.sendLog('debug', ...args);
+        if (!import.meta.env.PROD) {
+            void this.sendLog('debug', ...args);
+        }
     }
 
     /**
      * 记录 info 级别日志
      */
     info(...args: Serializable[]): void {
-        void this.sendLog('info', ...args);
+        if (!import.meta.env.PROD) {
+            void this.sendLog('info', ...args);
+        }
     }
 
     /**

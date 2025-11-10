@@ -1,113 +1,75 @@
-import { ChatOpenAI } from "@langchain/openai";
-import { HumanMessage } from "@langchain/core/messages";
-import { type BaseLanguageModel } from "@langchain/core/language_models/base";
-import { type BaseMessage } from "@langchain/core/messages";
-import { JsonOutputParser } from "@langchain/core/output_parsers";
-import { decode } from 'html-entities'
-import JSON5 from 'json5'
+import { OpenAI } from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { decode } from 'html-entities';
+import JSON5 from 'json5';
 import { marked, type Tokens } from "marked";
 import type { LLMConfig, CallResult, JSONCallResult } from "./index.type.js";
 import { isEmpty } from "remeda";
 import { PROVIDER_CONFIG } from "./providers.js";
 
 export class LLMWrapper {
-    private llm: BaseLanguageModel;
-    private jsonParser: JsonOutputParser;
+    private client: OpenAI;
 
     constructor(
         private config: LLMConfig,
-        private options?: {
-            model?: string;
-            temperature?: number;
-            maxTokens?: number;
-            baseURL?: string;
-        }
     ) {
-        this.llm = this.createLLM();
-        this.jsonParser = new JsonOutputParser();
+        this.client = this.createClient();
     }
 
     /**
-     * 创建LLM实例
+     * 创建 OpenAI 客户端实例
      */
-    private createLLM(): BaseLanguageModel {
+    private createClient(): OpenAI {
         const providerConfig = PROVIDER_CONFIG[this.config.provider];
         if (!providerConfig) {
             throw new Error(`不支持的提供商: ${this.config.provider}`);
         }
 
-        const baseURL = (this.options?.baseURL || providerConfig.baseURL).trim();
-        const model = (this.config.name || this.options?.model || providerConfig.defaultModel).trim();
+        const baseURL = (providerConfig.baseURL).trim();
 
-        const commonOptions: { model: string, [key: string]: any } = {
-            model,
-        };
-
-        if (this.options?.temperature) {
-            commonOptions.temperature = this.options?.temperature;
+        const param = {
+            apiKey: this.config.apiKey,
+            baseURL,
+            dangerouslyAllowBrowser: true, // 在浏览器环境中使用
         }
 
-        if (this.options?.maxTokens) {
-            commonOptions.maxTokens = this.options?.maxTokens;
+        if (providerConfig.create) {
+            return providerConfig.create(param);
         }
 
-        switch (this.config.provider) {
-            case 'groq':
-                // return new ChatGroq({
-                //     ...commonOptions,
-                //     apiKey: this.config.apiKey
-                // });
-            case 'deepseek':
-            case 'openai':
-            case 'moonshot':
-            case 'baichuan':
-            case 'zhipu':
-            case 'openrouter':
-            case 'qianwen':
-            case 'poe':
-                return new ChatOpenAI({
-                    apiKey: this.config.apiKey,
-                    openAIApiKey: this.config.apiKey,
-                    ...commonOptions,
-                    // @ts-expect-error 兼容groq等部分接口．
-                    baseURL,
-                    configuration: {
-                        baseURL
-                    }
-                });
+        return new OpenAI(param);
+    }
 
-            default:
-                throw new Error(`不支持的 LLM 提供商: ${this.config.provider}`);
-        }
+    /**
+     * 获取模型名称
+     */
+    private getModel(): string {
+        const providerConfig = PROVIDER_CONFIG[this.config.provider];
+        return this.config.name.trim();
     }
 
     /**
      * 将输入转换为消息格式
      */
-    private prepareInput(input: string | number | BaseMessage[]): BaseMessage[] {
+    private prepareInput(input: string | number | ChatCompletionMessageParam[]): ChatCompletionMessageParam[] {
         if (Array.isArray(input)) {
             return input;
         }
 
         const content = typeof input === 'number' ? input.toString() : input;
-        return [new HumanMessage(content)];
+        return [{ role: 'user', content }];
     }
 
     /**
      * 提取响应内容
      */
-    private extractResponse(result: any): string {
-        if (typeof result === 'string') {
-            return result;
-        }
-
-        if (result && typeof result === 'object' && 'content' in result) {
-            return result.content;
-        }
-
-        return String(result);
+    private extractResponse(message: OpenAI.Chat.Completions.ChatCompletionMessage): string {
+        return message.content || '';
     }
 
+    /**
+     * 解析 JSON
+     */
     private parseJSON(jsonString: string): any {
         const parsingAttempts = [
             () => JSON5.parse(jsonString),
@@ -121,7 +83,6 @@ export class LLMWrapper {
                     return result;
                 }
             } catch {
-                // 忽略错误，继续尝试下一个解析方法
                 continue;
             }
         }
@@ -129,35 +90,13 @@ export class LLMWrapper {
     }
 
     /**
-     * 解析JSON字符串
+     * 从 Markdown 中提取 JSON 代码块
      */
-    private async extractJSON(jsonString: string): Promise<any> {
-        const parsingAttempts = [
-            () => this.jsonParser.parse(jsonString),
-            () => this.parseJSON(this.extractJsonBlock(jsonString)),
-            () => this.parseJSON(jsonString)
-        ];
-
-        for (const attempt of parsingAttempts) {
-            try {
-                const result = await attempt();
-                if (result && !isEmpty(result)) {
-                    return result;
-                }
-            } catch {
-                // 忽略错误，继续尝试下一个解析方法
-                continue;
-            }
-        }
-
-        return null;
-    }
-
-    private extractJsonBlock(markdown: string): any[] | any {
+    private extractJsonBlock(markdown: string): any {
         const tokens = marked.lexer(markdown);
 
         const jsonBlocks = tokens
-            .filter((t): t is Tokens.Code => t.type === "code") // 类型守卫
+            .filter((t): t is Tokens.Code => t.type === "code")
             .filter(t => !t.lang || t.lang.toLowerCase() === "json")
             .map(t => {
                 try {
@@ -169,21 +108,56 @@ export class LLMWrapper {
             .filter(Boolean);
 
         if (jsonBlocks.length > 0) {
-            return jsonBlocks[0]
+            return jsonBlocks[0];
         }
-        return markdown;
+        return null;
     }
 
     /**
-     * 调用LLM
+     * 解析 JSON 字符串
      */
-    async call(input: string | number | BaseMessage[]): Promise<CallResult> {
+    private async extractJSON(jsonString: string): Promise<any> {
+        const parsingAttempts = [
+            () => this.parseJSON(jsonString),
+            () => this.extractJsonBlock(jsonString),
+        ];
+
+        for (const attempt of parsingAttempts) {
+            try {
+                const result = attempt();
+                if (result && !isEmpty(result)) {
+                    return result;
+                }
+            } catch {
+                continue;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 调用 LLM
+     */
+    async call(input: string | number | ChatCompletionMessageParam[]): Promise<CallResult> {
         const startTime = Date.now();
 
         try {
             const messages = this.prepareInput(input);
-            const result = await this.llm.invoke(messages);
-            const response = this.extractResponse(result);
+
+            const completion = await this.client.chat.completions.create({
+                model: this.getModel(),
+                messages,
+                temperature: this.config?.temperature,
+                max_tokens: this.config?.maxTokens,
+            });
+
+            const message = completion.choices[0]?.message;
+            if (!message) {
+                throw new Error('No response from LLM');
+            }
+
+            const response = this.extractResponse(message);
             const responseTime = Date.now() - startTime;
 
             return {
@@ -206,8 +180,11 @@ export class LLMWrapper {
         }
     }
 
+    /**
+     * 调用 LLM 并返回 JSON
+     */
     async callJSON(
-        input: string | number | BaseMessage[],
+        input: string | number | ChatCompletionMessageParam[],
         maxRetries: number = 2
     ): Promise<JSONCallResult> {
         const startTime = Date.now();
@@ -243,7 +220,7 @@ export class LLMWrapper {
 
             try {
                 const fixPrompt = this.createJSONFixPrompt(response);
-                console.log("fixJSONPrompt=", fixPrompt)
+                console.log("fixJSONPrompt=", fixPrompt);
                 const fixResult = await this.call(fixPrompt);
 
                 // 如果修复调用失败，继续下一次尝试
@@ -264,7 +241,6 @@ export class LLMWrapper {
                     };
                 }
             } catch (error) {
-                // 修复过程中的错误，继续下一次尝试
                 console.warn(`JSON修复第${attempts}次尝试失败:`, error);
             }
         }
@@ -279,30 +255,23 @@ export class LLMWrapper {
     }
 
     /**
-     * 创建JSON修复提示词
+     * 创建 JSON 修复提示词
      */
     private createJSONFixPrompt(invalidResponse: string): string {
-        const formatInstructions = this.jsonParser.getFormatInstructions();
+        return `
+以下内容应该是JSON格式，但因为语法错误，解析失败了：
 
-        const template = `
-以下内容是JSON格式，但因为语法错误，解析失败了：
+${invalidResponse}
 
-${JSON.stringify(invalidResponse)}
-
-${JSON.stringify(formatInstructions)}
-
-请修复并返回正确的JSON：
+请修复并返回正确的JSON格式。只返回修复后的JSON，不要添加任何解释或其他内容。
         `.trim();
-
-        return template;
-        // return render(template, { invalidResponse, formatInstructions });
     }
 
     /**
-     * 流式调用LLM
+     * 流式调用 LLM
      */
     async callStream(
-        input: string | number | BaseMessage[],
+        input: string | number | ChatCompletionMessageParam[],
         onChunk: (chunk: string) => void
     ): Promise<CallResult> {
         const startTime = Date.now();
@@ -311,12 +280,20 @@ ${JSON.stringify(formatInstructions)}
             const messages = this.prepareInput(input);
             let fullResponse = '';
 
-            const stream = await this.llm.stream(messages);
+            const stream = await this.client.chat.completions.create({
+                model: this.getModel(),
+                messages,
+                temperature: this.config?.temperature,
+                max_tokens: this.config?.maxTokens,
+                stream: true,
+            });
 
             for await (const chunk of stream) {
-                const chunkContent = this.extractResponse(chunk);
-                fullResponse += chunkContent;
-                onChunk(chunkContent);
+                const content = chunk.choices[0]?.delta?.content || '';
+                if (content) {
+                    fullResponse += content;
+                    onChunk(content);
+                }
             }
 
             const responseTime = Date.now() - startTime;
@@ -347,13 +324,4 @@ ${JSON.stringify(formatInstructions)}
     getConfig(): LLMConfig {
         return { ...this.config };
     }
-
-    /**
-     * 获取当前选项
-     */
-    getOptions() {
-        return { ...this.options };
-    }
 }
-
-

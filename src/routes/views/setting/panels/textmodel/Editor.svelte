@@ -11,7 +11,8 @@
 	import { localeStore, t } from '$lib/stores/config/ipc/i18n.svelte';
 	import { validTags, type LLMConfig, type LLMTag } from '$lib/utils/llms/index.type';
 	import { nav2Provider } from './utils';
-
+	import { Index } from 'flexsearch';
+	
 	interface Props {
 		initialData?: Partial<LLMConfig>;
 		onSave: (config: LLMConfig) => Promise<void>;
@@ -85,6 +86,7 @@
 	);
 
 	let availableModels = $state<string[]>([]);
+	let indexedModels: Index | undefined = undefined;
 	let loadingModels = $state(false);
 	let modelsFetched = $state(false);
 	let showApiKey = $state(false);
@@ -93,11 +95,24 @@
 	let dropdownError = $state<string>('');
 	let highlightedIndex = $state(-1);
 
+	function resetIndex() {
+		indexedModels?.destroy(); // 无需await．
+		if (availableModels.length <= 0) {
+			return;
+		}
+		indexedModels = new Index({
+			tokenize: 'forward'
+		});
+		availableModels.forEach((val, idx) => {
+			indexedModels?.add(idx, val);
+		});
+	}
+
 	const fetchModels = async () => {
 		if (modelsFetched) return;
 
 		if (!$form.apiKey || $form.apiKey.length < 10) {
-			dropdownError = '请先输入有效的 API Key (至少 10 个字符)';
+			dropdownError = '请先输入有效的 API Key';
 			return;
 		}
 
@@ -110,6 +125,7 @@
 				apiKey: $form.apiKey
 			} as LLMConfig;
 			availableModels = await listModels(llmcfg);
+			resetIndex();
 			modelsFetched = availableModels.length > 0;
 		} catch (e) {
 			dropdownError = e instanceof Error ? e.message : String(e);
@@ -121,6 +137,7 @@
 	const handleProviderChange = () => {
 		modelsFetched = false;
 		availableModels = [];
+		resetIndex();
 		$form.name = '';
 		dropdownError = '';
 	};
@@ -132,6 +149,9 @@
 		modelsDropdownOpen = !modelsDropdownOpen;
 		if (modelsDropdownOpen) {
 			highlightedIndex = -1;
+			setTimeout(() => {
+				modelInputRef?.focus();
+			}, 0);
 		}
 	};
 
@@ -219,9 +239,16 @@
 		}, 150);
 	};
 
-	const filteredModels = $derived(
-		availableModels.filter((m) => m.toLowerCase().includes($form.name.toLowerCase()))
-	);
+	const filteredModels = $derived.by<string[]>(() => {
+		if (!indexedModels || $form.name.trim().length <= 0) return availableModels;
+		const result = indexedModels.search({
+			query: $form.name,
+			suggest: true
+		});
+		// console.log('result=', result);
+		return result.map((idx) => availableModels[idx as number]);
+		// availableModels.filter((m) => m && m.toLowerCase().includes($form.name.toLowerCase()));
+	});
 
 	let isNaving = $state(false);
 	async function nav2ApikeyWeb() {
@@ -322,7 +349,7 @@
 					name="name"
 					type="text"
 					bind:value={$form.name}
-					placeholder="输入或选择模型"
+					placeholder="选择模型(按下键或点右侧按钮)"
 					class="input pr-10"
 					class:input-error={$errors.name}
 					onkeydown={handleModelInputKeydown}

@@ -1,6 +1,14 @@
 <script lang="ts">
-	import { navStore, ENTITIES, TRANSFORM, WORKFLOW } from '$lib/stores/navpanel/nav.svelte';
+	import {
+		navStore,
+		ENTITIES,
+		TRANSFORM,
+		WORKFLOW,
+		FLOWCHART,
+		UI
+	} from '$lib/stores/navpanel/nav.svelte';
 	import EntityComp from './entities/main.svelte';
+	import FlowChart from './flowchart/main.svelte';
 
 	let currentNav = $derived(navStore.current);
 	let scrollY = $state(0);
@@ -17,6 +25,12 @@
 		},
 		{
 			id: WORKFLOW
+		},
+		{
+			id: FLOWCHART
+		},
+		{
+			id: UI
 		}
 	]);
 </script>
@@ -87,6 +101,8 @@
 				<!-- 动态组件渲染 - 使用导入的组件 -->
 				{#if nav.id === ENTITIES}
 					<EntityComp></EntityComp>
+				{:else if nav.id === FLOWCHART}
+					<FlowChart></FlowChart>
 				{:else if nav.id === WORKFLOW}
 					<!-- <OpenView /> -->
 				{:else if nav.id === TRANSFORM}

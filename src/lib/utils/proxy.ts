@@ -1,5 +1,6 @@
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import picomatch from 'picomatch';
+import { logger } from './logger';
 
 export type ProxyType = 'all' | 'http' | 'https';
 
@@ -96,6 +97,7 @@ const buildProxyOptions = (proxyConfig: ProxyConfig, init?: RequestInit): any =>
     }
 
     const options: any = {
+        ...init,
         proxy: {
             all: allProxy
         }
@@ -107,6 +109,7 @@ const buildProxyOptions = (proxyConfig: ProxyConfig, init?: RequestInit): any =>
 
     return options;
 };
+
 
 const proxyFetch = async (
     input: string | URL | Request,
@@ -123,22 +126,34 @@ const proxyFetch = async (
         return origFetch(input, init);
     }
 
+    // 检查是否为 http/https 协议
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const isHttpProtocol = url.startsWith('http://') || url.startsWith('https://');
+    
+    if (!isHttpProtocol) {
+        // 非 http/https 协议，直接使用原始 fetch
+        return origFetch(input, init);
+    }
+
     const proxyConfig = shouldProxy(hostname);
+    // logger.error("shouldProxy(hostname)", hostname, proxyConfig, input);
     if (proxyConfig) {
         // console.log(`Hostname "${hostname}" matches proxy pattern, using proxy:`, proxyConfig.url);
         try {
             const proxyOptions = buildProxyOptions(proxyConfig, init);
             return await tauriFetch(input, proxyOptions);
         } catch (error) {
-            console.error('Proxy fetch failed, falling back to original fetch:', error);
+            logger.error('Proxy fetch failed, falling back to original fetch:', error instanceof Error ? error.message : String(error));
             // return origFetch(input, init);
             throw error;
         }
     } else {
         // console.log(`Hostname "${hostname}" does not match any proxy pattern`);
         return origFetch(input, init);
+        // return tauriFetch(input,init);
     }
 };
+
 
 export class Proxy {
     async init(): Promise<boolean> {
@@ -160,7 +175,7 @@ export class Proxy {
                 // ✅ 预编译所有 glob 模式为 matcher 函数，并缓存
                 const matchers = targets.map(pattern => {
                     // 转为小写以支持大小写不敏感匹配（host 是 case-insensitive）
-                    const lowerPattern = pattern.toLowerCase();
+                    const lowerPattern = (pattern ?? "").toLowerCase();
                     const matcher = picomatch(lowerPattern);
                     return (hostname: string) => matcher(hostname.toLowerCase());
                 });

@@ -3,6 +3,7 @@ export interface NavItem {
     id: string;
     icon: any;
     label: string;
+    disabled: boolean;
     onClick?: () => void;
 }
 
