@@ -1,3 +1,4 @@
+import { leftPanel } from "../config/prj/panel.svelte";
 
 export const ENTITIES = "entities";  // 实体(或者称数据结构?)
 export const TRANSFORM = "transformer";  // 变换(或者称函数?)
@@ -18,6 +19,9 @@ export class NavStore {
         if (this.current !== nav) {
             this.filter = ""
             this.current = nav;
+            if (!leftPanel.show) {
+                leftPanel.setShow(true);
+            }
         }
     }
 

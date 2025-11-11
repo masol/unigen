@@ -5,7 +5,8 @@
 	import { projectStore } from '$lib/stores/project/project.svelte';
 
 	// 导入视图组件
-	import OpenView from './open.svelte';
+	import OpenView from './open.svelte'; // 首次进入，打开项目.
+	import FlowView from './flow/main.svelte';
 	import SettingView from './setting/main.svelte';
 	import { viewStore } from '$lib/stores/project/view.svelte';
 
@@ -47,9 +48,7 @@
 					>
 						<!-- 动态组件渲染 - 使用导入的组件 -->
 						{#if view.type === 'flow'}
-							<!-- <MainView /> -->
-						{:else if view.type === 'prompt'}
-							<OpenView />
+							<FlowView></FlowView>
 						{:else if view.type === 'settings'}
 							<SettingView />
 						{/if}

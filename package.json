@@ -14,7 +14,7 @@
 		"storybook": "storybook dev -p 6006",
 		"build-storybook": "storybook build",
 		"outdated": "npx npm-check-updates",
-		"tauri:dev": "RUST_LOG=debug,sqlx::query=off npm run tauri -- dev",
+		"tauri:dev": "TAURI_REMOTE_DEBUGGING_PORT=9222 RUST_LOG=debug,sqlx::query=off npm run tauri -- dev",
 		"tauri": "tauri",
 		"tauri:clean": "cd src-tauri;cargo clean;cd -"
 	},
@@ -87,6 +87,7 @@
 		"svelte"
 	],
 	"dependencies": {
+		"@tanstack/svelte-virtual": "^3.13.12",
 		"@tauri-apps/api": "^2.9.0",
 		"@tauri-apps/plugin-clipboard-manager": "^2.3.2",
 		"@tauri-apps/plugin-dialog": "^2.4.2",
@@ -111,6 +112,11 @@
 		"picomatch": "^4.0.3",
 		"remeda": "^2.32.0",
 		"rete-auto-arrange-plugin": "^2.0.2",
+		"rete-connection-plugin": "^2.0.5",
+		"rete-history-plugin": "^2.1.1",
+		"rete-render-utils": "^2.0.3",
+		"rete-svelte-plugin": "^2.1.1",
+		"sass": "^1.94.0",
 		"svelte-splitpanes": "^8.0.9"
 	}
 }

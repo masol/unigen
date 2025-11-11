@@ -70,7 +70,7 @@ export class LLMCenter {
         let manager = this.managers.get(tag);
 
         if (!manager) {
-            console.error(`无效的 tag: ${tag}`);
+            // console.error(`无效的 tag: ${tag}`);
             manager = new LLMManager();
             this.managers.set(tag, manager);
         }
@@ -179,7 +179,7 @@ export class LLMCenter {
     resetManager(tag: LLMTag): boolean {
         const manager = this.managers.get(tag);
         if (!manager) {
-            console.error(`无效的 tag: ${tag}`);
+            // console.error(`无效的 tag: ${tag}`);
             return false;
         }
 

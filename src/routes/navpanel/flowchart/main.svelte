@@ -1,7 +1,5 @@
 <script lang="ts">
 	import Flowlist from './list.svelte';
-
-    console.log("e123")
 </script>
 
 <div>testtest</div>

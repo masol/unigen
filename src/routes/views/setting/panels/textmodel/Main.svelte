@@ -10,6 +10,7 @@
 	import IconMic from '~icons/lucide/mic';
 	import IconMusic from '~icons/lucide/music';
 	import IconHelpCircle from '~icons/lucide/help-circle';
+	import IconCheck from '~icons/lucide/check';
 	import ModelEditor from './Dialog.svelte';
 	import { llmStore } from '$lib/stores/config/ipc/llms.svelte';
 	import { type LLMConfig } from '$lib/utils/llms/index.type';
@@ -19,61 +20,44 @@
 
 	interface CapabilityConfig {
 		icon: any;
-		color: string;
-		bg: string;
-		border: string;
-		hoverShadow: string;
+		iconClass: string;
 	}
 
 	const capabilityConfig: Record<CapabilityType, CapabilityConfig> = {
 		text: {
 			icon: IconBrain,
-			color: 'text-blue-600 dark:text-blue-400',
-			bg: 'bg-blue-50 dark:bg-blue-950',
-			border: 'border-blue-200 dark:border-blue-800',
-			hoverShadow: 'hover:shadow-blue-200/50 dark:hover:shadow-blue-900/50'
+			iconClass:
+				'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800'
 		},
 		image: {
 			icon: IconImage,
-			color: 'text-purple-600 dark:text-purple-400',
-			bg: 'bg-purple-50 dark:bg-purple-950',
-			border: 'border-purple-200 dark:border-purple-800',
-			hoverShadow: 'hover:shadow-purple-200/50 dark:hover:shadow-purple-900/50'
+			iconClass:
+				'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-800'
 		},
 		video: {
 			icon: IconVideo,
-			color: 'text-pink-600 dark:text-pink-400',
-			bg: 'bg-pink-50 dark:bg-pink-950',
-			border: 'border-pink-200 dark:border-pink-800',
-			hoverShadow: 'hover:shadow-pink-200/50 dark:hover:shadow-pink-900/50'
+			iconClass:
+				'text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-950 border-pink-200 dark:border-pink-800'
 		},
 		speech: {
 			icon: IconMic,
-			color: 'text-emerald-600 dark:text-emerald-400',
-			bg: 'bg-emerald-50 dark:bg-emerald-950',
-			border: 'border-emerald-200 dark:border-emerald-800',
-			hoverShadow: 'hover:shadow-emerald-200/50 dark:hover:shadow-emerald-900/50'
+			iconClass:
+				'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-800'
 		},
 		music: {
 			icon: IconMusic,
-			color: 'text-amber-600 dark:text-amber-400',
-			bg: 'bg-amber-50 dark:bg-amber-950',
-			border: 'border-amber-200 dark:border-amber-800',
-			hoverShadow: 'hover:shadow-amber-200/50 dark:hover:shadow-amber-900/50'
+			iconClass:
+				'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800'
 		},
 		unknown: {
 			icon: IconHelpCircle,
-			color: 'text-surface-600 dark:text-surface-400',
-			bg: 'bg-surface-50 dark:bg-surface-900',
-			border: 'border-surface-200 dark:border-surface-700',
-			hoverShadow: 'hover:shadow-surface-200/50 dark:hover:shadow-surface-900/50'
+			iconClass:
+				'text-surface-600 dark:text-surface-400 bg-surface-50 dark:bg-surface-900 border-surface-200 dark:border-surface-700'
 		}
 	};
 
 	function getCapabilityType(tag: string): CapabilityType {
-		if (tag === 'fast' || tag === 'powerful' || tag === 'balanced') {
-			return 'text';
-		}
+		if (tag === 'fast' || tag === 'powerful' || tag === 'balanced') return 'text';
 		if (tag === 'image' || tag === 'image_modify') return 'image';
 		if (tag === 'video' || tag === 'video_modify') return 'video';
 		if (tag === 'speech' || tag === 'speech_modify') return 'speech';
@@ -82,6 +66,28 @@
 	}
 
 	const modelConfigs = $derived<LLMConfig[]>(llmStore.llms);
+
+	const enrichedModels = $derived(
+		modelConfigs.map((config) => {
+			const capType = getCapabilityType(config.tag);
+			return {
+				id: config.id,
+				name: config.name,
+				enabled: config.enabled,
+				provider: config.provider,
+				tag: config.tag,
+				capType,
+				capConfig: capabilityConfig[capType]
+			};
+		})
+	);
+
+	// 选中状态管理
+	let selectedId = $state<string | null>(null);
+
+	function selectModel(id: string) {
+		selectedId = selectedId === id ? null : id;
+	}
 
 	function toggleEnabled(id: string) {
 		const llm = llmStore.find(id);
@@ -92,6 +98,9 @@
 	}
 
 	function deleteModel(id: string) {
+		if (selectedId === id) {
+			selectedId = null;
+		}
 		llmStore.removeById(id);
 	}
 
@@ -116,86 +125,93 @@
 		<ModelEditor bind:open={editorOpen} {modelId}></ModelEditor>
 	</div>
 
-	<div class="grid gap-3">
-		{#each modelConfigs as config (config.id)}
-			{@const capType = getCapabilityType(config.tag)}
-			{@const capConfig = capabilityConfig[capType]}
+	<div class="space-y-2">
+		{#each enrichedModels as model (model.id)}
+			{@const isSelected = selectedId === model.id}
 			<div
-				class="group relative rounded-xl border border-surface-200
-               bg-surface-50 shadow-sm transition-all duration-300
-               hover:shadow-xl {capConfig.hoverShadow}
-               dark:border-surface-700 dark:bg-surface-800
-               {!config.enabled ? 'opacity-60' : ''}"
+				role="button"
+				tabindex="0"
+				onclick={() => selectModel(model.id)}
+				onkeydown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						selectModel(model.id);
+					}
+				}}
+				class="group relative cursor-pointer rounded-lg border transition-all duration-200"
+				class:opacity-60={!model.enabled}
+				class:border-primary-500={isSelected}
+				class:dark:border-primary-400={isSelected}
+				class:bg-primary-50={isSelected}
+				class:dark:bg-primary-950={isSelected}
+				class:shadow-md={isSelected}
+				class:border-surface-200={!isSelected}
+				class:dark:border-surface-700={!isSelected}
+				class:bg-surface-50={!isSelected}
+				class:dark:bg-surface-800={!isSelected}
+				class:hover:bg-surface-100={!isSelected}
+				class:dark:hover:bg-surface-750={!isSelected}
+				class:hover:border-surface-300={!isSelected}
+				class:dark:hover:border-surface-600={!isSelected}
 			>
-				<div
-					class="absolute inset-0 rounded-xl bg-gradient-to-br opacity-0 transition-opacity duration-300
-                    group-hover:opacity-100"
-					style="background: linear-gradient(to bottom right, {capType === 'text'
-						? 'rgb(59 130 246 / 0.05)'
-						: capType === 'image'
-							? 'rgb(168 85 247 / 0.05)'
-							: capType === 'video'
-								? 'rgb(236 72 153 / 0.05)'
-								: capType === 'speech'
-									? 'rgb(16 185 129 / 0.05)'
-									: capType === 'music'
-										? 'rgb(245 158 11 / 0.05)'
-										: 'rgb(107 114 128 / 0.05)'}, transparent)"
-				></div>
+				<!-- 选中指示器 -->
+				{#if isSelected}
+					<div
+						class="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-full bg-primary-500 text-white dark:bg-primary-400 dark:text-surface-900"
+					>
+						<IconCheck class="h-4 w-4" />
+					</div>
+				{/if}
 
-				<div class="relative flex items-center gap-4 p-5">
+				<div class="flex items-center gap-4 p-4">
 					<div class="flex-shrink-0">
 						<div
-							class="flex h-12 w-12 items-center justify-center rounded-xl
-                        {capConfig.bg} {capConfig.border} border
-                        transition-transform duration-300 group-hover:scale-110"
+							class="flex h-12 w-12 items-center justify-center rounded-lg border transition-transform duration-200 group-hover:scale-105 {model
+								.capConfig.iconClass}"
 						>
-							<capConfig.icon class="h-6 w-6 {capConfig.color}" />
+							<svelte:component this={model.capConfig.icon} class="h-6 w-6" />
 						</div>
 					</div>
 
 					<div class="min-w-0 flex-1">
-						<div class="mb-2 flex flex-wrap items-center gap-2">
+						<div class="mb-1 flex flex-wrap items-center gap-2">
 							<span
-								class="rounded-full bg-surface-200 px-2.5 py-0.5 text-xs
-                           font-medium text-surface-700
-                           dark:bg-surface-700 dark:text-surface-300"
+								class="rounded-full bg-surface-200 px-2.5 py-0.5 text-xs font-medium text-surface-700 dark:bg-surface-700 dark:text-surface-300"
 							>
-								{#key localeStore.lang}
-									{t(config.provider)}
-								{/key}
+								{t(model.provider)}
 							</span>
 
 							<span
-								class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium
-                           {capConfig.bg} {capConfig.color}"
+								class="rounded-full px-2.5 py-0.5 text-xs font-medium {model.capConfig.iconClass}"
 							>
-								{#key localeStore.lang}
-									{t(`tag_${config.tag}`)}
-								{/key}
+								{t(`tag_${model.tag}`)}
 							</span>
 						</div>
-						<div class="flex items-center gap-4">
-							<h3
-								class="truncate font-mono text-base font-semibold text-surface-900 dark:text-surface-50"
-							>
-								{config.name}
-							</h3>
-						</div>
+						<h3
+							class="truncate font-mono text-sm font-semibold text-surface-900 dark:text-surface-50"
+						>
+							{model.name}
+						</h3>
 					</div>
 
-					<div
-						class="flex items-center gap-2 opacity-60 transition-opacity duration-200 group-hover:opacity-100"
-					>
+					<div class="flex flex-shrink-0 items-center gap-1">
 						<button
-							onclick={() => toggleEnabled(config.id)}
-							class="rounded-lg p-2.5 transition-all duration-200
-                     {config.enabled
-								? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950'
-								: 'text-surface-400 hover:bg-surface-100 dark:text-surface-600 dark:hover:bg-surface-700'}"
-							title={config.enabled ? '禁用模型' : '启用模型'}
+							onclick={(e) => {
+								e.stopPropagation();
+								toggleEnabled(model.id);
+							}}
+							class="rounded p-2 transition-colors hover:bg-surface-200 dark:hover:bg-surface-700"
+							class:text-emerald-600={model.enabled}
+							class:dark:text-emerald-400={model.enabled}
+							class:hover:text-emerald-700={model.enabled}
+							class:dark:hover:text-emerald-300={model.enabled}
+							class:text-surface-400={!model.enabled}
+							class:dark:text-surface-600={!model.enabled}
+							class:hover:text-surface-500={!model.enabled}
+							class:dark:hover:text-surface-500={!model.enabled}
+							title={model.enabled ? '禁用模型' : '启用模型'}
 						>
-							{#if config.enabled}
+							{#if model.enabled}
 								<IconToggleRight class="h-5 w-5"></IconToggleRight>
 							{:else}
 								<IconToggleLeft class="h-5 w-5"></IconToggleLeft>
@@ -203,22 +219,22 @@
 						</button>
 
 						<button
-							onclick={() => editModel(config.id)}
-							class="rounded-lg p-2.5 text-surface-600 transition-all
-                     duration-200 hover:bg-surface-100
-                     hover:text-primary-600 dark:text-surface-400
-                     dark:hover:bg-surface-700 dark:hover:text-primary-400"
+							onclick={(e) => {
+								e.stopPropagation();
+								editModel(model.id);
+							}}
+							class="rounded p-2 text-surface-600 transition-colors hover:bg-surface-200 hover:text-surface-900 dark:text-surface-400 dark:hover:bg-surface-700 dark:hover:text-surface-50"
 							title="编辑配置"
 						>
 							<IconEdit class="h-5 w-5"></IconEdit>
 						</button>
 
 						<button
-							onclick={() => deleteModel(config.id)}
-							class="rounded-lg p-2.5 text-surface-600 transition-all
-                     duration-200 hover:bg-error-50
-                     hover:text-error-600 dark:text-surface-400
-                     dark:hover:bg-error-950 dark:hover:text-error-400"
+							onclick={(e) => {
+								e.stopPropagation();
+								deleteModel(model.id);
+							}}
+							class="rounded p-2 text-surface-600 transition-colors hover:bg-red-100 hover:text-red-600 dark:text-surface-400 dark:hover:bg-red-950 dark:hover:text-red-400"
 							title="删除模型"
 						>
 							<IconTrash class="h-5 w-5"></IconTrash>

@@ -9,9 +9,12 @@
 	import IconSync from '~icons/mdi/sync';
 	import { viewStore, type ViewItemType } from '$lib/stores/project/view.svelte';
 	import { localeStore, t } from '$lib/stores/config/ipc/i18n.svelte';
+	import { onDestroy, onMount } from 'svelte';
+	import { eventBus } from '$lib/utils/evt';
 
 	let dynamicTabs = $derived<ViewItemType[]>(viewStore.tabs);
 	let activeTabId = $derived<string>(viewStore.activeId);
+	let open = $state(false);
 
 	function selectTab(tabId: string) {
 		viewStore.setActive(tabId);
@@ -67,6 +70,20 @@
 	function onContextMenu(tabId: string) {
 		currentContextTabId = tabId;
 	}
+
+	let unsub: (() => void) | null = null;
+	onMount(async () => {
+		unsub = await eventBus.listen('reteclick', () => {
+			open = false;
+		});
+	});
+
+	onDestroy(() => {
+		if (unsub) {
+			unsub();
+			unsub = null;
+		}
+	});
 </script>
 
 <div

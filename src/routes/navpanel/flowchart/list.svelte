@@ -2,28 +2,20 @@
 <script lang="ts">
 	import IconCircle from '~icons/mdi/circle-outline';
 	import IconCircleFilled from '~icons/mdi/circle';
-	import IconFileDocument from '~icons/mdi/file-document';
-	import IconFunction from '~icons/mdi/function-variant';
-	import IconLink from '~icons/mdi/link-variant';
 	import IconFlowchart from '~icons/mdi/chart-timeline-variant';
-
 	import type { FlowData } from '$lib/utils/vocab/type';
 	import { viewStore, type ViewType } from '$lib/stores/project/view.svelte';
 	import {
 		flowStore,
 		getViewIdOfFlow,
-		getViewIdPrefixOfFlow
 	} from '$lib/stores/project/flow.svelte';
+	import { navStore } from '$lib/stores/navpanel/nav.svelte';
 
-	let viewedFlows = $derived(flowStore.items);
-
-	type SubItemType = { id: string; name: string; icon: any };
-
-	const fixedSubItems: Array<SubItemType> = [
-		{ id: 'general', name: '定义', icon: IconFileDocument },
-		{ id: 'functions', name: '评估函数', icon: IconFunction },
-		{ id: 'relations', name: '约束与规则', icon: IconLink }
-	];
+	const viewedFlows = $derived.by(() => {
+		if (navStore.filter)
+			return flowStore.items.filter((item) => (item.word ?? '').includes(navStore.filter));
+		return flowStore.items;
+	});
 
 	function handleItemClick(flow: FlowData) {
 		const viewId = getViewIdOfFlow(flow.id);

@@ -7,6 +7,14 @@ export class PanelStore {
         this.show = show;
         this.size = size;
     }
+
+    setShow(bShow: boolean) {
+        this.show = bShow;
+    }
+
+    setSize(size: number) {
+        this.size = size;
+    }
 }
 
 export const leftPanel = new PanelStore(true, 25);
