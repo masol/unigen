@@ -7,6 +7,8 @@
 	import IconFlowchart from '~icons/mdi/chart-timeline-variant';
 	import IconArrowRightBox from '~icons/mdi/arrow-right-box';
 	import IconSync from '~icons/mdi/sync';
+	import IconFunction from '~icons/mdi/function-variant';
+
 	import { viewStore, type ViewItemType } from '$lib/stores/project/view.svelte';
 	import { localeStore, t } from '$lib/stores/config/ipc/i18n.svelte';
 	import { onDestroy, onMount } from 'svelte';
@@ -111,6 +113,8 @@
 					<IconSettings class="size-4" />
 				{:else if tab.type === 'flow'}
 					<IconFlowchart class="size-4" />
+				{:else if tab.type === 'function'}
+					<IconFunction class="size-4" />
 				{/if}
 				<span class="max-w-32 truncate"
 					>{#key localeStore.lang}{t(tab.label)}{/key}</span

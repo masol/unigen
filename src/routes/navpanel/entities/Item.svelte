@@ -10,7 +10,7 @@
 	import IconFileDocument from '~icons/mdi/file-document';
 	import IconPuzzle from '~icons/mdi/puzzle';
 
-	import { entityStore, getViewIdPrefix } from '$lib/stores/project/entity.svelte';
+	import { entityStore,  getViewId as getViewIdPrefix } from '$lib/stores/project/entity.svelte';
 	// import { entityViewStore, type SubItemType } from '$lib/stores/navpanel/entityview.svelte';
 	import type { EntityData } from '$lib/utils/vocab/type';
 	import { viewStore, type ViewType } from '$lib/stores/project/view.svelte';

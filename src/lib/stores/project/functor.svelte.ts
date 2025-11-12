@@ -1,8 +1,8 @@
 
-import type { FlowData } from "$lib/utils/vocab/type";
+import type { FunctorData } from "$lib/utils/vocab/type";
 
-export class FlowStore {
-    items = $state<FlowData[]>([
+export class FunctorStore {
+    items = $state<FunctorData[]>([
         {
             id: 1,
             word: '用户',
@@ -10,7 +10,7 @@ export class FlowStore {
             lang: 'zh-CN',
             synonym: ['User', '使用者'],
             expand: true,
-            type: "flow"
+            type: "functor"
         },
         {
             id: 2,
@@ -19,7 +19,7 @@ export class FlowStore {
             lang: 'zh-CN',
             synonym: ['Product', '商品'],
             expand: false,
-            type: "flow"
+            type: "functor"
         },
         {
             id: 3,
@@ -28,7 +28,7 @@ export class FlowStore {
             lang: 'zh-CN',
             synonym: ['Order'],
             expand: false,
-            type: "flow"
+            type: "functor"
         }
     ]);
 
@@ -41,9 +41,8 @@ export class FlowStore {
     }
 }
 
-export function getViewIdOfFlow(id: number): string {
-    return `flow::${id}`
+export function getViewIdOfFunctor(id: number): string {
+    return `functor::${id}`
 }
 
-
-export const flowStore = new FlowStore();
+export const functorStore = new FunctorStore();

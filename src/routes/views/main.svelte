@@ -1,5 +1,4 @@
 <script lang="ts">
-	import IconPlus from '~icons/lucide/plus';
 	import IconFolder from '~icons/lucide/folder';
 
 	import { projectStore } from '$lib/stores/project/project.svelte';

@@ -4,11 +4,10 @@
 	import type { Snippet } from 'svelte';
 	import IconCloseBox from '~icons/mdi/close-box';
 	import { onMount } from 'svelte';
-	import { eventBus } from '$lib/utils/evt';
 
 	interface Props {
 		children: Snippet;
-		onMenucmd?: (cmd: string, nodeid?: string) => void;
+		onMenucmd?: (cmd: string, param?: Record<string, any>) => void;
 		getMenuType: (e: MouseEvent) => 'editor' | 'node';
 	}
 
@@ -17,8 +16,11 @@
 	let menuType = $state<'editor' | 'node'>('editor');
 	let open = $state(false);
 
+	let clientX: number, clientY: number;
 	function handleContextMenu(e: MouseEvent) {
-		console.log('enter handleContextMenu');
+		// console.log('enter handleContextMenu',e.offsetX,e.offsetY);
+		clientX = e.offsetX;
+		clientY = e.offsetY;
 		menuType = getMenuType(e);
 	}
 
@@ -108,27 +110,37 @@
 				>
 					<span>关闭全部</span>
 				</ContextMenu.Item>
-
-				<ContextMenu.Separator class="my-1 h-px bg-surface-300 dark:bg-surface-700" />
 			{:else if menuType === 'editor'}
-				<!-- Editor 菜单 -->
 				<ContextMenu.Item
 					class="flex cursor-pointer items-center gap-2.5 rounded px-3 py-2 text-sm transition-colors outline-none hover:bg-surface-200 dark:hover:bg-surface-700"
 					onclick={() => {
-						onMenucmd('edit');
+						onMenucmd('newnode', {
+							clientX,
+							clientY
+						});
 						open = false;
 					}}
 				>
-					<span>编辑节点</span>
+					<span>新建节点</span>
+				</ContextMenu.Item>
+				<ContextMenu.Separator class="my-1 h-px bg-surface-300 dark:bg-surface-700" />
+				<ContextMenu.Item
+					class="flex cursor-pointer items-center gap-2.5 rounded px-3 py-2 text-sm transition-colors outline-none hover:bg-surface-200 dark:hover:bg-surface-700"
+					onclick={() => {
+						onMenucmd('reset');
+						open = false;
+					}}
+				>
+					<span>显示全部</span>
 				</ContextMenu.Item>
 				<ContextMenu.Item
 					class="flex cursor-pointer items-center gap-2.5 rounded px-3 py-2 text-sm transition-colors outline-none hover:bg-surface-200 dark:hover:bg-surface-700"
 					onclick={() => {
-						onMenucmd('del');
+						onMenucmd('layout');
 						open = false;
 					}}
 				>
-					<span>删除节点</span>
+					<span>自动布局</span>
 				</ContextMenu.Item>
 			{/if}
 		</ContextMenu.Content>

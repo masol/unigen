@@ -1,6 +1,6 @@
-export type WordType = "entity" | "predict" | "flow";
+export type WordType = "entity" | "functor" | "flow";
 export const TypeEntity: WordType = "entity"
-export const TypePredict: WordType = "predict"
+export const TypeFunctor: WordType = "functor"
 export const TypeFlow: WordType = "flow" // 
 
 // 基础数据接口，@todo: 是否需要语义搜索？
@@ -26,4 +26,9 @@ export interface EntityData extends WordData {
 
 export interface FlowData extends WordData {
     type: "flow";
+}
+
+
+export interface FunctorData extends WordData {
+    type: "functor";
 }

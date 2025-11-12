@@ -9,6 +9,7 @@
 	} from '$lib/stores/navpanel/nav.svelte';
 	import EntityComp from './entities/main.svelte';
 	import FlowChart from './flowchart/main.svelte';
+	import Functor from './transform/Main.svelte'
 
 	let currentNav = $derived(navStore.current);
 	let scrollY = $state(0);
@@ -97,7 +98,6 @@
 				class="relative h-full w-full overflow-auto"
 				style:display={currentNav === nav.id ? 'block' : 'none'}
 			>
-				{nav.id}
 				<!-- 动态组件渲染 - 使用导入的组件 -->
 				{#if nav.id === ENTITIES}
 					<EntityComp></EntityComp>
@@ -106,7 +106,7 @@
 				{:else if nav.id === WORKFLOW}
 					<!-- <OpenView /> -->
 				{:else if nav.id === TRANSFORM}
-					<!-- <SettingView /> -->
+					<Functor></Functor>
 				{/if}
 			</div>
 		{/each}

@@ -43,8 +43,8 @@ export class EntityStore {
     }
 }
 
-export function getViewIdPrefix(entityId: number): string {
-    return `ent_${entityId}::`
+export function getViewId(entityId: number): string {
+    return `ent::${entityId}`
 }
 
 export const entityStore = new EntityStore();

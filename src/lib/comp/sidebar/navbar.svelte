@@ -20,8 +20,8 @@
 	const config = densityConfig['comfortable'];
 	const topItems: NavItem[] = [
 		{ id: FLOWCHART, icon: IconFlowchart, label: FLOWCHART, disabled: false },
-		{ id: ENTITIES, icon: IconTable, label: ENTITIES, disabled: false },
 		{ id: TRANSFORM, icon: IconFunction, label: TRANSFORM, disabled: false },
+		{ id: ENTITIES, icon: IconTable, label: ENTITIES, disabled: false },
 		{ id: 'sep::1', icon: null, label: 'sep', disabled: false }, // 分隔符
 		{ id: WORKFLOW, icon: IconWorkflow, label: WORKFLOW, disabled: true },
 		{ id: UI, icon: IconUI, label: UI, disabled: true }
