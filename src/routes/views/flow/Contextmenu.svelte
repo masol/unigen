@@ -27,27 +27,6 @@
 	// 添加全局点击监听器来关闭菜单
 	onMount(() => {
 		function handleClickOutside(e: MouseEvent) {
-			// eventBus.emit('reteclick', {});
-
-			// // 手动触发一个新的点击事件到 document，绕过 Rete.js 的阻止
-			// const syntheticEvent = new MouseEvent('click', {
-			// 	bubbles: true,
-			// 	cancelable: true,
-			// 	view: window,
-			// 	clientX: e.clientX,
-			// 	clientY: e.clientY,
-			// 	screenX: e.screenX,
-			// 	screenY: e.screenY,
-			// 	button: e.button,
-			// 	buttons: e.buttons,
-			// 	relatedTarget: e.relatedTarget
-			// });
-
-			// // 延迟触发，确保在当前事件处理完成后
-			// setTimeout(() => {
-			// 	document.dispatchEvent(syntheticEvent);
-			// }, 0);
-
 			if (open) {
 				const target = e.target as HTMLElement;
 				// 检查点击是否在菜单内容之外
@@ -83,32 +62,22 @@
 				<ContextMenu.Item
 					class="flex cursor-pointer items-center gap-2.5 rounded px-3 py-2 text-sm transition-colors outline-none hover:bg-surface-200 dark:hover:bg-surface-700"
 					onclick={() => {
-						onMenucmd('close');
+						onMenucmd('detail');
+						open = false;
+					}}
+				>
+					<span>编辑节点</span>
+				</ContextMenu.Item>
+				<ContextMenu.Separator class="my-1 h-px bg-surface-300 dark:bg-surface-700" />
+				<ContextMenu.Item
+					class="flex cursor-pointer items-center gap-2.5 rounded px-3 py-2 text-sm transition-colors outline-none hover:bg-surface-200 dark:hover:bg-surface-700"
+					onclick={() => {
+						onMenucmd('rmNode');
 						open = false;
 					}}
 				>
 					<IconCloseBox class="size-4" />
-					<span>关闭</span>
-				</ContextMenu.Item>
-
-				<ContextMenu.Item
-					class="flex cursor-pointer items-center gap-2.5 rounded px-3 py-2 text-sm transition-colors outline-none hover:bg-surface-200 dark:hover:bg-surface-700"
-					onclick={() => {
-						onMenucmd('close-right');
-						open = false;
-					}}
-				>
-					<span>关闭右侧</span>
-				</ContextMenu.Item>
-
-				<ContextMenu.Item
-					class="flex cursor-pointer items-center gap-2.5 rounded px-3 py-2 text-sm transition-colors outline-none hover:bg-surface-200 dark:hover:bg-surface-700"
-					onclick={() => {
-						onMenucmd('close-all');
-						open = false;
-					}}
-				>
-					<span>关闭全部</span>
+					<span>移除节点</span>
 				</ContextMenu.Item>
 			{:else if menuType === 'editor'}
 				<ContextMenu.Item

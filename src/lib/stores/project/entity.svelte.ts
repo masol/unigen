@@ -1,44 +1,18 @@
+import { projectBase } from "$lib/utils/appdb/project";
 import type { EntityData } from "$lib/utils/vocab/type";
 
 export class EntityStore {
-    entities = $state<EntityData[]>([
-        {
-            id: 1,
-            word: '用户',
-            definition: '系统使用者',
-            lang: 'zh-CN',
-            synonym: ['User', '使用者'],
-            expand: true,
-            type: "entity",
-            example: ['张三', '李四'],
-            compose: []
-        },
-        {
-            id: 2,
-            word: '产品',
-            definition: '商品信息',
-            lang: 'zh-CN',
-            synonym: ['Product', '商品'],
-            expand: false,
-            type: "entity",
-            compose: []
-        },
-        {
-            id: 3,
-            word: '订单',
-            definition: '购买记录',
-            lang: 'zh-CN',
-            synonym: ['Order'],
-            expand: false,
-            type: "entity",
-            compose: []
-        }
-    ]);
+    entities = $state<EntityData[]>([]);
 
-    toggleExpand(entityId: number) {
+    async reinit() { // 从项目库中加载--每次打开项目都会调用一次！
+        this.entities = await projectBase.vocabdb.getAllByType("entity");
+    }
+
+    async toggleExpand(entityId: string) {
         const entity = this.entities.find(e => e.id === entityId);
         if (entity) {
             entity.expand = !entity.expand;
+            await projectBase.vocabdb.upsert(entity);
         }
     }
 }

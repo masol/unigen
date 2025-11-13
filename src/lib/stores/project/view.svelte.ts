@@ -15,11 +15,17 @@ export type ViewItemType = {
     type: ViewType; // 视口类型.
 }
 
+type DbValueType = {
+    tabs: ViewItemType[];
+    activeId: string;
+}
+
 export class ViewStore {
     tabs = $state<ViewItemType[]>([]);
     activeId = $state("")
+    selectedItem = $state(""); // 在view中指示第一级选中．对flow chart view而言，是选中的node id.
 
-    async init() { // 从项目库中加载
+    async reinit() { // 从项目库中加载--每次打开项目都会调用一次！
         this.activeId = ""
         this.tabs = [];
         await this.loadfromdb();
@@ -36,10 +42,11 @@ export class ViewStore {
         return this.tabs.find(item => item.id === id);
     }
 
-    setActive(id: string) {
-        if (this.findById(id)) {
+    async setActive(id: string) {
+        if (this.activeId !== id && this.findById(id)) {
             this.activeId = id;
-            console.log("set activeid = ", id)
+            this.selectedItem = "";
+            await this.save2db();
         }
     }
 
@@ -47,10 +54,11 @@ export class ViewStore {
         const cfgdb = projectBase.cfgdb;
         if (cfgdb) {
             try {
-
-                const items = await cfgdb.getConfigsByKey(KEYNAME);
-                if (items && items.length > 0 && isArray(items[0].value)) {
-                    this.tabs = (items[0].value as unknown as ViewItemType[])
+                const dbValue = await cfgdb.getConfigsByKey<DbValueType>(KEYNAME);
+                if (dbValue && dbValue.length > 0 && isArray(dbValue[0].value?.tabs)) {
+                    this.tabs = dbValue[0].value?.tabs;
+                    this.activeId = dbValue[0].value?.activeId;
+                    this.selectedItem = "" // 选中未在view中响应式处理．
                 }
             } catch {
                 return false;
@@ -62,7 +70,11 @@ export class ViewStore {
     private async save2db(): Promise<boolean> {
         const cfgdb = projectBase.cfgdb;
         if (cfgdb) {
-            return (await cfgdb.upsertByKey(KEYNAME, JSON.stringify(this.tabs))).success;
+            const dbValue: DbValueType = {
+                tabs: this.tabs,
+                activeId: this.activeId
+            }
+            return (await cfgdb.upsertByKey(KEYNAME, JSON.stringify(dbValue))).success;
         }
         return false;
     }

@@ -1,15 +1,16 @@
-import { NodeEditor, type GetSchemes, ClassicPreset } from "rete";
-import { sockets } from "./sockets";
-import {
-    SveltePlugin,
-    Presets,
-    type SvelteArea2D
-} from "rete-svelte-plugin/5";
+import { ClassicPreset } from "rete";
 
 
 export class UniNode extends ClassicPreset.Node {
-    width = 120;
-    height = 180;
+    // width = 120;
+    // height = 180;
+    get width(): number {
+        return 120;
+    }
+    get height(): number {
+        return 180;
+    }
+
     constructor(label: string) {
         super(label);
 
@@ -23,11 +24,3 @@ export class UniNode extends ClassicPreset.Node {
         forward("auto");
     }
 }
-
-export class Connection<N extends UniNode = UniNode> extends ClassicPreset.Connection<N, N> {
-
-}
-
-
-type Schemes = GetSchemes<UniNode, Connection<UniNode>>;
-type AreaExtra = SvelteArea2D<Schemes>;

@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { viewStore } from '$lib/stores/project/view.svelte';
+
+	// import type { UniNode } from '$lib/utils/rete/llmNode';
 	import type { IRetEditor } from '$lib/utils/rete/type';
 	import ContextMenu from './Contextmenu.svelte';
 	import { onDestroy, onMount } from 'svelte';
@@ -6,29 +9,62 @@
 	let el: HTMLDivElement;
 	let editor: IRetEditor | undefined;
 	let isDraggingOver = false;
+	// 最后触发上下文菜单的节点．
+	let lastNode: string | undefined;
 
 	onMount(async () => {
 		const old = el.style.display;
 		el.style.display = 'none';
 		const { RetEditor } = await import('$lib/utils/rete/index.js');
 		editor = new RetEditor(el);
+		editor.onEvent = onEvent;
 		await editor.init();
 		el.style.display = old;
 	});
 
-	function onMenucmd(cmd: string, param?: Record<string, any>) {
+	async function onEvent(cmd: string, param?: Record<string, any>) {
 		if (!editor) return;
 		switch (cmd) {
 			case 'reset':
-				return editor.reset();
+				editor.reset();
+				break;
 			case 'newnode':
-				return editor.newNode({
+				await editor.newNode({
 					x: param?.clientX || 0,
 					y: param?.clientY || 0
 				});
+				break;
 			case 'layout':
-				return editor.layout();
+				await editor.layout();
+				break;
+			case 'rmNode':
+				if (lastNode) {
+					await editor.rmNode(lastNode);
+				}
+				break;
+			case 'nodepicked': // 在这里处理节点选中的逻辑
+				if (param?.id) {
+					viewStore.selectedItem = param.id;
+					console.log('节点被选中:', param.id);
+				}
+				break;
+			case 'pointerdown': // 如果点击的不是节点，清除所有选择
+				if (!param?.id) {
+					viewStore.selectedItem = '';
+					console.log('节点别移除选择！！！');
+				}
+				break;
+			case 'connectioncreate': // 如果
+				if (param?.id) {
+					// param.id = crypto.randomUUID();
+				}
+				console.log('connectioncreate', param);
+				break;
+			case 'connectioncreated': // 如果
+				console.log('connectioncreated', param);
+				break;
 		}
+		lastNode = undefined;
 	}
 
 	onDestroy(() => {
@@ -39,8 +75,12 @@
 	});
 
 	function getMenuType(e: MouseEvent): 'editor' | 'node' {
-		const targetElement = e.target as HTMLElement;
-		return targetElement.closest('[data-testid="node"]') ? 'node' : 'editor';
+		if (editor) {
+			const targetElement = e.target as HTMLElement;
+			lastNode = editor.nodeFromElement(targetElement);
+			return lastNode ? 'node' : 'editor';
+		}
+		return 'editor';
 	}
 
 	function handleDragOver(e: DragEvent) {
@@ -92,7 +132,7 @@
 	}
 </script>
 
-<ContextMenu {onMenucmd} {getMenuType}>
+<ContextMenu onMenucmd={onEvent} {getMenuType}>
 	<div
 		class="relative h-full w-full border text-left text-base transition-all duration-200
 			{isDraggingOver

@@ -1,25 +1,30 @@
 export type WordType = "entity" | "functor" | "flow";
 export const TypeEntity: WordType = "entity"
 export const TypeFunctor: WordType = "functor"
-export const TypeFlow: WordType = "flow" // 
+export const TypeFlow: WordType = "flow"
 
-// 基础数据接口，@todo: 是否需要语义搜索？
+// 基础数据接口，@todo: 是否需要语义搜索？是否需要维护全局而非项目级的词语(实体/概念)表？
 export interface WordData {
-    id: number; // 自增id.
-    // concept_id: number; // 以 
+    id: string; // UUID.
+    concept_id: number; // 以自增id，方便将word映射到prolog中． 
     word: string; // 可以为空，表示无自然语言对应--需要用句子来
-    definition: string;
+    definition?: string;
     lang: string; // 词汇定义时，使用的语言
-    synonym: string[];
-    expand: boolean;
+    synonym?: string[];
+    expand: boolean;  // UI指示器，指示当前是否已展开了(entity如此使用，其它可以作为flag1来使用)
     type: WordType;
+    created_at: number;
+    updated_at: number;
+    extra?: {};
 }
 
 
 export interface EntityData extends WordData {
     type: "entity";
-    example?: string[]; // 示例性的内容．如果以file://开头，指示本地文件(想对于项目路径/gitdata)
-    compose?: string[]; // 组成成分．值为id,指向了entity id．
+    extra?: {
+        example?: string[]; // 示例性的内容．如果以file://开头，指示本地文件(想对于项目路径/gitdata)
+        compose?: string[]; // 组成成分．值为id,指向了entity id．
+    }
     // belongto?: string; // 所属entity,值为id.指向了WordData中的entity．
 }
 
@@ -31,4 +36,7 @@ export interface FlowData extends WordData {
 
 export interface FunctorData extends WordData {
     type: "functor";
+    // extra: {
+    //     sub_type: string; // 函子类型，当前只支持一个，就是Prompt funciton.不给默认就是Prompt funciton.
+    // }
 }

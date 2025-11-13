@@ -16,10 +16,10 @@ type ConfigInner = {
     updated_at: number
 }
 
-function ConfigMapper(inner: ConfigInner): ConfigItem {
+function ConfigMapper<T>(inner: ConfigInner): ConfigItem<T> {
     return {
         id: inner.id,
-        value: JSON5.parse(inner.value),
+        value: JSON5.parse(inner.value) as T,
         created_at: inner.created_at,
         updated_at: inner.updated_at
     }
@@ -188,20 +188,20 @@ export class CfgDB {
         }
     }
 
-    async getConfigsByKey(key: string): Promise<ConfigItem[]> {
+    async getConfigsByKey<T>(key: string): Promise<ConfigItem<T>[]> {
         const results = await this.handle.select<ConfigInner[]>(
             'SELECT id, key, value, created_at, updated_at FROM config WHERE key = $1',
             [key]
         );
-        return results.map(ConfigMapper);
+        return results.map(ConfigMapper<T>);
     }
 
-    async getConfigById(id: string): Promise<ConfigItem | null> {
+    async getConfigById<T>(id: string): Promise<ConfigItem<T> | null> {
         const results = await this.handle.select<ConfigInner[]>(
             'SELECT id, key, value, created_at, updated_at FROM config WHERE id = $1',
             [id]
         );
-        return results.length > 0 ? ConfigMapper(results[0]) : null;
+        return results.length > 0 ? ConfigMapper<T>(results[0]) : null;
     }
 
     async close() {

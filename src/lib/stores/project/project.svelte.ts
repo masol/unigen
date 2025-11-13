@@ -13,6 +13,7 @@ import pMap from "p-map";
 import { mqttInstance } from "$lib/utils/appdb/mqtt";
 import { projectBase } from "$lib/utils/appdb/project";
 import { viewStore } from "./view.svelte";
+import { entityStore } from "./entity.svelte";
 
 
 const KEYNAME = "recent";
@@ -228,7 +229,9 @@ export class ProjectStore {
         /*
         // 主动通知(project依赖其它项)其它组件开始更新数据和状态．
         */
-        await viewStore.init();
+        await viewStore.reinit();
+        await entityStore.reinit();
+
 
 
         // 保存最近打开，无需通知其它－－也无需锁定，保存最后打开的即可．
