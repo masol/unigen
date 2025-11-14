@@ -6,7 +6,7 @@ import { isArray } from "remeda";
 
 const KEYNAME = "views";
 
-export type ViewType = "settings" | "entgeneral" | "function" | "flow"
+export type ViewType = "settings" | "entities" | "function" | "flow"
 export type ViewItemType = {
     id: string;
     label: string; // 这里传入的是key，通过t[key]来渲染。

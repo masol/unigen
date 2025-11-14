@@ -18,7 +18,7 @@
 	"tag_music_modify": "音乐修改",
 	"baichuan": "百川",
 	"deepinfra": "DeepInfra",
-	"entities": "AI输出定义",
-	"transformer": "",
+	"entities": "概念定义",
+	"transformer": "行为定义",
 	"flowchart": "流程图"
 }

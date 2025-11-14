@@ -4,6 +4,7 @@
 	import IconMdiClose from '~icons/mdi/close';
 	import { fade } from 'svelte/transition';
 	import { navStore } from '$lib/stores/navpanel/nav.svelte';
+	import NewWord from './sidebar/NewWord.svelte';
 
 	// 假store: 使用Svelte 5 Runes实现跨组件状态管理
 	let filterStore = $derived(navStore.filter);
@@ -81,7 +82,8 @@
 	"
 >
 	<!-- Create button -->
-	<button
+	 <NewWord></NewWord>
+	<!-- <button
 		type="button"
 		onclick={handleCreate}
 		disabled={createStore.isCreating}
@@ -118,7 +120,7 @@
 		{:else}
 			<IconMdiPlus class="h-5 w-5" />
 		{/if}
-	</button>
+	</button> -->
 
 	<!-- 分隔线 -->
 	<div

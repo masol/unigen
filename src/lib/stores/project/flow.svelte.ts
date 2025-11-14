@@ -1,49 +1,18 @@
 
-import type { FlowData } from "$lib/utils/vocab/type";
+import { projectBase } from "$lib/utils/appdb/project";
+import { TypeFlow, type FlowData } from "$lib/utils/vocab/type";
+import { updateStore } from "./utils";
 
 export class FlowStore {
-    items = $state<FlowData[]>([
-        {
-            id: 1,
-            word: '用户',
-            definition: '系统使用者',
-            lang: 'zh-CN',
-            synonym: ['User', '使用者'],
-            expand: true,
-            type: "flow"
-        },
-        {
-            id: 2,
-            word: '产品',
-            definition: '商品信息',
-            lang: 'zh-CN',
-            synonym: ['Product', '商品'],
-            expand: false,
-            type: "flow"
-        },
-        {
-            id: 3,
-            word: '订单',
-            definition: '购买记录',
-            lang: 'zh-CN',
-            synonym: ['Order'],
-            expand: false,
-            type: "flow"
-        }
-    ]);
+    items = $state<FlowData[]>([]);
 
+    async reinit() { // 从项目库中加载--每次打开项目都会调用一次！
+        this.items = await projectBase.vocabdb.getAllByType(TypeFlow);
+    }
 
-    toggleExpand(id: number) {
-        const item = this.items.find(e => e.id === id);
-        if (item) {
-            item.expand = !item.expand;
-        }
+    update(item: FlowData) {
+        updateStore(this, item);
     }
 }
-
-export function getViewIdOfFlow(id: number): string {
-    return `flow::${id}`
-}
-
 
 export const flowStore = new FlowStore();

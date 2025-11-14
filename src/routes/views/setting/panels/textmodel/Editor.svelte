@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { superForm } from 'sveltekit-superforms';
-	import { zodClient } from 'sveltekit-superforms/adapters';
+	import { zod4Client } from 'sveltekit-superforms/adapters';
 	import { z } from 'zod';
 	import { Clock, Wave } from 'svelte-loading-spinners';
 	import IconChevronDown from '~icons/carbon/chevron-down';
@@ -12,7 +12,7 @@
 	import { validTags, type LLMConfig, type LLMTag } from '$lib/utils/llms/index.type';
 	import { nav2Provider } from './utils';
 	import { Index } from 'flexsearch';
-	
+
 	interface Props {
 		initialData?: Partial<LLMConfig>;
 		onSave: (config: LLMConfig) => Promise<void>;
@@ -42,7 +42,7 @@
 		},
 		{
 			SPA: true,
-			validators: zodClient(modelSchema as any),
+			validators: zod4Client(modelSchema),
 			dataType: 'json',
 			resetForm: false,
 			// 改用 onSubmit
@@ -53,7 +53,7 @@
 				if (!validInfo.valid) {
 					errors.set(validInfo.errors);
 					cancel();
-					console.log('表单验证失败');
+					// console.log('表单验证失败');
 					return;
 				}
 

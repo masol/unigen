@@ -8,6 +8,7 @@
 	import IconArrowRightBox from '~icons/mdi/arrow-right-box';
 	import IconSync from '~icons/mdi/sync';
 	import IconFunction from '~icons/mdi/function-variant';
+	import IconText from '~icons/mdi/text-box';
 
 	import { viewStore, type ViewItemType } from '$lib/stores/project/view.svelte';
 	import { localeStore, t } from '$lib/stores/config/ipc/i18n.svelte';
@@ -115,6 +116,8 @@
 					<IconFlowchart class="size-4" />
 				{:else if tab.type === 'function'}
 					<IconFunction class="size-4" />
+				{:else if tab.type === 'entities'}
+					<IconText class="size-4" />
 				{/if}
 				<span class="max-w-32 truncate"
 					>{#key localeStore.lang}{t(tab.label)}{/key}</span

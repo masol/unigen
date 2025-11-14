@@ -1,6 +1,7 @@
 import type Database from "@tauri-apps/plugin-sql";
 import type { EntityData, FlowData, FunctorData, WordData, WordType } from "./type";
 import JSON5 from "json5";
+import { localeStore } from "$lib/stores/config/ipc/i18n.svelte";
 
 type CogmindData = EntityData | FlowData | FunctorData;
 
@@ -95,10 +96,11 @@ export class CogmindDb {
     /**
      * 通用 upsert 方法
      * 支持部分更新，只更新提供的字段
+     * 返回id.
      */
     async upsert(
         data: Partial<CogmindData> & { id?: string; type: WordType }
-    ): Promise<Boolean> {
+    ): Promise<string> {
         if (!this.#db) {
             throw new Error('Database not loaded');
         }
@@ -178,13 +180,13 @@ export class CogmindDb {
     }
 
     /**
-     * 更新现有记录（只更新提供的字段）
+     * 更新现有记录（只更新提供的字段），返回id.
      */
     private async updateRecord(
         id: string,
         data: Partial<CogmindData>,
         now: number
-    ): Promise<boolean> {
+    ): Promise<string> {
         if (!this.#db) {
             throw new Error('Database not loaded');
         }
@@ -221,7 +223,7 @@ export class CogmindDb {
             values
         );
 
-        return result.rowsAffected >= 0;
+        return result.rowsAffected > 0 ? id : "";
 
         // 重新获取更新后的数据
         // const updated = await this.getRowById(id);
@@ -233,13 +235,13 @@ export class CogmindDb {
     }
 
     /**
-     * 插入新记录
+     * 插入新记录,返回id.
      */
     private async insertRecord(
         id: string,
         data: Partial<CogmindData>,
         now: number
-    ): Promise<Boolean> {
+    ): Promise<string> {
         if (!this.#db) {
             throw new Error('Database not loaded');
         }
@@ -249,10 +251,12 @@ export class CogmindDb {
             throw new Error('Type is required for new records');
         }
         if (!data.word) {
-            throw new Error('Word is required for new records');
+            data.word = "";
+            // throw new Error('Word is required for new records');
         }
         if (!data.lang) {
-            throw new Error('Lang is required for new records');
+            data.lang = localeStore.lang;
+            // throw new Error('Lang is required for new records');
         }
 
         const conceptId = data.concept_id ?? this.getNextConceptId();
@@ -277,7 +281,7 @@ export class CogmindDb {
             ]
         );
 
-        return result.rowsAffected >= 0;
+        return result.rowsAffected > 0 ? id : "";
 
         // const inserted = await this.getRowById(id);
         // if (!inserted) {
@@ -348,12 +352,19 @@ export class CogmindDb {
     /**
      * 获取下一个 concept_id
      */
-    private getNextConceptId(): number {
+    public getNextConceptId(): number {
         if (this.#maxId < 0) {
             throw new Error("Max ID not initialized from database");
         }
 
         this.#maxId = this.#maxId + 1;
+        return this.#maxId;
+    }
+
+    get maxId(): number {
+         if (this.#maxId < 0) {
+            throw new Error("Max ID not initialized from database");
+        }
         return this.#maxId;
     }
 }

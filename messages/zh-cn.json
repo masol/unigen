@@ -37,8 +37,8 @@
 	"baichuan": "百川",
 	"deepinfra": "DeepInfra",
 	"qianfan": "百度千帆",
-	"entities": "AI输出定义",
-	"transformer": "提示词管理",
+	"entities": "概念定义",
+	"transformer": "行为定义",
 	"workflow": "工作流(BPMN)",
 	"flowchart": "流程图",
 	"ui": "用户界面"

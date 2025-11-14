@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { superForm } from 'sveltekit-superforms';
-	import { zodClient } from 'sveltekit-superforms/adapters';
+	import { zod4Client } from 'sveltekit-superforms/adapters';
 	import { z } from 'zod';
 	import { Clock } from 'svelte-loading-spinners';
 	import IconView from '~icons/carbon/view';
@@ -96,7 +96,7 @@
 		parseInitialData(),
 		{
 			SPA: true,
-			validators: zodClient(proxySchema as any),
+			validators: zod4Client(proxySchema),
 			dataType: 'json',
 			resetForm: false,
 			async onSubmit({ cancel }) {

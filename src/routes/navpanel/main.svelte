@@ -7,9 +7,9 @@
 		FLOWCHART,
 		UI
 	} from '$lib/stores/navpanel/nav.svelte';
-	import EntityComp from './entities/main.svelte';
-	import FlowChart from './flowchart/main.svelte';
-	import Functor from './transform/Main.svelte'
+	import EntityComp from './Entities.svelte';
+	import FlowChart from './FlowChart.svelte';
+	import Functor from './Transform.svelte'
 
 	let currentNav = $derived(navStore.current);
 	let scrollY = $state(0);

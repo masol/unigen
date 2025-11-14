@@ -1,7 +1,5 @@
 <script lang="ts">
 	import { viewStore } from '$lib/stores/project/view.svelte';
-
-	// import type { UniNode } from '$lib/utils/rete/llmNode';
 	import type { IRetEditor } from '$lib/utils/rete/type';
 	import ContextMenu from './Contextmenu.svelte';
 	import { onDestroy, onMount } from 'svelte';
@@ -9,7 +7,6 @@
 	let el: HTMLDivElement;
 	let editor: IRetEditor | undefined;
 	let isDraggingOver = false;
-	// 最后触发上下文菜单的节点．
 	let lastNode: string | undefined;
 
 	onMount(async () => {
@@ -20,6 +17,11 @@
 		editor.onEvent = onEvent;
 		await editor.init();
 		el.style.display = old;
+
+		// 使用原生事件监听器
+		el.addEventListener('dragover', handleDragOver);
+		el.addEventListener('dragleave', handleDragLeave);
+		el.addEventListener('drop', handleDrop);
 	});
 
 	async function onEvent(cmd: string, param?: Record<string, any>) {
@@ -42,25 +44,25 @@
 					await editor.rmNode(lastNode);
 				}
 				break;
-			case 'nodepicked': // 在这里处理节点选中的逻辑
+			case 'nodepicked':
 				if (param?.id) {
 					viewStore.selectedItem = param.id;
 					console.log('节点被选中:', param.id);
 				}
 				break;
-			case 'pointerdown': // 如果点击的不是节点，清除所有选择
+			case 'pointerdown':
 				if (!param?.id) {
 					viewStore.selectedItem = '';
 					console.log('节点别移除选择！！！');
 				}
 				break;
-			case 'connectioncreate': // 如果
+			case 'connectioncreate':
 				if (param?.id) {
 					// param.id = crypto.randomUUID();
 				}
 				console.log('connectioncreate', param);
 				break;
-			case 'connectioncreated': // 如果
+			case 'connectioncreated':
 				console.log('connectioncreated', param);
 				break;
 		}
@@ -68,6 +70,11 @@
 	}
 
 	onDestroy(() => {
+		if (el) {
+			el.removeEventListener('dragover', handleDragOver);
+			el.removeEventListener('dragleave', handleDragLeave);
+			el.removeEventListener('drop', handleDrop);
+		}
 		if (editor) {
 			editor.destroy();
 			editor = undefined;
@@ -84,14 +91,16 @@
 	}
 
 	function handleDragOver(e: DragEvent) {
+		console.log('drag over=', e);
 		e.preventDefault();
+		e.stopPropagation(); // 添加这行
 		if (!e.dataTransfer) return;
 		e.dataTransfer.dropEffect = 'copy';
 		isDraggingOver = true;
 	}
 
 	function handleDragLeave(e: DragEvent) {
-		// 只有在离开整个容器时才设置为 false
+		console.log('handleDragLeave over=', e);
 		const relatedTarget = e.relatedTarget as Node | null;
 		if (!relatedTarget || !el.contains(relatedTarget)) {
 			isDraggingOver = false;
@@ -99,7 +108,9 @@
 	}
 
 	function handleDrop(e: DragEvent) {
+		console.log('handleDrop=', e);
 		e.preventDefault();
+		e.stopPropagation(); // 添加这行
 		isDraggingOver = false;
 
 		if (!editor || !e.dataTransfer) return;
@@ -109,6 +120,7 @@
 
 			if (jsonData) {
 				const data = JSON.parse(jsonData);
+				console.log('drop data=', data);
 
 				if (data.type === 'functor') {
 					const rect = el.getBoundingClientRect();
@@ -122,8 +134,6 @@
 						functorId: data.functorId,
 						functorWord: data.functorWord
 					});
-
-					// console.log('Dropped functor:', data);
 				}
 			}
 		} catch (error) {
@@ -139,9 +149,6 @@
 			? 'border-blue-500 bg-blue-50/50 ring-2 ring-blue-400/50 dark:border-blue-400 dark:bg-blue-950/30 dark:ring-blue-500/50'
 			: 'border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-900'}"
 		bind:this={el}
-		on:dragover={handleDragOver}
-		on:dragleave={handleDragLeave}
-		on:drop={handleDrop}
 		role="region"
 		aria-label="编辑器拖放区域"
 	></div>
