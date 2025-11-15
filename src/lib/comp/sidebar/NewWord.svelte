@@ -11,19 +11,14 @@
 	import { entityStore } from '$lib/stores/project/entity.svelte';
 	import { flowStore } from '$lib/stores/project/flow.svelte';
 	import { functorStore } from '$lib/stores/project/functor.svelte';
-	import { projectStore } from '$lib/stores/project/project.svelte';
-	import { getViewId, viewTypeFromWord, wordTypeFromNav } from '$lib/stores/project/utils';
+	import { getViewId, viewTypeFromWord, wordTypeFromNav } from '$lib/stores/project/word.svelte';
 	import { viewStore } from '$lib/stores/project/view.svelte';
 	import { projectBase } from '$lib/utils/appdb/project';
 	import { logger } from '$lib/utils/logger';
 	import {
-		TypeEntity,
-		TypeFlow,
-		TypeFunctor,
 		type EntityData,
 		type FlowData,
 		type FunctorData,
-		type WordType
 	} from '$lib/utils/vocab/type';
 	import { Dialog as DialogPrimitive } from 'bits-ui';
 	import { superForm } from 'sveltekit-superforms';

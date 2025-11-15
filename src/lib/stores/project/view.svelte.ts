@@ -79,16 +79,40 @@ export class ViewStore {
         return false;
     }
 
-    addView(item: ViewItemType) {
-        let added = false;
-        if (!this.findById(item.id)) {
+    addView(item: ViewItemType): Promise<boolean> | undefined {
+        const existingIndex = this.tabs.findIndex(tab => tab.id === item.id);
+        let needsSave = false;
+
+        if (existingIndex !== -1) {
+            // 找到了，覆盖旧值
+            this.tabs[existingIndex] = {
+                ...this.tabs[existingIndex],
+                ...item
+            };
+            needsSave = true;
+        } else {
+            // 没找到，添加到开头
             this.tabs = [item, ...this.tabs];
-            added = true;
+            needsSave = true;
         }
+
         this.setActive(item.id);
-        if (added) {
+
+        if (needsSave) {
             return this.save2db();
         }
+    }
+
+    async update(id: string, item: Partial<ViewItemType>): Promise<boolean> {
+        const index = this.tabs.findIndex(tab => tab.id === id);
+        if (index !== -1) {
+            this.tabs[index] = {
+                ...this.tabs[index],
+                ...item
+            };
+            return this.save2db();
+        }
+        return false;
     }
 
     removeView(tabId: string): Promise<boolean> {

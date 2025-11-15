@@ -91,16 +91,16 @@
 	}
 
 	function handleDragOver(e: DragEvent) {
-		console.log('drag over=', e);
+		// console.log('drag over=', e);
 		e.preventDefault();
-		e.stopPropagation(); // 添加这行
+		e.stopPropagation();
 		if (!e.dataTransfer) return;
 		e.dataTransfer.dropEffect = 'copy';
 		isDraggingOver = true;
 	}
 
 	function handleDragLeave(e: DragEvent) {
-		console.log('handleDragLeave over=', e);
+		// console.log('handleDragLeave over=', e);
 		const relatedTarget = e.relatedTarget as Node | null;
 		if (!relatedTarget || !el.contains(relatedTarget)) {
 			isDraggingOver = false;
@@ -108,9 +108,9 @@
 	}
 
 	function handleDrop(e: DragEvent) {
-		console.log('handleDrop=', e);
+		// console.log('handleDrop=', e);
 		e.preventDefault();
-		e.stopPropagation(); // 添加这行
+		e.stopPropagation();
 		isDraggingOver = false;
 
 		if (!editor || !e.dataTransfer) return;

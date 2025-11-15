@@ -10,6 +10,12 @@
 			<WordList
 				icon={IconFunction}
 				viewType={'function'}
+				deleteWord={async (id: string) => {
+					functorStore.delete(id);
+				}}
+				updateWord={async (id: string, newWord: string) => {
+					functorStore.updateName(id, newWord);
+				}}
 				items={functorStore.items}
 			></WordList>
 		</div>

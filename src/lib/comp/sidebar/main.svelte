@@ -12,11 +12,13 @@
 		{
 			id: 'commands',
 			icon: IconCommand,
+			disabled: false,
 			label: 'slow_sharp_deer_race'
 		},
 		{
 			id: 'settings',
 			icon: IconSettings,
+			disabled: false,
 			label: 'patient_lower_polecat_learn',
 			onClick: () => {
 				viewStore.addView({

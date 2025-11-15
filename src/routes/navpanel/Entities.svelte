@@ -12,6 +12,12 @@
 				viewType={'entities'}
 				draggable={false}
 				items={entityStore.items}
+				deleteWord={async (id: string) => {
+					entityStore.delete(id);
+				}}
+				updateWord={async (id: string, newWord: string) => {
+					entityStore.updateName(id, newWord);
+				}}
 			></WordList>
 		</div>
 	</div>

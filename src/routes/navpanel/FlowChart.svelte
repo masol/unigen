@@ -11,6 +11,12 @@
 				icon={IconFlowchart}
 				viewType={'flow'}
 				items={flowStore.items}
+				deleteWord={async (id: string) => {
+					flowStore.delete(id);
+				}}
+				updateWord={async (id: string, newWord: string) => {
+					flowStore.updateName(id, newWord);
+				}}
 			></WordList>
 		</div>
 	</div>

@@ -1,17 +1,11 @@
-import { projectBase } from "$lib/utils/appdb/project";
 import { TypeEntity, type EntityData } from "$lib/utils/vocab/type";
-import { updateStore } from "./utils";
+import { WordStore } from "./word.svelte";
 
-export class EntityStore {
-    items = $state<EntityData[]>([]);
-
-    async reinit() { // 从项目库中加载--每次打开项目都会调用一次！
-        this.items = await projectBase.vocabdb.getAllByType(TypeEntity);
-    }
-
-    update(item: EntityData) {
-        updateStore(this, item);
-    }
+export class EntityStore extends WordStore<EntityData> {
+    type = TypeEntity;
+    // 删除一个word之后，额外处理．
+    async _delPost(data: EntityData): Promise<void> { }
+    async _renamePost(word: EntityData): Promise<void> { }
 
 }
 

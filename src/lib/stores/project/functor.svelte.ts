@@ -1,18 +1,13 @@
-
-import { projectBase } from "$lib/utils/appdb/project";
 import { TypeFunctor, type FunctorData } from "$lib/utils/vocab/type";
-import { updateStore } from "./utils";
+import { WordStore } from "./word.svelte";
 
-export class FunctorStore {
-    items = $state<FunctorData[]>([]);
-
-    async reinit() { // 从项目库中加载--每次打开项目都会调用一次！
-        this.items = await projectBase.vocabdb.getAllByType(TypeFunctor);
+export class FunctorStore extends WordStore<FunctorData> {
+    type = TypeFunctor;
+    // 删除一个word之后，额外处理．
+    async _delPost(data: FunctorData): Promise<void> {
     }
+    async _renamePost(word: FunctorData): Promise<void> { }
 
-    update(item: FunctorData) {
-        updateStore(this, item);
-    }
 }
 
 export const functorStore = new FunctorStore();
