@@ -1,44 +1,40 @@
 import { projectBase } from "$lib/utils/appdb/project";
-import { TypeEntity, type EntityData, TypeFlow, TypeFunctor, type WordData, type WordType } from "$lib/utils/vocab/type";
-import type { NavType } from "../navpanel/nav.svelte";
-import { viewStore, type ViewType } from "./view.svelte";
+import { type WordData, type WordType } from "$lib/utils/vocab/type";
+import { t } from "../config/ipc/i18n.svelte";
+import { viewStore } from "./view.svelte";
 
 
 export function getViewId(id: string, type: WordType) {
     return `${type}::${id}`
 }
 
-const navType2wordType: Record<string, WordType> = {
-    entities: TypeEntity,
-    transformer: TypeFunctor,
-    flowchart: TypeFlow
-};
-
-// 从ViewType转化为WordType.
-export function wordTypeFromNav(type: NavType): WordType | undefined {
-    return navType2wordType[type];
-}
-
-export function viewTypeFromWord(type: WordType): ViewType {
-    switch (type) {
-        case 'entity':
-            return 'entities';
-        case "functor":
-            return 'function';
-        case "flow":
-            return 'flow';
-    }
-}
-
 export function updateStore<T extends WordData>(store: { items: T[] }, item: T) {
     store.items = store.items.map(repo =>
         repo.id === item.id ? { ...repo, ...item } : repo
     );
-    let repo = store.items.find(repo => repo.id === item.id);
+    const repo = store.items.find(repo => repo.id === item.id);
     if (!repo) {
         store.items.push(item);
     }
 }
+
+export function nextName(prefix: string): string {
+    const nextId = projectBase.vocabdb.maxId + 1;
+    return prefix + String(nextId);
+}
+
+export function addWord2View(word: WordData): Promise<boolean> | undefined {
+    const viewId = getViewId(word.id, word.type);
+    const viewDef = {
+        id: viewId,
+        label: `${word.word}`,
+        closable: true,
+        docId: word.id,
+        type: word.type
+    };
+    return viewStore.addView(viewDef);
+}
+
 
 export abstract class WordStore<T extends WordData> {
     items = $state<T[]>([]);
@@ -55,11 +51,35 @@ export abstract class WordStore<T extends WordData> {
         updateStore(this, item);
     }
 
-    async updateName(id: string, newWord: string): Promise<boolean> {
-        const word = this.items.find(i => i.id === id);
+    // 返回word.id
+    async newItem(name?: string): Promise<T> {
+
+        if (!name) {
+            name = nextName(t(this.type));
+        }
+        const wordId = await projectBase.vocabdb.upsert({ type: this.type, word: name });
+        const word = await projectBase.vocabdb.getById<T>(wordId);
         if (!word) {
+            throw new Error(`新建${this.type}时出错!`)
+        }
+
+        this.update(word);
+        return word;
+    }
+
+    openView(id: string): Promise<boolean> | undefined {
+        const word = this.items.find(item => item.id === id);
+        if (word) {
+            return addWord2View(word)
+        }
+    }
+
+    async updateName(id: string, newWord: string): Promise<boolean> {
+        const oldWord = this.items.find(i => i.id === id);
+        if (!oldWord) {
             return false;
         }
+        const word = { ...oldWord }
         if (word.word === newWord) {
             return true;
         }
@@ -74,7 +94,8 @@ export abstract class WordStore<T extends WordData> {
                 id: viewId,
                 label: `${word.word}`,
                 closable: true,
-                type: viewTypeFromWord(word.type)
+                docId: word.id,
+                type: word.type
             };
             // 更新word.word
             viewStore.addView(viewDef);

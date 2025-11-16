@@ -1,21 +1,40 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
 	import IconPlus from '~icons/lucide/plus';
-	import Rete from './Rete.svelte'
+	import Rete from './Rete.svelte';
+	import { onMount } from 'svelte';
+	import { logger } from '$lib/utils/logger';
 
-	let scrollY = $state(0);
+	let {
+		vid = '',
+		rid = ''
+	}: {
+		vid: string;
+		rid?: string;
+	} = $props();
 
-	function handleScroll(e: Event) {
-		scrollY = (e.target as HTMLElement).scrollTop;
-	}
+	onMount(() => {
+		if (!rid) {
+			const parts = vid.split('::');
+			if (parts.length !== 2) {
+				logger.error('错误的ViewID格式:', vid);
+				return;
+			}
+			rid = parts[1];
+		}
+	});
+
+	// let scrollY = $state(0);
+
+	// function handleScroll(e: Event) {
+	// 	scrollY = (e.target as HTMLElement).scrollTop;
+	// }
 </script>
 
 <div class="flex h-full flex-col bg-surface-50 dark:bg-surface-900">
 	<!-- 顶部标题栏（sticky） -->
 	<header
 		class="sticky top-0 z-10 border-b border-surface-200 bg-white/95 backdrop-blur-sm transition-all duration-200 dark:border-surface-700 dark:bg-surface-800/95"
-		class:shadow-lg={scrollY > 10}
-		class:border-surface-300={scrollY > 10}
 	>
 		<div class="mx-auto flex h-11 max-w-full items-center justify-between px-6">
 			<div class="flex-1">
@@ -49,6 +68,6 @@
 	<!-- 主内容区域 -->
 	<div class="flex min-h-0 flex-1">
 		<!-- 左侧树形导航 -->
-		<Rete></Rete>
+		<Rete {rid}></Rete>
 	</div>
 </div>

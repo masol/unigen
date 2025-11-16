@@ -9,7 +9,8 @@ type Events = {
 	'llms.upsert': Record<string, unknown> | undefined; //LLMConfig 或 整体reset.
 	'repo.removed': { id: string | null };
 	'repo.reset': { length: number };
-	'reteclick': {};
+	'functor.updated': Record<string, unknown>; // Functor类型，这里不引入了.
+	'functor.remove': { id: string }; // Functor类型，这里不引入了.
 	'cfgchanged:*': { key: string };
 };
 

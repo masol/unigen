@@ -48,9 +48,12 @@
 	// 使用 $derived 来追踪 currentId
 	const currentId = $derived(projectStore.currentId);
 
+	interface OpenChangeDetails {
+		open: boolean;
+	}
 	// 关闭对话框时清空全部toaster
-	function handleOpenChange(param: Record<string, any>) {
-		const isOpen = param.open;
+	function handleOpenChange(details: OpenChangeDetails) {
+		const isOpen = details.open;
 		open = isOpen;
 
 		dialogToaster.dismiss();

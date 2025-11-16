@@ -14,7 +14,7 @@
 	import ModelEditor from './Dialog.svelte';
 	import { llmStore } from '$lib/stores/config/ipc/llms.svelte';
 	import { type LLMConfig } from '$lib/utils/llms/index.type';
-	import { localeStore, t } from '$lib/stores/config/ipc/i18n.svelte';
+	import { t } from '$lib/stores/config/ipc/i18n.svelte';
 
 	type CapabilityType = 'text' | 'image' | 'video' | 'speech' | 'music' | 'unknown';
 

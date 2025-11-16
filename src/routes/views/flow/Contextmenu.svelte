@@ -8,20 +8,22 @@
 	interface Props {
 		children: Snippet;
 		onMenucmd?: (cmd: string, param?: Record<string, any>) => void;
-		getMenuType: (e: MouseEvent) => 'editor' | 'node';
+		nodeFromEle: (e: MouseEvent) => string | undefined;
 	}
 
-	let { children, onMenucmd = () => {}, getMenuType }: Props = $props();
+	let { children, onMenucmd = () => {}, nodeFromEle }: Props = $props();
 
 	let menuType = $state<'editor' | 'node'>('editor');
 	let open = $state(false);
 
 	let clientX: number, clientY: number;
+	let lastNodeId = '';
 	function handleContextMenu(e: MouseEvent) {
 		// console.log('enter handleContextMenu',e.offsetX,e.offsetY);
 		clientX = e.offsetX;
 		clientY = e.offsetY;
-		menuType = getMenuType(e);
+		lastNodeId = nodeFromEle(e) ?? '';
+		menuType = lastNodeId ? 'node' : 'editor';
 	}
 
 	// 添加全局点击监听器来关闭菜单
@@ -62,17 +64,21 @@
 				<ContextMenu.Item
 					class="flex cursor-pointer items-center gap-2.5 rounded px-3 py-2 text-sm transition-colors outline-none hover:bg-surface-200 dark:hover:bg-surface-700"
 					onclick={() => {
-						onMenucmd('detail');
+						if (lastNodeId) {
+							onMenucmd('detail', { id: lastNodeId });
+						}
 						open = false;
 					}}
 				>
-					<span>编辑节点</span>
+					<span>编辑行为</span>
 				</ContextMenu.Item>
 				<ContextMenu.Separator class="my-1 h-px bg-surface-300 dark:bg-surface-700" />
 				<ContextMenu.Item
 					class="flex cursor-pointer items-center gap-2.5 rounded px-3 py-2 text-sm transition-colors outline-none hover:bg-surface-200 dark:hover:bg-surface-700"
 					onclick={() => {
-						onMenucmd('rmNode');
+						if (lastNodeId) {
+							onMenucmd('rmNode', { id: lastNodeId });
+						}
 						open = false;
 					}}
 				>

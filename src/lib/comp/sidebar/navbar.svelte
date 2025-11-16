@@ -6,22 +6,20 @@
 	import IconUI from '~icons/mdi/view-dashboard';
 	import { densityConfig, type NavItem } from './type';
 	import {
-		ENTITIES,
 		navStore,
-		TRANSFORM,
 		WORKFLOW,
-		FLOWCHART,
 		UI,
 		type NavType
 	} from '$lib/stores/navpanel/nav.svelte';
 	import { Portal, Tooltip } from '@skeletonlabs/skeleton-svelte';
 	import { localeStore, t } from '$lib/stores/config/ipc/i18n.svelte';
+	import { TypeEntity, TypeFlow, TypeFunctor } from '$lib/utils/vocab/type';
 
 	const config = densityConfig['comfortable'];
 	const topItems: NavItem[] = [
-		{ id: FLOWCHART, icon: IconFlowchart, label: FLOWCHART, disabled: false },
-		{ id: TRANSFORM, icon: IconFunction, label: TRANSFORM, disabled: false },
-		{ id: ENTITIES, icon: IconTable, label: ENTITIES, disabled: false },
+		{ id: TypeFlow, icon: IconFlowchart, label: TypeFlow, disabled: false },
+		{ id: TypeFunctor, icon: IconFunction, label: TypeFunctor, disabled: false },
+		{ id: TypeEntity, icon: IconTable, label: TypeEntity, disabled: false },
 		{ id: 'sep::1', icon: null, label: 'sep', disabled: false }, // 分隔符
 		{ id: WORKFLOW, icon: IconWorkflow, label: WORKFLOW, disabled: true },
 		{ id: UI, icon: IconUI, label: UI, disabled: true }

@@ -1,5 +1,5 @@
 import type Database from "@tauri-apps/plugin-sql";
-import type { EntityData, FlowData, FunctorData, WordData, WordType } from "./type";
+import type { EntityData, FlowData, FunctorData, WordType } from "./type";
 import JSON5 from "json5";
 import { localeStore } from "$lib/stores/config/ipc/i18n.svelte";
 
@@ -13,7 +13,6 @@ interface CogmindRow {
     definition: string | null;
     lang: string;
     synonym: string | null;
-    expand: number;
     type: WordType;
     extra: string | null;
     created_at: number;
@@ -48,7 +47,6 @@ export class CogmindDb {
                     definition TEXT,
                     lang TEXT NOT NULL,
                     synonym TEXT,
-                    expand INTEGER NOT NULL DEFAULT 0,
                     type TEXT NOT NULL CHECK(type IN ('entity', 'functor', 'flow')),
                     extra TEXT,
                     created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
@@ -155,7 +153,6 @@ export class CogmindDb {
             definition: row.definition || undefined,
             lang: row.lang,
             synonym: row.synonym ? JSON5.parse(row.synonym) : undefined,
-            expand: row.expand === 1,
             type: row.type,
             extra: row.extra ? JSON5.parse(row.extra) : undefined,
             created_at: row.created_at,
@@ -166,7 +163,7 @@ export class CogmindDb {
     /**
      * 序列化字段值（处理 JSON 和布尔值）
      */
-    private serializeField(value: any): string | number | null {
+    private serializeField(value: unknown): string | number | null {
         if (value === undefined || value === null) {
             return null;
         }
@@ -176,7 +173,8 @@ export class CogmindDb {
         if (typeof value === 'object') {
             return JSON.stringify(value);
         }
-        return value;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return value as any;
     }
 
     /**
@@ -193,11 +191,11 @@ export class CogmindDb {
 
         // 构建动态 UPDATE 语句
         const updates: string[] = [];
-        const values: any[] = [];
+        const values: unknown[] = [];
 
         // 定义可更新的字段
         const updatableFields: (keyof CogmindData)[] = [
-            'word', 'definition', 'lang', 'synonym', 'expand', 'extra'
+            'word', 'definition', 'lang', 'synonym', 'extra'
         ];
 
         for (const field of updatableFields) {
@@ -264,8 +262,8 @@ export class CogmindDb {
         const result = await this.#db.execute(
             `INSERT INTO cogmind (
                 id, concept_id, word, definition, lang, 
-                synonym, expand, type, extra, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                synonym, type, extra, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 id,
                 conceptId,
@@ -273,7 +271,6 @@ export class CogmindDb {
                 this.serializeField(data.definition),
                 data.lang,
                 this.serializeField(data.synonym),
-                data.expand ? 1 : 0,
                 data.type,
                 this.serializeField(data.extra),
                 now,
@@ -362,7 +359,7 @@ export class CogmindDb {
     }
 
     get maxId(): number {
-         if (this.#maxId < 0) {
+        if (this.#maxId < 0) {
             throw new Error("Max ID not initialized from database");
         }
         return this.#maxId;

@@ -15,7 +15,7 @@ import {
     type SvelteArea2D
 } from "rete-svelte-plugin/5";
 import { ReadonlyPlugin } from "rete-readonly-plugin";
-import { HistoryPlugin, type HistoryActions, HistoryExtensions, Presets as HistoryPresets } from "rete-history-plugin";
+import { HistoryPlugin, HistoryExtensions, Presets as HistoryPresets } from "rete-history-plugin";
 import { sockets } from "./sockets.js";
 import type { EventHandleType, IRetEditor } from "./type.js";
 import { UniNode } from './llmNode.js'
@@ -30,14 +30,15 @@ type AreaExtra = SvelteArea2D<Schemes>;
 export class RetEditor implements IRetEditor {
     #editor: NodeEditor<Schemes>;
     #area: AreaPlugin<Schemes, AreaExtra>;
-    #container: HTMLElement;
+    // #container: HTMLElement;
     #connection: ConnectionPlugin<Schemes, AreaExtra>;
     #render: SveltePlugin<Schemes, AreaExtra>;
     #history: HistoryPlugin<Schemes>;
     #arrange: AutoArrangePlugin<Schemes>;
     #readonly: ReadonlyPlugin<Schemes>;
-    #selector;
+    // #selector;
     #evtHandle: EventHandleType | undefined;
+    #refId: string; // 所属的word(流程图)id.
 
     set onEvent(eh: EventHandleType) {
         this.#evtHandle = eh;
@@ -63,9 +64,11 @@ export class RetEditor implements IRetEditor {
         }
     }
 
-    constructor(container: HTMLElement) {
+    constructor(container: HTMLElement,refId: string) {
+        this.#refId = refId;
+        console.log("try to load from refId:", this.#refId);
 
-        this.#container = container;
+        // this.#container = container;
         this.#editor = new NodeEditor<Schemes>();
         this.#area = new AreaPlugin<Schemes, AreaExtra>(container);
         this.#connection = new ConnectionPlugin<Schemes, AreaExtra>();
@@ -78,8 +81,8 @@ export class RetEditor implements IRetEditor {
 
         // 创建 selector 实例
         const selectorInstance = AreaExtensions.selector();
-        // 允许选择．
-        this.#selector = AreaExtensions.selectableNodes(this.#area, selectorInstance, {
+        // 允许选择．this.#selector =
+        AreaExtensions.selectableNodes(this.#area, selectorInstance, {
             accumulating: AreaExtensions.accumulateOnCtrl()
         });
 
@@ -127,7 +130,7 @@ export class RetEditor implements IRetEditor {
         if (!nodeContainer) return undefined;
         // 遍历所有节点视图找到匹配的元素
         for (const [nodeId, nodeView] of this.#area.nodeViews.entries()) {
-            console.log("nodeId,nodeView=", nodeId, nodeView.element, nodeContainer)
+            // console.log("nodeId,nodeView=", nodeId, nodeView.element, nodeContainer)
             if (nodeView.element === nodeContainer || nodeView.element.contains(nodeContainer)) {
                 return nodeId;
             }
@@ -140,6 +143,7 @@ export class RetEditor implements IRetEditor {
     }
 
     async rmNode(id: string): Promise<boolean> {
+        // console.log("rmNode.id=", id)
         const connections = this.#editor.getConnections()
         const incomingConnections = connections.filter(connection => connection.target === id)
         const outgoingConnections = connections.filter(connection => connection.source === id)
@@ -153,23 +157,61 @@ export class RetEditor implements IRetEditor {
         // console.log(incomingConnections, outgoingConnections);
         // 移除
         // this.#editor.removeConnection()
-        return this.#editor.removeNode(id);
+        return await this.#editor.removeNode(id);
     }
 
-    async newNode(param: Record<string, any>) {
-        const a = new UniNode(param.label || "未命名的");
+    // 查找索引了fid的
+    node4fuctor(fid: string): UniNode[] {
+        const nodes = this.#editor.getNodes();
+        // console.log("nodes=", nodes)
+        // const retNodes: UniNode[] = [];
+        // nodes.forEach(n => {
+        //     if (n.fid === fid) {
+        //         retNodes.push(n);
+        //     }
+        // })
+        // return retNodes;
+        // nodes.filter会改变nodes自身的值--是多个editor实例引发的错误!
+        return nodes.filter(n => n.fid === fid);
+    }
+
+
+    async updNode(id: string, param: Record<string, unknown>) {
+        const node = this.getNode(id);
+
+        if (!node) return;
+
+        let needUpdated = false;
+        if (param.label && param.label !== node.label) {
+            node.label = param.label as string;
+            needUpdated = true;
+        }
+
+        if (param.fid && param.fid !== node.fid) {
+            node.fid = param.fid as string;
+        }
+
+        if (needUpdated) {
+            await this.#area.update("node", node.id);
+        }
+    }
+
+    async newNode(param: Record<string, unknown>) {
+        const a = new UniNode((param.label as string) || "未命名的", param);
         a.addOutput("output", new ClassicPreset.Output(sockets().auto));
         a.addInput("input", new ClassicPreset.Input(sockets().auto));
 
         await this.#editor.addNode(a);
+
+        // console.log("nodes after add=", this.#editor.getNodes())
 
         // 获取当前视图的变换状态
         const transform = this.#area.area.transform;
 
         // 将屏幕坐标转换为画布坐标
         // 画布坐标 = (屏幕坐标 / 缩放) - (平移 / 缩放)
-        const canvasX = (param.x || 0) / transform.k - transform.x / transform.k;
-        const canvasY = (param.y || 0) / transform.k - transform.y / transform.k;
+        const canvasX = ((param.x as number) || 0) / transform.k - transform.x / transform.k;
+        const canvasY = ((param.y as number) || 0) / transform.k - transform.y / transform.k;
 
         await this.#area.translate(a.id, { x: canvasX, y: canvasY });
     }
@@ -203,6 +245,7 @@ export class RetEditor implements IRetEditor {
     }
 
     async layout(animate: boolean = true) {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
         const that = this;
         const applier = new ArrangeAppliers.TransitionApplier<Schemes, never>({
             duration: 500,

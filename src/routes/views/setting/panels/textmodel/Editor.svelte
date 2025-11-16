@@ -46,7 +46,7 @@
 			dataType: 'json',
 			resetForm: false,
 			// 改用 onSubmit
-			async onSubmit({ formData, cancel }) {
+			async onSubmit({ cancel }) {
 				// 强制验证，不管是否修改过
 				const validInfo = await validateForm();
 

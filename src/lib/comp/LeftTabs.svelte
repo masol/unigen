@@ -1,5 +1,4 @@
 <script lang="ts">
-	import IconMdiPlus from '~icons/mdi/plus';
 	import IconMdiMagnify from '~icons/mdi/magnify';
 	import IconMdiClose from '~icons/mdi/close';
 	import { fade } from 'svelte/transition';
@@ -9,9 +8,9 @@
 	// 假store: 使用Svelte 5 Runes实现跨组件状态管理
 	let filterStore = $derived(navStore.filter);
 
-	const createStore = $state({
-		isCreating: false
-	});
+	// const createStore = $state({
+	// 	isCreating: false
+	// });
 
 	let isFiltering = $state(false);
 
@@ -32,14 +31,6 @@
 	function debouncedFilter(value: string) {
 		if (filterTimeoutId) clearTimeout(filterTimeoutId);
 		filterTimeoutId = setTimeout(() => performFilter(value), 300);
-	}
-
-	function handleCreate() {
-		createStore.isCreating = true;
-		console.log('Create clicked');
-		setTimeout(() => {
-			createStore.isCreating = false;
-		}, 1000);
 	}
 
 	function clearFilter() {

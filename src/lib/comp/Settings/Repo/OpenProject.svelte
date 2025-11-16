@@ -6,7 +6,6 @@
 	import { projectStore } from '$lib/stores/project/project.svelte';
 	import { loadingStore } from '$lib/stores/loading.svelte';
 	import { getContext } from 'svelte';
-	import { logger } from '$lib/utils/logger';
 
 	type ToastStore = ReturnType<typeof import('@skeletonlabs/skeleton-svelte').createToaster>;
 	const toaster = getContext<ToastStore>('toaster');

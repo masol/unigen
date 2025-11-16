@@ -2,6 +2,7 @@
 	import { entityStore } from '$lib/stores/project/entity.svelte';
 	import WordList from '$lib/comp/sidebar/WordList.svelte';
 	import IconText from '~icons/mdi/text-box';
+	import { TypeEntity } from '$lib/utils/vocab/type';
 </script>
 
 <nav class="absolute inset-0 flex flex-col bg-surface-100 dark:bg-surface-800">
@@ -9,7 +10,7 @@
 		<div class="space-y-2">
 			<WordList
 				icon={IconText}
-				viewType={'entities'}
+				viewType={TypeEntity}
 				draggable={false}
 				items={entityStore.items}
 				deleteWord={async (id: string) => {

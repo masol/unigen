@@ -12,12 +12,12 @@
 
 	import { viewStore, type ViewItemType } from '$lib/stores/project/view.svelte';
 	import { localeStore, t } from '$lib/stores/config/ipc/i18n.svelte';
-	import { onDestroy, onMount } from 'svelte';
-	import { eventBus } from '$lib/utils/evt';
+	// import { onDestroy, onMount } from 'svelte';
+	// import { eventBus } from '$lib/utils/evt';
+	import { TypeEntity, TypeFlow, TypeFunctor } from '$lib/utils/vocab/type';
 
 	let dynamicTabs = $derived<ViewItemType[]>(viewStore.tabs);
 	let activeTabId = $derived<string>(viewStore.activeId);
-	let open = $state(false);
 
 	function selectTab(tabId: string) {
 		viewStore.setActive(tabId);
@@ -74,19 +74,19 @@
 		currentContextTabId = tabId;
 	}
 
-	let unsub: (() => void) | null = null;
-	onMount(async () => {
-		unsub = await eventBus.listen('reteclick', () => {
-			open = false;
-		});
-	});
+	// let unsub: (() => void) | null = null;
+	// onMount(async () => {
+	// 	unsub = await eventBus.listen('reteclick', () => {
+	// 		open = false;
+	// 	});
+	// });
 
-	onDestroy(() => {
-		if (unsub) {
-			unsub();
-			unsub = null;
-		}
-	});
+	// onDestroy(() => {
+	// 	if (unsub) {
+	// 		unsub();
+	// 		unsub = null;
+	// 	}
+	// });
 </script>
 
 <div
@@ -112,11 +112,11 @@
 			>
 				{#if tab.type === 'settings'}
 					<IconSettings class="size-4" />
-				{:else if tab.type === 'flow'}
+				{:else if tab.type === TypeFlow}
 					<IconFlowchart class="size-4" />
-				{:else if tab.type === 'function'}
+				{:else if tab.type === TypeFunctor}
 					<IconFunction class="size-4" />
-				{:else if tab.type === 'entities'}
+				{:else if tab.type === TypeEntity}
 					<IconText class="size-4" />
 				{/if}
 				<span class="max-w-32 truncate"

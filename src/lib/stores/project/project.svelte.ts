@@ -77,7 +77,7 @@ export class ProjectStore {
             const content = await readTextFile(metaFile);
 
             metaInfo = JSON5.parse(content);
-            // logger.info("readed meta content=", content)
+            logger.info("readed meta content=", content)
         } catch (e) {
             void (e);
             logger.error("error:", e as Error)
@@ -134,6 +134,7 @@ export class ProjectStore {
             try {
                 await pMap([unigenDir, gitdata], async (dir) => {
                     try {
+                        logger.debug("mkdir=",dir)
                         // 省掉了exists调用．
                         await mkdir(dir!, { recursive: true })
                     } catch (e) {

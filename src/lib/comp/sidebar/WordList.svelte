@@ -4,11 +4,11 @@
 	import IconDragVertical from '~icons/mdi/drag-vertical';
 	import IconCheck from '~icons/mdi/check';
 	import IconClose from '~icons/mdi/close';
-	import type { WordData } from '$lib/utils/vocab/type';
+	import { isWordType, type WordData } from '$lib/utils/vocab/type';
 	import { viewStore, type ViewType } from '$lib/stores/project/view.svelte';
 	import { navStore } from '$lib/stores/navpanel/nav.svelte';
 	import { lightStore } from '$lib/stores/config/ipc/light.svelte';
-	import { getViewId, wordTypeFromNav } from '$lib/stores/project/word.svelte';
+	import { addWord2View, getViewId } from '$lib/stores/project/word.svelte';
 	import { logger } from '$lib/utils/logger';
 	import WordMenu, { type FindInfoType } from './WordMenu.svelte';
 
@@ -21,7 +21,7 @@
 		updateWord: (id: string, newWord: string) => Promise<void>;
 	}
 
-	let { items, viewType, icon, deleteWord, updateWord, draggable = true }: Props = $props();
+	let { items, icon, deleteWord, updateWord, draggable = true }: Props = $props();
 
 	const viewedWords = $derived(
 		navStore.filter ? items.filter((item) => (item.word ?? '').includes(navStore.filter)) : items
@@ -34,27 +34,19 @@
 	let inputElement = $state<HTMLInputElement | null>(null);
 
 	function viewIdFromNav(wordId: string): string {
-		const wordType = wordTypeFromNav(navStore.current);
-		if (!wordType) {
+		if (!isWordType(navStore.current)) {
 			const msg = '添加了新的Nav面板，但是这里未处理.';
 			logger.error(msg);
 			throw new Error(msg);
 		}
-		return getViewId(wordId, wordType);
+		return getViewId(wordId, navStore.current);
 	}
 
 	function handleItemClick(word: WordData) {
 		// 如果正在编辑，点击不触发打开
 		if (editingWordId === word.id) return;
 
-		const viewId = viewIdFromNav(word.id);
-		const viewDef = {
-			id: viewId,
-			label: `${word.word}`,
-			closable: true,
-			type: viewType
-		};
-		viewStore.addView(viewDef);
+		addWord2View(word);
 	}
 
 	function getItemState(id: string): 'focused' | 'opened' | 'closed' {

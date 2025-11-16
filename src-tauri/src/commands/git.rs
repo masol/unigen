@@ -7,8 +7,10 @@ pub fn ensure_git(path: String) -> Result<bool, String> {
 
     // 检查路径是否存在
     if !repo_path.exists() {
-        tracing::warn!("路径不存在: {}", path);
-        return Ok(false);
+        if let Err(_) = std::fs::create_dir_all(repo_path) {
+            tracing::warn!("无法创建项目的GitData目录: {:?}", repo_path);
+            return Ok(false);
+        }
     }
 
     // 尝试打开现有的 Git 仓库

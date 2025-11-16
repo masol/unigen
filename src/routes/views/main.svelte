@@ -47,7 +47,7 @@
 					>
 						<!-- 动态组件渲染 - 使用导入的组件 -->
 						{#if view.type === 'flow'}
-							<FlowView></FlowView>
+							<FlowView vid={view.id} rid={view.docId}></FlowView>
 						{:else if view.type === 'settings'}
 							<SettingView />
 						{/if}

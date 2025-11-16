@@ -2,11 +2,12 @@
 
 import { projectBase } from "$lib/utils/appdb/project";
 import { isArray } from "remeda";
+import type { NavType } from "../navpanel/nav.svelte";
 
 
 const KEYNAME = "views";
 
-export type ViewType = "settings" | "entities" | "function" | "flow"
+export type ViewType = NavType | "settings"
 export type ViewItemType = {
     id: string;
     label: string; // 这里传入的是key，通过t[key]来渲染。

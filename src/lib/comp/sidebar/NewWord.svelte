@@ -1,24 +1,17 @@
 <script lang="ts">
 	import { t } from '$lib/stores/config/ipc/i18n.svelte';
-	import {
-		ENTITIES,
-		FLOWCHART,
-		navStore,
-		TRANSFORM,
-		UI,
-		WORKFLOW
-	} from '$lib/stores/navpanel/nav.svelte';
+	import { navStore, UI, WORKFLOW } from '$lib/stores/navpanel/nav.svelte';
 	import { entityStore } from '$lib/stores/project/entity.svelte';
 	import { flowStore } from '$lib/stores/project/flow.svelte';
 	import { functorStore } from '$lib/stores/project/functor.svelte';
-	import { getViewId, viewTypeFromWord, wordTypeFromNav } from '$lib/stores/project/word.svelte';
-	import { viewStore } from '$lib/stores/project/view.svelte';
-	import { projectBase } from '$lib/utils/appdb/project';
+	import { addWord2View, nextName } from '$lib/stores/project/word.svelte';
 	import { logger } from '$lib/utils/logger';
 	import {
-		type EntityData,
-		type FlowData,
-		type FunctorData,
+		isWordType,
+		TypeEntity,
+		TypeFlow,
+		TypeFunctor,
+		type WordType
 	} from '$lib/utils/vocab/type';
 	import { Dialog as DialogPrimitive } from 'bits-ui';
 	import { superForm } from 'sveltekit-superforms';
@@ -37,72 +30,48 @@
 	function setOpen(newOpen: boolean) {
 		if (newOpen) {
 			reset();
-			// console.log(projectBase.vocabdb.maxId);
-			const nextId = projectBase.vocabdb.maxId + 1;
 			switch (navStore.current) {
-				case ENTITIES:
+				case TypeEntity:
 					newCate = '概念';
 					break;
-				case TRANSFORM:
+				case TypeFunctor:
 					newCate = '行为';
 					break;
-				case FLOWCHART:
+				case TypeFlow:
 					newCate = '流程图';
 					break;
 				case WORKFLOW:
 				case UI:
 					newCate = '未知...';
 			}
-			$form.name = newCate + String(nextId);
-			// console.log('on open!!!!');
+			$form.name = nextName(t(navStore.current));
 		}
 		open = newOpen;
 	}
 
 	async function onSave(name: string): Promise<boolean> {
-		const wordType = wordTypeFromNav(navStore.current);
-
-		if (!wordType) return false;
-
-		const wordId = await projectBase.vocabdb.upsert({ type: wordType, word: name });
-
+		if (!isWordType(navStore.current)) {
+			return false;
+		}
+		const wordType: WordType = navStore.current;
 		let word;
-
-		if (wordId) {
-			switch (navStore.current) {
-				case ENTITIES:
-					word = await projectBase.vocabdb.getById<EntityData>(wordId);
-					if (word) {
-						entityStore.update(word);
-					}
-					break;
-				case TRANSFORM:
-					word = await projectBase.vocabdb.getById<FunctorData>(wordId);
-					if (word) {
-						functorStore.update(word);
-					}
-					break;
-				case FLOWCHART:
-					word = await projectBase.vocabdb.getById<FlowData>(wordId);
-					if (word) {
-						flowStore.update(word);
-					}
-					break;
-			}
+		switch (navStore.current) {
+			case TypeEntity:
+				word = await entityStore.newItem(name);
+				break;
+			case TypeFunctor:
+				word = await functorStore.newItem(name);
+				break;
+			case TypeFlow:
+				word = await flowStore.newItem(name);
+				break;
 		}
 
 		if (word) {
-			const viewId = getViewId(wordId, wordType);
-			const viewDef = {
-				id: viewId,
-				label: `${word.word}`,
-				closable: true,
-				type: viewTypeFromWord(word.type)
-			};
-			viewStore.addView(viewDef);
+			addWord2View(word);
 		}
 
-		return !!wordId;
+		return !!word;
 	}
 
 	const schema = z.object({

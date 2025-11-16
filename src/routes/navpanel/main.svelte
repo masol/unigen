@@ -1,12 +1,10 @@
 <script lang="ts">
 	import {
 		navStore,
-		ENTITIES,
-		TRANSFORM,
 		WORKFLOW,
-		FLOWCHART,
 		UI
 	} from '$lib/stores/navpanel/nav.svelte';
+	import { TypeEntity, TypeFlow, TypeFunctor } from '$lib/utils/vocab/type';
 	import EntityComp from './Entities.svelte';
 	import FlowChart from './FlowChart.svelte';
 	import Functor from './Transform.svelte'
@@ -19,16 +17,16 @@
 
 	const navList = $state([
 		{
-			id: ENTITIES
+			id: TypeEntity
 		},
 		{
-			id: TRANSFORM
+			id: TypeFunctor
 		},
 		{
 			id: WORKFLOW
 		},
 		{
-			id: FLOWCHART
+			id: TypeFlow
 		},
 		{
 			id: UI
@@ -99,13 +97,13 @@
 				style:display={currentNav === nav.id ? 'block' : 'none'}
 			>
 				<!-- 动态组件渲染 - 使用导入的组件 -->
-				{#if nav.id === ENTITIES}
+				{#if nav.id === TypeEntity}
 					<EntityComp></EntityComp>
-				{:else if nav.id === FLOWCHART}
+				{:else if nav.id === TypeFlow}
 					<FlowChart></FlowChart>
 				{:else if nav.id === WORKFLOW}
 					<!-- <OpenView /> -->
-				{:else if nav.id === TRANSFORM}
+				{:else if nav.id === TypeFunctor}
 					<Functor></Functor>
 				{/if}
 			</div>

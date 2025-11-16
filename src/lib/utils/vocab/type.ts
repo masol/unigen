@@ -2,6 +2,11 @@ export type WordType = "entity" | "functor" | "flow";
 export const TypeEntity: WordType = "entity"
 export const TypeFunctor: WordType = "functor"
 export const TypeFlow: WordType = "flow"
+export const wordTypeValues = [TypeEntity, TypeFunctor, TypeFlow] as const;
+
+export function isWordType(value: string): value is WordType {
+    return wordTypeValues.includes(value as WordType);
+}
 
 // 基础数据接口，@todo: 是否需要语义搜索？是否需要维护全局而非项目级的词语(实体/概念)表？
 export interface WordData {
@@ -11,11 +16,10 @@ export interface WordData {
     definition?: string;
     lang: string; // 词汇定义时，使用的语言
     synonym?: string[];
-    expand: boolean;  // UI指示器，指示当前是否已展开了(entity如此使用，其它可以作为flag1来使用)
     type: WordType;
     created_at: number;
     updated_at: number;
-    extra?: {};
+    extra?: unknown;
 }
 
 

@@ -7,6 +7,16 @@ use std::path::Path;
 pub fn acquire_lock<P: AsRef<Path>>(path: P) -> Option<File> {
     let path = path.as_ref();
 
+    // 检查并创建父目录
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("无法创建目录 {:?}: {}", parent, e);
+                return None;
+            }
+        }
+    }
+
     let mut file = match OpenOptions::new()
         .read(true)
         .write(true)
