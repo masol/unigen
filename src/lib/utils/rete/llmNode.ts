@@ -2,7 +2,7 @@ import { ClassicPreset } from "rete";
 
 
 export class UniNode extends ClassicPreset.Node {
-    #fid: string = "";
+    #fid: string = ""; // 引用的functor id/或者flow chart id(refId).
     // width = 120;
     // height = 180;
     get fid(): string {
@@ -21,14 +21,14 @@ export class UniNode extends ClassicPreset.Node {
         return 180;
     }
 
-    constructor(label: string, opt?: Record<string, any>) {
+    constructor(label: string, opt?: Record<string, unknown>) {
         super(label);
         if (opt?.id) {
-            this.id = opt.id;
+            this.id = opt.id as string;
         }
         
-        if (opt?.fid) {
-            this.fid = opt.fid;
+        if (opt?.ref_id) {
+            this.fid = opt.ref_id as string;
             // console.log("set fid to", opt.fid)
         }
 

@@ -83,7 +83,7 @@
 			<div class="flex items-center gap-1">
 				<!-- 文字容器 - 字符逐个淡入淡出 -->
 				<div class="flex overflow-hidden">
-					{#each chars as char, i}
+					{#each chars as char, i (i)}
 						<Motion
 							initial={{ y: '100%', opacity: 0 }}
 							animate={{
@@ -111,7 +111,7 @@
 
 				<!-- 省略号容器 - 依次淡入淡出 -->
 				<div class="flex gap-0.5">
-					{#each [0, 1, 2] as dotIndex}
+					{#each [0, 1, 2] as dotIndex (dotIndex)}
 						<Motion
 							initial={{ opacity: 0, scale: 0.5 }}
 							animate={{

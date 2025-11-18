@@ -35,7 +35,7 @@
 
 <nav class="py-4">
 	<ul class="space-y-1">
-		{#each settingsData as item}
+		{#each settingsData as item (item.id)}
 			<li>
 				<button
 					class="group flex w-full items-center gap-3 px-6 py-3 text-left transition-all duration-200 {selectedItem ===

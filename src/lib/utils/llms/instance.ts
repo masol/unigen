@@ -44,7 +44,7 @@ export class LLMWrapper {
      * 获取模型名称
      */
     private getModel(): string {
-        const providerConfig = PROVIDER_CONFIG[this.config.provider];
+        // const providerConfig = PROVIDER_CONFIG[this.config.provider];
         return this.config.name.trim();
     }
 

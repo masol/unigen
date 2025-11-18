@@ -118,6 +118,7 @@
 		"rete-structures": "^2.0.3",
 		"rete-svelte-plugin": "^2.1.1",
 		"sass": "^1.94.0",
-		"svelte-splitpanes": "^8.0.9"
+		"svelte-splitpanes": "^8.0.9",
+		"uuid": "^13.0.0"
 	}
 }

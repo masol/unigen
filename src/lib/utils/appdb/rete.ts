@@ -32,6 +32,7 @@ export class ReteDb {
                     ref_id TEXT NOT NULL,
                     ref_type TEXT NOT NULL DEFAULT 'functor',
                     belong_id TEXT NOT NULL,
+                    label TEXT,
                     x REAL NOT NULL DEFAULT 0,
                     y REAL NOT NULL DEFAULT 0,
                     cached_input TEXT,
@@ -89,6 +90,7 @@ export class ReteDb {
             ref_id: row.ref_id,
             ref_type: row.ref_type || 'functor',
             belong_id: row.belong_id,
+            label: row.label || undefined,
             x: row.x,
             y: row.y,
             cached_input: row.cached_input ? JSON5.parse(row.cached_input) as PortConfig[] : undefined,
@@ -172,6 +174,7 @@ export class ReteDb {
                     ref_id: nodeData.ref_id ?? old.ref_id,
                     ref_type: nodeData.ref_type ?? old.ref_type,
                     belong_id: nodeData.belong_id ?? old.belong_id,
+                    label: nodeData.label !== undefined ? nodeData.label : old.label,
                     x: nodeData.x ?? old.x,
                     y: nodeData.y ?? old.y,
                     cached_input: nodeData.cached_input !== undefined ? nodeData.cached_input : old.cached_input,
@@ -188,18 +191,20 @@ export class ReteDb {
                     `UPDATE nodes SET 
                         ref_id = $1, 
                         ref_type = $2,
-                        belong_id = $3, 
-                        x = $4, 
-                        y = $5,
-                        cached_input = $6,
-                        cached_output = $7,
-                        extra = $8, 
-                        updated_at = $9 
-                    WHERE id = $10`,
+                        belong_id = $3,
+                        label = $4,
+                        x = $5, 
+                        y = $6,
+                        cached_input = $7,
+                        cached_output = $8,
+                        extra = $9, 
+                        updated_at = $10 
+                    WHERE id = $11`,
                     [
                         updated.ref_id,
                         updated.ref_type,
                         updated.belong_id,
+                        updated.label ?? null,
                         updated.x,
                         updated.y,
                         updated.cached_input ? JSON.stringify(updated.cached_input) : null,
@@ -220,6 +225,7 @@ export class ReteDb {
                     ref_id: nodeData.ref_id,
                     ref_type: nodeData.ref_type ?? 'functor',
                     belong_id: nodeData.belong_id,
+                    label: nodeData.label,
                     x: nodeData.x ?? 0,
                     y: nodeData.y ?? 0,
                     cached_input: nodeData.cached_input,
@@ -230,13 +236,14 @@ export class ReteDb {
                 };
 
                 await this.#db.execute(
-                    `INSERT INTO nodes (id, ref_id, ref_type, belong_id, x, y, cached_input, cached_output, extra, created_at, updated_at) 
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+                    `INSERT INTO nodes (id, ref_id, ref_type, belong_id, label, x, y, cached_input, cached_output, extra, created_at, updated_at) 
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
                     [
                         newNode.id,
                         newNode.ref_id,
                         newNode.ref_type,
                         newNode.belong_id,
+                        newNode.label ?? null,
                         newNode.x,
                         newNode.y,
                         newNode.cached_input ? JSON.stringify(newNode.cached_input) : null,
@@ -371,13 +378,15 @@ export class ReteDb {
     /**
      * 删除 connection
      */
-    public async rmConn(id: string): Promise<void> {
+    public async rmConn(id: string): Promise<boolean> {
         if (!this.#db) {
             throw new Error('Database not loaded');
         }
 
         try {
-            await this.#db.execute('DELETE FROM connections WHERE id = $1', [id]);
+            const result = await this.#db.execute('DELETE FROM connections WHERE id = $1', [id]);
+            // console.log("rmConn result=",result);
+            return result.rowsAffected >= 1
         } catch (error) {
             const msg = `Failed to remove connection: ${error}`;
             logger.error(msg);

@@ -29,7 +29,7 @@ export class NetStore {
         this.nets = this.nets.map(l =>
             l.id === net.id ? { ...l, ...net } : l
         );
-        let l = this.nets.find(l => l.id === net.id);
+        const l = this.nets.find(l => l.id === net.id);
         if (!l) {
             this.nets = [...this.nets, net];
         }

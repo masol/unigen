@@ -14,7 +14,6 @@
 
 	interface Props {
 		items: WordData[];
-		viewType: ViewType;
 		icon?: typeof IconCircle;
 		draggable?: boolean;
 		deleteWord: (id: string) => Promise<void>;

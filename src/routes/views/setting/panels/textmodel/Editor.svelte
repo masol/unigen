@@ -272,7 +272,7 @@
 				onchange={handleProviderChange}
 				class="select"
 			>
-				{#each ProviderNames as pname}
+				{#each ProviderNames as pname (pname)}
 					<option value={pname}>{t(pname)}</option>
 				{/each}
 			</select>
@@ -378,7 +378,7 @@
 								<Wave size="40" color="#3b82f6" unit="px" duration="1s" />
 							</div>
 						{:else if filteredModels.length > 0}
-							{#each filteredModels as model, index}
+							{#each filteredModels as model, index (index)}
 								<button
 									type="button"
 									id={`availableModel-${index}`}
@@ -415,7 +415,7 @@
 		<label class="label">
 			<span class="text-surface-900 dark:text-surface-50">模型类别</span>
 			<select name="tag" bind:value={$form.tag} class="select">
-				{#each validTags as option}
+				{#each validTags as option (option)}
 					<option value={option}
 						>{#key localeStore.lang}
 							{t(`tag_${option}`)}

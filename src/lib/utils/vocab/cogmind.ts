@@ -1,9 +1,9 @@
 import type Database from "@tauri-apps/plugin-sql";
-import type { EntityData, FlowData, FunctorData, WordType } from "./type";
+import type { EntityData, FlowData, FunctorData, WordData, WordType } from "./type";
 import JSON5 from "json5";
 import { localeStore } from "$lib/stores/config/ipc/i18n.svelte";
 
-type CogmindData = EntityData | FlowData | FunctorData;
+export type CogmindData = EntityData | FlowData | FunctorData;
 
 // 数据库行类型
 interface CogmindRow {
@@ -145,7 +145,7 @@ export class CogmindDb {
     /**
      * 将数据库行转换为 CogmindData 对象
      */
-    private rowToData<T extends CogmindData>(row: CogmindRow): T {
+    private rowToData<T extends WordData>(row: CogmindRow): T {
         return {
             id: row.id,
             concept_id: row.concept_id,
@@ -291,7 +291,7 @@ export class CogmindDb {
     /**
      * 根据 ID 获取完整记录
      */
-    async getById<T extends CogmindData>(id: string): Promise<T | null> {
+    async getById<T extends WordData>(id: string): Promise<T | null> {
         if (!this.#db) {
             throw new Error('Database not loaded');
         }

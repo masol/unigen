@@ -1,4 +1,5 @@
 import { projectBase } from "$lib/utils/appdb/project";
+import type { CogmindData } from "$lib/utils/vocab/cogmind";
 import { type WordData, type WordType } from "$lib/utils/vocab/type";
 import { t } from "../config/ipc/i18n.svelte";
 import { viewStore } from "./view.svelte";
@@ -44,11 +45,15 @@ export abstract class WordStore<T extends WordData> {
     abstract _renamePost(word: T): Promise<void>;
 
     async reinit() { // 从项目库中加载--每次打开项目都会调用一次！
-        this.items = await projectBase.vocabdb.getAllByType(this.type);
+        this.items = (await projectBase.vocabdb.getAllByType(this.type)) as T[];
     }
 
     update(item: T) {
         updateStore(this, item);
+    }
+
+    find(id: string): T | undefined {
+        return this.items.find(i => i.id === id);
     }
 
     // 返回word.id
@@ -100,7 +105,7 @@ export abstract class WordStore<T extends WordData> {
             // 更新word.word
             viewStore.addView(viewDef);
         }
-        const result = await projectBase.vocabdb.upsert(word);
+        const result = await projectBase.vocabdb.upsert(word as CogmindData);
         if (result) {
             await this._renamePost(word);
         }

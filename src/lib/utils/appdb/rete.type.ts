@@ -2,6 +2,7 @@ export interface PortConfig {
     key: string;
     label?: string;
     type?: string;
+    id: string;
 }
 
 export interface Node {
@@ -9,6 +10,7 @@ export interface Node {
     ref_id: string;
     ref_type: string; // 默认值 "functor"
     belong_id: string;
+    label?: string;  // 为了简化初始化的依赖解藕，这里缓冲ref_id所属word的label.
     x: number;
     y: number;
     cached_input?: PortConfig[]; // 可空

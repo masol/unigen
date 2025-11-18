@@ -33,7 +33,7 @@ export class LLMStore {
         this.llms = this.llms.map(l =>
             l.id === llm.id ? { ...l, ...llm } : l
         );
-        let l = this.llms.find(l => l.id === llm.id);
+        const l = this.llms.find(l => l.id === llm.id);
         if (!l) {
             this.llms = [...this.llms, llm];
         }

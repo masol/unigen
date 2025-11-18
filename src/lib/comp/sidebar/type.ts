@@ -1,7 +1,7 @@
 
 export interface NavItem {
     id: string;
-    icon: any;
+    icon: unknown;
     label: string;
     disabled: boolean;
     onClick?: () => void;

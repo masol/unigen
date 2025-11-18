@@ -16,16 +16,18 @@ import {
 } from "rete-svelte-plugin/5";
 import { ReadonlyPlugin } from "rete-readonly-plugin";
 import { HistoryPlugin, HistoryExtensions, Presets as HistoryPresets } from "rete-history-plugin";
-import { sockets } from "./sockets.js";
-import type { EventHandleType, IRetEditor } from "./type.js";
+import { getSocket, loadInput, loadOutput, STDOUT } from "./sockets.js";
+import { type EventHandleType, type IRetEditor, type onConnRm, type TraveContext, type TraveFunc, type TraversalOption } from "./type.js";
 import { UniNode } from './llmNode.js'
 import pMap from "p-map";
-
+import type { PartialNode, PortConfig, Connection as SqlConnection } from "../appdb/rete.type.js";
+import { logger } from "../logger.js";
 
 
 export class Connection<N extends UniNode = UniNode> extends ClassicPreset.Connection<N, N> { }
 type Schemes = GetSchemes<UniNode, Connection<UniNode>>;
 type AreaExtra = SvelteArea2D<Schemes>;
+
 
 export class RetEditor implements IRetEditor {
     #editor: NodeEditor<Schemes>;
@@ -38,7 +40,11 @@ export class RetEditor implements IRetEditor {
     #readonly: ReadonlyPlugin<Schemes>;
     // #selector;
     #evtHandle: EventHandleType | undefined;
-    #refId: string; // 所属的word(流程图)id.
+    #belongtoId: string; // 所属的word(流程图)id.(belongtoId)
+
+    get belongtoId(): string {
+        return this.#belongtoId;
+    }
 
     set onEvent(eh: EventHandleType) {
         this.#evtHandle = eh;
@@ -50,6 +56,35 @@ export class RetEditor implements IRetEditor {
 
     get readonly(): boolean {
         return this.#readonly.enabled;
+    }
+
+    async traversal(func: TraveFunc, opt?: TraversalOption): Promise<void> {
+        const order = opt?.order ?? "any";
+        const concurrency = opt?.concurrency ?? 1;
+        if (order === 'any') {
+            const nodes = this.#editor.getNodes();
+            try {
+                await pMap(nodes, async (n) => {
+                    const ctx: TraveContext = {
+                        node: n,
+                        param: opt?.param
+                    }
+                    if (opt?.positon) {
+                        const view = this.#area.nodeViews.get(n.id);
+                        if (view) {
+                            ctx.position = { ...view.position }
+                        }
+                    }
+                    await func(ctx);
+                }, {
+                    concurrency
+                })
+            } catch (e) {
+                logger.warn(`遍历被异常终止:${e}`)
+            }
+        } else {
+            throw new Error(`尚未实现的遍历方式:${order}`);
+        }
     }
 
     set readonly(value: boolean) {
@@ -64,9 +99,9 @@ export class RetEditor implements IRetEditor {
         }
     }
 
-    constructor(container: HTMLElement,refId: string) {
-        this.#refId = refId;
-        console.log("try to load from refId:", this.#refId);
+    constructor(container: HTMLElement, refId: string) {
+        this.#belongtoId = refId;
+        // console.log("try to load from refId:", this.#refId);
 
         // this.#container = container;
         this.#editor = new NodeEditor<Schemes>();
@@ -142,7 +177,7 @@ export class RetEditor implements IRetEditor {
         return this.#editor.getNode(nodeId);
     }
 
-    async rmNode(id: string): Promise<boolean> {
+    async rmNode(id: string, func: onConnRm): Promise<boolean> {
         // console.log("rmNode.id=", id)
         const connections = this.#editor.getConnections()
         const incomingConnections = connections.filter(connection => connection.target === id)
@@ -150,7 +185,10 @@ export class RetEditor implements IRetEditor {
 
         // 移除关联的connection.
         await pMap([...incomingConnections, ...outgoingConnections], async (c) => {
-            this.#editor.removeConnection(c.id);
+            await this.#editor.removeConnection(c.id);
+            if (func) {
+                await func(c.id);
+            }
         }, {
             concurrency: 20
         })
@@ -161,7 +199,7 @@ export class RetEditor implements IRetEditor {
     }
 
     // 查找索引了fid的
-    node4fuctor(fid: string): UniNode[] {
+    getFuncNodes(fid: string): UniNode[] {
         const nodes = this.#editor.getNodes();
         // console.log("nodes=", nodes)
         // const retNodes: UniNode[] = [];
@@ -196,10 +234,81 @@ export class RetEditor implements IRetEditor {
         }
     }
 
+    getSqlNode(id: string): PartialNode | undefined {
+        const node = this.getNode(id);
+        if (!node) {
+            return;
+        }
+
+        const ret: PartialNode = {
+            id: node.id
+        }
+
+        if (node.fid) {
+            ret.ref_id = node.fid;
+        }
+
+        if (node.label) {
+            ret.label = node.label;
+        }
+
+        ret.belong_id = this.belongtoId
+
+        // 加载input.
+        Object.entries(node.inputs).forEach(([key, value]) => {
+            if (value) {
+                ret.cached_input = ret.cached_input || [];
+                ret.cached_input.push(getSocket(key, value));
+            }
+        });
+
+
+        // 加载output.
+        Object.entries(node.outputs).forEach(([key, value]) => {
+            if (value) {
+                ret.cached_output = ret.cached_output || [];
+                ret.cached_output.push(getSocket(key, value));
+            }
+        });
+
+        // 获取x,y位置.
+        const view = this.#area.nodeViews.get(id);
+        if (view) {
+            ret.x = view.position.x
+            ret.y = view.position.y
+        }
+
+        return ret;
+    }
+
     async newNode(param: Record<string, unknown>) {
+        // console.log("newNode param=", param)
         const a = new UniNode((param.label as string) || "未命名的", param);
-        a.addOutput("output", new ClassicPreset.Output(sockets().auto));
-        a.addInput("input", new ClassicPreset.Input(sockets().auto));
+        const input: PortConfig[] | undefined = param.cached_input as (PortConfig[] | undefined);
+        input?.forEach((i) => {
+            a.addInput(i.key, loadInput(i));
+        })
+        if (!input || input.length === 0) {
+            // 添加默认的output.
+            a.addInput("test", loadInput({
+                id: crypto.randomUUID(),
+                key: "test"
+            }));
+        }
+
+        const output: PortConfig[] | undefined = param.cached_output as (PortConfig[] | undefined);
+        output?.forEach((i) => {
+            a.addOutput(i.key, loadOutput(i));
+        })
+        if (!output || output.length === 0) {
+            // 添加默认的output.
+            a.addOutput(STDOUT, loadOutput({
+                id: crypto.randomUUID(),
+                key: STDOUT
+            }));
+        }
+
+        // a.addInput("input", new ClassicPreset.Input(sockets().auto));
 
         await this.#editor.addNode(a);
 
@@ -216,32 +325,45 @@ export class RetEditor implements IRetEditor {
         await this.#area.translate(a.id, { x: canvasX, y: canvasY });
     }
 
+    async addConnection(conn: SqlConnection): Promise<boolean> {
+        // console.log("build conn=", conn);
 
-    async init() {
-        const a = new UniNode("A");
-        a.addControl("a", new ClassicPreset.InputControl("text", { initial: "a" }));
-        a.addOutput("a", new ClassicPreset.Output(sockets().auto));
-        a.addOutput("b", new ClassicPreset.Output(sockets().auto));
-        await this.#editor.addNode(a);
-
-        a.addInput("b", new ClassicPreset.Input(sockets().auto));
-
-        const b = new UniNode("B");
-        b.addControl("b", new ClassicPreset.InputControl("text", { initial: "b" }));
-        b.addInput("b", new ClassicPreset.Input(sockets().auto));
-        b.addInput("c", new ClassicPreset.Input(sockets().auto));
-        b.addInput("d", new ClassicPreset.Input(sockets().auto, "中文测试22"));
-
-        await this.#editor.addNode(b);
-        await this.#editor.addConnection(new ClassicPreset.Connection(a, "a", b, "b"));
-
-        await this.#area.translate(a.id, { x: 0, y: 0 });
-        await this.#area.translate(b.id, { x: 270, y: 0 });
-
+        const a = this.#editor.getNode(conn.from_id);
+        const b = this.#editor.getNode(conn.to_id);
+        // console.log("a,b", a, b)
+        if (a && b) {
+            const c = new ClassicPreset.Connection(a, conn.from_output, b, conn.to_input);
+            c.id = conn.id;
+            return await this.#editor.addConnection(c);
+        }
+        return false;
     }
 
-    reset() {
-        AreaExtensions.zoomAt(this.#area, this.#editor.getNodes());
+
+    async init() {
+        // const a = new UniNode("A");
+        // a.addControl("a", new ClassicPreset.InputControl("text", { initial: "a" }));
+        // a.addOutput("a", new ClassicPreset.Output(sockets().auto));
+        // a.addOutput("b", new ClassicPreset.Output(sockets().auto));
+        // await this.#editor.addNode(a);
+
+        // a.addInput("b", new ClassicPreset.Input(sockets().auto));
+
+        // const b = new UniNode("B");
+        // b.addControl("b", new ClassicPreset.InputControl("text", { initial: "b" }));
+        // b.addInput("b", new ClassicPreset.Input(sockets().auto));
+        // b.addInput("c", new ClassicPreset.Input(sockets().auto));
+        // b.addInput("d", new ClassicPreset.Input(sockets().auto, "中文测试22"));
+
+        // await this.#editor.addNode(b);
+        // await this.#editor.addConnection(new ClassicPreset.Connection(a, "a", b, "b"));
+
+        // await this.#area.translate(a.id, { x: 0, y: 0 });
+        // await this.#area.translate(b.id, { x: 270, y: 0 });
+    }
+
+    async reset() {
+        await AreaExtensions.zoomAt(this.#area, this.#editor.getNodes());
     }
 
     async layout(animate: boolean = true) {

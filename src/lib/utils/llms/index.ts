@@ -128,10 +128,10 @@ export class LLMCenter {
         totalInstances: number;
         totalAvailable: number;
     } {
-        let ret = { summary: {} as { [K in LLMTag]: { total: number; available: number } }, totalInstances: 0, totalAvailable: 0 };
+        const ret = { summary: {} as { [K in LLMTag]: { total: number; available: number } }, totalInstances: 0, totalAvailable: 0 };
 
         for (const [key, manager] of this.managers) {
-            const manager = this.managers.get(key);
+            // const manager = this.managers.get(key);
             if (!manager) {
                 continue;
             }

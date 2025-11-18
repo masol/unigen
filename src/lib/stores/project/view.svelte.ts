@@ -25,6 +25,7 @@ export class ViewStore {
     tabs = $state<ViewItemType[]>([]);
     activeId = $state("")
     selectedItem = $state(""); // 在view中指示第一级选中．对flow chart view而言，是选中的node id.
+    #saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
     async reinit() { // 从项目库中加载--每次打开项目都会调用一次！
         this.activeId = ""
@@ -69,15 +70,27 @@ export class ViewStore {
     }
 
     private async save2db(): Promise<boolean> {
-        const cfgdb = projectBase.cfgdb;
-        if (cfgdb) {
-            const dbValue: DbValueType = {
-                tabs: this.tabs,
-                activeId: this.activeId
-            }
-            return (await cfgdb.upsertByKey(KEYNAME, JSON.stringify(dbValue))).success;
+        // 清除之前的定时器
+        if (this.#saveTimeout) {
+            clearTimeout(this.#saveTimeout);
         }
-        return false;
+
+        // 使用 Promise 包装，延迟执行
+        return new Promise((resolve) => {
+            this.#saveTimeout = setTimeout(async () => {
+                const cfgdb = projectBase.cfgdb;
+                if (cfgdb) {
+                    const dbValue: DbValueType = {
+                        tabs: this.tabs,
+                        activeId: this.activeId
+                    }
+                    const result = await cfgdb.upsertByKey(KEYNAME, JSON.stringify(dbValue));
+                    resolve(result.success);
+                } else {
+                    resolve(false);
+                }
+            }, 100); // 100ms 防抖延迟
+        });
     }
 
     addView(item: ViewItemType): Promise<boolean> | undefined {

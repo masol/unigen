@@ -53,7 +53,7 @@
 		if (!isWordType(navStore.current)) {
 			return false;
 		}
-		const wordType: WordType = navStore.current;
+		// const wordType: WordType = navStore.current;
 		let word;
 		switch (navStore.current) {
 			case TypeEntity:

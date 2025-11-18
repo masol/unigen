@@ -116,10 +116,10 @@ export class CfgDB {
             return { success: true, id };
         }
 
-        // 如果有多个记录，不操作，返回 false
+        // 如果有多个记录，警告，并更新第一个．
         if (existing.length > 1) {
             console.warn(`Key "${key}" has multiple records (${existing.length}), upsert skipped.`);
-            return { success: false, id: null };
+            // return { success: false, id: null };
         }
 
         // 只有一个记录时，执行更新

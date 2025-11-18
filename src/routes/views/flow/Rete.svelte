@@ -1,13 +1,8 @@
 <script lang="ts">
-	import { viewStore } from '$lib/stores/project/view.svelte';
-	import { eventBus } from '$lib/utils/evt';
-	import type { IRetEditor } from '$lib/utils/rete/type';
-	import type { FunctorData } from '$lib/utils/vocab/type';
-	import pMap from 'p-map';
 	import ContextMenu from './Contextmenu.svelte';
 	import { onDestroy, onMount } from 'svelte';
-	import { functorStore } from '$lib/stores/project/functor.svelte';
 	import LoadingComp from '$lib/comp/feedback/Loading.svelte';
+	import { ReteAdapter } from './adapter';
 
 	// ref id--> belong to id for db!!.
 	let {
@@ -17,19 +12,18 @@
 	} = $props();
 
 	let el: HTMLDivElement;
-	let editor: IRetEditor | undefined;
+	let adapter: ReteAdapter | undefined;
 	let isDraggingOver = $state(false);
-	let unsub: (() => void) | undefined;
-	let unsub2: (() => void) | undefined;
 	let isLoading = $state(true);
 
 	onMount(async () => {
 		const old = el.style.display;
 		el.style.display = 'none';
+
 		const { RetEditor } = await import('$lib/utils/rete/index.js');
-		editor = new RetEditor(el, rid);
-		editor.onEvent = onEvent;
-		await editor.init();
+		adapter = new ReteAdapter(new RetEditor(el, rid));
+		await adapter.init();
+
 		el.style.display = old;
 
 		// 使用原生事件监听器
@@ -37,133 +31,31 @@
 		el.addEventListener('dragleave', handleDragLeave);
 		el.addEventListener('drop', handleDrop);
 
-		unsub = await eventBus.listen('functor.updated', async (event) => {
-			// console.log("recieved functor.updated!!!!")
-			const item = event as FunctorData;
-			const nodes = editor?.node4fuctor(item.id);
-			// console.log("item=",item);
-			// console.log("found nodes for updated=",JSON.stringify(nodes));
-			if (!nodes || nodes.length === 0) {
-				return;
-			}
-			await pMap(
-				nodes,
-				async (n) => {
-					await editor?.updNode(n.id, {
-						label: item.word,
-						fid: item.id
-					});
-				},
-				{ concurrency: 30 }
-			);
-			// console.log('item changed=', item);
-		});
-
-		unsub2 = await eventBus.listen('functor.remove', async (event) => {
-			// console.log("on functor removed:",event);
-			const fid = (event as Record<string, string>).id;
-			const nodes = editor?.node4fuctor(fid);
-			// console.log('found nodes=', nodes);
-			if (!nodes || nodes.length === 0) {
-				return;
-			}
-			await pMap(
-				nodes,
-				async (n) => {
-					await editor?.rmNode(n.id);
-				},
-				{ concurrency: 30 }
-			);
-		});
-
 		isLoading = false;
 	});
 
-	async function onEvent(cmd: string, data?: unknown) {
-		if (!editor) return;
-		const param: Record<string, unknown> = data as Record<string, unknown>;
-		switch (cmd) {
-			case 'reset':
-				editor.reset();
-				break;
-			case 'detail':
-				if (param?.id) {
-					// const node = editor?.getNO
-					const node = editor.getNode(param.id as string);
-					if (node && node.fid) {
-						functorStore.openView(node.fid);
-					}
-				}
-				break;
-			case 'newnode':
-				// 首先创建新行为.
-				const word = await functorStore.newItem();
-				const id = crypto.randomUUID();
-				await editor.newNode({
-					label: word.word,
-					id,
-					fid: word.id,
-					x: param?.clientX || 0,
-					y: param?.clientY || 0
-				});
-				break;
-			case 'layout':
-				await editor.layout();
-				break;
-			case 'rmNode':
-				if (param && param.id) {
-					await editor.rmNode(param.id as string);
-				}
-				break;
-			case 'nodepicked':
-				if (param?.id) {
-					viewStore.selectedItem = param.id as string;
-					console.log('节点被选中:', param.id);
-				}
-				break;
-			case 'pointerdown':
-				if (!param?.id) {
-					viewStore.selectedItem = '';
-					console.log('节点别移除选择！！！');
-				}
-				break;
-			case 'connectioncreate':
-				if (param?.id) {
-					// param.id = crypto.randomUUID();
-				}
-				console.log('connectioncreate', param);
-				break;
-			case 'connectioncreated':
-				console.log('connectioncreated', param);
-				break;
-		}
-	}
-
 	onDestroy(() => {
 		// console.log('destroy editor');
-		if (unsub) {
-			unsub();
-			unsub = undefined;
-		}
-		if (unsub2) {
-			unsub2();
-			unsub2 = undefined;
+		if (adapter) {
+			adapter.destroy();
+			adapter = undefined;
 		}
 		if (el) {
 			el.removeEventListener('dragover', handleDragOver);
 			el.removeEventListener('dragleave', handleDragLeave);
 			el.removeEventListener('drop', handleDrop);
 		}
-		if (editor) {
-			editor.destroy();
-			editor = undefined;
-		}
 	});
 
+	async function onEvent(cmd: string, data?: unknown) {
+		if (adapter) {
+			return adapter.onEvent(cmd, data);
+		}
+	}
+
 	function nodeFromEle(e: MouseEvent): string | undefined {
-		if (editor) {
-			const targetElement = e.target as HTMLElement;
-			return editor.nodeFromElement(targetElement);
+		if (adapter) {
+			return adapter.nodeFromEle(e);
 		}
 		return undefined;
 	}
@@ -191,7 +83,7 @@
 		e.stopPropagation();
 		isDraggingOver = false;
 
-		if (!editor || !e.dataTransfer) return;
+		if (!adapter || !e.dataTransfer) return;
 
 		try {
 			const jsonData = e.dataTransfer.getData('application/json');
@@ -205,12 +97,12 @@
 					const x = e.clientX - rect.left;
 					const y = e.clientY - rect.top;
 
-					editor.newNode({
+					adapter.newNode({
 						id: crypto.randomUUID(),
 						label: data.word,
 						x,
 						y,
-						fid: data.id
+						ref_id: data.id
 					});
 				}
 			}
