@@ -1,0 +1,235 @@
+// Milkdown 基础样式
+@import '@milkdown/theme-nord/style.css';
+
+// 使用标准 CSS 而不是 @apply
+.milkdown-editor {
+    margin-left: auto;
+    margin-right: auto;
+
+    .editor {
+        min-height: 80vh;
+        padding: 2rem;
+        outline: none;
+    }
+
+    .ProseMirror {
+        outline: none;
+    }
+
+    // 标题样式
+    h1 {
+        font-size: 2.25rem; // text-4xl
+        font-weight: 700;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+    }
+
+    h2 {
+        font-size: 1.875rem; // text-3xl
+        font-weight: 700;
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+    }
+
+    h3 {
+        font-size: 1.5rem; // text-2xl
+        font-weight: 700;
+        margin-top: 1.25rem;
+        margin-bottom: 0.5rem;
+    }
+
+    // 段落样式
+    p {
+        font-size: 1rem;
+        line-height: 1.75;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    // 列表样式
+    ul,
+    ol {
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        padding-left: 1.5rem;
+    }
+
+    li {
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    // 代码块样式
+    pre {
+        background-color: rgb(243 244 246); // gray-100
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        overflow-x: auto;
+
+        :global(.dark) & {
+            background-color: rgb(31 41 55); // gray-800
+        }
+    }
+
+    code {
+        background-color: rgb(243 244 246);
+        padding: 0.125rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+
+        :global(.dark) & {
+            background-color: rgb(31 41 55);
+        }
+    }
+
+    // 引用样式
+    blockquote {
+        border-left-width: 4px;
+        border-left-color: rgb(209 213 219); // gray-300
+        padding-left: 1rem;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        font-style: italic;
+
+        :global(.dark) & {
+            border-left-color: rgb(75 85 99); // gray-600
+        }
+    }
+
+    // 分割线
+    hr {
+        margin-top: 2rem;
+        margin-bottom: 2rem;
+        border-color: rgb(209 213 219);
+
+        :global(.dark) & {
+            border-color: rgb(75 85 99);
+        }
+    }
+
+    // 表格样式
+    table {
+        width: 100%;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        border-collapse: collapse;
+    }
+
+    th,
+    td {
+        border: 1px solid rgb(209 213 219);
+        padding: 0.75rem 1rem;
+
+        :global(.dark) & {
+            border-color: rgb(75 85 99);
+        }
+    }
+
+    th {
+        background-color: rgb(243 244 246);
+        font-weight: 700;
+
+        :global(.dark) & {
+            background-color: rgb(31 41 55);
+        }
+    }
+
+    // Placeholder 样式
+    .ProseMirror p.is-empty::before {
+        content: attr(data-placeholder);
+        color: rgb(156 163 175); // gray-400
+        float: left;
+        height: 0;
+        pointer-events: none;
+    }
+}
+
+// Slash 命令菜单样式
+.slash-menu {
+    background-color: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    border: 1px solid rgb(229 231 235); // gray-200
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    max-height: 20rem;
+    overflow-y: auto;
+
+    :global(.dark) & {
+        background-color: rgb(31 41 55); // gray-800
+        border-color: rgb(55 65 81); // gray-700
+    }
+}
+
+.slash-menu-item {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+
+    &:hover {
+        background-color: rgb(243 244 246);
+
+        :global(.dark) & {
+            background-color: rgb(55 65 81);
+        }
+    }
+
+    &.selected {
+        background-color: rgb(219 234 254); // blue-100
+
+        :global(.dark) & {
+            background-color: rgb(30 58 138); // blue-900
+        }
+    }
+}
+
+.slash-menu-item-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: rgb(107 114 128); // gray-500
+}
+
+.slash-menu-item-content {
+    flex: 1;
+}
+
+.slash-menu-item-title {
+    font-weight: 500;
+    font-size: 0.875rem;
+}
+
+.slash-menu-item-description {
+    font-size: 0.75rem;
+    color: rgb(107 114 128);
+}
+
+// Block Handle 样式
+.block-handle {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    cursor: grab;
+    opacity: 0;
+    transition: opacity 0.2s;
+
+    &:hover {
+        opacity: 1;
+    }
+
+    &:active {
+        cursor: grabbing;
+    }
+}
+
+// 拖拽指示器
+.drag-indicator {
+    height: 2px;
+    background-color: rgb(59 130 246); // blue-500
+    transition: all 0.2s;
+}

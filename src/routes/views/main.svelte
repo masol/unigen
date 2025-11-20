@@ -6,6 +6,7 @@
 	// 导入视图组件
 	import OpenView from './open.svelte'; // 首次进入，打开项目.
 	import FlowView from './flow/main.svelte';
+	import FunctorView from './functor/Main.svelte';
 	import SettingView from './setting/main.svelte';
 	import { viewStore } from '$lib/stores/project/view.svelte';
 
@@ -48,6 +49,8 @@
 						<!-- 动态组件渲染 - 使用导入的组件 -->
 						{#if view.type === 'flow'}
 							<FlowView vid={view.id} rid={view.docId}></FlowView>
+						{:else if view.type === 'functor'}
+							<FunctorView vid={view.id} wid={view.docId}></FunctorView>
 						{:else if view.type === 'settings'}
 							<SettingView />
 						{/if}
