@@ -12,6 +12,7 @@ type Events = {
 	'functor.updated': Record<string, unknown>; // Functor类型，这里不引入了.
 	'functor.remove': { id: string }; // Functor类型，这里不引入了.
 	'cfgchanged:*': { key: string };
+	'theme.change': {dark: boolean};
 };
 
 const TauriEvtPrefix = "tauri//";

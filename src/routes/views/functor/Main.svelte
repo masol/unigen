@@ -3,7 +3,8 @@
 	import IconPlus from '~icons/lucide/plus';
 	import { onMount } from 'svelte';
 	import { logger } from '$lib/utils/logger';
-	import Milkdown from './MilkdownEditor.svelte';
+	import Codemirror from './Codemirror.svelte';
+	import LeftCmds from './LeftCmds.svelte';
 
 	let {
 		vid = '', // viewid可能包含了类型等内容．
@@ -39,17 +40,11 @@
 		<div class="mx-auto flex h-11 max-w-full items-center justify-between px-6">
 			<div class="flex-1">
 				<div class="flex gap-2" transition:fade={{ duration: 200 }}>
-					<button
-						class="variant-ghost-surface hover:variant-soft-surface btn flex items-center gap-1.5 btn-sm"
-						aria-label="取消更改"
-					>
-						<IconPlus class="text-lg" />
-						<span class="hidden sm:inline">取消</span>
-					</button>
+					<LeftCmds></LeftCmds>
 				</div>
 			</div>
 
-			<h1 class="text-xl font-semibold text-surface-900 dark:text-surface-50">设置</h1>
+			<!-- <h1 class="text-xl font-semibold text-surface-900 dark:text-surface-50"></h1> -->
 
 			<div class="flex flex-1 justify-end">
 				<div transition:fade={{ duration: 200 }}>
@@ -67,6 +62,6 @@
 
 	<!-- 主内容区域 -->
 	<div class="flex min-h-0 flex-1">
-		<Milkdown></Milkdown>
+		<Codemirror></Codemirror>
 	</div>
 </div>
