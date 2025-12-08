@@ -1,52 +1,167 @@
-**English** | [中文](docs/README.cn.md)
+**English** | [中文](./docs/README_CN.md)
 
-# UniGen: Universal Generator - An AI-Augmented Flow-Based Programming Compiler
+# UniGen: An Exploratory Natural Language Flow-Based Programming Compiler
 
-**Summary:** Exploring the combination of Flow-Based Programming (FBP), Lambda Calculus concepts, and AI to enhance the efficiency and expressiveness of graphical programming.
+**This is a personal experimental project** that attempts to parse users' natural language intentions into functional structures and organize them into executable dataflow graphs. The project is still in its early exploratory stage, and many ideas remain unvalidated.
+
+---
+
+## Motivation
+
+While working with LLMs, I noticed a pattern: regardless of what users input, it can essentially be viewed as an implicit "function call"—there's input, an expected output, and some processing in between.
+
+This led me to wonder: if we explicitly parse user intentions into **Input/Process/Output triplets**, might there be some benefits?
+
+- Structured representations are easier to compose and reuse
+- They could potentially interface with symbolic reasoning systems for long-chain planning
+- They might be easier to verify and debug than pure Chain-of-Thought approaches
+
+This project is an exploratory implementation of that idea.
+
+---
 
 ## Core Ideas
 
-UniGen is an experimental project that leverages the network structure of Flow-Based Programming (FBP) and the function composition ideas of Lambda Calculus, combined with AI capabilities, to augment the expressiveness of graphical programming:
+### Functional Intent Parsing
 
-1.  **LLM as Universal Function Simulator & Data Processor:** View Large Language Models (LLMs) as a **Universal Function Simulator**. Each FBP node encapsulates an LLM call, whose behavior is defined by a natural language **template** (Prompt). This template not only defines the node's processing logic but can also implicitly or explicitly specify how to **unpack** the output from upstream nodes to extract the data required by this node, enabling flexible data passing. (**Note: The simpler and more clearly defined the function being simulated (with explicit I/O), the higher the accuracy and reliability typically are.**)
-2.  **FBP Network = Function Composition & Dataflow:** The connections between FBP nodes define dataflow, which semantically corresponds to function application and composition in Lambda Calculus (`f(g(x))`). The entire network itself is a visual representation of a complex function. The connections between nodes carry data and control flow.
-3.  **Process Template = Callable Function:** The node's prompt describes its processing logic (which may include I/O examples or steps -- triggering side effects in a Monad-like manner via MCP). Placeholders (e.g., `[INPUT]`) inject upstream data, making the template a callable "function". Templates can also define unpacking rules.
-4.  **Function (Behavior) Passing:** A node can output a task description (process), which can be directly used as the template for another node, achieving the passing of a "function" (behavioral instruction) like data (drawing from the first-class function concept in Lambda Calculus).
-5.  **Consistent State Management via Prolog/CLP (Future):** The current version focuses on explicit, one-time data passing between nodes. Future versions will explore introducing **global state(State Monad)** management. By drawing inspiration from **Prolog** (and its extension **Constraint Logic Programming - CLP**), it will allow defining variables and their required **logical constraints** using **natural language** at the workflow level (e.g., via special nodes or global configuration). Internally, a fact database akin to Prolog will be maintained, and its reasoning engine used to automatically ensure these constraints remain **consistent** throughout workflow execution. This effectively unifies the traditionally separate "database" and "model maintenance code" under a Prolog engine. (**Note: While logically sound, this approach can be performance-intensive; long-term goals include compiler optimizations to address this. Global variables and such consistency constraints are not supported in the current version.**)
-6.  **Compilation Optimization & Hybrid Execution (Future):** The project plans to explore compiling certain nodes (especially those with clear, formalizable logic, i.e., "Terminals") into efficient Python/C++ code in the future, creating a hybrid execution model combining AI calls and compiled code. The data unpacking logic might also be compiled to improve efficiency.  
+Parse arbitrary natural language input into a standard triplet:
 
-## Key Benefits
+```yaml
+function: translate_to_chinese
+input:
+  explicit: [english_text]
+  implicit: {style: formal}
+  type: string
+process:
+  - understand source semantics
+  - select formal vocabulary
+  - generate translation
+output:
+  expected: chinese_translation
+  type: string
+```
 
-*   **Intuitive Design:** Define node behavior declaratively using natural language templates derived from examples.
-*   **Flexible Composition:** Easily build complex workflows by connecting nodes.
-*   **AI-Native:** Leverages the general problem-understanding capabilities of LLMs.
-*   **Function Reuse & Passing:** Nodes can dynamically generate or pass behavioral instructions to other nodes.
-*   **Hybrid Efficiency (Planned):** Potential to compile performance-critical parts to native code.
+The design of this structure is inspired by two classical theories:
 
-## Vision
+**Lambda Calculus**: The triplet can correspond to `λ input. process(input) → output`, and node composition corresponds to function composition. This isn't a rigorous formal correspondence, but it provides a useful thinking framework.
 
-Enable users to capture and automate structured human thought processes (e.g., writing papers, coding, novel writing) by:
-1.  Visually designing the workflow (data flow graph).
-2.  Defining node functions via templated natural language descriptions (potentially auto-generated/suggested by AI).
-3.  Letting UniGen compile and execute the workflow, combining LLM inference with compiled components.
+**Prolog**: Parsed triplets could be stored as fact-like structures, theoretically supporting backward chaining to automatically search for function chains. This part is still just a concept and hasn't been implemented yet.
 
-## Limitations / Scope
+### Dataflow Graphs
 
-*   **Captures Static Knowledge:** UniGen excels at固化 (solidifying/capturing) existing, well-defined human workflows and methodologies.
-*   **No Autonomous Evolution (Currently):** It does **not** inherently possess the capability to self-improve or discover better methods beyond its initial programming/specification. If the underlying human methodology evolves, the UniGen workflow typically needs manual updating.
+Multiple nodes connect through I/O type matching to form graphs, borrowing ideas from Flow-Based Programming. The difference from traditional FBP:
 
-## Status
+- Nodes are described in natural language rather than predefined code
+- LLMs act as "universal function simulators," attempting to execute the tasks described by nodes
 
-**Conceptual / Early Development**
+It should be noted that the reliability of LLM function simulation heavily depends on task clarity. Complex or ambiguous tasks are prone to errors, which is why large tasks need to be decomposed into small, well-defined nodes.
 
-This is a conceptual exploration and early-stage implementation. Contributions and feedback are welcome!
+### Output-Driven Structure Optimization (Concept)
 
----
-
-## 📄 License
-
-MIT License © 2025 lizhutang contributors
+An idea not yet implemented: users provide expected outputs or output constraints, and the system uses these as an evaluation function to search for suitable node combinations. This is somewhat similar to fitness functions in genetic programming, but I'm not yet sure how far this path can go.
 
 ---
 
-**UniGen**: Visually compose AI workflows by combining FBP and Lambda Calculus with LLM-powered nodes.
+## Architecture Sketch
+
+```
+Natural Language Input
+         │
+         ▼
+┌─────────────────────┐
+│  Functional Parser  │  Parse input into I/P/O triplets
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Graph Organizer    │  Organize node connections via type matching
+└──────────┬──────────┘
+           │
+     ┌─────┴─────┐
+     ▼           ▼
+┌────────┐  ┌────────┐
+│  LLM   │  │Compiled│  Hybrid execution (latter is a long-term goal)
+│Execute │  │  Code  │
+└────────┘  └────────┘
+```
+
+---
+
+## A Simple Example
+
+**User intent**: "Read this paper, extract key points, write a Chinese introduction"
+
+**Possible decomposition**:
+
+```
+[Paper File] → [Extract Key Points] → [Write Chinese Intro] → [Chinese Article]
+```
+
+Each node independently defines I/P/O and can be tested separately. Whether this decomposition is optimal, and whether AI can automatically perform such decomposition, are questions that remain to be validated.
+
+---
+
+## Relationship to Related Work
+
+This project is inspired by the following work:
+
+| Approach | My Understanding |
+|----------|------------------|
+| Chain-of-Thought | Focuses on intermediate steps within a single reasoning pass; UniGen attempts structured composition across multiple calls |
+| Flow-Based Programming | A mature dataflow programming paradigm; UniGen borrows its graph structure but differs in how nodes are defined |
+| Lambda Calculus / Prolog | Provides theoretical perspectives, but UniGen's "correspondence" is still rough, not a rigorous formal mapping |
+
+---
+
+## Current Status and Limitations
+
+**Status**: Conceptual exploration + early prototype
+
+**Known limitations**:
+
+- Accuracy of functional parsing depends on LLM capabilities; complex intentions are easily parsed incorrectly
+- Automatic graph structure organization hasn't been implemented yet; currently requires manual specification
+- Prolog integration is just a concept; work hasn't started
+- Lacks systematic evaluation; uncertain whether this approach is actually better than existing methods
+
+---
+
+## Roadmap (Tentative)
+
+- [x] Organize core ideas
+- [ ] Implement basic triplet parsing
+- [ ] Simple dataflow graph execution
+- [ ] Explore feasibility of Prolog integration
+- [ ] Conduct preliminary evaluation on some concrete tasks
+
+---
+
+## Why Make This Early Project Public
+
+Mainly to document the exploration process, and hopefully to receive feedback and suggestions. If you have experience in the following areas, I'd very much welcome a conversation:
+
+- Type systems / practical applications of lambda calculus
+- Prolog / logic programming
+- Flow-Based Programming in practice
+- Reliability engineering for LLMs
+
+---
+
+## References
+
+These are some materials that have influenced my thinking; they do not imply any formal affiliation with this project:
+
+- Church, A. (1936). An Unsolvable Problem of Elementary Number Theory.
+- Morrison, J.P. (2010). Flow-Based Programming, 2nd Edition.
+- Kowalski, R. (1974). Predicate Logic as a Programming Language.
+- Wei, J. et al. (2022). Chain-of-Thought Prompting Elicits Reasoning in Large Language Models.
+
+---
+
+## License
+
+MIT License © 2025
+
+---
+
+**UniGen**: A personal experiment attempting to make natural language intentions structured and composable.

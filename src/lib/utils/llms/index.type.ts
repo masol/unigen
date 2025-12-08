@@ -1,5 +1,11 @@
-import type { BaseMessage } from "@langchain/core/messages";
+// index.type.ts
 
+import type { ModelMessage, LanguageModelUsage } from 'ai';
+import type { z } from 'zod';
+
+// ============================================================================
+// 标签和配置
+// ============================================================================
 
 export const validTags = [
     'fast', 'powerful', 'balanced',
@@ -7,24 +13,31 @@ export const validTags = [
     'speech', 'speech_modify', 'music', 'music_modify'
 ] as const;
 
-
 export type LLMTag = typeof validTags[number];
 
-// 简化的LLM配置
+/**
+ * LLM配置接口
+ */
 export interface LLMConfig {
     id: string;
     provider: string;
     apiKey: string;
-    name: string; // name保存了模型名称。
+    name: string; // name保存了模型名称
     tag: LLMTag;
     // weight: number; // 暂未启用。防止干扰试听。
     enabled?: boolean;
     temperature?: number;
     maxTokens?: number;
     [key: string]: unknown;
-};
+}
 
+// ============================================================================
 // 调用结果接口
+// ============================================================================
+
+/**
+ * 基础调用结果接口
+ */
 export interface CallResult {
     success: boolean;
     response?: string;
@@ -32,17 +45,100 @@ export interface CallResult {
     responseTime: number;
 }
 
-
+/**
+ * JSON调用结果接口
+ */
 export interface JSONCallResult extends CallResult {
-    json?: any;
+    json?: unknown;
 }
 
+/**
+ * 生成对象结果接口
+ */
+export interface GenerateObjectResult<T> {
+    success: boolean;
+    object?: T;
+    finishReason?: string;
+    usage?: LanguageModelUsage;
+    error?: Error;
+    responseTime: number;
+}
+
+// ============================================================================
+// LLMWrapper 相关接口
+// ============================================================================
+
+/**
+ * 生成对象选项
+ */
+export interface GenerateObjectOptions {
+    mode?: 'auto' | 'json' | 'tool';
+    schemaName?: string;
+    schemaDescription?: string;
+}
+
+/**
+ * LLMWrapper 接口
+ */
+export interface ILLMWrapper {
+    /**
+     * 调用 LLM
+     * @param input 输入内容（字符串、数字或消息数组）
+     * @returns 调用结果
+     */
+    call(input: string | number | ModelMessage[]): Promise<CallResult>;
+
+    /**
+     * 调用 LLM 并返回 JSON（基于文本解析）
+     * @param input 输入内容
+     * @param maxRetries 最大重试次数，默认2次
+     * @returns JSON调用结果
+     */
+    callJSON(
+        input: string | number | ModelMessage[],
+        maxRetries?: number
+    ): Promise<JSONCallResult>;
+
+    /**
+     * 使用 schema 生成结构化对象（推荐使用）
+     * @param input 输入内容
+     * @param schema Zod schema
+     * @param options 生成选项
+     * @returns 生成对象结果
+     */
+    generateObject<T extends z.ZodType>(
+        input: string | number | ModelMessage[],
+        schema: T,
+        options?: GenerateObjectOptions
+    ): Promise<GenerateObjectResult<z.infer<T>>>;
+
+    /**
+     * 流式调用 LLM
+     * @param input 输入内容
+     * @param onChunk 数据块回调函数
+     * @returns 调用结果
+     */
+    callStream(
+        input: string | number | ModelMessage[],
+        onChunk: (chunk: string) => void
+    ): Promise<CallResult>;
+
+    /**
+     * 获取配置信息
+     * @returns LLM配置
+     */
+    getConfig(): LLMConfig;
+}
+
+// ============================================================================
+// LLMManager 相关接口
+// ============================================================================
 
 /**
  * 实例状态接口
  */
 export interface InstanceState {
-    wrapper: any; // 由于LLMWrapper不在当前文件中，使用any或者导入具体类型
+    wrapper: ILLMWrapper; // 使用ILLMWrapper接口类型
     config: LLMConfig;
     isAvailable: boolean;
     errorCount: number;
@@ -72,6 +168,16 @@ export interface InstanceStatusInfo {
 }
 
 /**
+ * LLM管理器配置选项接口
+ */
+export interface LLMManagerOptions {
+    /** 连续错误次数上限，默认3次 */
+    maxConsecutiveErrors?: number;
+    /** 错误冷却时间（毫秒），默认30000ms */
+    errorCooldownTime?: number;
+}
+
+/**
  * LLM管理器接口
  */
 export interface ILLMManager {
@@ -95,7 +201,9 @@ export interface ILLMManager {
      */
     removeLLM(id: string): boolean;
 
-
+    /**
+     * 删除所有 LLM 实例
+     */
     removeAllLLMs(): void;
 
     /**
@@ -104,7 +212,7 @@ export interface ILLMManager {
      * @param maxRetries 最大重试次数，默认2次
      * @returns 调用结果
      */
-    call(message: string | number | BaseMessage[], maxRetries?: number): Promise<CallResult>;
+    call(message: string | number, maxRetries?: number): Promise<CallResult>;
 
     /**
      * 调用 LLM 获取JSON响应，失败后重试其他实例
@@ -112,7 +220,7 @@ export interface ILLMManager {
      * @param maxRetries 最大重试次数，默认2次
      * @returns JSON调用结果
      */
-    callJSON(message: string | number | BaseMessage[], maxRetries?: number): Promise<JSONCallResult>;
+    callJSON(message: string | number, maxRetries?: number): Promise<JSONCallResult>;
 
     /**
      * 流式调用 LLM，失败后重试其他实例
@@ -122,7 +230,7 @@ export interface ILLMManager {
      * @returns 调用结果
      */
     callStream(
-        message: string | number | BaseMessage[],
+        message: string | number,
         onChunk: (chunk: string) => void,
         maxRetries?: number
     ): Promise<CallResult>;
@@ -170,21 +278,4 @@ export interface ILLMManager {
      * @returns 是否设置成功
      */
     setInstanceAvailability(id: string, isAvailable: boolean): boolean;
-}
-
-/**
- * LLM管理器配置选项接口
- */
-export interface LLMManagerOptions {
-    /** 连续错误次数上限，默认3次 */
-    maxConsecutiveErrors?: number;
-    /** 错误冷却时间（毫秒），默认30000ms */
-    errorCooldownTime?: number;
-}
-
-/**
- * 创建LLM管理器的工厂函数接口
- */
-export interface CreateLLMManagerFunction {
-    (options?: LLMManagerOptions): ILLMManager;
 }

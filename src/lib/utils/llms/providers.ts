@@ -1,14 +1,15 @@
 // 移除langchain依赖．转而使用openAI兼容的API来通信，非支持OpenAI的服务，要制作adapter到OpenAI.
-
+// 为了方便tool,mcp,skill支持，使用vercel/ai．
 
 import type { LLMConfig } from "./index.type";
-import { type OpenAI } from "openai";
+// import { createOpenAI } from '@ai-sdk/openai';
 
 
 export type ProviderInfo = {
     baseURL: string;
     apikeyURL: string;
-    create?: (param: Record<string, unknown>) => OpenAI
+    // default protocal is openai
+    protocal?: 'openai' | 'xai' | 'anthropic' | 'huggingface' | 'perplexity' | 'ollama' | 'google';
 }
 
 // 提供商配置映射,key作为i18n的key,自行定义到各自语言的名称．
@@ -92,5 +93,5 @@ export async function listModels(config: LLMConfig): Promise<string[]> {
     }
 
     const data = await response.json();
-    return data.data.map((model: any) => model.id);
+    return data.data.map((model: Record<string, string>) => model.id);
 }

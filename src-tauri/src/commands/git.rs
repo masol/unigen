@@ -7,7 +7,7 @@ pub fn ensure_git(path: String) -> Result<bool, String> {
 
     // 检查路径是否存在
     if !repo_path.exists() {
-        if let Err(_) = std::fs::create_dir_all(repo_path) {
+        if std::fs::create_dir_all(repo_path).is_err() {
             tracing::warn!("无法创建项目的GitData目录: {:?}", repo_path);
             return Ok(false);
         }

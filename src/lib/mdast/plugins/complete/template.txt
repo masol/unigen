@@ -1,0 +1,19 @@
+<label name="<%~ it.functionName %>" >
+  <%~ it.notes %>
+</label>
+
+<input name="<%~ it.inputName %>">
+  <meta> <%~ it.inputDefinition %> </meta>
+  <samp> <%~ it.inputExample %> </samp>
+</input>
+
+<output name="<%~ it.outputName %>">
+  <meta> <%~ it.outputDefinition %> </meta>
+  <samp> <%~ it.outputExample %> </samp>
+</output>
+
+
+<details name="<%~ it.processName %>">
+  <meta> <%~ it.processDefinition %> </meta>
+  <samp> <%~ it.processExample %> </samp>
+</details>

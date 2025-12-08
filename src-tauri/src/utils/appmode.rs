@@ -7,7 +7,7 @@ pub const APP_MODE_MQTT: &str = "mqtt";
 /// 应用运行模式枚举（推荐用于复杂逻辑）
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppMode {
-    MQTT,
+    Mqtt,
     Desktop,
 }
 
@@ -15,14 +15,14 @@ impl AppMode {
     /// 从环境变量解析当前模式
     pub fn from_env() -> Self {
         match std::env::var(ENV_APP_MODE_KEY).unwrap_or_default().as_str() {
-            APP_MODE_MQTT => AppMode::MQTT,
+            APP_MODE_MQTT => AppMode::Mqtt,
             _ => AppMode::Desktop,
         }
     }
 
     /// 判断是否为 MQTT 模式
     pub fn is_mqtt(&self) -> bool {
-        matches!(self, AppMode::MQTT)
+        matches!(self, AppMode::Mqtt)
     }
 }
 

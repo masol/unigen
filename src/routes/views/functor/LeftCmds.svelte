@@ -5,7 +5,7 @@
 	import { SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 </script>
 
-<SegmentedControl defaultValue="process">
+<SegmentedControl defaultValue="process" class="[&>*]:!border-0">
 	<SegmentedControl.Control>
 		<SegmentedControl.Indicator />
 		<SegmentedControl.Item value="process" title="end" aria-label="end">

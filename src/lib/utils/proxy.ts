@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import picomatch from 'picomatch';
 import { logger } from './logger';
@@ -149,8 +150,8 @@ const proxyFetch = async (
         }
     } else {
         // console.log(`Hostname "${hostname}" does not match any proxy pattern`);
-        return origFetch(input, init);
-        // return tauriFetch(input,init);
+        // return origFetch(input, init);
+        return tauriFetch(input,init); // 规避cors限制！
     }
 };
 

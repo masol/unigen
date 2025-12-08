@@ -11,8 +11,11 @@
   },
   "plugins": {
     "sql": {
-      "preload": ["sqlite:app.db"]
-    }
+      "preload": [
+        "sqlite:app.db"
+      ]
+    },
+    "notification": null
   },
   "app": {
     "windows": [
@@ -30,6 +33,7 @@
     ],
     "security": {
       "csp": null,
+      "dangerousDisableAssetCspModification": true,
       "capabilities": [
         "default",
         "window-control"

@@ -1,9 +1,12 @@
-import { LLMWrapper } from "./instance.js";
-import type { LLMConfig, CallResult, JSONCallResult } from './index.type.js'
+import type { LLMConfig, CallResult, JSONCallResult, ILLMWrapper } from './index.type.js'
+import { WrapperFactory } from './wrapper/index.js';
+import type { z } from 'zod';
+import type { GenerateObjectOptions, GenerateObjectResult } from './index.type.js';
+import type { ModelMessage } from 'ai';
 
 // 实例状态接口
 interface InstanceState {
-    wrapper: LLMWrapper;
+    wrapper: ILLMWrapper;
     config: LLMConfig;
     isAvailable: boolean;
     errorCount: number;
@@ -42,7 +45,7 @@ export class LLMManager {
      */
     private createInstanceState(config: LLMConfig): InstanceState {
         const processedConfig = { ...config };
-        const wrapper = new LLMWrapper(processedConfig);
+        const wrapper = WrapperFactory.createWrapper(processedConfig);
 
         return {
             wrapper,
@@ -86,6 +89,7 @@ export class LLMManager {
      * 添加 LLM 实例
      */
     addLLM(config: LLMConfig): boolean {
+        console.log("addLLM:", config)
         try {
             const instanceState = this.createInstanceState(config);
             this.instances.set(config.id, instanceState);
@@ -173,6 +177,37 @@ export class LLMManager {
             // 更新平均响应时间
             const totalTime = state.averageResponseTime * (state.successCalls - 1) + result.responseTime;
             state.averageResponseTime = totalTime / state.successCalls;
+        } else {
+            state.errorCount++;
+            state.consecutiveErrors++;
+            state.lastError = result.error;
+
+            // 如果连续错误过多，暂时标记为不可用
+            if (state.consecutiveErrors >= this.maxConsecutiveErrors) {
+                console.warn(`实例 ${state.config.name} 连续错误 ${state.consecutiveErrors} 次，暂时禁用`);
+            }
+        }
+    }
+
+    /**
+     * 更新实例统计信息 (GenerateObject 专用)
+     */
+    private updateInstanceStatsForGenerateObject<T>(
+        state: InstanceState,
+        result: GenerateObjectResult<T>
+    ): void {
+        state.totalCalls++;
+
+        if (result.success) {
+            state.successCalls++;
+            state.consecutiveErrors = 0;  // 重置连续错误计数
+            state.lastSuccessTime = Date.now();
+
+            // 更新平均响应时间
+            if (result.responseTime !== undefined) {
+                const totalTime = state.averageResponseTime * (state.successCalls - 1) + result.responseTime;
+                state.averageResponseTime = totalTime / state.successCalls;
+            }
         } else {
             state.errorCount++;
             state.consecutiveErrors++;
@@ -323,6 +358,74 @@ export class LLMManager {
         return {
             success: false,
             error: lastError || new Error('所有流式调用重试都失败了'),
+            responseTime: 0
+        };
+    }
+
+    /**
+     * 使用 schema 生成结构化对象，失败后重试其他实例
+     * @param input 输入内容（字符串、数字或消息数组）
+     * @param schema Zod schema
+     * @param options 生成选项
+     * @param maxRetries 最大重试次数
+     * @returns 生成对象结果
+     */
+    async generateObject<T extends z.ZodType>(
+        input: string | number | ModelMessage[],
+        schema: T,
+        options?: GenerateObjectOptions,
+        maxRetries: number = 2
+    ): Promise<GenerateObjectResult<z.infer<T>>> {
+        let lastError: Error | undefined;
+        const attemptedInstances = new Set<string>();
+
+        // 总尝试次数 = 1次初始调用 + maxRetries次重试
+        const totalAttempts = 1 + maxRetries;
+
+        for (let attempt = 0; attempt < totalAttempts; attempt++) {
+            const state = this.getNextAvailableInstance();
+
+            if (!state) {
+                lastError = new Error('没有可用的 LLM 实例');
+                break;
+            }
+
+            // 如果这个实例已经尝试过，跳过
+            if (attemptedInstances.has(state.config.id)) {
+                continue;
+            }
+
+            attemptedInstances.add(state.config.id);
+
+            console.log(`尝试生成结构化对象实例: ${state.config.name} (第${attempt + 1}次尝试)`);
+
+            try {
+                const result = await state.wrapper.generateObject(input, schema, options);
+                this.updateInstanceStatsForGenerateObject(state, result);
+
+                if (result.success) {
+                    console.log(`结构化对象生成成功: ${state.config.name}`);
+                    return result;
+                } else {
+                    lastError = result.error;
+                    console.warn(`结构化对象生成失败: ${state.config.name}`, result.error?.message);
+                }
+            } catch (error) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                console.warn(`结构化对象生成异常: ${state.config.name}`, lastError.message);
+
+                // 更新统计信息
+                this.updateInstanceStatsForGenerateObject(state, {
+                    success: false,
+                    error: lastError,
+                    responseTime: 0
+                });
+            }
+        }
+
+        return {
+            success: false,
+            error: lastError || new Error('所有结构化对象生成重试都失败了'),
             responseTime: 0
         };
     }

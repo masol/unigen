@@ -4,15 +4,19 @@
 	import { type MenuCommand } from '$lib/utils/codemirror/types';
 	import Contextmenu, { type MenuType } from './Contextmenu.svelte';
 	import LoadingComp from '$lib/comp/feedback/Loading.svelte';
+	import { functorStore } from '$lib/stores/project/functor.svelte';
+	import type { FunctorData } from '$lib/utils/vocab/type';
+	import { doComplete } from './complete';
 
 	let editorElement = $state<HTMLDivElement>();
 	let cmWrapper: CMWrapper;
 	let isLoading = $state(true);
+	let functor: FunctorData | undefined;
 
 	// Props
 	interface Props {
-		initialValue?: string;
-		onChange?: (markdown: string) => void;
+		wid: string;
+		onChange: (markdown: string) => void;
 		onFocus?: () => void;
 		onBlur?: () => void;
 		placeholder?: string;
@@ -20,7 +24,7 @@
 	}
 
 	let {
-		initialValue = '',
+		wid,
 		onChange,
 		onFocus,
 		onBlur,
@@ -31,9 +35,13 @@
 	onMount(async () => {
 		if (!editorElement) return;
 
+		functor = functorStore.find(wid);
+
+		console.log('functor=', functor);
+
 		cmWrapper = new CMWrapper({
 			parent: editorElement,
-			initialValue,
+			initialValue: functor?.extra?.source ?? '',
 			placeholder,
 			readonly,
 			onChange,
@@ -51,46 +59,52 @@
 	});
 
 	function typeFromPoint(e: MouseEvent): MenuType {
-		if (!cmWrapper) return 'selection';
+		const ret: MenuType = {
+			hasContent: false,
+			type: 'normal'
+		};
+		if (!cmWrapper) return ret;
 
-		const pos = cmWrapper.posAtCoords(e.clientX, e.clientY);
-		console.log('pos=', pos);
-		if (pos === null) return 'selection';
+		if (cmWrapper.getContent().length === 0) {
+			return ret;
+		}
 
-		// const { from, to } = cmWrapper.getSelection();
+		ret.hasContent = true;
 
-		// // 如果点击位置在选区内，显示选区菜单
-		// if (pos >= from && pos <= to && from !== to) {
-		// 	return 'selection';
-		// }
+		return ret;
 
-		return 'selection';
+		// const pos = cmWrapper.posAtCoords(e.clientX, e.clientY);
+		// console.log('pos=', pos);
+		// if (pos === null) return ret;
+
+		// // const { from, to } = cmWrapper.getSelection();
+
+		// // // 如果点击位置在选区内，显示选区菜单
+		// // if (pos >= from && pos <= to && from !== to) {
+		// // 	return 'selection';
+		// // }
+
+		// return ret;
+	}
+
+	async function onAutoCmd() {
+		isLoading = true;
+		onChange('');
+		const content = await doComplete(cmWrapper.getContent());
+		cmWrapper.setContent(content);
+		isLoading = false;
+		// 开始编译和优化．
 	}
 
 	async function onMenucmd(cmd: string, param?: Record<string, unknown>) {
 		if (!cmWrapper) return;
-		await cmWrapper.executeCommand(cmd as MenuCommand, param);
-	}
-
-	// 暴露公共方法
-	export function getMarkdown(): string {
-		return cmWrapper?.getContent() || '';
-	}
-
-	export function setMarkdown(markdown: string): void {
-		cmWrapper?.setContent(markdown);
-	}
-
-	export function focus(): void {
-		cmWrapper?.focus();
-	}
-
-	export function clear(): void {
-		cmWrapper?.clear();
-	}
-
-	export function insertAtCursor(text: string): void {
-		cmWrapper?.insertAtCursor(text);
+		switch (cmd) {
+			case 'auto': // 自动完善．
+				console.log('auto menu command!!');
+				return onAutoCmd();
+			default:
+				return await cmWrapper.executeCommand(cmd as MenuCommand, param);
+		}
 	}
 </script>
 

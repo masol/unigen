@@ -127,6 +127,7 @@
 
 	<div class="space-y-2">
 		{#each enrichedModels as model (model.id)}
+			{@const IconComponent = model.capConfig.icon}
 			{@const isSelected = selectedId === model.id}
 			<div
 				role="button"
@@ -169,7 +170,7 @@
 							class="flex h-12 w-12 items-center justify-center rounded-lg border transition-transform duration-200 group-hover:scale-105 {model
 								.capConfig.iconClass}"
 						>
-							<svelte:component this={model.capConfig.icon} class="h-6 w-6" />
+							<IconComponent class="h-6 w-6" />
 						</div>
 					</div>
 
