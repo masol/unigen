@@ -1,0 +1,52 @@
+<label name="<%~ it.functionName %>" >
+  <% if (it.notes) { %>
+
+  <aside>
+    <%~ it.notes %>
+    
+  </aside>
+  <% } %>
+<% if (it.origin) { %>
+
+  <cite>
+    <%~ it.origin %>
+
+  </cite>
+  <% } %>
+
+</label>
+
+<input name="<%~ it.inputName %>">
+  <meta>
+   <%~ it.inputDefinition %>
+  
+  </meta>
+  
+  <samp>
+   <%~ it.inputExample %>
+  
+  </samp>
+</input>
+
+<output name="<%~ it.outputName %>">
+  <meta>
+   <%~ it.outputDefinition %>
+  
+  </meta>
+  <samp>
+   <%~ it.outputExample %>
+  
+  </samp>
+</output>
+
+
+<details name="<%~ it.processName %>">
+  <meta>
+   <%~ it.processDefinition %> 
+  
+  </meta>
+  <samp>
+   <%~ it.processExample %> 
+  
+  </samp>
+</details>

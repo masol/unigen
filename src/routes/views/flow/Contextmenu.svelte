@@ -70,7 +70,7 @@
 						open = false;
 					}}
 				>
-					<span>编辑行为</span>
+					<span>编辑节点</span>
 				</ContextMenu.Item>
 				<ContextMenu.Separator class="my-1 h-px bg-surface-300 dark:bg-surface-700" />
 				<ContextMenu.Item

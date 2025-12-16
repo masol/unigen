@@ -3,22 +3,15 @@ import { ClassicPreset } from "rete";
 
 export class UniNode extends ClassicPreset.Node {
     #fid: string = ""; // 引用的functor id/或者flow chart id(refId).
-    // width = 120;
-    // height = 180;
+    // 高度和宽度非只读，但是只有创建时，根据有多少inputs/outputs来决定其高度．
+    width = 190;
+    height = 4800;
     get fid(): string {
         return this.#fid;
     }
 
     set fid(fid: string) {
         this.#fid = fid;
-    }
-
-    get width(): number {
-        return 120;
-    }
-
-    get height(): number {
-        return 180;
     }
 
     constructor(label: string, opt?: Record<string, unknown>) {

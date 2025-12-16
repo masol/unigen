@@ -39,28 +39,31 @@ export interface FlowData extends WordData {
 }
 
 type IoBaseType = {
-    id: string; // 本socket的name.
     entId?: string; // 引用的entity id.
     name: string; // 或者命名为类型?类别?.
+    extractor?: string; // 用于抽取所需信息的提示词-如无，使用标准抽取提示词．
+    definition?: string; // 概念内涵．
     sample?: string; // 原始的案例(name所指向的内容)．
-    reward?: string; // 奖励函数(判断是否是一个好的)--如果未给出.
+    reward?: string; // 奖励函数(判断是否是一个好的)--如果未给出，使用标准reward.
 }
 
-type IoType<T extends 'input' | 'output'> = IoBaseType & {
+type IoType<T extends 'input' | 'output' | 'process'> = IoBaseType & {
     type: T;
 }
 
 export type InputType = IoType<'input'> & {}
 export type OutputType = IoType<'output'> & {}
+export type ProcessType = IoType<'process'> & {}
 
 export interface FunctorData extends WordData {
     type: "functor";
     extra?: {
         sub_type?: string; // 函子类型，当前只支持一个，就是Prompt funciton.不给默认就是Prompt funciton.
-        inputs: InputType[];
+        inputs?: InputType[];
         // template: string; // 编译后的模板存入definition中．
         // inputDeps?: DepGraph<string>; // 暂不支持嵌套inputs.
         output?: OutputType;
-        source: string; // md string source.
+        process?: ProcessType;
+        source?: string; // md string source.
     }
 }

@@ -7,7 +7,10 @@ import type { IRetEditor, TraveContext } from "$lib/utils/rete/type";
 import type { FunctorData } from "$lib/utils/vocab/type";
 import pMap from 'p-map';
 import { validate as uuidValidate } from 'uuid';
-
+import { type ProgreeReporter } from "./type";
+import { runImpl } from './run/index'
+import { NoReadyError, RunError } from "./run/error";
+// import { PanelStore } from "./panel/panelStore.svelte";
 
 const debounceTimers = new Map<string, NodeJS.Timeout>();
 function updPosition(id: string, x: number, y: number) {
@@ -34,13 +37,40 @@ export class ReteAdapter {
     #loading: boolean = true;
     private removeConnectionTimeouts = new Map<string, NodeJS.Timeout>();
 
+    // #panelStore: PanelStore;
+
     readonly editor: IRetEditor;
     private unsub!: (() => void);
     private unsub2!: (() => void);
 
     constructor(editor: IRetEditor) {
         this.editor = editor;
+        // this.#panelStore = new PanelStore();
         this.editor.onEvent = this.onEvent.bind(this);
+    }
+
+    // public get panelStore(): PanelStore {
+    //     return this.#panelStore;
+    // }
+
+    async run(reporter: ProgreeReporter) {
+        try {
+            return await runImpl(this.editor, reporter);
+        } catch (e) {
+            if (e instanceof RunError) {
+                if (!e.isConnected && e.isolatedNodes.length > 0) {
+                    // console.log("isolatedNodes=", e.isolatedNodes)
+                    await this.editor.unselectAll();
+                    await this.editor.selectNodes(e.isolatedNodes);
+                }
+            } else if (e instanceof NoReadyError) {
+                if (e.noreadyNodes.length > 0) {
+                    await this.editor.unselectAll();
+                    await this.editor.selectNodes(e.noreadyNodes);
+                }
+            }
+            reporter("error", e instanceof Error ? e.message : String(e));
+        }
     }
 
     destroy() {
@@ -63,15 +93,19 @@ export class ReteAdapter {
         })
         await pMap(reteInfo.connections, async (conn) => {
             // console.log("load persist Connection=", conn);
-            return this.editor.addConnection(conn);
+            try {
+                return await this.editor.addConnection(conn);
+            } catch (e) {
+                console.error("无法恢复连接:", e)
+            }
         })
 
         setTimeout(() => {
             this.editor.reset();
-        }, 0);
+        }, 10);
 
         this.unsub = await eventBus.listen('functor.updated', async (event) => {
-            // console.log("recieved functor.updated!!!!")
+            console.log("recieved functor.updated!!!!")
             const item = event as FunctorData;
             const nodes = this.editor.getFuncNodes(item.id);
             // console.log("item=",item);
@@ -117,7 +151,7 @@ export class ReteAdapter {
     }
 
 
-    private async onNodeUpdated(id: string) {
+    public async onNodeUpdated(id: string) {
         if (!this.#loading) {
             // 未在加载状态．保存节点．
             const sqlNode = this.editor.getSqlNode(id);
@@ -190,11 +224,10 @@ export class ReteAdapter {
     async newNode(param: Record<string, unknown>): Promise<void> {
         const id = crypto.randomUUID();
         await this.editor.newNode({
-            label: param.label,
+            x: 0,
+            y: 0,
+            ...param,
             id,
-            ref_id: param.ref_id,
-            x: param?.x || 0,
-            y: param?.y || 0
         });
         await this.onNodeUpdated(id);
     }

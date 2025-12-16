@@ -37,7 +37,7 @@
 
 		functor = functorStore.find(wid);
 
-		console.log('functor=', functor);
+		// console.log('functor=', functor);
 
 		cmWrapper = new CMWrapper({
 			parent: editorElement,
@@ -90,8 +90,8 @@
 	async function onAutoCmd() {
 		isLoading = true;
 		onChange('');
-		const content = await doComplete(cmWrapper.getContent());
-		cmWrapper.setContent(content);
+		const content = await doComplete(cmWrapper.getContent(), wid);
+		// cmWrapper.setContent(content);
 		isLoading = false;
 		// 开始编译和优化．
 	}

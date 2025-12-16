@@ -1,20 +1,37 @@
 <script lang="ts">
 	import ContextMenu from './Contextmenu.svelte';
-	import { onDestroy, onMount } from 'svelte';
+	import { getContext, onDestroy, onMount } from 'svelte';
 	import LoadingComp from '$lib/comp/feedback/Loading.svelte';
 	import { ReteAdapter } from './adapter';
+	import { functorStore } from '$lib/stores/project/functor.svelte';
+	// import type { PortConfig } from '$lib/utils/appdb/rete.type';
+	// import { trimTo6 } from '$lib/utils/str';
+	import FunctorDialog from './functor/Dialog.svelte';
+	import { cvtIO } from './util';
+	import type { FunctorData } from '$lib/utils/vocab/type';
+	type ToastStore = ReturnType<typeof import('@skeletonlabs/skeleton-svelte').createToaster>;
+	const toaster = getContext<ToastStore>('toaster');
+
+	// import PanelManage from './PanelManage.svelte';
+	// import type { PanelStore } from './panelStore.svelte';
 
 	// ref id--> belong to id for db!!.
 	let {
-		rid = ''
+		rid = '',
+		setAdapter
 	}: {
 		rid: string;
+		setAdapter(editor: ReteAdapter): void;
 	} = $props();
 
 	let el: HTMLDivElement;
 	let adapter: ReteAdapter | undefined;
 	let isDraggingOver = $state(false);
 	let isLoading = $state(true);
+	let fid = $state(''); // 当前编辑的functor id.
+	let nodeId = ''; // 当前编辑的node id.
+	let open = $state(false); // 当前编辑器是否打开了．
+	// let myPanelStore = $state<PanelStore | undefined>(undefined);
 
 	onMount(async () => {
 		const old = el.style.display;
@@ -22,7 +39,9 @@
 
 		const { RetEditor } = await import('$lib/utils/rete/index.js');
 		adapter = new ReteAdapter(new RetEditor(el, rid));
+		setAdapter(adapter);
 		await adapter.init();
+		// myPanelStore = adapter.panelStore;
 
 		el.style.display = old;
 
@@ -48,8 +67,25 @@
 	});
 
 	async function onEvent(cmd: string, data?: unknown) {
-		if (adapter) {
-			return adapter.onEvent(cmd, data);
+		//拦截前置处理部分cmd.
+		const param: Record<string, unknown> = data as Record<string, unknown>;
+		switch (cmd) {
+			case 'detail':
+				if (param?.id) {
+					// const node = editor?.getNO
+					const node = adapter?.editor.getNode(param.id as string);
+					if (node && node.fid) {
+						// functorStore.openView(node.fid);
+						fid = node.fid;
+						nodeId = node.id;
+						open = true;
+					}
+				}
+				return;
+			default:
+				if (adapter) {
+					return adapter.onEvent(cmd, data);
+				}
 		}
 	}
 
@@ -77,7 +113,16 @@
 		}
 	}
 
-	function handleDrop(e: DragEvent) {
+	async function onSave(functor: FunctorData) {
+		const ios = cvtIO(functor);
+		const node = adapter?.editor.getNode(nodeId);
+		if (node && adapter) {
+			await adapter.editor.updNodeSocks(node, ios.inputs, ios.outputs, true);
+			await adapter.onNodeUpdated(node.id);
+		}
+	}
+
+	async function handleDrop(e: DragEvent) {
 		// console.log('handleDrop=', e);
 		e.preventDefault();
 		e.stopPropagation();
@@ -97,12 +142,27 @@
 					const x = e.clientX - rect.left;
 					const y = e.clientY - rect.top;
 
-					adapter.newNode({
+					//从data.id中获取ref_id.
+
+					const functor = functorStore.find(data.id);
+					if (!functor) {
+						console.error('未发现拖拽的functor...');
+						return;
+					}
+
+					const ios = cvtIO(functor);
+					await adapter.newNode({
 						id: crypto.randomUUID(),
 						label: data.word,
 						x,
 						y,
-						ref_id: data.id
+						ref_id: data.id,
+						cached_input: ios.inputs,
+						cached_output: ios.outputs
+					});
+				} else if (data.type === 'flow') {
+					toaster.error({
+						description: '尚未支持嵌套流程图．'
 					});
 				}
 			}
@@ -113,6 +173,8 @@
 </script>
 
 <div class="relative h-full w-full">
+	<FunctorDialog {fid} bind:open {onSave}></FunctorDialog>
+	<!-- <PanelManage view={rid} store={myPanelStore}></PanelManage> -->
 	<ContextMenu onMenucmd={onEvent} {nodeFromEle}>
 		<div
 			class="relative h-full w-full border text-left text-base transition-all duration-200

@@ -88,6 +88,8 @@ export abstract class WordStore<T extends WordData> {
         if (word.word === newWord) {
             return true;
         }
+                console.log("updated word to ",newWord);
+        
         word.word = newWord;
         updateStore(this, word);
         // 开始修改view的word!!

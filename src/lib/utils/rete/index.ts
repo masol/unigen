@@ -16,17 +16,23 @@ import {
 } from "rete-svelte-plugin/5";
 import { ReadonlyPlugin } from "rete-readonly-plugin";
 import { HistoryPlugin, HistoryExtensions, Presets as HistoryPresets } from "rete-history-plugin";
-import { getSocket, loadInput, loadOutput, STDOUT } from "./sockets.js";
+import { getSocket, loadInput, loadOutput } from "./sockets.js";
 import { type EventHandleType, type IRetEditor, type onConnRm, type TraveContext, type TraveFunc, type TraversalOption } from "./type.js";
 import { UniNode } from './llmNode.js'
 import pMap from "p-map";
 import type { PartialNode, PortConfig, Connection as SqlConnection } from "../appdb/rete.type.js";
 import { logger } from "../logger.js";
+import type { Connection } from "./type.js";
+import type { SelectorEntity } from "rete-area-plugin/_types/extensions/selectable.js";
+import { isNumber, difference } from "remeda";
 
-
-export class Connection<N extends UniNode = UniNode> extends ClassicPreset.Connection<N, N> { }
 type Schemes = GetSchemes<UniNode, Connection<UniNode>>;
 type AreaExtra = SvelteArea2D<Schemes>;
+
+function calcHeight(ioNum: number): number {
+    return 60 + ioNum * 40;
+}
+
 
 
 export class RetEditor implements IRetEditor {
@@ -38,7 +44,7 @@ export class RetEditor implements IRetEditor {
     #history: HistoryPlugin<Schemes>;
     #arrange: AutoArrangePlugin<Schemes>;
     #readonly: ReadonlyPlugin<Schemes>;
-    // #selector;
+    #selector: AreaExtensions.Selector<SelectorEntity>;
     #evtHandle: EventHandleType | undefined;
     #belongtoId: string; // 所属的word(流程图)id.(belongtoId)
 
@@ -56,6 +62,50 @@ export class RetEditor implements IRetEditor {
 
     get readonly(): boolean {
         return this.#readonly.enabled;
+    }
+
+    async unselectAll() {
+        this.#selector.unselectAll();
+    }
+
+    async selectNodes(nodes: string | string[], accu: boolean = true): Promise<number> {
+        let number = 0;
+
+        const selectNode = async (nid: string) => {
+            const nodeView = this.#area.nodeViews.get(nid);
+            // console.log("found nodeView=", nid, nodeView);
+            if (nodeView) {
+                const nodeElement = nodeView.element;
+
+                // 模拟点击事件来触发选择
+                const pointerEvent = new PointerEvent('pointerdown', {
+                    bubbles: true,
+                    cancelable: true,
+                    ctrlKey: accu, // Ctrl 键用于累加选择
+                    button: 0
+                });
+
+                nodeElement.dispatchEvent(pointerEvent);
+
+                // 释放事件
+                const pointerUpEvent = new PointerEvent('pointerup', {
+                    bubbles: true,
+                    cancelable: true
+                });
+
+                nodeElement.dispatchEvent(pointerUpEvent);
+                // await this.#selector.add(nodeView, accu); // false 表示不累加，清除之前的选择
+                number++;
+            }
+        }
+
+        if (Array.isArray(nodes)) {
+            await pMap(nodes, selectNode);
+        } else {
+            await selectNode(nodes);
+        }
+
+        return number;
     }
 
     async traversal(func: TraveFunc, opt?: TraversalOption): Promise<void> {
@@ -115,9 +165,9 @@ export class RetEditor implements IRetEditor {
         this.#history.addPreset(HistoryPresets.classic.setup());
 
         // 创建 selector 实例
-        const selectorInstance = AreaExtensions.selector();
+        this.#selector = AreaExtensions.selector();
         // 允许选择．this.#selector =
-        AreaExtensions.selectableNodes(this.#area, selectorInstance, {
+        AreaExtensions.selectableNodes(this.#area, this.#selector, {
             accumulating: AreaExtensions.accumulateOnCtrl()
         });
 
@@ -198,6 +248,14 @@ export class RetEditor implements IRetEditor {
         return await this.#editor.removeNode(id);
     }
 
+    getNodes(): UniNode[] {
+        return this.#editor.getNodes();
+    }
+
+    getConnections(): Connection<UniNode>[] {
+        return this.#editor.getConnections();
+    }
+
     // 查找索引了fid的
     getFuncNodes(fid: string): UniNode[] {
         const nodes = this.#editor.getNodes();
@@ -227,6 +285,16 @@ export class RetEditor implements IRetEditor {
 
         if (param.fid && param.fid !== node.fid) {
             node.fid = param.fid as string;
+        }
+
+        if (isNumber(param.width) && param.width >= 100) {
+            node.width = param.width as number;
+            needUpdated = true;
+        }
+
+        if (isNumber(param.height) && param.height >= 100) {
+            node.height = param.height as number;
+            needUpdated = true;
         }
 
         if (needUpdated) {
@@ -281,35 +349,78 @@ export class RetEditor implements IRetEditor {
         return ret;
     }
 
+    async updNodeSocks(node: UniNode, input: PortConfig[] | undefined, output: PortConfig[] | undefined, updateHeight = true) {
+        // 处理 inputs
+        const currentInputKeys = Object.keys(node.inputs);
+        const newInputKeys = input?.map(config => config.key) ?? [];
+        const connections = this.#editor.getConnections()
+
+        const allRmConns: Connection<UniNode>[] = [];
+
+        const inputKeysToRemove = difference(currentInputKeys, newInputKeys);
+        const inputKeysToAdd = difference(newInputKeys, currentInputKeys);
+
+        inputKeysToRemove.forEach(key => {
+            node.removeInput(key);
+            const rmConnections = connections.filter(connection => connection.target === node.id && connection.targetInput === key);
+            if (rmConnections.length > 0) {
+                allRmConns.push(...rmConnections);
+            }
+        })
+
+        inputKeysToAdd.forEach(key => {
+            const inputConfig = input?.find((item) => item.key === key);
+            if (inputConfig) {
+                node.addInput(key, loadInput(inputConfig));
+            }
+        })
+
+        // 处理 outputs
+        const currentOutputKeys = Object.keys(node.outputs);
+        const newOutputKeys = output?.map(config => config.key) ?? [];
+
+        const outputKeysToRemove = difference(currentOutputKeys, newOutputKeys);
+        const outputKeysToAdd = difference(newOutputKeys, currentOutputKeys);
+
+        outputKeysToRemove.forEach(key => {
+            node.removeOutput(key);
+            const rmConnections = connections.filter(connection => connection.source === node.id && connection.sourceOutput === key);
+            if (rmConnections.length > 0) {
+                allRmConns.push(...rmConnections);
+            }
+        })
+
+        outputKeysToAdd.forEach(key => {
+            const outputConfig = output?.find((item) => item.key === key);
+            if (outputConfig) {
+                node.addOutput(key, loadOutput(outputConfig));
+            }
+        })
+
+        // 移除关联的connection.
+        await pMap(allRmConns, async (c) => {
+            await this.#editor.removeConnection(c.id);
+        }, {
+            concurrency: 20
+        })
+
+        const totalIONum = Object.keys(node.inputs).length + Object.keys(node.outputs).length;
+        const newHeight = calcHeight(totalIONum);
+        if (newHeight !== node.height) {
+            node.height = newHeight;
+            if (updateHeight) {
+                await this.#area.update("node", node.id);
+            }
+        }
+    }
+
     async newNode(param: Record<string, unknown>) {
         // console.log("newNode param=", param)
         const a = new UniNode((param.label as string) || "未命名的", param);
         const input: PortConfig[] | undefined = param.cached_input as (PortConfig[] | undefined);
-        input?.forEach((i) => {
-            a.addInput(i.key, loadInput(i));
-        })
-        if (!input || input.length === 0) {
-            // 添加默认的output.
-            a.addInput("test", loadInput({
-                id: crypto.randomUUID(),
-                key: "test"
-            }));
-        }
-
         const output: PortConfig[] | undefined = param.cached_output as (PortConfig[] | undefined);
-        output?.forEach((i) => {
-            a.addOutput(i.key, loadOutput(i));
-        })
-        if (!output || output.length === 0) {
-            // 添加默认的output.
-            a.addOutput(STDOUT, loadOutput({
-                id: crypto.randomUUID(),
-                key: STDOUT
-            }));
-        }
 
-        // a.addInput("input", new ClassicPreset.Input(sockets().auto));
-
+        await this.updNodeSocks(a,input,output,false);
         await this.#editor.addNode(a);
 
         // console.log("nodes after add=", this.#editor.getNodes())

@@ -51,11 +51,13 @@ function newPort<T extends ClassicPreset.Input<ClassicPreset.Socket> | ClassicPr
     }
 
     ret.id = sockcfg.id ? sockcfg.id : crypto.randomUUID();
+    // ret.multipleConnections = true; // 默认允许多连接．规则是，每个连接视为一次调用－－通常只在最终节点中使用．
     return ret;
 }
 
 //
 export function loadInput(sockcfg: PortConfig): ClassicPreset.Input<ClassicPreset.Socket> {
+    // console.log("loadInput",sockcfg);
     return newPort(sockcfg, ClassicPreset.Input);
 }
 

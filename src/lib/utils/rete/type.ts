@@ -1,6 +1,12 @@
-import type { PartialNode, Connection as SqlConnection } from "../appdb/rete.type";
+import type { PartialNode, PortConfig, Connection as SqlConnection } from "../appdb/rete.type";
 import type { UniNode } from "./llmNode";
+import { ClassicPreset } from "rete";
+// import type { AreaExtensions } from "rete-area-plugin";
+// import type { SelectorEntity } from "rete-area-plugin/_types/extensions/selectable.js";
 
+
+export class Connection<N extends UniNode = UniNode> extends ClassicPreset.Connection<N, N> { }
+// export type Selector = AreaExtensions.Selector<SelectorEntity>
 
 export type NodeDataType = {
     id: string; // UUID.
@@ -46,17 +52,23 @@ export type onConnRm = (id: string) => Promise<void>;
 export interface IRetEditor {
     readonly: boolean; // 读取和设置编辑器的只读状态．
     readonly belongtoId: string; // 读取rete所属的流程图Id.
+    // selector相关函数:
+    unselectAll(): Promise<void>;
+    selectNodes(nodes: string | string[], accu?: boolean): Promise<number>;
     onEvent: EventHandleType | undefined; // 简化版，只允许设置一个evtHandle.
     init(): Promise<void>; // 传入所属id.自行从数据库中加载．
     reset(): Promise<void>; // 缩放并居中．
     layout(animate?: boolean): Promise<void>; // 自动居中．
     newNode(param: Record<string, unknown>): Promise<void>;
     addConnection(conn: SqlConnection): Promise<boolean>;
-    rmNode(id: string,func: onConnRm): Promise<boolean>;
+    updNodeSocks(node: UniNode, input: PortConfig[] | undefined, output: PortConfig[] | undefined, updateHeight?: boolean): Promise<void>;
+    rmNode(id: string, func: onConnRm): Promise<boolean>;
     destroy(): void;
     traversal(func: TraveFunc, opt?: TraversalOption): Promise<void>;
     getFuncNodes(fid: string): UniNode[];
     getNode(id: string): UniNode | undefined;
+    getNodes(): UniNode[];
+    getConnections(): Connection<UniNode>[];
     getSqlNode(id: string): PartialNode | undefined;
     updNode(id: string, param: Record<string, unknown>): Promise<void>;
     nodeFromElement(el: HTMLElement): string | undefined;

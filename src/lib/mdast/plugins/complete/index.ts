@@ -2,11 +2,12 @@
 // import type { HtmlWithChildren } from "../../types";
 // import { visitParents } from "unist-util-visit-parents";
 // import type {  HtmlNodeInfo } from "./types";
-import { applyLlm } from '$lib/utils/llms/funcs/promptgen/index'
-import Template from './template.txt'
+// import { applyLlm } from '$lib/utils/llms/funcs/promptgen/index'
+// import Template from './template.txt'
 
-console.log("Template=",Template);
-import { Eta } from 'eta';
+// @deprecated.
+
+// import { Eta } from 'eta';
 
 // import { namedInput } from './namedInput';
 // // 工具函数，构建所有的Html节点数组．
@@ -43,6 +44,7 @@ import { Eta } from 'eta';
 
 // 根据mdast,重新调整输入/输出定义，以及过程定义．更形式化．
 export async function complete(md: string): Promise<string> {
+    void(md);
     // let tree = mdast.tree;
 
     // const ctx: CompleteContxt = {
@@ -50,11 +52,12 @@ export async function complete(md: string): Promise<string> {
     //     tree: mdast.tree
     // }
 
+    return "";
 
-    const result = await applyLlm(md);
+    // const result = await applyLlm(md);
 
-    const eta = new Eta();
-    return eta.renderString(Template, result)
+    // const eta = new Eta();
+    // return eta.renderString(Template, result)
 
     // console.log("result=", result);
 
