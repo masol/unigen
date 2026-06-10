@@ -11,10 +11,6 @@
   let ready = $state(false);
 
   onMount(async () => {
-    requestAnimationFrame(() => {
-      window.notifyReady?.();
-    });
-
     console.log("version=", window.versions);
 
     initApi();
@@ -31,12 +27,10 @@
     }
 
     // 给加载动画一个最小展示时间，避免闪烁（不需要可删除）
-    await new Promise((r) => setTimeout(r, 600));
+    // await new Promise((r) => setTimeout(r, 600));
 
     // 全部就绪，切换到正式界面
     ready = true;
-
-    // 等下一帧，确保正式界面已渲染到 DOM 后再通知主进程显示窗口
   });
 </script>
 

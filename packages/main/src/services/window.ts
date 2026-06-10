@@ -19,6 +19,23 @@ const max = os
         return false
     })
 
+    const show = os
+    .input(
+        z.number(),
+    )
+    .output(
+        z.boolean()
+    )
+    .handler(({ input }): boolean => {
+        // your list code here
+        const win = BrowserWindow.fromId(input);
+        if (win) {
+            win.maximize();
+        }
+
+        return false
+    })
+
 export default {
     max
 }

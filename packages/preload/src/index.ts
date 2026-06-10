@@ -1,4 +1,4 @@
-import { getWindowId, onNotification, notifyReady } from './win.js';
+import { getWindowId, onNotification } from './win.js';
 import { sha256sum } from './nodeCrypto.js';
 import { versions } from './versions.js';
 import { ipcRenderer } from 'electron';
@@ -16,4 +16,4 @@ window.addEventListener('message', (event) => {
 })
 
 
-export { sha256sum, versions, send, getWindowId, onNotification, notifyReady };
+export { sha256sum, versions, send, getWindowId, onNotification };

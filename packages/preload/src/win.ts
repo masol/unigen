@@ -15,8 +15,3 @@ export function getWindowId(): Promise<number> {
 export function onNotification(callback: (event: Electron.IpcRendererEvent, message: string) => void) {
   ipcRenderer.on('ug-notification', callback)
 }
-
-// 通知主进程：渲染端内容已全部就绪，可以显示窗口
-export function notifyReady() {
-  ipcRenderer.send('renderer-ready');
-}

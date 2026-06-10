@@ -1,6 +1,6 @@
 import type { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../ModuleContext.js';
-import { BrowserWindow, ipcMain, screen, Rectangle } from 'electron';
+import { BrowserWindow, screen, Rectangle } from 'electron';
 import type { AppInitConfig } from '../AppInitConfig.js';
 // import { configService } from '$libs/store/index.js'
 // import { debounce } from 'radashi';
@@ -47,10 +47,7 @@ class WindowManager implements AppModule {
       // this.restoreOrCreateWindow(true)
       // 开始创建新窗口。
       const win = await this.createWindow();
-      await this.waitForRendererReady(win);
-      if (!win.isDestroyed()) {
-        this.showWindow(win);
-      }
+      this.showWindow(win);
     });
     app.on('activate', () => this.restoreOrCreateWindow(true));
   }
@@ -107,35 +104,6 @@ class WindowManager implements AppModule {
     return browserWindow;
   }
 
-  // 等待渲染端通知"内容已就绪"，带超时兜底，避免窗口永久隐藏
-  private waitForRendererReady(window: BrowserWindow, timeout = 5000): Promise<void> {
-    return new Promise((resolve) => {
-      const webContentsId = window.webContents.id;
-      let settled = false;
-
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        ipcMain.off('renderer-ready', onReady);
-        resolve();
-      };
-
-      const onReady = (event: Electron.IpcMainEvent) => {
-        if (event.sender.id === webContentsId) {
-          finish();
-        }
-      };
-
-      const timer = setTimeout(finish, timeout);
-
-      ipcMain.on('renderer-ready', onReady);
-
-      // 窗口在就绪前被关闭，避免悬挂
-      window.once('closed', finish);
-    });
-  }
-
   showWindow(window: BrowserWindow) {
     if (window.isMinimized()) {
       window.restore();
@@ -159,11 +127,7 @@ class WindowManager implements AppModule {
     }
 
     if (show) {
-      // 等渲染端内容全部就绪后再显示，避免显示中间的加载态
-      await this.waitForRendererReady(window);
-      if (!window.isDestroyed()) {
-        this.showWindow(window);
-      }
+      this.showWindow(window);
     }
 
     return window;
