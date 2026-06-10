@@ -3,7 +3,7 @@ import { ModuleContext } from '../ModuleContext.js';
 import { BrowserWindow, screen, Rectangle } from 'electron';
 import type { AppInitConfig } from '../AppInitConfig.js';
 import { configService } from '$libs/store/index.js'
-import { debounce } from 'radashi';
+// import { debounce } from 'radashi';
 
 
 // 防止窗口恢复到不可见区域（多显示器场景）
@@ -42,21 +42,19 @@ class WindowManager implements AppModule {
   async enable({ app }: ModuleContext): Promise<void> {
     await app.whenReady();
     await this.restoreOrCreateWindow(true);
-    app.on('second-instance', () => this.restoreOrCreateWindow(true));
+    app.on('second-instance', async () => { // event, commandLine, workingDirectory, additionalData) => {
+      // console.log("second:", event, commandLine, workingDirectory, additionalData)
+      // this.restoreOrCreateWindow(true)
+      // 开始创建新窗口。
+      const win = await this.createWindow();
+      this.showWindow(win);
+    });
     app.on('activate', () => this.restoreOrCreateWindow(true));
   }
 
   private createWindowInstance(): BrowserWindow {
 
-    const saved = configService.getWindowState();
-    const options = {
-      x: saved.x,
-      y: saved.y,
-      width: saved.width,
-      height: saved.height,
-    }
     const win = new BrowserWindow({
-      ...options,
 
       show: false, // Use the 'ready-to-show' event to show the instantiated BrowserWindow.
       // 无边框
@@ -86,34 +84,9 @@ class WindowManager implements AppModule {
     // 防止窗口恢复到不可见区域（多显示器场景）
     ensureWindowVisible(win);
     // 恢复窗口状态
-    if (saved?.isMaximized) {
+    if (configService().isMaximized()) {
       win.maximize();
     }
-
-
-    // 保存窗口状态
-    const saveState = debounce({ delay: 200 }, () => {
-      if (win.isDestroyed()) return;
-
-      if (!win.isMaximized()) {
-        configService.setWindowState({
-          ...win.getBounds(),
-          isMaximized: false,
-        });
-        return;
-      }
-
-      const prev = configService.getWindowState();
-
-      configService.setWindowState({
-        ...prev,
-        isMaximized: win.isMaximized(),
-      });
-    });
-
-    win.on('resize', saveState);
-    win.on('move', saveState);
-    win.on('close', saveState);
 
     return win;
   }
@@ -130,17 +103,7 @@ class WindowManager implements AppModule {
     return browserWindow;
   }
 
-  async restoreOrCreateWindow(show = false) {
-    let window = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
-
-    if (window === undefined) {
-      window = await this.createWindow();
-    }
-
-    if (!show) {
-      return window;
-    }
-
+  showWindow(window: BrowserWindow) {
     if (window.isMinimized()) {
       window.restore();
     }
@@ -152,6 +115,19 @@ class WindowManager implements AppModule {
     }
 
     window.focus();
+  }
+
+  // 当没有任意窗口打开时，创建新窗口.
+  async restoreOrCreateWindow(show = false) {
+    let window = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
+
+    if (window === undefined) {
+      window = await this.createWindow();
+    }
+
+    if (show) {
+      this.showWindow(window);
+    }
 
     return window;
   }

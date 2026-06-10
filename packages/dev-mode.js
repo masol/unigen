@@ -27,8 +27,41 @@ const rendererWatchServer = await createServer({
   root: path.resolve('packages/renderer'),
 });
 
-await rendererWatchServer.listen();
+const server = await rendererWatchServer.listen();
+const resolvedAddress = rendererWatchServer.httpServer?.address();
+const host = resolvedAddress?.address || 'localhost';
+const port = resolvedAddress?.port || 5173;
+const serverUrl = `http://${host}:${port}`;
+process.env.VITE_DEV_SERVER_URL = serverUrl;
 
+console.log(`Renderer dev server listening at: ${serverUrl}`);
+
+/**
+ * Wait for the server to be ready by checking if it responds.
+ */
+let isServerReady = false;
+let attempts = 0;
+const maxAttempts = 30; // Max 30 attempts (15 seconds with 500ms intervals)
+
+while (!isServerReady && attempts < maxAttempts) {
+  try {
+    const response = await fetch(serverUrl);
+    if (response.ok || response.status !== 404) {
+      isServerReady = true;
+      console.log('Renderer dev server is ready');
+    }
+  } catch (e) {
+    // Server not ready yet
+  }
+  if (!isServerReady) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    attempts++;
+  }
+}
+
+if (!isServerReady) {
+  console.warn('Dev server did not respond within timeout, proceeding anyway...');
+}
 
 /**
  * 3. We are creating a simple provider plugin.

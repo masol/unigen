@@ -1,10 +1,10 @@
 import { test } from "./test.js";
 import { os } from "@orpc/server";
 
-export const serviceRouter = os.router({
+export const appRouter = os.router({
     test: {
         test: test,
     },
 });
 
-export type ServiceRouter = typeof serviceRouter;
+export type AppRouter = typeof appRouter

@@ -1,0 +1,1 @@
+export type { AppClient } from './shared/api.js'

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // electron/store/configStore.ts
 import Store from 'electron-store';
 import { AppConfig } from '$types/appconfig.js';
@@ -99,11 +100,7 @@ export class ConfigService {
      */
     private getDefaultConfig(): AppConfig {
         return {
-            windowState: {
-                width: 1280,
-                height: 720,
-                isMaximized: false
-            },
+            maximized: true,
             theme: 'system',
             lang: 'zh-CN',
         };
@@ -133,18 +130,6 @@ export class ConfigService {
             console.warn('Failed to set full config', err);
         }
     }
-
-    // ---------------------- windowState ----------------------
-
-    getWindowState(): AppConfig['windowState'] {
-        const defaults = this.getDefaultConfig().windowState;
-        return safeGet(this.store, 'windowState', defaults);
-    }
-
-    setWindowState(state: AppConfig['windowState']): void {
-        safeSet(this.store, 'windowState', state);
-    }
-
     // ---------------------- theme ----------------------
 
     getTheme(): AppConfig['theme'] {
@@ -165,15 +150,29 @@ export class ConfigService {
         safeSet(this.store, 'lang', lang);
     }
 
+    isMaximized(): AppConfig['maximized'] {
+        return safeGet(this.store, 'maximized', true);
+    }
+
+    setMaximized(max: AppConfig['maximized']): void {
+        safeSet(this.store, 'maximized', max);
+    }
+
     // 以后加新字段，按同样方式：
     // getX() { return safeGet(this.store, 'x', defaultX); }
     // setX(v) { safeSet(this.store, 'x', v); }
 }
 
+let cs: ConfigService;
 // 单例
-export const configService = new ConfigService(
-    new Store<AppConfig>({
-        schema: configSchema,
-        name: 'config',
-    })
-);
+export const configService = (): ConfigService => {
+    if (!cs) {
+        cs = new ConfigService(
+            new Store<AppConfig>({
+                schema: configSchema,
+                name: 'config',
+            })
+        );
+    }
+    return cs;
+}

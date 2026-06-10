@@ -1,8 +1,13 @@
 {
   "files": [],
-  "paths": {
-    "$types/*": ["./src/types/*"],
-    "$libs/*": ["./src/libs/*"]
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "$types/*": ["./src/types/*"],
+      "$libs/*": ["./src/libs/*"]
+    },
+    "composite": true,
+    "ignoreDeprecations": "6.0"
   },
   "references": [
     { "path": "./tsconfig.app.json" },

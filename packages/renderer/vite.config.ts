@@ -5,4 +5,9 @@ import tailwind from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [svelte(), tailwind()],
+  build: {
+    rollupOptions: {
+      external: ['@app/main'],
+    },
+  },
 })

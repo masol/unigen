@@ -1,15 +1,15 @@
 import type { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../ModuleContext.js';
-import { ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import { RPCHandler } from '@orpc/server/message-port';
 import { onError } from '@orpc/server';
-import { serviceRouter } from '$services/index.js';
+import { appRouter } from '$services/index.js';
 import log from 'electron-log/main';
 
 class OrpcModule implements AppModule {
-    readonly #router: typeof serviceRouter;
+    readonly #router: typeof appRouter;
 
-    constructor({ router }: { router: typeof serviceRouter }) {
+    constructor({ router }: { router: typeof appRouter }) {
         this.#router = router;
     }
 
@@ -27,6 +27,25 @@ class OrpcModule implements AppModule {
                 const [serverPort] = event.ports;
                 handler.upgrade(serverPort);
                 serverPort.start();
+            });
+
+            ipcMain.handle('get-window-id', (event) => {
+
+                // event.sender corresponds to the webContents of the requesting window
+                // const webContentsId = event.sender.id;
+
+                // Find the parent BrowserWindow that owns this webContents
+                const win = BrowserWindow.fromWebContents(event.sender);
+
+
+                console.log("win=", win?.id)
+
+                const wintest = BrowserWindow.fromId(Number(win?.id));
+                console.log(wintest)
+
+                // Return the native Electron Window ID (or fallback to webContentsId)
+                return win?.id;
+
             });
         });
     }

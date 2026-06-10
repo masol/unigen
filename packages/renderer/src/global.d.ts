@@ -1,7 +1,8 @@
 declare global {
     interface Window {
-        versions: any,
-        orpc_connect: () => Promise<MessagePort>;
+        versions: Record<string, unknown>,
+        onNotification: (callback: (event: Electron.IpcRendererEvent, message: string) => void) => Promise<void>
+        getWindowId: () => Promise<number>;
     }
 }
 
