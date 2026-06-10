@@ -1,8 +1,22 @@
 <script>
-  import svelteLogo from './assets/svelte.svg'
-  import viteLogo from './assets/vite.svg'
-  import heroImg from './assets/hero.png'
-  import Counter from './lib/Counter.svelte'
+  import svelteLogo from "./assets/svelte.svg";
+  import viteLogo from "./assets/vite.svg";
+  import heroImg from "./assets/hero.png";
+  import Counter from "./lib/Counter.svelte";
+  import { api, initApi } from "./lib/utils/api";
+  import { onMount } from "svelte";
+
+  const version = window.versions;
+
+  console.log("version=", window.versions);
+
+  onMount(async () => {
+    await initApi();
+
+    setTimeout(async () => {
+      console.log(await api().test.test("test"));
+    }, 1000);
+  });
 </script>
 
 <section id="center">
@@ -50,7 +64,11 @@
     <p>Join the Vite community</p>
     <ul>
       <li>
-        <a href="https://github.com/vitejs/vite" target="_blank" rel="noreferrer">
+        <a
+          href="https://github.com/vitejs/vite"
+          target="_blank"
+          rel="noreferrer"
+        >
           <svg class="button-icon" role="presentation" aria-hidden="true">
             <use href="/icons.svg#github-icon"></use>
           </svg>
@@ -74,7 +92,11 @@
         </a>
       </li>
       <li>
-        <a href="https://bsky.app/profile/vite.dev" target="_blank" rel="noreferrer">
+        <a
+          href="https://bsky.app/profile/vite.dev"
+          target="_blank"
+          rel="noreferrer"
+        >
           <svg class="button-icon" role="presentation" aria-hidden="true">
             <use href="/icons.svg#bluesky-icon"></use>
           </svg>

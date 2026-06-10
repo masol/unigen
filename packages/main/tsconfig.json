@@ -11,7 +11,10 @@
     "types": ["node"],
     "paths": {
       "@app/preload": ["../preload"],
-      "@app/renderer": ["../renderer"]
+      "@app/renderer": ["../renderer"],
+      "$services/*": ["./src/services/*"],
+      "$types/*": ["./src/types/*"],
+      "$libs/*": ["./src/libs/*"]
     }
   },
   "include": ["src/**/*.ts", "../../types/**/*.d.ts"],

@@ -1,5 +1,9 @@
 {
   "files": [],
+  "paths": {
+    "$types/*": ["./src/types/*"],
+    "$libs/*": ["./src/libs/*"]
+  },
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }

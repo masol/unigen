@@ -1,0 +1,1 @@
+export const orpcName = 'start-orpc-server'
