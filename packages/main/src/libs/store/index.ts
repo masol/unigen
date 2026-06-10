@@ -151,7 +151,7 @@ export class ConfigService {
     }
 
     isMaximized(): AppConfig['maximized'] {
-        return safeGet(this.store, 'maximized', true);
+        return safeGet(this.store, 'maximized', false);
     }
 
     setMaximized(max: AppConfig['maximized']): void {

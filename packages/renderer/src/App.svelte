@@ -1,112 +1,89 @@
-<script>
-  import svelteLogo from "./assets/svelte.svg";
-  import viteLogo from "./assets/vite.svg";
-  import heroImg from "./assets/hero.png";
-  import Counter from "./lib/Counter.svelte";
-  import { api, initApi, setupEvt } from "./lib/utils/api";
+<!-- src/App.svelte -->
+<script lang="ts">
   import { onMount } from "svelte";
+  import { ModeWatcher } from "mode-watcher";
+  import { api, initApi, setupEvt } from "./lib/utils/api";
+  import Layout from "./route/layout.svelte";
+  import LoadingScreen from "$lib/components/loading-screen.svelte";
+  import { Motion, AnimatePresence } from "svelte-motion";
 
-  console.log("version=", window.versions);
+  // 初始化完成标记：未完成时显示加载页
+  let ready = $state(false);
 
   onMount(async () => {
+    requestAnimationFrame(() => {
+      window.notifyReady?.();
+    });
+
+    console.log("version=", window.versions);
+
     initApi();
     await setupEvt();
+
     const winid = await window.getWindowId();
     console.log("winid", winid);
 
-    setTimeout(async () => {
+    // 保留原有的异步初始化逻辑
+    try {
       console.log(await api().test.test("test"));
-    }, 1000);
+    } catch (e) {
+      console.error("init test failed", e);
+    }
+
+    // 给加载动画一个最小展示时间，避免闪烁（不需要可删除）
+    await new Promise((r) => setTimeout(r, 600));
+
+    // 全部就绪，切换到正式界面
+    ready = true;
+
+    // 等下一帧，确保正式界面已渲染到 DOM 后再通知主进程显示窗口
   });
 </script>
 
-<section id="center">
-  <div class="hero">
-    <img src={heroImg} class="base" width="170" height="179" alt="" />
-    <img src={svelteLogo} class="framework" alt="Svelte logo" />
-    <img src={viteLogo} class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/App.svelte</code> and save to test <code>HMR</code></p>
-  </div>
-  <Counter />
-</section>
+<ModeWatcher />
 
-<div class="ticks"></div>
+<!-- 整窗：占满视口，外层不滚动 -->
+<div class="app-shell">
+  <AnimatePresence list={ready ? [{ key: "app" }] : [{ key: "loading" }]}>
+    {#if ready}
+      <Motion
+        let:motion
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+      >
+        <div use:motion class="app-fill">
+          <Layout />
+        </div>
+      </Motion>
+    {:else}
+      <Motion
+        let:motion
+        initial={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.4, ease: "easeIn" }}
+      >
+        <div use:motion class="app-fill">
+          <LoadingScreen />
+        </div>
+      </Motion>
+    {/if}
+  </AnimatePresence>
+</div>
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="icons.svg#documentation-icon"></use>
-    </svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank" rel="noreferrer">
-          <img class="logo" src={viteLogo} alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://svelte.dev/" target="_blank" rel="noreferrer">
-          <img class="button-icon" src={svelteLogo} alt="" />
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="icons.svg#social-icon"></use>
-    </svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li>
-        <a
-          href="https://github.com/vitejs/vite"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="icons.svg#github-icon"></use>
-          </svg>
-          GitHub
-        </a>
-      </li>
-      <li>
-        <a href="https://chat.vite.dev/" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="icons.svg#discord-icon"></use>
-          </svg>
-          Discord
-        </a>
-      </li>
-      <li>
-        <a href="https://x.com/vite_js" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="icons.svg#x-icon"></use>
-          </svg>
-          X.com
-        </a>
-      </li>
-      <li>
-        <a
-          href="https://bsky.app/profile/vite.dev"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="icons.svg#bluesky-icon"></use>
-          </svg>
-          Bluesky
-        </a>
-      </li>
-    </ul>
-  </div>
-</section>
+<style>
+  /* 整窗接管：占满视口，外层不滚动 */
+  .app-shell {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+  }
 
-<div class="ticks"></div>
-<section id="spacer"></section>
+  /* 填充整个 shell，供加载页/正式内容共用 */
+  .app-fill {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+  }
+</style>

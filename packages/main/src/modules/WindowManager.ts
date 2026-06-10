@@ -1,8 +1,8 @@
 import type { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../ModuleContext.js';
-import { BrowserWindow, screen, Rectangle } from 'electron';
+import { BrowserWindow, ipcMain, screen, Rectangle } from 'electron';
 import type { AppInitConfig } from '../AppInitConfig.js';
-import { configService } from '$libs/store/index.js'
+// import { configService } from '$libs/store/index.js'
 // import { debounce } from 'radashi';
 
 
@@ -47,7 +47,10 @@ class WindowManager implements AppModule {
       // this.restoreOrCreateWindow(true)
       // 开始创建新窗口。
       const win = await this.createWindow();
-      this.showWindow(win);
+      await this.waitForRendererReady(win);
+      if (!win.isDestroyed()) {
+        this.showWindow(win);
+      }
     });
     app.on('activate', () => this.restoreOrCreateWindow(true));
   }
@@ -56,9 +59,12 @@ class WindowManager implements AppModule {
 
     const win = new BrowserWindow({
 
+      width: 640,
+      height: 480,
+
       show: false, // Use the 'ready-to-show' event to show the instantiated BrowserWindow.
       // 无边框
-      frame: false,
+      // frame: false,
 
       // macOS 更好看
       titleBarStyle: 'hidden',
@@ -84,9 +90,7 @@ class WindowManager implements AppModule {
     // 防止窗口恢复到不可见区域（多显示器场景）
     ensureWindowVisible(win);
     // 恢复窗口状态
-    if (configService().isMaximized()) {
-      win.maximize();
-    }
+    // win.maximize();
 
     return win;
   }
@@ -101,6 +105,35 @@ class WindowManager implements AppModule {
     }
 
     return browserWindow;
+  }
+
+  // 等待渲染端通知"内容已就绪"，带超时兜底，避免窗口永久隐藏
+  private waitForRendererReady(window: BrowserWindow, timeout = 5000): Promise<void> {
+    return new Promise((resolve) => {
+      const webContentsId = window.webContents.id;
+      let settled = false;
+
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        ipcMain.off('renderer-ready', onReady);
+        resolve();
+      };
+
+      const onReady = (event: Electron.IpcMainEvent) => {
+        if (event.sender.id === webContentsId) {
+          finish();
+        }
+      };
+
+      const timer = setTimeout(finish, timeout);
+
+      ipcMain.on('renderer-ready', onReady);
+
+      // 窗口在就绪前被关闭，避免悬挂
+      window.once('closed', finish);
+    });
   }
 
   showWindow(window: BrowserWindow) {
@@ -126,7 +159,11 @@ class WindowManager implements AppModule {
     }
 
     if (show) {
-      this.showWindow(window);
+      // 等渲染端内容全部就绪后再显示，避免显示中间的加载态
+      await this.waitForRendererReady(window);
+      if (!window.isDestroyed()) {
+        this.showWindow(window);
+      }
     }
 
     return window;
