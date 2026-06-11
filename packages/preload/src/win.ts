@@ -12,6 +12,6 @@ export function getWindowId(): Promise<number> {
 }
 
 
-export function onNotification(callback: (event: Electron.IpcRendererEvent, message: string) => void) {
+export function onNotification(callback: (event: Electron.IpcRendererEvent, message: unknown) => void) {
   ipcRenderer.on('ug-notification', callback)
 }
