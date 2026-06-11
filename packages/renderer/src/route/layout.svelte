@@ -11,19 +11,7 @@
   import ActivityBar from "./featured/activity.svelte";
   import MainContent from "./content.svelte";
   import BottomBar from "./featured/bottom/bar.svelte";
-
-  // ── Tabler Icons ──
   import { layoutStore } from "$lib/store/layout.svelte";
-
-  // ── Props (children snippet for main content) ──
-  // import type { Snippet } from "svelte";
-
-  // interface Props {
-  //   children?: Snippet;
-  // }
-  // let { children }: Props = $props();
-
-  // ── Mock terminal lines ──
 </script>
 
 <!--══════════════════════════════════════════════════════════════ -->
@@ -36,10 +24,6 @@
 
     <!-- 内容区域：Activity Bar + Panels -->
     <div class="flex flex-1 min-h-0">
-      <!-- ╭─────────────────────────────────────────────────────╮ -->
-      <!-- │ [可抽取子组件 → ActivityBar.svelte]│ -->
-      <!-- │职责：最左侧垂直按钮栏，控制左侧面板的显隐与活动项│ -->
-      <!-- ╰─────────────────────────────────────────────────────╯ -->
       <ActivityBar></ActivityBar>
       <!-- ╭─── / ActivityBar ───╮ -->
 
