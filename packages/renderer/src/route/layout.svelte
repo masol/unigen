@@ -1,119 +1,140 @@
 <!-- src/route/layout.svelte -->
 <script lang="ts">
-  import svelteLogo from "../assets/svelte.svg";
-  import viteLogo from "../assets/vite.svg";
-  import heroImg from "../assets/hero.png";
-  import Counter from "$lib/Counter.svelte";
   import HeaderBar from "./featured/titlebar.svelte";
+  import * as Resizable from "$lib/components/ui/resizable";
+  // import { Button } from "$lib/components/ui/button";
+  import * as Tooltip from "$lib/components/ui/tooltip";
+  // import * as Tabs from "$lib/components/ui/tabs";
+  import StatusBar from "./featured/status.svelte";
+  import RightSidebar from "./featured/rightside/bar.svelte";
+  import LeftSidebar from "./featured/leftside/bar.svelte";
+  import ActivityBar from "./featured/activity.svelte";
+  import MainContent from "./content.svelte";
+  import BottomBar from "./featured/bottom/bar.svelte";
+
+  // ── Tabler Icons ──
+  import { layoutStore } from "$lib/store/layout.svelte";
+
+  // ── Props (children snippet for main content) ──
+  // import type { Snippet } from "svelte";
+
+  // interface Props {
+  //   children?: Snippet;
+  // }
+  // let { children }: Props = $props();
+
+  // ── Mock terminal lines ──
 </script>
 
-<!-- 标题栏：固定，不参与滚动 -->
-<HeaderBar />
+<!--══════════════════════════════════════════════════════════════ -->
+<!--ROOT LAYOUT                                                  -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<Tooltip.Provider>
+  <div class="flex w-full h-full flex-col bg-background">
+    <!-- HeaderBar：固定在顶部 -->
+    <HeaderBar />
 
-<!-- 内容区：唯一滚动容器，滚动条在标题栏之下 -->
-<main class="app-content">
-  <section id="center">
-    <div class="hero">
-      <img src={heroImg} class="base" width="170" height="179" alt="" />
-      <img src={svelteLogo} class="framework" alt="Svelte logo" />
-      <img src={viteLogo} class="vite" alt="Vite logo" />
+    <!-- 内容区域：Activity Bar + Panels -->
+    <div class="flex flex-1 min-h-0">
+      <!-- ╭─────────────────────────────────────────────────────╮ -->
+      <!-- │ [可抽取子组件 → ActivityBar.svelte]│ -->
+      <!-- │职责：最左侧垂直按钮栏，控制左侧面板的显隐与活动项│ -->
+      <!-- ╰─────────────────────────────────────────────────────╯ -->
+      <ActivityBar></ActivityBar>
+      <!-- ╭─── / ActivityBar ───╮ -->
+
+      <!-- ══════════════════════════════════════════════ -->
+      <!--  Resizable Panel Group-->
+      <!-- ══════════════════════════════════════════════ -->
+      <div class="flex-1 min-w-0 min-h-0">
+        {#key layoutStore.horizontalKey}
+          <Resizable.PaneGroup direction="horizontal" class="h-full">
+            <!-- ── Left Sidebar Pane ── -->
+            {#if layoutStore.isLeftOpen}
+              <Resizable.Pane
+                defaultSize={layoutStore.isAnyMaximized &&
+                layoutStore.maximizedPanel === "left"
+                  ? 100
+                  : 20}
+                minSize={14}
+                maxSize={layoutStore.isAnyMaximized ? 100 : 45}
+              >
+                <LeftSidebar></LeftSidebar>
+              </Resizable.Pane>
+              {#if !layoutStore.isAnyMaximized}
+                <Resizable.Handle
+                  class="w-px bg-transparent hover:bg-primary/30 active:bg-primary/50 transition-colors duration-200"
+                />
+              {/if}
+            {/if}
+
+            <!-- ── Center Column (Editor + Bottom Panel) ── -->
+            {#if layoutStore.showMainEditor || layoutStore.maximizedPanel === "bottom"}
+              <Resizable.Pane
+                defaultSize={layoutStore.maximizedPanel === "bottom"
+                  ? 100
+                  : undefined}
+                minSize={30}
+              >
+                {#key layoutStore.verticalKey}
+                  <Resizable.PaneGroup direction="vertical" class="h-full">
+                    <!-- Main Editor Area -->
+                    {#if layoutStore.showMainEditor}
+                      <Resizable.Pane minSize={20}>
+                        <MainContent></MainContent>
+                      </Resizable.Pane>
+                    {/if}
+                    <!-- Bottom Panel -->
+                    {#if layoutStore.showBottom}
+                      {#if layoutStore.showMainEditor}
+                        <Resizable.Handle
+                          class="h-px bg-transparent hover:bg-primary/30 active:bg-primary/50 transition-colors duration-200"
+                        />
+                      {/if}
+                      <Resizable.Pane
+                        defaultSize={layoutStore.maximizedPanel === "bottom"
+                          ? 100
+                          : 30}
+                        minSize={15}
+                        maxSize={layoutStore.maximizedPanel === "bottom"
+                          ? 100
+                          : 80}
+                      >
+                        <BottomBar></BottomBar>
+                        <!-- ╭─── / BottomPanel ───╮ -->
+                      </Resizable.Pane>
+                    {/if}
+                  </Resizable.PaneGroup>
+                {/key}
+              </Resizable.Pane>
+            {/if}
+
+            <!-- ── Right Sidebar Pane ── -->
+            {#if layoutStore.showRight}
+              {#if !layoutStore.isAnyMaximized}
+                <Resizable.Handle
+                  class="w-px bg-transparent hover:bg-primary/30 active:bg-primary/50 transition-colors duration-200"
+                />
+              {/if}
+              <Resizable.Pane
+                defaultSize={layoutStore.isAnyMaximized &&
+                layoutStore.maximizedPanel === "right"
+                  ? 100
+                  : 18}
+                minSize={12}
+                maxSize={layoutStore.isAnyMaximized ? 100 : 40}
+              >
+                <!-- ╭─── / RightSidebar ───╮ -->
+                <RightSidebar />
+              </Resizable.Pane>
+            {/if}
+          </Resizable.PaneGroup>
+        {/key}
+      </div>
     </div>
-    <div>
-      中文测试1/11
-      <h1>Get started</h1>
-      <p>
-        Edit <code>src/App.svelte</code> and save to test <code>HMR</code>
-      </p>
-    </div>
-    <Counter />
-  </section>
-
-  <div class="ticks"></div>
-
-  <section id="next-steps">
-    <div id="docs">
-      <svg class="icon" role="presentation" aria-hidden="true">
-        <use href="icons.svg#documentation-icon"></use>
-      </svg>
-      <h2>Documentation</h2>
-      <p>Your questions, answered</p>
-      <ul>
-        <li>
-          <a href="https://vite.dev/" target="_blank" rel="noreferrer">
-            <img class="logo" src={viteLogo} alt="" />
-            Explore Vite
-          </a>
-        </li>
-        <li>
-          <a href="https://svelte.dev/" target="_blank" rel="noreferrer">
-            <img class="button-icon" src={svelteLogo} alt="" />
-            Learn more
-          </a>
-        </li>
-      </ul>
-    </div>
-
-    <div id="social">
-      <svg class="icon" role="presentation" aria-hidden="true">
-        <use href="icons.svg#social-icon"></use>
-      </svg>
-      <h2>Connect with us</h2>
-      <p>Join the Vite community</p>
-      <ul>
-        <li>
-          <a
-            href="https://github.com/vitejs/vite"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <svg class="button-icon" role="presentation" aria-hidden="true">
-              <use href="icons.svg#github-icon"></use>
-            </svg>
-            GitHub
-          </a>
-        </li>
-        <li>
-          <a href="https://chat.vite.dev/" target="_blank" rel="noreferrer">
-            <svg class="button-icon" role="presentation" aria-hidden="true">
-              <use href="icons.svg#discord-icon"></use>
-            </svg>
-            Discord
-          </a>
-        </li>
-        <li>
-          <a href="https://x.com/vite_js" target="_blank" rel="noreferrer">
-            <svg class="button-icon" role="presentation" aria-hidden="true">
-              <use href="icons.svg#x-icon"></use>
-            </svg>
-            X.com
-          </a>
-        </li>
-        <li>
-          <a
-            href="https://bsky.app/profile/vite.dev"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <svg class="button-icon" role="presentation" aria-hidden="true">
-              <use href="icons.svg#bluesky-icon"></use>
-            </svg>
-            Bluesky
-          </a>
-        </li>
-      </ul>
-    </div>
-  </section>
-
-  <div class="ticks"></div>
-  <section id="spacer"></section>
-</main>
-
-<style>
-  /* 内容区：占据剩余空间，唯一滚动区域 */
-  .app-content {
-    flex: 1 1 auto;
-    min-height: 0; /* 关键：允许 flex 子项收缩，否则不出现滚动条 */
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-</style>
+  </div>
+  <!-- ══════════════════════════════════════════════ -->
+  <!--  Status Bar (底部状态栏)                -->
+  <!-- ══════════════════════════════════════════════ -->
+  <StatusBar />
+</Tooltip.Provider>

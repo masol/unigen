@@ -132,6 +132,9 @@ export class WindowService {
         contextIsolation: true,
         sandbox: false,
         webviewTag: false,
+        // 关键：关闭无障碍动画抑制
+        enableBlinkFeatures: 'CSSAnimations,CSSTransitions',
+        disableBlinkFeatures: 'PrefersReducedMotion',
         preload: this.#preload.path,
       },
     });
