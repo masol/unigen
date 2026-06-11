@@ -2,48 +2,67 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { ModeWatcher } from "mode-watcher";
-  import { api, initApi, setupEvt } from "./lib/utils/api";
+  import { initApi, setupEvt } from "./lib/utils/api";
   import Layout from "./route/layout.svelte";
   import LoadingScreen from "$lib/components/loading-screen.svelte";
+  import ErrorScreen from "$lib/components/error-screen.svelte";
   import { Motion, AnimatePresence } from "svelte-motion";
+  import { windowStore } from "$lib/store/window.svelte";
 
   // 初始化完成标记：未完成时显示加载页
   let ready = $state(false);
+  // 初始化异常：非空时显示错误页
+  let initError = $state<unknown>(null);
 
   onMount(async () => {
-    console.log("version=", window.versions);
-
-    initApi();
-    await setupEvt();
-
-    const winid = await window.getWindowId();
-    console.log("winid", winid);
-
-    // 保留原有的异步初始化逻辑
     try {
-      console.log(await api().test.test("test"));
+      // 初始化api, api()可用。
+      initApi();
+      // 初始化事件机制，evtbus生效。唯一返回windowsId的机会。
+      const wid = await setupEvt();
+      windowStore.init(wid);
+
+      await windowStore.maximize();
+
+      // 给加载动画一个最小展示时间，避免闪烁（不需要可删除）
+      // await new Promise((r) => setTimeout(r, 600));
+
+      // 全部就绪，切换到正式界面
+      ready = true;
     } catch (e) {
-      console.error("init test failed", e);
+      // 拦截初始化过程中的任何异常，切换到错误页
+      console.error("initialization failed", e);
+      initError = e;
     }
-
-    // 给加载动画一个最小展示时间，避免闪烁（不需要可删除）
-    // await new Promise((r) => setTimeout(r, 600));
-
-    // 全部就绪，切换到正式界面
-    ready = true;
   });
+
+  // 当前应该渲染的视图 key，用于 AnimatePresence 切换
+  const view = $derived(initError ? "error" : ready ? "app" : "loading");
 </script>
 
 <ModeWatcher />
 
 <!-- 整窗：占满视口，外层不滚动 -->
 <div class="app-shell">
-  <AnimatePresence list={ready ? [{ key: "app" }] : [{ key: "loading" }]}>
-    {#if ready}
+  <AnimatePresence list={[{ key: view }]}>
+    {#if initError}
       <Motion
         let:motion
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+      >
+        <div use:motion class="app-fill">
+          <ErrorScreen error={initError} />
+        </div>
+      </Motion>
+    {:else if ready}
+      <Motion
+        let:motion
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
       >
         <div use:motion class="app-fill">
@@ -54,6 +73,7 @@
       <Motion
         let:motion
         initial={{ opacity: 1 }}
+        animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.4, ease: "easeIn" }}
       >

@@ -1,5 +1,5 @@
 import type { AppModule } from '../AppModule.js';
-import { ModuleContext } from '../ModuleContext.js';
+import { ModuleContext } from '../types/ModuleContext.js';
 import log from 'electron-log/main';
 
 class LoggerModule implements AppModule {

@@ -1,5 +1,5 @@
 import {AppModule} from '../AppModule.js';
-import {ModuleContext} from '../ModuleContext.js';
+import {ModuleContext} from '../types/ModuleContext.js';
 
 export abstract class AbstractSecurityRule implements AppModule {
   enable({app}: ModuleContext): Promise<void> | void {

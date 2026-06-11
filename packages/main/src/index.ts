@@ -1,4 +1,4 @@
-import type { AppInitConfig } from './AppInitConfig.js';
+import type { AppInitConfig } from './types/AppInitConfig.js';
 import { createModuleRunner } from './ModuleRunner.js';
 import { disallowMultipleAppInstance } from './modules/SingleInstanceApp.js';
 import { createWindowManagerModule } from './modules/WindowManager.js';

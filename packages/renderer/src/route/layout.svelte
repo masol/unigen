@@ -4,7 +4,7 @@
   import viteLogo from "../assets/vite.svg";
   import heroImg from "../assets/hero.png";
   import Counter from "$lib/Counter.svelte";
-  import HeaderBar from "$lib/components/titlebar.svelte";
+  import HeaderBar from "./featured/titlebar.svelte";
 </script>
 
 <!-- 标题栏：固定，不参与滚动 -->

@@ -1,5 +1,5 @@
 import type { AppModule } from '../AppModule.js';
-import { ModuleContext } from '../ModuleContext.js';
+import { ModuleContext } from '../types/ModuleContext.js';
 import { BrowserWindow, ipcMain } from 'electron';
 import { RPCHandler } from '@orpc/server/message-port';
 import { onError } from '@orpc/server';
@@ -38,10 +38,7 @@ class OrpcModule implements AppModule {
                 const win = BrowserWindow.fromWebContents(event.sender);
 
 
-                console.log("win=", win?.id)
-
-                const wintest = BrowserWindow.fromId(Number(win?.id));
-                console.log(wintest)
+                BrowserWindow.fromId(Number(win?.id));
 
                 // Return the native Electron Window ID (or fallback to webContentsId)
                 return win?.id;

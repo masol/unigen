@@ -1,12 +1,12 @@
 import { test } from "./test.js";
 import { os } from "@orpc/server";
-import win from './window.js'
+import window from './window.js'
 
 export const appRouter = os.router({
     test: {
         test: test,
     },
-    win
+    window
 });
 
 export type AppRouter = typeof appRouter
