@@ -8,6 +8,10 @@ on:
         description: Distribution channel for release. It can be `beta`, `alpha` or any string.
         type: string
         required: true
+      deploy:
+        description: Whether to deploy after compilation.
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       distribution-channel:
@@ -17,7 +21,11 @@ on:
           - beta
           - alpha
         required: true
-        
+      deploy:
+        description: Deploy after compilation?
+        type: boolean
+        default: false
+
 concurrency:
   group: ${{github.workflow}}-${{ github.ref }}-${{inputs.distribution-channel}}
   cancel-in-progress: true
@@ -47,6 +55,7 @@ jobs:
           echo "- \`COMMIT_TIMESTAMP\`: ${{ steps.COMMIT_TIMESTAMP.outputs.COMMIT_TIMESTAMP }}" >> $GITHUB_STEP_SUMMARY
           echo "- \`APP_VERSION\`: ${{ steps.APP_VERSION.outputs.APP_VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "- \`APP_FULL_VERSION\`: ${{ steps.APP_FULL_VERSION.outputs.APP_FULL_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- \`DEPLOY\`: ${{ inputs.deploy }}" >> $GITHUB_STEP_SUMMARY
 
   compile-and-test:
     needs:
@@ -61,7 +70,8 @@ jobs:
       distribution-channel: ${{inputs.distribution-channel}}
 
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: inputs.deploy == true
     permissions:
       contents: write
     needs:
