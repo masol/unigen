@@ -30,6 +30,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
       - run: npm run typecheck --if-present
 
   compile:
@@ -43,8 +48,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm exec electron -- --version
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
       - run: npm version "${{inputs.app-version}}" --no-git-tag-version
-      - run: npm run compile -- -p never
+      - run: npm run compile
         env:
           VITE_DISTRIBUTION_CHANNEL: ${{inputs.distribution-channel}}
 
