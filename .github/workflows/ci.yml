@@ -8,7 +8,16 @@ on:
         description: Distribution channel for release. It can be `beta`, `alpha` or any string.
         type: string
         required: true
-
+  workflow_dispatch:
+    inputs:
+      distribution-channel:
+        description: Distribution channel for release. It can be `beta`, `alpha` or any string.
+        type: choice
+        options:
+          - beta
+          - alpha
+        required: true
+        
 concurrency:
   group: ${{github.workflow}}-${{ github.ref }}-${{inputs.distribution-channel}}
   cancel-in-progress: true
