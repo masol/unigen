@@ -1,9 +1,9 @@
 import { createORPCClient } from '@orpc/client'
 import { RPCLink } from '@orpc/client/message-port'
-import type { AppClient } from '@app/main/types'
-import evtbus from './evtbus'
-import { destr } from "destr";
+import type { AppClient, NotifyContract } from '@app/main/types'
+import evtbus, { type Events } from './evtbus'
 import { isPlainObject } from 'radashi';
+import Logger from 'electron-log/renderer';
 
 export function initApi(): AppClient {
 
@@ -23,14 +23,19 @@ export function initApi(): AppClient {
 // let windowsId: number = -1;
 export async function setupEvt(): Promise<number> {
     await window.onNotification((evt, msg) => {
-        console.log("on notify,", evt, msg)
-        void (evt)
-        const msgObj: Record<string, unknown> = destr(msg);
-        if (isPlainObject(msgObj) && msgObj.evtName) {
-            // @ts-expect-error 忽略类型推理
-            evtbus.emit(msgObj.evtName, msgObj.data);
+        if (!isPlainObject(msg)) {
+            Logger.error("收到无效的事件通知:", msg);
+            return;
         }
+        void (evt)
+        const notyObj: NotifyContract = msg as unknown as NotifyContract;
+        if (!notyObj.name) {
+            Logger.error("收到无效的事件通知(不包含名称):", msg);
+            return;
+        }
+        evtbus.emit(notyObj.name as keyof Events, notyObj.payload as never);
     })
+    // 不让后续获取到window.id了,而是通过windowStore来操作.
     return await window.getWindowId();
     // return windowsId;
 }

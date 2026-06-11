@@ -5,12 +5,6 @@
     IconSquare,
     IconCopy,
     IconX,
-    IconLayoutSidebarLeftCollapse,
-    IconLayoutSidebarLeftExpand,
-    IconLayoutSidebarRightCollapse,
-    IconLayoutSidebarRightExpand,
-    IconLayoutBottombarCollapse,
-    IconLayoutBottombarExpand,
     IconSun,
     IconMoon,
     IconDeviceDesktop,
@@ -19,30 +13,11 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { Separator } from "$lib/components/ui/separator";
-  import { cn } from "$lib/utils";
   import { setMode, userPrefersMode } from "mode-watcher";
   import { windowStore } from "$lib/store/window.svelte";
+  import LayoutGroup from "./header/layout.svelte";
 
   type ThemeMode = "light" | "dark" | "system";
-
-  //──跨组件 Runes Store（class + $state，后续可抽到 $lib/stores） ──
-  class TitleBarStore {
-    showLeftSidebar = $state(true);
-    showBottomPanel = $state(false);
-    showRightSidebar = $state(false);
-
-    toggleLeft() {
-      this.showLeftSidebar = !this.showLeftSidebar;
-    }
-    toggleBottom() {
-      this.showBottomPanel = !this.showBottomPanel;
-    }
-    toggleRight() {
-      this.showRightSidebar = !this.showRightSidebar;
-    }
-  }
-
-  const bar = new TitleBarStore();
 
   const menus = ["文件", "编辑", "视图", "运行", "终端", "帮助"];
   const menuItems = ["新建文件", "打开...", "保存", "另存为...", "退出"];
@@ -50,11 +25,13 @@
   // ── 主题三态轮换：light → dark → system → light ──
   const themeOrder: ThemeMode[] = ["light", "dark", "system"];
   const currentTheme = $derived(
-    (userPrefersMode.current ?? "system") as ThemeMode,);
+    (userPrefersMode.current ?? "system") as ThemeMode,
+  );
   const themeLabel = $derived(
     currentTheme === "light"
       ? "浅色主题"
-      : currentTheme === "dark"? "深色主题"
+      : currentTheme === "dark"
+        ? "深色主题"
         : "跟随系统",
   );
 
@@ -190,97 +167,7 @@
     <!-- │ 职责：左侧栏/底部面板/右侧栏三栏开关，│ -->
     <!-- │使用 Collapse/Expand 图标表达开关状态               │ -->
     <!-- ╰─────────────────────────────────────────────────────────╯ -->
-    <div class="flex items-center" style="-webkit-app-region: no-drag;">
-      <!-- 左侧栏开关 -->
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              onclick={() => bar.toggleLeft()}
-              variant="ghost"
-              size="icon"
-              aria-pressed={bar.showLeftSidebar}
-              class={cn(
-                "size-9 rounded-none hover:bg-accent/80",
-                bar.showLeftSidebar
-                  ? "text-foreground"
-                  : "text-muted-foreground",
-              )}
-            >
-              {#if bar.showLeftSidebar}
-                <IconLayoutSidebarLeftCollapse size={16} />
-              {:else}
-                <IconLayoutSidebarLeftExpand size={16} />
-              {/if}
-            </Button>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>
-          {bar.showLeftSidebar ? "收起左侧栏" : "展开左侧栏"}
-        </Tooltip.Content>
-      </Tooltip.Root>
-
-      <!-- 底部面板开关 -->
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              onclick={() => bar.toggleBottom()}
-              variant="ghost"
-              size="icon"
-              aria-pressed={bar.showBottomPanel}
-              class={cn(
-                "size-9 rounded-none hover:bg-accent/80",
-                bar.showBottomPanel
-                  ? "text-foreground"
-                  : "text-muted-foreground",
-              )}
-            >
-              {#if bar.showBottomPanel}
-                <IconLayoutBottombarCollapse size={16} />
-              {:else}
-                <IconLayoutBottombarExpand size={16} />
-              {/if}
-            </Button>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>
-          {bar.showBottomPanel ? "收起底部面板" : "展开底部面板"}
-        </Tooltip.Content>
-      </Tooltip.Root>
-
-      <!-- 右侧栏开关 -->
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              onclick={() => bar.toggleRight()}
-              variant="ghost"
-              size="icon"
-              aria-pressed={bar.showRightSidebar}
-              class={cn(
-                "size-9 rounded-none hover:bg-accent/80",
-                bar.showRightSidebar
-                  ? "text-foreground"
-                  : "text-muted-foreground",
-              )}
-            >
-              {#if bar.showRightSidebar}
-                <IconLayoutSidebarRightCollapse size={16} />
-              {:else}
-                <IconLayoutSidebarRightExpand size={16} />
-              {/if}
-            </Button>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>
-          {bar.showRightSidebar ? "收起右侧栏" : "展开右侧栏"}
-        </Tooltip.Content>
-      </Tooltip.Root>
-    </div>
+    <LayoutGroup></LayoutGroup>
     <!-- ╭─── / LayoutToggles ───╮ --><!--
       窗口控制：最小化 / 最大化-还原 / 关闭
       z-60 + relative + no-drag + pointer-events-auto：
@@ -320,7 +207,8 @@
         variant="ghost"
         size="icon"
         class="group h-9 w-11 rounded-none"
-        title="关闭">
+        title="关闭"
+      >
         <IconX
           size={16}
           class="transition-colors duration-200 group-hover:text-white"
