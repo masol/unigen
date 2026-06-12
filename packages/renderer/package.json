@@ -50,9 +50,10 @@
     "electron-log": "^5.4.4",
     "mitt": "^3.0.1",
     "mode-watcher": "^1.1.0",
+    "p-map": "^7.0.4",
+    "p-timeout": "^7.0.1",
     "radashi": "^12.9.1",
     "svelte-motion": "^0.12.2",
-    "svelte-spa-router": "^5.1.0",
-    "systemjs": "^6.15.1"
+    "svelte-spa-router": "^5.1.0"
   }
 }

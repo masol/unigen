@@ -4,7 +4,8 @@ import log from 'electron-log/renderer'
 // import { api } from '$lib/utils/api'
 import { pluginRuntime } from '$lib/utils/plugin'
 import { BUILDIN_PLUGINS } from '$lib/utils/plugin/shared/plugin'
-import type { PluginInfo, PluginScope } from '@app/main/types'
+import type { PluginInfo, PluginScope, PluginStatus } from '@app/main/types'
+import pMap from 'p-map'
 
 // ══════════════════════════════════════════════════════════════
 // 类型
@@ -24,6 +25,8 @@ interface PluginMeta extends PluginInfo {
     /** core 插件不可卸载 */
     readonly canUninstall: boolean
 }
+
+const MaxLoading = 6
 
 // ══════════════════════════════════════════════════════════════
 // 假数据工厂（待替换为 api() 调用）
@@ -303,7 +306,12 @@ class PluginStore {
             const coreMetas = [...this.#metas.values()].filter(
                 (p) => p.scope === 'core' && p.installed && p.status === 'enabled',
             )
-            await Promise.all(coreMetas.map((m) => this.#loadRuntime(m)))
+            // await Promise.all(coreMetas.map((m) => this.#loadRuntime(m)))
+            await pMap(
+                coreMetas,
+                (m) => this.#loadRuntime(m),
+                { concurrency: MaxLoading }
+            )
 
             log.info(`[PluginStore] core plugins loaded — ${coreMetas.length} item(s)`)
 

@@ -133,7 +133,7 @@ export class WindowService {
         sandbox: true,
         webviewTag: false,
         // 关键：关闭无障碍动画抑制
-        enableBlinkFeatures: 'CSSAnimations,CSSTransitions',
+        // enableBlinkFeatures: 'CSSAnimations,CSSTransitions',
         disableBlinkFeatures: 'PrefersReducedMotion',
         preload: this.#preload.path,
       },

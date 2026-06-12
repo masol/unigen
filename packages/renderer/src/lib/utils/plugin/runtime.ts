@@ -69,9 +69,6 @@ class PluginRuntimeManager {
             return
         }
 
-        // 1. 初始化 loader（SystemJS 环境必须先就绪）
-        moduleLoader.init()
-
         // 2. 将平台服务注入根容器
         //    value 已经是 IPlatformService 实例（引用传递，asValue 不复制）
         let count = 0
@@ -210,7 +207,7 @@ class PluginRuntimeManager {
             this.#runtimes.delete(pluginId)
 
             // 从 SystemJS 注册表移除，允许热重载时获取新版本
-            moduleLoader.unloadModule(pluginId)
+            // moduleLoader.unloadModule(pluginId)
 
             log.info(`[PluginRuntime] unloaded: ${pluginId}`)
             return { pluginId, success: true }
@@ -218,7 +215,7 @@ class PluginRuntimeManager {
             // 即便出错也强制移除，防止僵尸状态
             this.#runtimes.delete(pluginId)
             await this.#disposeScope(runtime.scope)
-            moduleLoader.unloadModule(pluginId)
+            // moduleLoader.unloadModule(pluginId)
             const errorMessage = err instanceof Error ? err.message : String(err)
             log.error(`[PluginRuntime] unload failed: ${pluginId}`, err)
             return { pluginId, success: false, errorMessage }

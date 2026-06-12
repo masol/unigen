@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 修复：移除 blob-src，script-src 增加 blob:，禁用 unsafe-eval -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+      default-src 'self';
+      script-src 'self' blob:;
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' data:;
+      object-src 'none';
+    "
+    />
     <title>renderer</title>
   </head>
   <body>
