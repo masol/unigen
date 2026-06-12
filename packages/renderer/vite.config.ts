@@ -44,6 +44,8 @@ export default defineConfig({
           if (id.includes('tailwind-variants')) return 'tailwind-variants';
           if (id.includes('tailwind-merge')) return 'tailwind-merge';
           if (id.includes('tabbable')) return 'tabbable';
+          if (id.includes('awilix')) return 'awilix';
+          if (id.includes('systemjs')) return 'systemjs';
 
           // 2. 其他所有 node_modules 打包到 vendor
           if (id.includes('node_modules')) {
