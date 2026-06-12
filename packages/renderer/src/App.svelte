@@ -10,6 +10,7 @@
   import { windowStore } from "$lib/store/window.svelte";
   import DialogHost from "$lib/components/dialog/DialogHost.svelte";
   import { Toaster } from "$lib/components/ui/sonner";
+  import { pluginStore } from "$lib/store/plugin.svelte";
 
   // 初始化完成标记：未完成时显示加载页
   let ready = $state(false);
@@ -23,6 +24,10 @@
       // 初始化事件机制，evtbus生效。唯一返回windowsId的机会。
       const wid = await setupEvt();
       windowStore.init(wid);
+
+      //初始化pluginSystem.
+
+      await pluginStore.init();
 
       await windowStore.maximize();
 
