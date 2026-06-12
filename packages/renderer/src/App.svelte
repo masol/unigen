@@ -8,6 +8,8 @@
   import ErrorScreen from "$lib/components/error-screen.svelte";
   import { Motion, AnimatePresence } from "svelte-motion";
   import { windowStore } from "$lib/store/window.svelte";
+  import DialogHost from "$lib/components/dialog/DialogHost.svelte";
+  import { Toaster } from "$lib/components/ui/sonner";
 
   // 初始化完成标记：未完成时显示加载页
   let ready = $state(false);
@@ -40,6 +42,7 @@
   const view = $derived(initError ? "error" : ready ? "app" : "loading");
 </script>
 
+<Toaster position="bottom-right" richColors></Toaster>
 <ModeWatcher />
 
 <!-- 整窗：占满视口，外层不滚动 -->
@@ -84,6 +87,8 @@
     {/if}
   </AnimatePresence>
 </div>
+
+<DialogHost />
 
 <style>
   /* 整窗接管：占满视口，外层不滚动 */

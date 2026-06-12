@@ -9,6 +9,8 @@
   } from "@tabler/icons-svelte";
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import { layoutStore } from "$lib/store/layout.svelte";
+  // import { dialogStore, DialogCancelledError } from "$lib/store/dialog.svelte";
+  // import ConfirmDialog from "$lib/components/dialog/Confirm.svelte";
 
   const terminalLines = [
     { id: 1, text: "$ pnpm dev", type: "command" as const },
