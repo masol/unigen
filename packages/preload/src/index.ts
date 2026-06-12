@@ -1,19 +1,5 @@
-import { getWindowId, onNotification } from './win.js';
-import { sha256sum } from './nodeCrypto.js';
-import { versions } from './versions.js';
-import { ipcRenderer } from 'electron';
+// Type definitions for preload API
+// Actual implementation is in exposed.ts and runs in the main process
 
-function send(channel: string, message: string) {
-  return ipcRenderer.invoke(channel, message);
-}
-
-
-window.addEventListener('message', (event) => {
-  if (event.data === 'start-orpc-client') {
-    const [serverPort] = event.ports
-    ipcRenderer.postMessage('start-orpc-server', null, [serverPort])
-  }
-})
-
-
-export { sha256sum, versions, send, getWindowId, onNotification };
+export type GetWindowId = () => Promise<number>;
+export type OnNotification = (callback: (event: never, message: unknown) => void) => void;

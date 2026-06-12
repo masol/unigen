@@ -130,7 +130,7 @@ export class WindowService {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        sandbox: false,
+        sandbox: true,
         webviewTag: false,
         // 关键：关闭无障碍动画抑制
         enableBlinkFeatures: 'CSSAnimations,CSSTransitions',

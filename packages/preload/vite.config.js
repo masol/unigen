@@ -18,9 +18,11 @@ export default /**
     rollupOptions: {
       output: [
         {
-          // ESM preload scripts must have the .mjs extension
-          // https://www.electronjs.org/docs/latest/tutorial/esm#esm-preload-scripts-must-have-the-mjs-extension
-          entryFileNames: '[name].mjs',
+          // Sandbox preload scripts require CommonJS format (no top-level imports)
+          // https://www.electronjs.org/docs/latest/tutorial/sandbox
+          format: 'cjs',
+          entryFileNames: '[name].js',
+          exports: 'auto',
         },
       ],
     },

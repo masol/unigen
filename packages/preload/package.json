@@ -8,11 +8,11 @@
   "exports": {
     ".": {
       "types": "./src/index.ts",
-      "default": "./dist/_virtual_browser.mjs"
+      "default": "./dist/_virtual_browser.js"
     },
-    "./exposed.mjs": {
+    "./exposed.js": {
       "types": "./src/exposed.d.ts",
-      "default": "./dist/exposed.mjs"
+      "default": "./dist/exposed.js"
     }
   },
   "devDependencies": {
