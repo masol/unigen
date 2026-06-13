@@ -1,16 +1,19 @@
-import path from 'path';
-import { fileURLToPath } from 'url';
+// import path from 'path';
+// import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import("@sveltejs/vite-plugin-svelte").SvelteConfig} */
-export default {
-  vitePlugin: {
-    inspector: true,
-  },
-  preprocess: [],
-  compilerOptions: {
-    preserveComments: true,
-    preserveWhitespace: true,
-  },
-}
+export default ({ mode }) => {
+  const isProd = mode !== "development";
+  return {
+    vitePlugin: {
+      inspector: true,
+    },
+    preprocess: [],
+    compilerOptions: {
+      preserveComments: !isProd,
+      preserveWhitespace: !isProd,
+    },
+  };
+};

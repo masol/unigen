@@ -7,6 +7,10 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// 默认为生产模式，仅在 dev 时为 false
+// 可通过 npm run dev 启动开发模式，或设置环境变量 VITE_MODE=dev
+const isProd = process.env.VITE_MODE !== 'dev' && process.env.NODE_ENV !== 'development';
+
 // https://vite.dev/config/
 export default defineConfig({
   resolve: {
@@ -23,10 +27,27 @@ export default defineConfig({
     })
   ],
   build: {
-    chunkSizeWarningLimit: 1024, // Electron 场景的安全阈值
+    // Electron 场景的安全阈值
+    chunkSizeWarningLimit: 1024,
+    // 小于 4kb 资源转 base64，减少文件数量
+    assetsInlineLimit: 4096,
+    // Electron 41 最优：不做语法降级，编译最快
+    target: 'esnext',
+    // 生产关闭 SourceMap，保护源码；开发开启方便调试
+    sourcemap: !isProd,
+    // 生产强制压缩，开发关闭压缩提升热更新速度
+    minify: isProd ? 'esbuild' : false,
+    // 构建前清空 dist（避免旧文件残留）
+    emptyOutDir: isProd,
+
     rollupOptions: {
       external: ['@app/main'],
       output: {
+        // 文件名添加 hash：文件变化才更新，静态资源强缓存
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+
         manualChunks(id) {
           // 1. 从vite-bundle-visualizer分析图里看到的大块依赖，逐个拆分
           if (id.includes('bits-ui/dist')) return 'bits-ui';

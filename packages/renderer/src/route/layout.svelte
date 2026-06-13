@@ -1,6 +1,6 @@
 <!-- src/route/layout.svelte -->
 <script lang="ts">
-  import HeaderBar from "./featured/titlebar.svelte";
+  import HeaderBar from "./featured/header-bar.svelte";
   import * as Resizable from "$lib/components/ui/resizable";
   // import { Button } from "$lib/components/ui/button";
   import * as Tooltip from "$lib/components/ui/tooltip";

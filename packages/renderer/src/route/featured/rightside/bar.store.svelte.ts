@@ -4,20 +4,20 @@ import {
     IconListTree,
     IconClock,
 } from "@tabler/icons-svelte";
-import type { SvelteComponentTyped } from "svelte";
+import type { Component } from "svelte";
 
 export type PanelTab = {
     id: string;
     label: string;
-    Icon: typeof SvelteComponentTyped;
+    Icon: Component<any>;
 };
 
 function createRightPanelStore() {
     let activeTab = $state<string>("outline");
 
     const tabs: PanelTab[] = [
-        { id: "outline", label: "大纲", Icon: IconListTree },
-        { id: "timeline", label: "时间线", Icon: IconClock },
+        { id: "outline", label: "大纲", Icon: IconListTree as unknown as Component<any> },
+        { id: "timeline", label: "时间线", Icon: IconClock as unknown as Component<any> },
     ];
 
     return {
