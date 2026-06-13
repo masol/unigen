@@ -16,7 +16,7 @@ export interface PluginModule {
     activate?(container: AwilixContainer): void | Promise<void>
 
     /**卸载前调用 —— 释放资源、取消订阅等 */
-    deactivate?(): void | Promise<void>
+    deactivate?(container: AwilixContainer): void | Promise<void>
 }
 
 

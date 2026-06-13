@@ -1,11 +1,10 @@
 // src/lib/store/plugin.svelte.ts
-// import evtbus from '$lib/utils/evtbus'
 import log from 'electron-log/renderer'
-// import { api } from '$lib/utils/api'
 import { pluginRuntime } from '$lib/utils/plugin'
 import { BUILDIN_PLUGINS } from '$lib/utils/plugin/shared/plugin'
-import type { PluginInfo, PluginScope, PluginStatus } from '@app/main/types'
+import type { PluginInfo, PluginScope } from '@app/main/types'
 import pMap from 'p-map'
+import { api } from '$lib/utils/api'
 
 // ══════════════════════════════════════════════════════════════
 // 类型
@@ -27,77 +26,6 @@ interface PluginMeta extends PluginInfo {
 }
 
 const MaxLoading = 6
-
-// ══════════════════════════════════════════════════════════════
-// 假数据工厂（待替换为 api() 调用）
-// ══════════════════════════════════════════════════════════════
-
-function fakeLoadSystemPlugins(): Promise<PluginInfo[]> {
-    return new Promise((resolve) =>
-        setTimeout(() => {
-            resolve([
-                {
-                    id: 'plugin-markdown',
-                    name: 'Markdown Renderer',
-                    version: '1.2.0',
-                    description: '渲染 Markdown 内容',
-                    scope: 'system',
-                    installed: true,
-                    status: 'enabled',
-                    config: {},
-                    installedAt: Date.now() - 864_000_00,
-                    statusChangedAt: Date.now() - 360_000_0,
-                },
-                {
-                    id: 'plugin-theme-dark',
-                    name: 'Dark Theme',
-                    version: '2.1.0',
-                    description: '深色主题',
-                    scope: 'system',
-                    installed: true,
-                    status: 'enabled',
-                    config: { accent: '#6366f1' },
-                    installedAt: Date.now() - 172_800_000,
-                    statusChangedAt: Date.now() - 172_800_000,
-                },
-                {
-                    id: 'plugin-export-pdf',
-                    name: 'PDF Export',
-                    version: '0.9.1',
-                    description: '导出 PDF 功能',
-                    scope: 'system',
-                    installed: true,
-                    status: 'disabled',
-                    config: {},
-                    installedAt: Date.now() - 259_200_000,
-                    statusChangedAt: Date.now() - 259_200_000,
-                },
-            ])
-        }, 500),
-    )
-}
-
-function fakePersistStatus(
-    _id: string,
-    _status: PluginStatus,
-): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, 200))
-}
-
-function fakePersistConfig(
-    _id: string,
-    _config: Record<string, unknown>,
-): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, 150))
-}
-
-function fakePersistUninstall(_id: string): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, 300))
-}
-
-function fakePersistInstall(_info: PluginInfo): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, 300))
-}
 
 // ══════════════════════════════════════════════════════════════
 // 内部辅助：PluginInfo → 初始 PluginMeta
@@ -195,38 +123,6 @@ class PluginStore {
 
     constructor() {
         log.info('[PluginStore] initialized')
-
-        // // 全局重置（退出登录 / 恢复出厂）
-        // evtbus.on('plugin:reset', () => {
-        //     log.debug('[PluginStore] received plugin:reset')
-        //     this.#metas = new Map()
-        //     this.#error = null
-        // })
-
-        // // 外部通知某插件已安装（插件市场等模块触发），被动收纳
-        // evtbus.on('plugin:installed', (info: PluginInfo) => {
-        //     log.debug(`[PluginStore] received plugin:installed, id=${info.id}`)
-        //     if (!this.#metas.has(info.id)) {
-        //         this.#metas.set(info.id, toMeta(info))
-        //         // 触发 Map 顶层响应
-        //         this.#metas = new Map(this.#metas)
-        //         log.info(`[PluginStore] plugin registered via event, id=${info.id}`)
-        //     }
-        // })
-
-        // // 外部通知配置变更
-        // evtbus.on(
-        //     'plugin:config-changed',
-        //     (payload: { pluginId: string; config: Record<string, unknown> }) => {
-        //         log.debug(
-        //             `[PluginStore] received plugin:config-changed, pluginId=${payload.pluginId}`,
-        //         )
-        //         const meta = this.#metas.get(payload.pluginId)
-        //         if (meta) {
-        //             meta.config = payload.config
-        //         }
-        //     },
-        // )
     }
 
     // ── 内部辅助 ──────────────────────────────────────────────
@@ -280,6 +176,38 @@ class PluginStore {
         return result.success
     }
 
+    /**
+     * 持久化插件信息到后端
+     * 提取 meta 中的 PluginInfo 部分（排除运行时状态）
+     */
+    async #persistPlugin(meta: PluginMeta): Promise<boolean> {
+        try {
+            const pluginInfo: PluginInfo = {
+                id: meta.id,
+                name: meta.name,
+                version: meta.version,
+                description: meta.description,
+                scope: meta.scope,
+                installed: meta.installed,
+                installedAt: meta.installedAt,
+                status: meta.status,
+                statusChangedAt: meta.statusChangedAt,
+                config: meta.config,
+            }
+
+            const success = await api().plugin.updatePlugin(pluginInfo)
+
+            if (!success) {
+                throw new Error(`Failed to persist plugin: ${meta.id}`)
+            }
+
+            return true
+        } catch (err) {
+            log.error(`[PluginStore] persist failed: ${meta.id}`, err)
+            throw err
+        }
+    }
+
     // ── Actions ───────────────────────────────────────────────
 
     /**
@@ -306,7 +234,7 @@ class PluginStore {
             const coreMetas = [...this.#metas.values()].filter(
                 (p) => p.scope === 'core' && p.installed && p.status === 'enabled',
             )
-            // await Promise.all(coreMetas.map((m) => this.#loadRuntime(m)))
+
             await pMap(
                 coreMetas,
                 (m) => this.#loadRuntime(m),
@@ -316,8 +244,7 @@ class PluginStore {
             log.info(`[PluginStore] core plugins loaded — ${coreMetas.length} item(s)`)
 
             // Step 3：获取系统级插件
-            // TODO: const systemInfos = await api().plugin.getSystemInstalled()
-            const systemInfos = await fakeLoadSystemPlugins()
+            const systemInfos: PluginInfo[] = await api().plugin.getSysplugins()
             this.#register(systemInfos)
 
             const systemEnabledMetas = systemInfos
@@ -325,15 +252,16 @@ class PluginStore {
                 .map((p) => this.#metas.get(p.id)!)
                 .filter(Boolean)
 
-            await Promise.all(systemEnabledMetas.map((m) => this.#loadRuntime(m)))
+            await pMap(
+                systemEnabledMetas,
+                (m) => this.#loadRuntime(m),
+                { concurrency: MaxLoading }
+            )
 
             log.info(
                 `[PluginStore] init complete — total=${this.#metas.size}, ` +
                 `enabled=${this.enabledCount}`,
             )
-            // } catch (err) {  // 不能拦截错误，否则外部初始化失败不进入主界面的guard被跳过了。
-            //     this.#error = err instanceof Error ? err.message : String(err)
-            //     log.error('[PluginStore] init() failed', err)
         } finally {
             this.#isLoading = false
         }
@@ -367,7 +295,11 @@ class PluginStore {
                 .map((p) => this.#metas.get(p.id)!)
                 .filter((m) => m && !m.runtimeLoaded)
 
-            const results = await Promise.all(toLoad.map((m) => this.#loadRuntime(m)))
+            const results = await pMap(
+                toLoad,
+                (m) => this.#loadRuntime(m),
+                { concurrency: MaxLoading }
+            )
             const successCount = results.filter(Boolean).length
 
             log.info(
@@ -401,7 +333,7 @@ class PluginStore {
     }
 
     /**
-     * 启用插件：持久化 → 加载运行时
+     * 启用插件：修改状态 → 持久化 → 加载运行时
      */
     async enable(pluginId: string): Promise<void> {
         log.debug(`[PluginStore] enable() called, pluginId=${pluginId}`)
@@ -419,16 +351,19 @@ class PluginStore {
         this.#error = null
 
         try {
-            // TODO: await api().plugin.setStatus(pluginId, 'enabled')
-            await fakePersistStatus(pluginId, 'enabled')
+            // 修改状态
+            meta.status = 'enabled'
+            meta.statusChangedAt = Date.now()
 
+            // 持久化
+            await this.#persistPlugin(meta)
+
+            // 加载运行时
             const ok = await this.#loadRuntime(meta)
             if (!ok) {
                 throw new Error(meta.errorMessage ?? `Runtime load failed: ${pluginId}`)
             }
 
-            meta.status = 'enabled'
-            meta.statusChangedAt = Date.now()
             meta.errorMessage = undefined
 
             log.info(`[PluginStore] plugin enabled: ${pluginId}`)
@@ -437,13 +372,20 @@ class PluginStore {
             meta.errorMessage = err instanceof Error ? err.message : String(err)
             this.#error = meta.errorMessage
             log.error(`[PluginStore] enable() failed, pluginId=${pluginId}`, err)
+
+            // 回滚持久化
+            try {
+                await this.#persistPlugin(meta)
+            } catch (rollbackErr) {
+                log.error(`[PluginStore] enable() rollback failed, pluginId=${pluginId}`, rollbackErr)
+            }
         } finally {
             meta.busy = false
         }
     }
 
     /**
-     * 禁用插件：卸载运行时 → 持久化
+     * 禁用插件：卸载运行时 → 修改状态 → 持久化
      */
     async disable(pluginId: string): Promise<void> {
         log.debug(`[PluginStore] disable() called, pluginId=${pluginId}`)
@@ -461,14 +403,16 @@ class PluginStore {
         this.#error = null
 
         try {
+            // 卸载运行时
             await this.#unloadRuntime(meta)
 
-            // TODO: await api().plugin.setStatus(pluginId, 'disabled')
-            await fakePersistStatus(pluginId, 'disabled')
-
+            // 修改状态
             meta.status = 'disabled'
             meta.statusChangedAt = Date.now()
             meta.errorMessage = undefined
+
+            // 持久化
+            await this.#persistPlugin(meta)
 
             log.info(`[PluginStore] plugin disabled: ${pluginId}`)
         } catch (err) {
@@ -476,6 +420,13 @@ class PluginStore {
             meta.errorMessage = err instanceof Error ? err.message : String(err)
             this.#error = meta.errorMessage
             log.error(`[PluginStore] disable() failed, pluginId=${pluginId}`, err)
+
+            // 回滚持久化
+            try {
+                await this.#persistPlugin(meta)
+            } catch (rollbackErr) {
+                log.error(`[PluginStore] disable() rollback failed, pluginId=${pluginId}`, rollbackErr)
+            }
         } finally {
             meta.busy = false
         }
@@ -517,28 +468,25 @@ class PluginStore {
         this.#error = null
 
         try {
-            const installInfo: PluginInfo = {
-                ...info,
-                installed: true,
-                status: 'enabled',
-                installedAt: Date.now(),
-                statusChangedAt: Date.now(),
-            }
+            // 修改状态
+            meta.installed = true
+            meta.status = 'enabled'
+            meta.installedAt = Date.now()
+            meta.statusChangedAt = Date.now()
 
-            // TODO: await api().plugin.install(installInfo)
-            await fakePersistInstall(installInfo)
+            // 持久化
+            await this.#persistPlugin(meta)
 
             // 加载运行时
             const ok = await this.#loadRuntime(meta)
 
-            // 无论运行时成功与否都标记已安装，失败时状态为 error
-            Object.assign(meta, {
-                installed: true,
-                status: ok ? ('enabled' as PluginStatus) : ('error' as PluginStatus),
-                installedAt: installInfo.installedAt,
-                statusChangedAt: installInfo.statusChangedAt,
-                errorMessage: ok ? undefined : meta.errorMessage,
-            })
+            if (!ok) {
+                // 运行时加载失败，更新状态为 error 并重新持久化
+                meta.status = 'error'
+                await this.#persistPlugin(meta)
+            } else {
+                meta.errorMessage = undefined
+            }
 
             log.info(`[PluginStore] plugin installed: ${info.id}`)
         } catch (err) {
@@ -546,6 +494,13 @@ class PluginStore {
             meta.errorMessage = err instanceof Error ? err.message : String(err)
             this.#error = meta.errorMessage
             log.error(`[PluginStore] install() failed, pluginId=${info.id}`, err)
+
+            // 回滚持久化
+            try {
+                await this.#persistPlugin(meta)
+            } catch (rollbackErr) {
+                log.error(`[PluginStore] install() rollback failed, pluginId=${info.id}`, rollbackErr)
+            }
         } finally {
             meta.busy = false
         }
@@ -571,24 +526,26 @@ class PluginStore {
         this.#error = null
 
         try {
-            // 1. 卸载运行时
+            // 卸载运行时
             await this.#unloadRuntime(meta)
 
-            // 2. 持久化删除
-            // TODO: await api().plugin.uninstall(pluginId)
-            await fakePersistUninstall(pluginId)
-
-            // 保留 meta 条目，但标记未安装
+            // 修改状态
             meta.installed = false
             meta.status = 'disabled'
             meta.errorMessage = undefined
             meta.installedAt = null
             meta.statusChangedAt = Date.now()
 
+            // 删除持久化数据
+            await api().plugin.rmPlugin({ pluginId })
+
             log.info(`[PluginStore] plugin uninstalled: ${pluginId}`)
         } catch (err) {
             this.#error = err instanceof Error ? err.message : String(err)
             log.error(`[PluginStore] uninstall() failed, pluginId=${pluginId}`, err)
+
+            // 回滚状态
+            meta.installed = true
         } finally {
             meta.busy = false
         }
@@ -611,16 +568,22 @@ class PluginStore {
         meta.busy = true
         this.#error = null
 
-        try {
-            // TODO: await api().plugin.updateConfig(pluginId, config)
-            await fakePersistConfig(pluginId, config)
+        const oldConfig = meta.config
 
+        try {
+            // 修改配置
             meta.config = config
+
+            // 持久化
+            await this.#persistPlugin(meta)
 
             log.info(`[PluginStore] config updated: ${pluginId}`)
         } catch (err) {
             this.#error = err instanceof Error ? err.message : String(err)
             log.error(`[PluginStore] updateConfig() failed, pluginId=${pluginId}`, err)
+
+            // 回滚配置
+            meta.config = oldConfig
         } finally {
             meta.busy = false
         }

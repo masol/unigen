@@ -17,6 +17,8 @@ import log from 'electron-log/renderer'
 import pTimeout from 'p-timeout'
 import type { ModuleSource } from '@app/main/types'
 import { BUILTIN_MODULES } from './shared/module'
+import { api } from '../api'
+import { isObject } from 'radashi'
 
 // ══════════════════════════ 类型 ══════════════════════════
 
@@ -27,27 +29,6 @@ export type ModuleNamespace = Record<string, unknown>
 
 /** 单模块加载超时（ms） */
 const MODULE_LOAD_TIMEOUT_MS = 3_000
-
-// ══════════════════════════ 模拟 api() 调用 ══════════════════════════
-// TODO: 替换为 await api().module.load(pluginId)
-
-function fakeApiModuleLoad(pluginId: string): Promise<ModuleSource> {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            if (Math.random() < 0.15) {
-                reject(new Error(`[Mock] Failed to fetch module source for "${pluginId}"`))
-                return
-            }
-            resolve({
-                code: `
-                    export function register(container) {}
-                    export function activate(container) {}
-                    export function deactivate() {}
-                `,
-            })
-        }, 200)
-    })
-}
 
 // ══════════════════════════ 加载器 ══════════════════════════
 
@@ -108,7 +89,10 @@ class ModuleLoader {
 
     async #doLoad(pluginId: string): Promise<ModuleNamespace> {
         // 1. 通过 IPC 取源码
-        const source = await fakeApiModuleLoad(pluginId)
+        const source = await api().plugin.load(pluginId) as ModuleSource
+        if (!isObject(source) || !source.code) {
+            throw new Error(`[PluginLoader] Failed to fetch module source for "${pluginId}"`)
+        }
         log.debug(`[PluginLoader] source fetched, pluginId=${pluginId}`)
 
         // 2. 创建 Blob URL → import → 立即回收

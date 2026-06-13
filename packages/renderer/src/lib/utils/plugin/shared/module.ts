@@ -1,10 +1,5 @@
 //── 真实共享模块导入（Vite 打包阶段静态解析） ──
-import * as svelte from 'svelte'
-import * as svelteStore from 'svelte/store'
-import { api } from '$lib/utils/api'
-import evtbus from '$lib/utils/evtbus'
-import Logger from 'electron-log/renderer'
-import * as awilix from 'awilix'
+import CorePlugin from '$lib/plugins/core'
 
 // ══════════════════════════ 内置共享模块 ══════════════════════════
 
@@ -21,10 +16,5 @@ import * as awilix from 'awilix'
  *   外部调用 pluginLoader.addSharedModule(specifier, mod)
  */
 export const BUILTIN_MODULES: Record<string, unknown> = {
-    'svelte': svelte,
-    'svelte/store': svelteStore,
-    '$lib/utils/api': { api },       // 命名导出 →手动构造对象
-    '$lib/utils/evtbus': evtbus,        // 默认导出
-    'electron-log/renderer': Logger,        // 默认导出
-    'awilix': awilix,        // 命名空间
+    'plugin-core': CorePlugin,        // core plugin.
 }

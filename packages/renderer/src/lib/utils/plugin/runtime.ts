@@ -47,7 +47,7 @@ class PluginRuntimeManager {
 
     constructor() {
         this.#root = createContainer({
-            injectionMode: InjectionMode.PROXY,
+            injectionMode: InjectionMode.CLASSIC,
             strict: true,
         })
         log.info('[PluginRuntime] root container created')
@@ -201,7 +201,7 @@ class PluginRuntimeManager {
 
         try {
             if (runtime.module.deactivate) {
-                await runtime.module.deactivate()
+                await runtime.module.deactivate(runtime.scope)
             }
             await this.#disposeScope(runtime.scope)
             this.#runtimes.delete(pluginId)

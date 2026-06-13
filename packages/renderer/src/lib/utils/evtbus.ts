@@ -97,6 +97,8 @@ const evtbus = {
  */
 export default evtbus;
 
+export type Evtbus = typeof evtbus;
+
 /**
  * 5. 使用示例（可直接在项目中使用）
  */

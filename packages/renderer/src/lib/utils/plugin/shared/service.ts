@@ -1,6 +1,6 @@
 import type { IPlatformService } from "$lib/types/plugin";
-import { LoggerService } from "./services/logger";
+import { PlatformContext } from "./services/context";
 
 export const PLATFORM_SERVICES: Record<string, IPlatformService> = {
-    logger: new LoggerService(),
+    ctx: new PlatformContext(),
 }
