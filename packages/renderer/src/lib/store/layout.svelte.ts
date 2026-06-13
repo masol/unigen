@@ -148,6 +148,21 @@ class LayoutStore {
     // ══════════════════════════════════════════════════════════
 
     /**
+     * 是否给定id当前已经被注册。
+     * @param actId 
+     * @returns 
+     */
+    hasActivity(actId: string): boolean {
+        if (this.#topActivityMap.has(actId)) {
+            return true;
+        }
+        if (this.bottomActivities.find((act) => act.id === actId)) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * 注册一个左侧栏 Activity 项目
      * 重复 id 会覆盖已有项，注册后列表自动按 order 排序（派生）
      */
@@ -160,22 +175,6 @@ class LayoutStore {
 
         this.#topActivityMap.set(item.id, item)
         log.info(`[LayoutStore] activity registered, id=${item.id}, total=${this.#topActivityMap.size}`)
-    }
-
-    /**
-     * 批量注册左侧栏 Activity 项目（便于插件一次性注册多项）
-     */
-    addActivities(items: LeftSidebarItem[]): void {
-        log.debug(`[LayoutStore] addActivities() count=${items.length}`)
-
-        for (const item of items) {
-            if (this.#topActivityMap.has(item.id)) {
-                log.info(`[LayoutStore] addActivities() overwriting existing id=${item.id}`)
-            }
-            this.#topActivityMap.set(item.id, item)
-        }
-
-        log.info(`[LayoutStore] activities registered, added=${items.length}, total=${this.#topActivityMap.size}`)
     }
 
     /**

@@ -1,6 +1,6 @@
 import { asClass, type AwilixContainer } from 'awilix';
 import type { PluginModule } from '$lib/types/plugin/plugin';
-import { PluginMainService } from './srvs/core';
+import { PluginMainService } from './mainsrv/srv';
 
 const plugin: PluginModule = {
     register(scope: AwilixContainer) {
@@ -16,12 +16,10 @@ const plugin: PluginModule = {
         await mainService?.initialize();
     },
 
-    async deactivate() {
+    async deactivate(scope: AwilixContainer) {
         // 3. 销毁资源
-        // if (mainService) {
-        //     await mainService.dispose();
-        //     mainService = null;
-        // }
+        const mainService = scope.resolve('main') as PluginMainService;
+        await mainService?.dispose();
     }
 };
 

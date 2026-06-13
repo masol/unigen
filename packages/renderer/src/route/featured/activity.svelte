@@ -103,7 +103,14 @@
           {#snippet child({ props })}
             <button
               {...props}
-              class="flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground"
+              class={[
+                "relative flex size-10 items-center justify-center rounded-lg transition-all duration-200",
+                "hover:bg-accent/60",
+                layoutStore.activeActivity === activity.id &&
+                layoutStore.isLeftOpen
+                  ? "text-foreground before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-0.5 before:rounded-full before:bg-foreground"
+                  : "text-muted-foreground",
+              ]}
               onclick={() => layoutStore.handleActivityClick(activity.id)}
             >
               <activity.icon class="size-5" />
