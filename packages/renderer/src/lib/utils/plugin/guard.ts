@@ -4,7 +4,7 @@
 // 窄化为类型安全的 PluginModule
 //─────────────────────────────────────────────────────────
 
-import type { PluginModule } from '$lib/types/plugin'
+import type { PluginModule } from '$lib/types/plugin/plugin'
 import type { ModuleNamespace } from './loader'
 
 /**

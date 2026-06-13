@@ -1,5 +1,5 @@
 //── 真实共享模块导入（Vite 打包阶段静态解析） ──
-import CorePlugin from '$lib/plugins/core'
+import CorePlugin from '../../../../plugins/core'
 
 // ══════════════════════════ 内置共享模块 ══════════════════════════
 

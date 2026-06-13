@@ -1,4 +1,4 @@
-import type { IPlatformContext } from "$lib/types/platform";
+import type { IPlatformContext } from "$lib/types/plugin/platform";
 
 export class PluginMainService {
     // 自动注入全局平台共享服务

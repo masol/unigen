@@ -1,5 +1,5 @@
 import { asClass, type AwilixContainer } from 'awilix';
-import type { PluginModule } from '$lib/types/plugin';
+import type { PluginModule } from '$lib/types/plugin/plugin';
 import { PluginMainService } from './srvs/core';
 
 const plugin: PluginModule = {

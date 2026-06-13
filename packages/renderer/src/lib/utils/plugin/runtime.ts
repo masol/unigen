@@ -4,7 +4,7 @@
 // 纯工具类，不持有任何响应式状态，专为 pluginStore 服务
 // ─────────────────────────────────────────────────────────────
 
-import { isPlatformService, type PluginModule } from '$lib/types/plugin'
+import { type PluginModule } from '$lib/types/plugin/plugin'
 import {
     createContainer,
     asValue,
@@ -15,6 +15,7 @@ import log from 'electron-log/renderer'
 import { moduleLoader } from './loader'
 import { PLATFORM_SERVICES } from './shared/service'
 import { assertPluginModule } from './guard'
+import { isPlatformService } from '$lib/types/plugin/platform'
 
 // ══════════════════════════ 公开类型 ══════════════════════════
 
