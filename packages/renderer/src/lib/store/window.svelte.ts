@@ -19,7 +19,7 @@ export type WindowVisualState = 'normal' | 'maximized' | 'minimized'
 class WindowStore {
   // ── 窗口标识（纯内部） ──
   #wid = -1                // 原始值 
-  #title = $state('ugvideo — workspace')                   // 原始值 → $state
+  #title = $state('unigen — workspace')                   // 原始值 → $state
 
   // ── 核心状态 ──
   #visualState = $state<WindowVisualState>('normal')       // 原始值 → $state
