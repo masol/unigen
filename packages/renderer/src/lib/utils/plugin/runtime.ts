@@ -48,7 +48,7 @@ class PluginRuntimeManager {
 
     constructor() {
         this.#root = createContainer({
-            injectionMode: InjectionMode.CLASSIC,
+            injectionMode: InjectionMode.PROXY,
             strict: true,
         })
         log.info('[PluginRuntime] root container created')
