@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { LeftSidebarItem } from "$lib/utils/plugin/extpoint/leftsidebar"
-import { IconUserCircle, IconSettings2 } from "@tabler/icons-svelte"
+import { IconUserCircle, IconSettings } from "@tabler/icons-svelte"
 import type { Component } from "svelte"
 import SettingPanel from './setting.svelte'
 import SettingHeader from './setting.header.svelte'
@@ -8,7 +8,7 @@ import Fallback from "./fallback.svelte"
 
 const bottomActivities: LeftSidebarItem[] = [
     { id: 'account', icon: IconUserCircle as unknown as Component<any>, label: '账户', component: Fallback, header: null },
-    { id: 'settings', icon: IconSettings2 as unknown as Component<any>, label: '设置', component: SettingPanel, header: SettingHeader },
+    { id: 'settings', icon: IconSettings as unknown as Component<any>, label: '设置', component: SettingPanel, header: SettingHeader },
 ]
 
 export default bottomActivities;
