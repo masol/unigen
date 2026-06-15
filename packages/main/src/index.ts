@@ -32,8 +32,8 @@ export async function initApp(initConfig: AppInitConfig) {
       new Set(
         initConfig.renderer instanceof URL
           ? [
-            'https://vite.dev',
-            'https://developer.mozilla.org',
+            'https://lizt.top',
+            'https://unigen.cc',
             'https://solidjs.com',
             'https://qwik.dev',
             'https://lit.dev',
