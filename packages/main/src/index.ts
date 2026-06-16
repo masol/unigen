@@ -9,13 +9,12 @@ import { allowInternalOrigins } from './modules/BlockNotAllowdOrigins.js';
 import { allowExternalUrls } from './modules/ExternalUrls.js';
 import { loggerModule } from './modules/LoggerModule.js';
 import { orpcModule } from './modules/OrpcModule.js';
-import { appRouter } from '$services/index.js'
 
 export async function initApp(initConfig: AppInitConfig) {
   const moduleRunner = createModuleRunner()
     .init(disallowMultipleAppInstance())
     .init(loggerModule())
-    .init(orpcModule({ router: appRouter }))
+    .init(orpcModule())
     .init(createWindowManagerModule({ initConfig, openDevTools: import.meta.env.DEV }))
     .init(terminateAppOnLastWindowClose())
     .init(hardwareAccelerationMode({ enable: false }))

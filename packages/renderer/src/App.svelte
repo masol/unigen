@@ -2,7 +2,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { ModeWatcher } from "mode-watcher";
-  import { initApi, setupEvt } from "./lib/utils/api";
+  import { api, setupEvt } from "./lib/utils/api";
   import Layout from "./route/layout.svelte";
   import LoadingScreen from "$lib/components/loading-screen.svelte";
   import ErrorScreen from "$lib/components/error-screen.svelte";
@@ -20,7 +20,7 @@
   onMount(async () => {
     try {
       // 初始化api, api()可用。
-      initApi();
+      api();
       // 初始化事件机制，evtbus生效。唯一返回windowsId的机会。
       const wid = await setupEvt();
       windowStore.init(wid);

@@ -2,10 +2,9 @@ import { z } from 'zod'
 import { os } from "@orpc/server";
 import { BrowserWindow } from 'electron';
 import { WindowService } from '$libs/utils/window.js';
+import { RpcContext } from './type.js';
 
-const windowInput = z.number().describe('BrowserWindow id')
-
-// ----------窗口状态枚举 ----------
+// ---------- 窗口状态枚举 ----------
 const WindowStateSchema = z.object({
     isMaximized: z.boolean(),
     isMinimized: z.boolean(),
@@ -35,58 +34,58 @@ function withWindow(id: number, action: (win: BrowserWindow) => void): boolean {
 
 // ---------- 最大化 ----------
 const max = os
-    .input(windowInput)
     .output(z.boolean())
-    .handler(({ input }): boolean => {
-        return withWindow(input, (win) => win.maximize());
+    .handler(({ context }): boolean => {
+        const ctx = context as RpcContext;
+        return withWindow(ctx.project.wid, (win) => win.maximize());
     })
 
 // ---------- 最小化 ----------
 const min = os
-    .input(windowInput)
     .output(z.boolean())
-    .handler(({ input }): boolean => {
-        return withWindow(input, (win) => win.minimize());
+    .handler(({ context }): boolean => {
+        const ctx = context as RpcContext;
+        return withWindow(ctx.project.wid, (win) => win.minimize());
     })
 
 // ---------- 还原 ----------
 const restore = os
-    .input(windowInput)
     .output(z.boolean())
-    .handler(({ input }): boolean => {
-        return withWindow(input, (win) => win.restore());
+    .handler(({ context }): boolean => {
+        const ctx = context as RpcContext;
+        return withWindow(ctx.project.wid, (win) => win.restore());
     })
 
 // ---------- 显示 ----------
 const show = os
-    .input(windowInput)
     .output(z.boolean())
-    .handler(({ input }): boolean => {
-        return withWindow(input, (win) => WindowService.instance.showWindow(win));
+    .handler(({ context }): boolean => {
+        const ctx = context as RpcContext;
+        return withWindow(ctx.project.wid, (win) => WindowService.instance.showWindow(win));
     })
 
 // ---------- 聚焦 ----------
 const focus = os
-    .input(windowInput)
     .output(z.boolean())
-    .handler(({ input }): boolean => {
-        return withWindow(input, (win) => win.focus());
+    .handler(({ context }): boolean => {
+        const ctx = context as RpcContext;
+        return withWindow(ctx.project.wid, (win) => win.focus());
     })
 
 // ---------- 关闭 ----------
 const close = os
-    .input(windowInput)
     .output(z.boolean())
-    .handler(({ input }): boolean => {
-        return withWindow(input, (win) => win.close());
+    .handler(({ context }): boolean => {
+        const ctx = context as RpcContext;
+        return withWindow(ctx.project.wid, (win) => win.close());
     })
 
 // ---------- 获取窗口状态 ----------
 const getState = os
-    .input(windowInput)
     .output(WindowStateSchema.nullable())
-    .handler(({ input }): WindowState | null => {
-        const win = BrowserWindow.fromId(input);
+    .handler(({ context }): WindowState | null => {
+        const ctx = context as RpcContext;
+        const win = BrowserWindow.fromId(ctx.project.wid);
         if (!win || win.isDestroyed()) {
             return null;
         }

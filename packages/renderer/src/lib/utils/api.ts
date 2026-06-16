@@ -5,7 +5,7 @@ import evtbus, { type Events } from './evtbus'
 import { isPlainObject } from 'radashi';
 import Logger from 'electron-log/renderer';
 
-export function initApi(): AppClient {
+function initApi(): AppClient {
 
     const { port1: clientPort, port2: serverPort } = new MessageChannel()
     window.postMessage('start-orpc-client', '*', [serverPort])

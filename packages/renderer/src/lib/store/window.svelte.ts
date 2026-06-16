@@ -34,6 +34,10 @@ class WindowStore {
     this.#visualState === 'maximized' ? '向下还原' : '最大化',
   )
 
+  get wid(): number {
+    return this.#wid;
+  }
+
   // ── 只读门面 ──
   get title(): string { return this.#title }
   get visualState(): WindowVisualState { return this.#visualState }
@@ -73,7 +77,7 @@ class WindowStore {
   async maximize(): Promise<void> {
     log.debug('[WindowStore] maximize() called')
     try {
-      if (await api().window.max(this.#wid)) {
+      if (await api().window.max()) {
         this.#visualState = 'maximized'
         log.info('[WindowStore] maximize() succeeded')
       }
@@ -85,7 +89,7 @@ class WindowStore {
   async minimize(): Promise<void> {
     log.debug('[WindowStore] minimize() called')
     try {
-      if (await api().window.min(this.#wid)) {
+      if (await api().window.min()) {
         this.#visualState = 'minimized'
         log.info('[WindowStore] minimize() succeeded')
       }
@@ -97,7 +101,7 @@ class WindowStore {
   async restore(): Promise<void> {
     log.debug('[WindowStore] restore() called')
     try {
-      if (await api().window.restore(this.#wid)) {
+      if (await api().window.restore()) {
         this.#visualState = 'normal'
         log.info('[WindowStore] restore() succeeded')
       }
@@ -117,7 +121,7 @@ class WindowStore {
   async focus(): Promise<void> {
     log.debug('[WindowStore] focus() called')
     try {
-      if (await api().window.focus(this.#wid)) {
+      if (await api().window.focus()) {
         this.#isFocused = true
         log.info('[WindowStore] focus() succeeded')
       }
@@ -129,7 +133,7 @@ class WindowStore {
   async close(): Promise<void> {
     log.debug('[WindowStore] close() called')
     try {
-      if (await api().window.close(this.#wid)) {
+      if (await api().window.close()) {
         log.info('[WindowStore] close() succeeded')
       }
     } catch (err) {

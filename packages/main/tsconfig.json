@@ -12,7 +12,6 @@
     "paths": {
       "@app/preload": ["../preload"],
       "@app/renderer": ["../renderer"],
-      "$services/*": ["./src/services/*"],
       "$types/*": ["./src/types/*"],
       "$libs/*": ["./src/libs/*"]
     }

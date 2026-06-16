@@ -19,6 +19,15 @@ class ProjectManager {
         return this.projects.find(prj => prj.wid === wid);
     }
 
+    ensureProject(wid: number): ProjectContainer {
+        let prj = this.getByWindow(wid);
+        if (!prj) {
+            prj = new ProjectContainer(wid, ++this.prjId);
+            this.projects.push(prj);
+        }
+        return prj
+    }
+
 
     // createProject(path:string,wid:number):number{
 
