@@ -2,16 +2,15 @@
 <script lang="ts">
   import HeaderBar from "./featured/header-bar.svelte";
   import * as Resizable from "$lib/components/ui/resizable";
-  // import { Button } from "$lib/components/ui/button";
   import * as Tooltip from "$lib/components/ui/tooltip";
-  // import * as Tabs from "$lib/components/ui/tabs";
   import StatusBar from "./featured/status.svelte";
   import RightSidebar from "./featured/rightside/bar.svelte";
   import LeftSidebar from "./featured/leftside/bar.svelte";
   import ActivityBar from "./featured/activity.svelte";
-  import MainContent from "./content.svelte";
+  import Router from "svelte-spa-router";
   import BottomBar from "./featured/bottom/bar.svelte";
   import { layoutStore } from "$lib/store/layout.svelte";
+  import { routerStore } from "$lib/store/route.svelte";
 </script>
 
 <!--══════════════════════════════════════════════════════════════ -->
@@ -65,7 +64,7 @@
                     <!-- Main Editor Area -->
                     {#if layoutStore.showMainEditor}
                       <Resizable.Pane minSize={20}>
-                        <MainContent></MainContent>
+                        <Router routes={routerStore.routes} />
                       </Resizable.Pane>
                     {/if}
                     <!-- Bottom Panel -->
