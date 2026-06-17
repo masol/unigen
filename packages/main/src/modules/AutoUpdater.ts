@@ -1,5 +1,7 @@
-import {AppModule} from '../AppModule.js';
-import electronUpdater, {type AppUpdater, type Logger} from 'electron-updater';
+// import { getCountryCode } from '$libs/utils/net/ip.js';
+// import eLogger from 'electron-log';
+import { AppModule } from '../AppModule.js';
+import electronUpdater, { type AppUpdater, type Logger } from 'electron-updater';
 
 type DownloadNotification = Parameters<AppUpdater['checkForUpdatesAndNotify']>[0];
 
@@ -23,13 +25,14 @@ export class AutoUpdater implements AppModule {
   }
 
   async enable(): Promise<void> {
+    // const code = await getCountryCode();
     await this.runAutoUpdater();
   }
 
   getAutoUpdater(): AppUpdater {
     // Using destructuring to access autoUpdater due to the CommonJS module of 'electron-updater'.
     // It is a workaround for ESM compatibility issues, see https://github.com/electron-userland/electron-builder/issues/7976.
-    const {autoUpdater} = electronUpdater;
+    const { autoUpdater } = electronUpdater;
     return autoUpdater;
   }
 

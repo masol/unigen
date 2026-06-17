@@ -22,10 +22,10 @@ const getSysplugins = os
 
 // 如果不存在，则新建此项记录。
 const updatePlugin = os
-    .input(z.object({ pluginId: z.string() }))
+    .input(PluginInfoSchema)
     .output(z.boolean())
     .handler(async ({ input }) => {
-        const { pluginId } = input
+        const pluginId = input
         void pluginId;
         return true
     })

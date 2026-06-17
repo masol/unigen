@@ -2,24 +2,26 @@
 
 import {
     wrap,
-    type AsyncSvelteComponent // 懒加载 loader 标准类型
-} from 'svelte-spa-router/wrap'
-import log from 'electron-log/renderer'
-import type { Component } from 'svelte'
-import FallbackComponent from '../../route/featured/content/fallback.svelte'
+    type AsyncSvelteComponent, // 懒加载 loader 标准类型
+} from "svelte-spa-router/wrap";
+import log from "electron-log/renderer";
+import type { Component } from "svelte";
+import FallbackComponent from "../../route/featured/content/fallback.svelte";
+import GeneralSetting from "../../route/page/settings/general.svelte";
+import LLMSetting from "../../route/page/settings/models/llm.svelte";
 
 // ── 类型 ──
 
 /** svelte-spa-router 路由值：普通组件 或 wrap() 返回的包装对象 */
-type RouteDefinitionValue = Component | ReturnType<typeof wrap>
+type RouteDefinitionValue = Component | ReturnType<typeof wrap>;
 
 /** 路由表：路径 → 组件 */
-type RouteMap = Record<string, RouteDefinitionValue>
+type RouteMap = Record<string, RouteDefinitionValue>;
 
 /** 批量注册条目 */
 interface RouteEntry {
-    path: string
-    component: RouteDefinitionValue
+    path: string;
+    component: RouteDefinitionValue;
 }
 
 // ── Store ──
@@ -32,30 +34,32 @@ class RouterStore {
      * 初始即包含 fallback '*'
      */
     #routes: RouteMap = $state.raw({
-        '*': FallbackComponent
-    })
+        "/settings/models/llm": LLMSetting,
+        "/settings/general": GeneralSetting,
+        "*": FallbackComponent,
+    });
 
     // ── 只读门面 ──
 
     get routes() {
-        return this.#routes
+        return this.#routes;
     }
 
     // ── 派生 ──
 
     /** 已注册路径列表 */
-    readonly registeredPaths = $derived(Object.keys(this.#routes))
+    readonly registeredPaths = $derived(Object.keys(this.#routes));
 
     /** 路由总数 */
-    readonly routeCount = $derived(Object.keys(this.#routes).length)
+    readonly routeCount = $derived(Object.keys(this.#routes).length);
 
     /** 路由表是否非空 */
-    readonly hasRoutes = $derived(Object.keys(this.#routes).length > 0)
+    readonly hasRoutes = $derived(Object.keys(this.#routes).length > 0);
 
     // ── 构造 ──
 
     constructor() {
-        log.info('[RouterStore] initialized')
+        log.info("[RouterStore] initialized");
     }
 
     // ── Actions ──
@@ -65,16 +69,18 @@ class RouterStore {
      * @returns true 成功，false 路径已存在
      */
     addRoute(path: string, component: RouteDefinitionValue): boolean {
-        log.debug(`[RouterStore] addRoute(), path=${path}`)
+        log.debug(`[RouterStore] addRoute(), path=${path}`);
 
         if (this.#routes[path]) {
-            log.debug(`[RouterStore] addRoute() skipped, already exists: ${path}`)
-            return false
+            log.debug(`[RouterStore] addRoute() skipped, already exists: ${path}`);
+            return false;
         }
 
-        this.#routes = { ...this.#routes, [path]: component }
-        log.info(`[RouterStore] route added: ${path}, total ${Object.keys(this.#routes).length}`)
-        return true
+        this.#routes = { ...this.#routes, [path]: component };
+        log.info(
+            `[RouterStore] route added: ${path}, total ${Object.keys(this.#routes).length}`,
+        );
+        return true;
     }
 
     /**
@@ -83,22 +89,23 @@ class RouterStore {
      * @param loader 动态导入函数，如 () => import('./pages/Foo.svelte')
      * @returns true 成功，false 路径已存在
      */
-    addLazyRoute(
-        path: string,
-        loader: AsyncSvelteComponent
-    ): boolean {
-        log.debug(`[RouterStore] addLazyRoute(), path=${path}`)
+    addLazyRoute(path: string, loader: AsyncSvelteComponent): boolean {
+        log.debug(`[RouterStore] addLazyRoute(), path=${path}`);
 
         if (this.#routes[path]) {
-            log.debug(`[RouterStore] addLazyRoute() skipped, already exists: ${path}`)
-            return false
+            log.debug(
+                `[RouterStore] addLazyRoute() skipped, already exists: ${path}`,
+            );
+            return false;
         }
 
         // 不再粗暴断言 object，完全匹配 WrapOptions.asyncComponent 类型
-        const wrapped = wrap({ asyncComponent: loader })
-        this.#routes = { ...this.#routes, [path]: wrapped }
-        log.info(`[RouterStore] lazy route added: ${path}, total ${Object.keys(this.#routes).length}`)
-        return true
+        const wrapped = wrap({ asyncComponent: loader });
+        this.#routes = { ...this.#routes, [path]: wrapped };
+        log.info(
+            `[RouterStore] lazy route added: ${path}, total ${Object.keys(this.#routes).length}`,
+        );
+        return true;
     }
 
     /**
@@ -106,26 +113,28 @@ class RouterStore {
      * @returns 实际成功添加的数量
      */
     addBatchRoutes(entries: RouteEntry[]): number {
-        log.debug(`[RouterStore] addBatchRoutes(), count=${entries.length}`)
+        log.debug(`[RouterStore] addBatchRoutes(), count=${entries.length}`);
 
-        const merged = { ...this.#routes }
-        let added = 0
+        const merged = { ...this.#routes };
+        let added = 0;
 
         for (const { path, component } of entries) {
             if (merged[path]) {
-                log.debug(`[RouterStore] batch skipping existing: ${path}`)
-                continue
+                log.debug(`[RouterStore] batch skipping existing: ${path}`);
+                continue;
             }
-            merged[path] = component
-            added++
+            merged[path] = component;
+            added++;
         }
 
         if (added > 0) {
-            this.#routes = merged
-            log.info(`[RouterStore] batch added ${added} route(s), total ${Object.keys(merged).length}`)
+            this.#routes = merged;
+            log.info(
+                `[RouterStore] batch added ${added} route(s), total ${Object.keys(merged).length}`,
+            );
         }
 
-        return added
+        return added;
     }
 
     /**
@@ -133,23 +142,25 @@ class RouterStore {
      * @returns true 成功，false 不存在或为 fallback
      */
     removeRoute(path: string): boolean {
-        log.debug(`[RouterStore] removeRoute(), path=${path}`)
+        log.debug(`[RouterStore] removeRoute(), path=${path}`);
 
-        if (path === '*') {
-            log.debug('[RouterStore] removeRoute() rejected: cannot remove fallback')
-            return false
+        if (path === "*") {
+            log.debug("[RouterStore] removeRoute() rejected: cannot remove fallback");
+            return false;
         }
 
         if (!this.#routes[path]) {
-            log.debug(`[RouterStore] removeRoute() skipped, not found: ${path}`)
-            return false
+            log.debug(`[RouterStore] removeRoute() skipped, not found: ${path}`);
+            return false;
         }
 
-        const updated = { ...this.#routes }
-        delete updated[path]
-        this.#routes = updated
-        log.info(`[RouterStore] route removed: ${path}, total ${Object.keys(updated).length}`)
-        return true
+        const updated = { ...this.#routes };
+        delete updated[path];
+        this.#routes = updated;
+        log.info(
+            `[RouterStore] route removed: ${path}, total ${Object.keys(updated).length}`,
+        );
+        return true;
     }
 
     /**
@@ -157,21 +168,21 @@ class RouterStore {
      * @returns true 成功，false 路径不存在
      */
     updateRoute(path: string, component: RouteDefinitionValue): boolean {
-        log.debug(`[RouterStore] updateRoute(), path=${path}`)
+        log.debug(`[RouterStore] updateRoute(), path=${path}`);
 
         if (!this.#routes[path]) {
-            log.debug(`[RouterStore] updateRoute() skipped, not found: ${path}`)
-            return false
+            log.debug(`[RouterStore] updateRoute() skipped, not found: ${path}`);
+            return false;
         }
 
-        this.#routes = { ...this.#routes, [path]: component }
-        log.info(`[RouterStore] route updated: ${path}`)
-        return true
+        this.#routes = { ...this.#routes, [path]: component };
+        log.info(`[RouterStore] route updated: ${path}`);
+        return true;
     }
 
     /** 检查路径是否已注册 */
     hasRoute(path: string): boolean {
-        return path in this.#routes
+        return path in this.#routes;
     }
 
     /**
@@ -179,12 +190,12 @@ class RouterStore {
      * 保留 '*' 条目（若存在）
      */
     reset(): void {
-        log.debug('[RouterStore] reset() called')
+        log.debug("[RouterStore] reset() called");
 
-        const fallback = this.#routes['*']
-        this.#routes = fallback ? { '*': fallback } : {}
-        log.info('[RouterStore] routes reset to fallback only')
+        const fallback = this.#routes["*"];
+        this.#routes = fallback ? { "*": fallback } : {};
+        log.info("[RouterStore] routes reset to fallback only");
     }
 }
 
-export const routerStore = new RouterStore()
+export const routerStore = new RouterStore();

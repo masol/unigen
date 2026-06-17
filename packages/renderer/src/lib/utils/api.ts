@@ -20,7 +20,7 @@ function initApi(): AppClient {
     return client;
 }
 
-// let windowsId: number = -1;
+let windowsId: number = -1;
 export async function setupEvt(): Promise<number> {
     await window.onNotification((evt, msg) => {
         if (!isPlainObject(msg)) {
@@ -33,11 +33,18 @@ export async function setupEvt(): Promise<number> {
             Logger.error("收到无效的事件通知(不包含名称):", msg);
             return;
         }
+        if (windowsId === -1) {
+            return; // 尚未初始化。
+        }
+        if (notyObj.srcId === windowsId) {
+            // 过滤自己发出的事件，不再通知回自己。
+            Logger.debug(`过滤自己发出的事件，不再通知回自己。${JSON.stringify(notyObj)}`)
+            return;
+        }
         evtbus.emit(notyObj.name as keyof Events, notyObj.payload as never);
     })
-    // 不让后续获取到window.id了,而是通过windowStore来操作.
-    return await window.getWindowId();
-    // return windowsId;
+    windowsId = await window.getWindowId();
+    return windowsId;
 }
 
 // export const wid = (): number => windowsId;

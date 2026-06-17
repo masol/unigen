@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import { Button } from "$lib/components/ui/button";
+  import { push } from "svelte-spa-router";
 
   //   ── Props (children snippet for main content) ──
   import type { Snippet } from "svelte";
@@ -49,7 +50,8 @@
           <Button
             variant="outline"
             class="rounded-xl"
-            onclick={() => layoutStore.togglePanel("bottom")}
+            // onclick={() => layoutStore.togglePanel("bottom")}
+            onclick={() => push("/test")}
           >
             <IconTerminal2 class="size-4" />
             打开终端

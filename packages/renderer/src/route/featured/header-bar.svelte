@@ -5,11 +5,11 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { Separator } from "$lib/components/ui/separator";
-  import { setMode, userPrefersMode } from "mode-watcher";
   import { windowStore } from "$lib/store/window.svelte";
   import LayoutGroup from "./header/layout.svelte";
   import Brand from "./header/brand.svelte";
   import Winctrl from "./header/winctrl.svelte";
+  import { configStore } from "$lib/store/config.svelte";
 
   type ThemeMode = "light" | "dark" | "system";
 
@@ -18,9 +18,7 @@
 
   // ── 主题三态轮换：light → dark → system → light ──
   const themeOrder: ThemeMode[] = ["light", "dark", "system"];
-  const currentTheme = $derived(
-    (userPrefersMode.current ?? "system") as ThemeMode,
-  );
+  const currentTheme = $derived(configStore.theme);
   const themeLabel = $derived(
     currentTheme === "light"
       ? "浅色主题"
@@ -31,7 +29,7 @@
 
   function cycleTheme() {
     const idx = themeOrder.indexOf(currentTheme);
-    setMode(themeOrder[(idx + 1) % themeOrder.length]);
+    configStore.setTheme(themeOrder[(idx + 1) % themeOrder.length]);
   }
 </script>
 

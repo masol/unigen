@@ -1,7 +1,7 @@
 <!-- $lib/components/panels/SettingsSearchBar.svelte -->
 <script lang="ts">
   import { IconSearch, IconX } from "@tabler/icons-svelte";
-  import { settingsPanelStore } from "./settings.svelte";
+  import { settingsPanelStore } from "./settingStore.svelte";
 </script>
 
 <div class="shrink-0 px-1 pb-2">

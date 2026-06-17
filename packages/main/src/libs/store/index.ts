@@ -1,59 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // electron/store/configStore.ts
 import Store from 'electron-store';
 import { AppConfig } from '$types/appconfig.js';
 import { configSchema } from './schema.js';
-
-// 深度合并：保留 target 中的有效值，缺失/错误字段用 defaultVal
-function deepMerge<T>(target: Partial<T>, defaultVal: T): T {
-    const result: any = { ...defaultVal };
-
-    for (const key in target) {
-        const tVal = target[key];
-        if (tVal === undefined || tVal === null) {
-            continue;
-        }
-
-        const dVal = result[key];
-        if (
-            typeof tVal === 'object' &&
-            typeof dVal === 'object' &&
-            !Array.isArray(tVal) &&
-            tVal !== null &&
-            dVal !== null
-        ) {
-            result[key] = deepMerge(tVal as any, dVal as any);
-        } else {
-            result[key] = tVal;
-        }
-    }
-
-    return result as T;
-}
-
-// 安全获取配置字段，解析错误时使用默认值
-function safeGet<T>(store: Store<AppConfig>, key: string, defaultValue: T): T {
-    try {
-        const value = store.get(key);
-        if (value === undefined || value === null) {
-            return defaultValue;
-        }
-        return value as T;
-    } catch (err) {
-        // 解析错误 / 类型错误等，直接返回默认值
-        console.warn(`Failed to parse config key "${key}", using default value`, err);
-        return defaultValue;
-    }
-}
-
-// 安全设置配置字段
-function safeSet<T>(store: Store<AppConfig>, key: string, value: T): void {
-    try {
-        store.set(key, value);
-    } catch (err) {
-        console.warn(`Failed to set config key "${key}"`, err);
-    }
-}
+import { broadcast } from '$libs/utils/rpcevt.js';
+import { getCurrentProject } from '$libs/utils/api.js';
 
 export class ConfigService {
     private store: Store<AppConfig>;
@@ -61,110 +11,71 @@ export class ConfigService {
     constructor(store: Store<AppConfig>) {
         this.store = store;
 
-        // 初始化时修复配置：解析错误 / 字段缺失时直接使用默认值
-        this.migrateToDefaults();
-    }
-
-    /**
-     * 检查并修复整个配置：
-     * - 配置文件为空 / 不是对象 -> 直接用默认配置
-     * - 某个字段解析错误 / 类型错误 -> 该字段用默认值
-     * - 其他有效字段保留
-     */
-    private migrateToDefaults(): void {
+        // 确保如果磁盘上的物理文件遭遇人为损坏（如变成了空文件或非法 JSON），
+        // 也能在初始化时立即根据 configSchema 重置并生成一个干净、合规的默认 JSON 配置文件。
         try {
-            const raw = this.store.store;
-
-            const defaults = this.getDefaultConfig();
-
-            // 配置为空或不是对象，直接用默认配置
-            if (!raw || typeof raw !== 'object') {
-                this.store.store = defaults;
-                console.info('Config is empty or invalid, using default config');
-                return;
+            if (!this.store.store || typeof this.store.store !== 'object') {
+                this.store.clear();
             }
-
-            // 深度合并：保留有效值，错误/缺失字段用默认值
-            const merged = deepMerge(raw, defaults);
-            this.store.store = merged;
-            console.info('Config migrated to defaults for invalid fields');
-        } catch (err) {
-            // 整体解析失败，直接用默认配置
-            console.warn('Failed to parse config file, using default config', err);
-            this.store.store = this.getDefaultConfig();
+        } catch {
+            this.store.clear();
         }
     }
 
     /**
-     * 获取完整默认配置
-     */
-    private getDefaultConfig(): AppConfig {
-        return {
-            maximized: true,
-            theme: 'system',
-            lang: 'zh-CN',
-        };
-    }
-
-    /**
-     * 获取整个配置
-     * 如果解析失败，返回完整默认配置
+     * 获取整个配置对象
+     * 内部会自动融合 schema 中定义的所有最新默认值
      */
     getAll(): AppConfig {
-        try {
-            const raw = this.store.store;
-            if (!raw || typeof raw !== 'object') {
-                return this.getDefaultConfig();
-            }
-            return deepMerge(raw, this.getDefaultConfig());
-        } catch (err) {
-            console.warn('Failed to parse full config, using default', err);
-            return this.getDefaultConfig();
-        }
+        return this.store.store;
     }
 
+    /**
+     * 覆盖重写整个配置
+     * 如果配置不符合 schema 规范，会直接向外抛出异常
+     */
     setAll(config: AppConfig): void {
-        try {
-            this.store.store = config;
-        } catch (err) {
-            console.warn('Failed to set full config', err);
-        }
-    }
-    // ---------------------- theme ----------------------
-
-    getTheme(): AppConfig['theme'] {
-        return safeGet(this.store, 'theme', 'light');
+        this.store.store = config;
+        const prj = getCurrentProject();
+        broadcast({
+            name: "cfg:setall",
+            srcId: prj?.wid || -1,
+            payload: config
+        })
     }
 
-    setTheme(theme: AppConfig['theme']): void {
-        safeSet(this.store, 'theme', theme);
+    /**
+     * 通用获取配置项方法
+     * 传入的 key 必须是 AppConfig 的键，返回值会自动推导为该键对应的类型
+     */
+    get<K extends keyof AppConfig>(key: K): AppConfig[K] {
+        return this.store.get(key);
     }
 
-    // ---------------------- lang ----------------------
-
-    getLang(): AppConfig['lang'] {
-        return safeGet(this.store, 'lang', 'zh-CN');
+    /**
+     * 通用设置配置项方法
+     * 传入的 key 必须是 AppConfig 的键，value 的类型会被严格约束为该键对应的类型
+     * 不进行内部异常捕获，若 schema 校验失败，异常将直接向上抛出由外部处理
+     */
+    set<K extends keyof AppConfig>(key: K, value: AppConfig[K]): void {
+        this.store.set(key, value);
+        const prj = getCurrentProject();
+        broadcast({
+            name: "cfg:set",
+            srcId: prj?.wid || -1,
+            payload: {
+                name: key,
+                value
+            }
+        })
     }
-
-    setLang(lang: AppConfig['lang']): void {
-        safeSet(this.store, 'lang', lang);
-    }
-
-    isMaximized(): AppConfig['maximized'] {
-        return safeGet(this.store, 'maximized', false);
-    }
-
-    setMaximized(max: AppConfig['maximized']): void {
-        safeSet(this.store, 'maximized', max);
-    }
-
-    // 以后加新字段，按同样方式：
-    // getX() { return safeGet(this.store, 'x', defaultX); }
-    // setX(v) { safeSet(this.store, 'x', v); }
 }
 
 let cs: ConfigService;
-// 单例
+
+/**
+ * 获取 ConfigService 单例实例
+ */
 export const configService = (): ConfigService => {
     if (!cs) {
         cs = new ConfigService(
@@ -175,4 +86,4 @@ export const configService = (): ConfigService => {
         );
     }
     return cs;
-}
+};

@@ -1,7 +1,7 @@
 // evtbus.ts
 // mitt + TypeScript 全局事件总线封装模板
 // 安装依赖：npm install mitt
-import type { WindowEventPayload } from '@app/main/types'
+import type { AppConfig, WindowEventPayload } from '@app/main/types'
 import mitt, { type Emitter } from "mitt";
 
 /**
@@ -11,6 +11,9 @@ import mitt, { type Emitter } from "mitt";
  */
 export type Events = {
     "winstate": WindowEventPayload;
+    "cfg:setall": AppConfig;
+    "cfg:set": { name: string; value: unknown };
+    "sys:usedark": boolean  
     // 用户相关事件
     "user:login": { id: number; name: string; avatar?: string };
     "user:logout": void;
@@ -22,7 +25,7 @@ export type Events = {
 
     // 页面/应用状态事件
     "ready": void;
-    "error": { code: number; message: string; stack?: string };
+
 };
 
 export type EventNameType = keyof Events;

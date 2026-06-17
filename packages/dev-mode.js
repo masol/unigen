@@ -28,6 +28,7 @@ const rendererWatchServer = await createServer({
 });
 
 const server = await rendererWatchServer.listen();
+void server
 const resolvedAddress = rendererWatchServer.httpServer?.address();
 const host = resolvedAddress?.address || 'localhost';
 const port = resolvedAddress?.port || 5173;
@@ -51,6 +52,7 @@ while (!isServerReady && attempts < maxAttempts) {
       console.log('Renderer dev server is ready');
     }
   } catch (e) {
+    void e
     // Server not ready yet
   }
   if (!isServerReady) {

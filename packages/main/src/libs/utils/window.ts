@@ -1,7 +1,7 @@
 import { BrowserWindow, screen, Rectangle } from "electron";
 import { AppInitConfig } from "$types/AppInitConfig.js";
-import { WindowEventType, WindowEventPayload } from "$types/shared/window.js";
-import { NotifyContract } from "$types/shared/api.js";
+import { WindowEventPayload, WindowEventType } from "$types/shared/rpcevt.js";
+import { notify } from "./rpcevt.js";
 
 // ─── 工具函数 ───────────────────────────────────────────────────
 
@@ -17,7 +17,6 @@ function isVisibleOnAnyDisplay(bounds: Rectangle): boolean {
   });
 }
 
-const NotifyChannelName = "ug-notification";
 // ─── 窗口服务 ───────────────────────────────────────────────────
 
 export class WindowService {
@@ -55,64 +54,43 @@ export class WindowService {
     return WindowService.#instance;
   }
 
-  /**
-   * 通知：触发事件 → 通过 IPC 通知renderer
-   */
-  notify(type: WindowEventType, win: BrowserWindow): void {
+  private stateNotify(type: WindowEventType, win: BrowserWindow) {
     const payload: WindowEventPayload = {
       type,
       windowId: win.id,
       timestamp: Date.now(),
     };
-    // 1. 通过 IPC 发送给renderer（webContents 可能已销毁）
-    if (!win.isDestroyed() && win.webContents) {
-      const evt: NotifyContract = {
-        name: "winstate",
-        srcId: -1,
-        payload,
-      };
-      win.webContents.send(NotifyChannelName, evt);
-    }
-  }
-
-  broadcast(evt: NotifyContract): void {
-    BrowserWindow.getAllWindows().forEach((win) => {
-      // 1. 通过 IPC 发送给renderer（webContents 可能已销毁）
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send(NotifyChannelName, evt);
-      }
-    });
+    notify(win, "winstate", payload);
   }
 
   // ── 窗口事件绑定 ─────────────────────────────────────────────
-
   /**
    * 将原生窗口事件映射到统一的 notify 派发
    */
   private attachWindowEvents(win: BrowserWindow): void {
     win.on("maximize", () => {
-      this.notify("maximized", win);
+      this.stateNotify("maximized", win);
     });
 
     win.on("unmaximize", () => {
-      this.notify("normal", win);
+      this.stateNotify("normal", win);
     });
 
     win.on("minimize", () => {
-      this.notify("minimized", win);
+      this.stateNotify("minimized", win);
     });
 
     win.on("restore", () => {
       // restore 可能从最小化或最大化恢复，统一为 normal
-      this.notify("normal", win);
+      this.stateNotify("normal", win);
     });
 
     win.on("focus", () => {
-      this.notify("focus", win);
+      this.stateNotify("focus", win);
     });
 
     win.on("blur", () => {
-      this.notify("blur", win);
+      this.stateNotify("blur", win);
     });
   }
 

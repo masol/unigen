@@ -1,28 +1,23 @@
 <!-- $lib/components/panels/SettingsPanel.svelte -->
 <script lang="ts">
   import autoAnimate from "@formkit/auto-animate";
+  import * as Collapsible from "$lib/components/ui/collapsible";
+  import { Separator } from "$lib/components/ui/separator";
   import {
-    IconPalette,
+    IconSettings,
+    IconBrain,
     IconCode,
     IconKeyboard,
-    IconLanguage,
-    IconBrain,
-    IconDatabase,
-    IconPhoto,
-    IconMicrophone,
     IconRobot,
-    IconTool,
-    IconWorld,
-    IconShield,
-    IconBell,
-    IconChevronRight,
+    IconVideo,
+    IconPhoto,
+    IconSearch,
+    IconPlug,
+    IconChevronDown,
     IconSettingsOff,
-    IconInfoCircle,
-    IconServer,
-    IconHistory,
-    IconDownload,
   } from "@tabler/icons-svelte";
-  import { settingsPanelStore } from "./settings.svelte";
+  import { router, push } from "svelte-spa-router";
+  import { settingsPanelStore } from "./settingStore.svelte";
 
   /* ------------------------------------------------------------------ */
   /*  Types                                                              */
@@ -31,8 +26,10 @@
   type SettingsNavItem = {
     id: string;
     label: string;
+    description: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     icon: any;
+    /** 路由路径片段，拼接为 /settings/{path} */
     path: string;
     keywords?: string[];
   };
@@ -40,271 +37,327 @@
   type SettingsGroup = {
     id: string;
     label: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    icon: any;
     items: SettingsNavItem[];
   };
 
   /* ------------------------------------------------------------------ */
-  /*  Built-in Groups                                                    */
+  /*  Constants — Route Prefix                                           */
+  /* ------------------------------------------------------------------ */
+
+  const SETTINGS_BASE = "/settings";
+
+  /* ------------------------------------------------------------------ */
+  /*  Navigation Data (static, never mutated)                            */
   /* ------------------------------------------------------------------ */
 
   const builtinGroups: SettingsGroup[] = [
     {
       id: "general",
       label: "通用",
+      icon: IconSettings,
       items: [
         {
-          id: "appearance",
-          label: "外观",
-          icon: IconPalette,
-          path: "appearance",
-          keywords: ["theme", "主题", "暗色", "亮色", "颜色", "字号"],
-        },
-        {
-          id: "editor",
-          label: "编辑器",
-          icon: IconCode,
-          path: "editor",
-          keywords: ["font", "字体", "缩进", "行号", "自动保存"],
+          id: "general-main",
+          label: "通用",
+          description: "语言、本地模型、数据备份",
+          icon: IconSettings,
+          path: "general",
+          keywords: [
+            "语言",
+            "language",
+            "locale",
+            "嵌入",
+            "embedding",
+            "备份",
+            "导入",
+            "导出",
+            "版本",
+          ],
         },
         {
           id: "keybindings",
           label: "快捷键",
+          description: "自定义键盘绑定",
           icon: IconKeyboard,
           path: "keybindings",
           keywords: ["shortcut", "热键", "绑定", "快捷方式"],
-        },
-        {
-          id: "language",
-          label: "语言与区域",
-          icon: IconLanguage,
-          path: "language",
-          keywords: ["locale", "中文", "english", "时区", "日期格式"],
-        },
-        {
-          id: "notifications",
-          label: "通知",
-          icon: IconBell,
-          path: "notifications",
-          keywords: ["alert", "提醒", "消息", "推送", "声音"],
-        },
-        {
-          id: "privacy",
-          label: "隐私与安全",
-          icon: IconShield,
-          path: "privacy",
-          keywords: ["security", "权限", "数据", "遥测", "日志"],
-        },
-        {
-          id: "data",
-          label: "数据管理",
-          icon: IconDownload,
-          path: "data",
-          keywords: ["导入", "导出", "备份", "恢复", "清除"],
-        },
-        {
-          id: "about",
-          label: "关于",
-          icon: IconInfoCircle,
-          path: "about",
-          keywords: ["版本", "version", "更新", "许可证", "license"],
         },
       ],
     },
     {
       id: "models",
       label: "模型管理",
+      icon: IconBrain,
       items: [
         {
-          id: "models-providers",
-          label: "模型供应商",
-          icon: IconServer,
-          path: "models/providers",
-          keywords: [
-            "OpenAI",
-            "Anthropic",
-            "provider",
-            "API Key",
-            "端点",
-            "endpoint",
-          ],
-        },
-        {
           id: "models-llm",
-          label: "大语言模型",
-          icon: IconBrain,
+          label: "语言模型",
+          description: "LLM 配置与选择",
+          icon: IconRobot,
           path: "models/llm",
-          keywords: [
-            "LLM",
-            "GPT",
-            "Claude",
-            "chat",
-            "对话",
-            "文本生成",
-            "推理",
-          ],
+          keywords: ["LLM", "GPT", "Claude", "对话", "文本生成", "推理"],
         },
         {
-          id: "models-embedding",
-          label: "嵌入模型",
-          icon: IconDatabase,
-          path: "models/embedding",
-          keywords: ["vector", "向量", "RAG", "检索", "知识库"],
+          id: "models-video",
+          label: "视频模型",
+          description: "视频生成与处理",
+          icon: IconVideo,
+          path: "models/video",
+          keywords: ["video", "视频生成", "Sora", "动画"],
         },
         {
           id: "models-image",
           label: "图像模型",
+          description: "图片生成与编辑",
           icon: IconPhoto,
           path: "models/image",
-          keywords: [
-            "DALL-E",
-            "Stable Diffusion",
-            "图片",
-            "绘图",
-            "生图",
-            "vision",
-          ],
-        },
-        {
-          id: "models-speech",
-          label: "语音模型",
-          icon: IconMicrophone,
-          path: "models/speech",
-          keywords: ["TTS", "STT", "语音合成", "语音识别", "Whisper", "朗读"],
+          keywords: ["DALL-E", "Stable Diffusion", "图片", "生图", "绘图"],
         },
       ],
     },
     {
-      id: "agents",
-      label: "智能体",
+      id: "api",
+      label: "API 管理",
+      icon: IconCode,
       items: [
         {
-          id: "agents-default",
-          label: "默认配置",
-          icon: IconRobot,
-          path: "agents/default",
-          keywords: [
-            "agent",
-            "系统提示词",
-            "system prompt",
-            "温度",
-            "temperature",
-            "预设",
-          ],
+          id: "api-search",
+          label: "搜索",
+          description: "搜索引擎与联网",
+          icon: IconSearch,
+          path: "api/search",
+          keywords: ["search", "联网", "搜索引擎", "Google", "Bing"],
         },
         {
-          id: "agents-tools",
-          label: "工具管理",
-          icon: IconTool,
-          path: "agents/tools",
-          keywords: [
-            "function calling",
-            "函数调用",
-            "tool",
-            "MCP",
-            "插件",
-            "能力",
-          ],
-        },
-        {
-          id: "agents-network",
-          label: "网络访问",
-          icon: IconWorld,
-          path: "agents/network",
-          keywords: ["proxy", "代理", "API", "网关", "联网", "搜索", "CORS"],
-        },
-        {
-          id: "agents-history",
-          label: "对话历史",
-          icon: IconHistory,
-          path: "agents/history",
-          keywords: ["记录", "上下文", "context", "记忆", "memory", "保留"],
+          id: "api-mcp",
+          label: "MCP",
+          description: "模型上下文协议",
+          icon: IconPlug,
+          path: "api/mcp",
+          keywords: ["MCP", "tool", "插件", "function calling"],
         },
       ],
     },
   ];
 
+  /** Flat lookup: path → full route for quick matching */
+  // const allItems = builtinGroups.flatMap((g) => g.items);
+
   /* ------------------------------------------------------------------ */
-  /*  Filtered by search query                                           */
+  /*  State                                                              */
   /* ------------------------------------------------------------------ */
+
+  let openGroups = $state<Record<string, boolean>>({
+    general: true,
+    models: true,
+    api: true,
+  });
+
+  /* ------------------------------------------------------------------ */
+  /*  Derived — Route-based active state                                 */
+  /* ------------------------------------------------------------------ */
+
+  const currentLocation = $derived(router.location);
+
+  /** Extract the sub-path after /settings/ */
+  let activePath = $derived.by((): string => {
+    const loc = currentLocation;
+    if (loc.startsWith(SETTINGS_BASE + "/")) {
+      return loc.slice(SETTINGS_BASE.length + 1);
+    }
+    // Fallback: if exactly /settings, default to first item
+    if (loc === SETTINGS_BASE) {
+      return builtinGroups[0].items[0].path;
+    }
+    return "";
+  });
+
+  let activeGroupId = $derived(
+    builtinGroups.find((g) => g.items.some((i) => i.path === activePath))?.id ??
+      "",
+  );
+
+  let hasSearch = $derived(settingsPanelStore.searchQuery.trim().length > 0);
 
   let filteredGroups = $derived.by((): SettingsGroup[] => {
     const q = settingsPanelStore.searchQuery.trim().toLowerCase();
     if (!q) return builtinGroups;
-
     return builtinGroups
-      .map((group) => ({
-        ...group,
-        items: group.items.filter(
+      .map((g) => ({
+        ...g,
+        items: g.items.filter(
           (item) =>
             item.label.toLowerCase().includes(q) ||
             item.id.toLowerCase().includes(q) ||
-            group.label.toLowerCase().includes(q) ||
+            item.description.toLowerCase().includes(q) ||
+            g.label.toLowerCase().includes(q) ||
             (item.keywords ?? []).some((k) => k.toLowerCase().includes(q)),
         ),
       }))
-      .filter((group) => group.items.length > 0);
+      .filter((g) => g.items.length > 0);
   });
+
+  /* ------------------------------------------------------------------ */
+  /*  Navigation handler                                                 */
+  /* ------------------------------------------------------------------ */
+
+  function navigateTo(path: string) {
+    push(`${SETTINGS_BASE}/${path}`);
+  }
 </script>
 
 <div class="flex h-full flex-col">
-  <div class="flex-1 overflow-y-auto" use:autoAnimate>
+  <nav class="flex-1 overflow-y-auto px-3 py-3" use:autoAnimate>
     {#each filteredGroups as group, gi (group.id)}
-      <div>
-        <!-- Group header -->
-        <div class={["px-3 pb-1", gi === 0 ? "pt-0.5" : "pt-4"]}>
-          <span
-            class="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-          >
-            {group.label}
-          </span>
-        </div>
+      {@const GroupIcon = group.icon}
+      {@const isOpen = hasSearch || (openGroups[group.id] ?? true)}
+      {@const isGroupActive = activeGroupId === group.id}
 
-        <!-- Group items -->
-        <div class="space-y-0.5" use:autoAnimate>
-          {#each group.items as item (item.id)}
-            {@const isActive = false}
-            {@const Icon = item.icon}
-            <button
-              class={[
-                "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left transition-all duration-200",
-                isActive
-                  ? "bg-primary/10 font-medium text-foreground"
-                  : "text-foreground/80 hover:bg-accent/60",
-              ]}
-              aria-current={isActive ? "page" : undefined}
-              onclick={() => void item.path}
-            >
-              <Icon
-                class={[
-                  "size-4 shrink-0",
-                  isActive ? "text-primary" : "text-muted-foreground",
-                ]}
-              />
-              <span class="min-w-0 flex-1 truncate text-xs">
-                {item.label}
-              </span>
-              {#if isActive}
-                <IconChevronRight class="size-3 shrink-0 text-primary/60" />
-              {/if}
-            </button>
-          {/each}
+      {#if gi > 0}
+        <div class="px-2 py-2">
+          <Separator class="bg-border/40" />
         </div>
-      </div>
+      {/if}
+
+      <Collapsible.Root
+        open={isOpen}
+        onOpenChange={(v) => {
+          if (!hasSearch) openGroups[group.id] = v;
+        }}
+      >
+        <!--╭─────────────────────────────────────────────────────╮ -->
+        <!-- │ [可抽取子组件 → SettingsGroupHeader.svelte]         │ -->
+        <!-- │ 职责：可折叠分组标题行，含图标、标签、计数与箭头    │ -->
+        <!-- ╰─────────────────────────────────────────────────────╯ -->
+        <Collapsible.Trigger>
+          {#snippet child({ props })}
+            <button
+              {...props}
+              class={[
+                "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200",
+                "hover:bg-accent/60",
+                isGroupActive && !isOpen ? "bg-accent/30" : "bg-transparent",
+              ]}
+            >
+              <div
+                class={[
+                  "flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors duration-200",
+                  isGroupActive
+                    ? "bg-primary/10 text-primary"
+                    : "bg-muted text-muted-foreground group-hover:bg-accent group-hover:text-foreground",
+                ]}
+              >
+                <GroupIcon size={18} stroke={1.5} />
+              </div>
+
+              <span
+                class="flex-1 text-left text-sm font-medium tracking-tight text-foreground"
+              >
+                {group.label}
+              </span>
+
+              <div class="flex items-center gap-2">
+                <!-- Collapsed item count badge — on the right -->
+                {#if !isOpen}
+                  <span
+                    class="inline-flex h-5 min-w-5 items-center justify-center rounded-lg bg-muted px-1.5 text-xs tabular-nums text-muted-foreground transition-all duration-200"
+                  >
+                    {group.items.length}
+                  </span>
+                {/if}
+
+                <div
+                  class="flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 group-hover:bg-accent"
+                >
+                  <IconChevronDown
+                    class="size-3.5 text-muted-foreground transition-transform duration-200 {!isOpen
+                      ? '-rotate-90'
+                      : ''}"
+                    stroke={1.5}
+                  />
+                </div>
+              </div>
+            </button>
+          {/snippet}
+        </Collapsible.Trigger>
+        <!-- ╭─── / SettingsGroupHeader ───╮ -->
+
+        <!--╭─────────────────────────────────────────────────────╮ -->
+        <!-- │ [可抽取子组件 → SettingsNavItemList.svelte]         │ -->
+        <!-- │ 职责：分组内导航条目列表，路由驱动 active 高亮      │ -->
+        <!-- ╰─────────────────────────────────────────────────────╯ -->
+        <Collapsible.Content>
+          <div class="mt-1 space-y-0.5 pb-1" use:autoAnimate>
+            {#each group.items as item (item.id)}
+              {@const isActive = activePath === item.path}
+              {@const Icon = item.icon}
+
+              <button
+                class={[
+                  "relative flex w-full items-center gap-3 rounded-xl py-2.5 pl-16 pr-3 text-left transition-all duration-200",
+                  isActive
+                    ? "bg-primary/8 text-foreground"
+                    : "text-foreground/70 hover:bg-accent/40 hover:text-foreground",
+                ]}
+                aria-current={isActive ? "page" : undefined}
+                onclick={() => navigateTo(item.path)}
+              >
+                {#if isActive}
+                  <span
+                    class="absolute left-3 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary transition-all duration-200"
+                  ></span>
+                {/if}
+
+                <Icon
+                  class={[
+                    "size-4 shrink-0 transition-colors duration-200",
+                    isActive ? "text-primary" : "text-muted-foreground",
+                  ]}
+                  stroke={1.5}
+                />
+
+                <div class="flex min-w-0 flex-1 flex-col">
+                  <span
+                    class={[
+                      "truncate text-sm transition-colors duration-200",
+                      isActive ? "font-medium" : "font-normal",
+                    ]}
+                  >
+                    {item.label}
+                  </span>
+                  <span
+                    class={[
+                      "truncate text-xs transition-colors duration-200",
+                      isActive ? "text-primary/60" : "text-muted-foreground/70",
+                    ]}
+                  >
+                    {item.description}
+                  </span>
+                </div>
+              </button>
+            {/each}
+          </div>
+        </Collapsible.Content>
+        <!-- ╭─── / SettingsNavItemList ───╮ -->
+      </Collapsible.Root>
     {/each}
 
-    <!-- Empty search state -->
     {#if filteredGroups.length === 0}
-      <div class="flex flex-col items-center gap-3 px-4 py-10 text-center">
+      <div
+        class="flex flex-col items-center gap-4 px-6 py-16 text-center animate-fade-in"
+      >
         <div
-          class="flex size-10 items-center justify-center rounded-2xl bg-muted"
+          class="flex size-12 items-center justify-center rounded-2xl bg-muted"
         >
-          <IconSettingsOff class="size-5 text-muted-foreground" />
+          <IconSettingsOff class="size-5 text-muted-foreground" stroke={1.5} />
         </div>
         <div class="space-y-1">
-          <p class="text-xs font-medium text-foreground">未找到匹配的设置项</p>
+          <p class="text-sm font-medium text-foreground">未找到匹配的设置项</p>
           <p class="text-xs text-muted-foreground">尝试使用其他关键词搜索</p>
         </div>
       </div>
     {/if}
-  </div>
+  </nav>
 </div>

@@ -9,6 +9,7 @@ import { allowInternalOrigins } from './modules/BlockNotAllowdOrigins.js';
 import { allowExternalUrls } from './modules/ExternalUrls.js';
 import { loggerModule } from './modules/LoggerModule.js';
 import { orpcModule } from './modules/OrpcModule.js';
+import { systhemeModule } from './modules/SysthemeModule.js';
 
 export async function initApp(initConfig: AppInitConfig) {
   const moduleRunner = createModuleRunner()
@@ -43,8 +44,8 @@ export async function initApp(initConfig: AppInitConfig) {
             'https://vuejs.org',
           ]
           : [],
-      )),
-    );
+      ))
+    ).init(systhemeModule());
 
   await moduleRunner;
 }
