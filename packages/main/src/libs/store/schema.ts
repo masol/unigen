@@ -16,6 +16,10 @@ export const configSchema: Schema<AppConfig> = {
         type: 'boolean',
         default: true
     },
+    disableHA: {
+        type: 'boolean',
+        default: false,
+    },
     model_endpoint: {
         type: 'string',
         default: ""

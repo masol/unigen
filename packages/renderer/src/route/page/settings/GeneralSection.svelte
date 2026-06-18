@@ -4,11 +4,13 @@
     IconChevronDown,
     IconCheck,
     IconPalette,
+    IconDeviceSim,
   } from "@tabler/icons-svelte";
   import { Separator } from "$lib/components/ui/separator";
   import * as Popover from "$lib/components/ui/popover";
   import { configStore } from "$lib/store/config.svelte";
   import type { AppConfig } from "@app/main/types";
+  import { Switch } from "$lib/components/ui/switch";
 
   let langOpen = $state(false);
   let themeOpen = $state(false);
@@ -33,6 +35,15 @@
     THEMES.find((o) => o.value === configStore.theme)?.label ??
       configStore.theme,
   );
+
+  const disableHAProxy = {
+    get value() {
+      return configStore.disableHA;
+    },
+    set value(newValue: boolean) {
+      configStore.setDisableHA(newValue);
+    },
+  };
 </script>
 
 <section class="space-y-4">
@@ -162,6 +173,27 @@
           </div>
         </Popover.Content>
       </Popover.Root>
+    </div>
+
+    <Separator class="bg-border/30" />
+
+    <div
+      class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-8 p-6"
+    >
+      <div class="flex items-center gap-4 min-w-0">
+        <div
+          class="flex items-center justify-center size-9 rounded-lg bg-muted shrink-0"
+        >
+          <IconDeviceSim size={20} stroke={1.5} class="text-muted-foreground" />
+        </div>
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-foreground">禁用硬件加速</p>
+          <p class="text-xs text-muted-foreground mt-0.5">
+            禁用UI界面的硬件加速(重启生效)
+          </p>
+        </div>
+      </div>
+      <Switch bind:checked={disableHAProxy.value} class="shrink-0" />
     </div>
   </div>
 </section>

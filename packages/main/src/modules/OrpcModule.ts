@@ -3,7 +3,7 @@ import { ModuleContext } from '../types/ModuleContext.js';
 import { BrowserWindow, ipcMain, type MessagePortMain } from 'electron';
 import { getOrpcHandler } from '../api/index.js';
 import { projectManager } from '$libs/project/manager.js';
-import Logger from 'electron-log';
+import Logger from 'electron-log/main';
 
 class OrpcModule implements AppModule {
     private windowPortsMap = new Map<number, MessagePortMain>();

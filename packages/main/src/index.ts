@@ -10,20 +10,22 @@ import { allowExternalUrls } from './modules/ExternalUrls.js';
 import { loggerModule } from './modules/LoggerModule.js';
 import { orpcModule } from './modules/OrpcModule.js';
 import { systhemeModule } from './modules/SysthemeModule.js';
+import { protocalModule, registerSchemes } from './modules/ProtocalModule.js';
 
 export async function initApp(initConfig: AppInitConfig) {
+  registerSchemes();
+
   const moduleRunner = createModuleRunner()
     .init(disallowMultipleAppInstance())
-    .init(loggerModule())
-    .init(orpcModule())
     .init(createWindowManagerModule({ initConfig, openDevTools: import.meta.env.DEV }))
     .init(terminateAppOnLastWindowClose())
-    .init(hardwareAccelerationMode({ enable: false }))
+    .init(loggerModule())
+    .init(orpcModule())
+    .init(protocalModule())
+    .init(hardwareAccelerationMode())
     .init(autoUpdater())
-
     // Install DevTools extension if needed
     // .init(chromeDevToolsExtension({extension: 'VUEJS3_DEVTOOLS'}))
-
     // Security
     .init(allowInternalOrigins(
       new Set(initConfig.renderer instanceof URL ? [initConfig.renderer.origin] : []),
@@ -34,18 +36,13 @@ export async function initApp(initConfig: AppInitConfig) {
           ? [
             'https://lizt.top',
             'https://unigen.cc',
-            'https://solidjs.com',
-            'https://qwik.dev',
-            'https://lit.dev',
-            'https://react.dev',
-            'https://preactjs.com',
-            'https://www.typescriptlang.org',
             'https://www.lizt.top',
-            'https://vuejs.org',
+            'https://www.unigen.cc',
           ]
           : [],
       ))
-    ).init(systhemeModule());
+    )
+    .init(systhemeModule());
 
   await moduleRunner;
 }

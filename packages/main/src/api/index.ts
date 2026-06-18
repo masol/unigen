@@ -1,11 +1,12 @@
-import { onError, os } from "@orpc/server";
-import window from './window.js';
-import plugin from './plugin.js';
+import { onError, ORPCError, os } from "@orpc/server";
+import window from './common/window.js';
+import plugin from './common/plugin.js';
 import { RPCHandler } from "@orpc/server/message-port";
 import Logger from "electron-log";
 import { RpcContext } from "./type.js";
 import { alsMiddleware } from "./als.js";
-import config from './cfg.js'
+import config from './common/cfg.js'
+import system from './common/sys.js'
 
 
 // ==========================================
@@ -16,7 +17,8 @@ const appRouter = os
     .router({
         plugin,
         window,
-        config
+        config,
+        system
     });
 
 export type AppRouter = typeof appRouter;
@@ -29,6 +31,16 @@ export function getOrpcHandler(): RPCHandler<RpcContext> {
             interceptors: [
                 onError((error, context) => {
                     Logger.error('oRPC Server Error:', error, context);
+                    // 重新抛出，错误透传给客户端。@todo: 这里需要处理不是从Error派生的异常，重新从Error派生。
+                    // 如果不是 ORPCError，包装一层下发前端
+                    if (!(error instanceof ORPCError)) {
+                        throw new ORPCError('BAD_REQUEST', {
+                            message: error instanceof Error ? error.message : String(error), // 把 Conf 校验信息透传给前端
+                            cause: error,
+                        })
+                    }
+                    // 本身就是 ORPCError 直接重抛
+                    throw error
                 }),
             ],
         });

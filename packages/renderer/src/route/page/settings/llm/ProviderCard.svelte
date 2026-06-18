@@ -1,0 +1,362 @@
+<script lang="ts">
+  import * as Collapsible from "$lib/components/ui/collapsible";
+  import { Button } from "$lib/components/ui/button";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Separator } from "$lib/components/ui/separator";
+  import { Switch } from "$lib/components/ui/switch";
+  import autoAnimate from "@formkit/auto-animate";
+  import {
+    IconPlus,
+    IconTrash,
+    IconChevronDown,
+    IconKey,
+    IconSettings,
+    IconServer,
+    IconSearch,
+    IconDatabase,
+    IconCloudOff,
+  } from "@tabler/icons-svelte";
+
+  import { type Model, getProviderIcon } from "./types";
+  import type { Provider } from "@app/main/types";
+  import { searchStore } from "./searchstore.svelte";
+  import ModelCard from "./ModelCard.svelte";
+  import { cn } from "tailwind-variants";
+
+  let {
+    provider,
+    visibleModels,
+    open = false,
+    onOpenChange,
+    onEditConfig,
+    onAddModel,
+    onRemoveModel,
+    onRemoveProvider,
+    onToggleEnabled,
+  }: {
+    provider: Provider;
+    visibleModels: Model[];
+    open?: boolean;
+    onOpenChange?: (v: boolean) => void;
+    onEditConfig?: () => void;
+    onAddModel?: () => void;
+    onRemoveModel?: (modelId: string) => void;
+    onRemoveProvider?: () => void;
+    onToggleEnabled?: (enabled: boolean) => void;
+  } = $props();
+
+  let ProviderIcon = $derived(getProviderIcon(provider));
+  let isDisabled = $derived(provider.disabled === true);
+
+  function handleToggleEnabled(checked: boolean) {
+    // 直接突变响应式对象 → 立即触发 UI 更新
+    provider.disabled = !checked;
+    // 通知父组件做持久化
+    onToggleEnabled?.(checked);
+  }
+</script>
+
+<Collapsible.Root {open} onOpenChange={(v) => onOpenChange?.(v)}>
+  <div
+    class={[
+      "rounded-2xl border transition-all duration-200",
+      isDisabled
+        ? "border-border/30 bg-card/60 shadow-none"
+        : open
+          ? "border-border/50 bg-card shadow-md"
+          : "border-border/50 bg-card shadow-sm hover:shadow-lg",
+    ]}
+  >
+    <!-- ─── Trigger ─── -->
+    <Collapsible.Trigger>
+      {#snippet child({ props })}
+        <button
+          {...props}
+          class={[
+            "flex w-full cursor-pointer items-center gap-4 p-6 text-left transition-colors duration-200 select-none",
+            open ? "rounded-t-2xl" : "rounded-2xl",
+            isDisabled ? "hover:bg-muted/15" : "hover:bg-muted/30",
+          ]}
+        >
+          <div
+            class={[
+              "flex size-10 shrink-0 items-center justify-center rounded-xl transition-all duration-200",
+              isDisabled ? "bg-muted" : "bg-primary/10",
+            ]}
+          >
+            <ProviderIcon
+              size={20}
+              stroke={1.5}
+              class={cn(
+                "transition-colors duration-200",
+                isDisabled ? "text-muted-foreground/50" : "text-primary",
+              )}
+            />
+          </div>
+
+          <div
+            class={[
+              "min-w-0 flex-1 transition-opacity duration-200",
+              isDisabled && "opacity-50",
+            ]}
+          >
+            <div class="flex flex-wrap items-center gap-2">
+              <span
+                class={[
+                  "text-lg font-medium transition-all duration-200",
+                  isDisabled &&
+                    "line-through decoration-muted-foreground/40 decoration-1",
+                ]}
+              >
+                {provider.id}
+              </span>
+              {#if isDisabled}
+                <Badge
+                  variant="secondary"
+                  class="rounded-lg border-none bg-destructive/10 text-xs text-destructive"
+                >
+                  <IconCloudOff size={12} stroke={1.5} class="mr-1" />
+                  已禁用
+                </Badge>
+              {/if}
+              {#if provider.protocol}
+                <Badge
+                  variant="secondary"
+                  class={["rounded-lg text-xs", isDisabled && "opacity-60"]}
+                >
+                  {provider.protocol}
+                </Badge>
+              {/if}
+              {#if provider.apiKey && !isDisabled}
+                <div
+                  class="hidden items-center gap-1 text-xs text-muted-foreground sm:flex"
+                >
+                  <IconKey size={12} stroke={1.5} />
+                  <span>已配置</span>
+                </div>
+              {/if}
+            </div>
+            <p
+              class="mt-0.5 max-w-xs truncate text-xs text-muted-foreground sm:max-w-sm lg:max-w-md"
+              title={provider.baseUrl}
+            >
+              {provider.baseUrl}
+            </p>
+          </div>
+
+          <div class="flex shrink-0 items-center gap-3">
+            <!--
+              Switch 隔离点击事件，防止触发 Collapsible 折叠切换。
+              直接突变 provider.disabled 保证即时视觉反馈。
+            -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              onclick={(e: MouseEvent) => e.stopPropagation()}
+              onkeydown={(e: KeyboardEvent) => {
+                if (e.key === " " || e.key === "Enter") e.stopPropagation();
+              }}
+              class="flex items-center"
+              title={isDisabled ? "点击启用该提供商" : "点击禁用该提供商"}
+            >
+              <Switch
+                checked={!isDisabled}
+                onCheckedChange={handleToggleEnabled}
+                class="scale-90"
+              />
+            </div>
+
+            <Badge
+              variant="outline"
+              class={[
+                "rounded-lg text-xs transition-opacity duration-200",
+                isDisabled && "opacity-40",
+              ]}
+            >
+              {#if searchStore.isFiltering && visibleModels.length !== provider.models.length}
+                {visibleModels.length}/{provider.models.length} 个模型
+              {:else}
+                {provider.models.length} 个模型
+              {/if}
+            </Badge>
+            <div
+              class={[
+                "transition-transform duration-200",
+                open && "rotate-180",
+              ]}
+            >
+              <IconChevronDown
+                size={20}
+                stroke={1.5}
+                class="text-muted-foreground"
+              />
+            </div>
+          </div>
+        </button>
+      {/snippet}
+    </Collapsible.Trigger>
+
+    <!-- ─── Content ─── -->
+    <Collapsible.Content>
+      <div
+        class={[
+          "space-y-6 px-6 pb-6 transition-opacity duration-200",
+          isDisabled && "opacity-60",
+        ]}
+      >
+        <Separator />
+
+        {#if isDisabled}
+          <!--╭─────────────────────────────────────────────────────╮ -->
+          <!-- │ [可抽取子组件 → DisabledBanner.svelte]              │ -->
+          <!-- │ 职责：提供商禁用状态下的提示横幅与快捷启用按钮       │ -->
+          <!-- ╰─────────────────────────────────────────────────────╯ -->
+          <div
+            class="flex items-center gap-4 rounded-xl border border-dashed border-destructive/20 bg-destructive/5 p-4"
+          >
+            <div
+              class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-destructive/10"
+            >
+              <IconCloudOff size={16} stroke={1.5} class="text-destructive" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-medium text-foreground">
+                该提供商已被禁用
+              </p>
+              <p class="mt-0.5 text-xs text-muted-foreground">
+                禁用期间其下所有模型将不可用于对话或任务，配置与模型列表仍然保留。
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              class="shrink-0 gap-1.5 rounded-xl text-xs"
+              onclick={() => handleToggleEnabled(true)}
+            >
+              重新启用
+            </Button>
+          </div>
+          <!-- ╭─── / DisabledBanner ───╮ -->
+        {/if}
+
+        <!-- ─── Provider Config Row ─── -->
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <Button
+            variant="outline"
+            size="sm"
+            class="gap-2 rounded-xl text-xs"
+            onclick={() => onEditConfig?.()}
+          >
+            <IconSettings size={14} stroke={1.5} />
+            编辑提供商
+          </Button>
+
+          {#if provider.maxConn}
+            <div
+              class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
+            >
+              <span class="flex items-center gap-1">
+                <IconServer size={12} stroke={1.5} />
+                最大并发 {provider.maxConn}
+              </span>
+            </div>
+          {/if}
+        </div>
+
+        <Separator />
+
+        <!-- ─── Models Section ─── -->
+        <!--╭─────────────────────────────────────────────────────╮ -->
+        <!-- │ [可抽取子组件 → ModelListSection.svelte]            │ -->
+        <!-- │ 职责：模型列表标题栏、网格渲染及空态展示             │ -->
+        <!-- ╰─────────────────────────────────────────────────────╯ -->
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <h3
+              class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            >
+              模型列表
+              {#if searchStore.isFiltering && visibleModels.length !== provider.models.length}
+                <span class="ml-1 font-normal">
+                  ({visibleModels.length}/{provider.models.length})
+                </span>
+              {:else}
+                <span class="ml-1 font-normal">
+                  ({provider.models.length})
+                </span>
+              {/if}
+            </h3>
+            <Button
+              variant="outline"
+              size="sm"
+              class="gap-1.5 rounded-xl text-xs"
+              onclick={() => onAddModel?.()}
+              disabled={isDisabled}
+            >
+              <IconPlus size={14} stroke={1.5} />
+              添加模型
+            </Button>
+          </div>
+
+          {#if visibleModels.length > 0}
+            <div
+              class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
+              use:autoAnimate
+            >
+              {#each visibleModels as model (model.id)}
+                <ModelCard
+                  {model}
+                  disabled={isDisabled}
+                  onRemove={() => onRemoveModel?.(model.id)}
+                />
+              {/each}
+            </div>
+          {:else if searchStore.isFiltering}
+            <div
+              class="flex flex-col items-center justify-center space-y-3 rounded-xl border border-dashed border-border/50 py-8"
+            >
+              <IconSearch
+                size={18}
+                stroke={1.5}
+                class="text-muted-foreground"
+              />
+              <p class="text-sm text-muted-foreground">该提供商下无匹配模型</p>
+            </div>
+          {:else}
+            <div
+              class="flex flex-col items-center justify-center space-y-3 rounded-xl border border-dashed border-border/50 py-10"
+            >
+              <div
+                class="flex size-10 items-center justify-center rounded-xl bg-muted"
+              >
+                <IconDatabase
+                  size={18}
+                  stroke={1.5}
+                  class="text-muted-foreground"
+                />
+              </div>
+              <p class="text-sm text-muted-foreground">该提供商尚无模型</p>
+            </div>
+          {/if}
+        </div>
+        <!-- ╭─── / ModelListSection ───╮ -->
+
+        <!-- ─── Danger Zone ─── -->
+        <Separator />
+        <div class="flex items-center justify-between">
+          <p class="text-xs text-muted-foreground">
+            移除后该提供商及其所有模型配置将被永久删除
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            class="gap-2 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onclick={() => onRemoveProvider?.()}
+          >
+            <IconTrash size={14} stroke={1.5} />
+            移除提供商
+          </Button>
+        </div>
+      </div>
+    </Collapsible.Content>
+  </div>
+</Collapsible.Root>

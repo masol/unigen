@@ -46,42 +46,17 @@
   aria-label="窗口标题栏"
   tabindex="-1"
 >
-  <Tooltip.Provider delayDuration={300}>
-    <!--╭─────────────────────────────────────────────────────────╮ -->
-    <!-- │ [可抽取子组件 → AppMenu.svelte]                         │ -->
-    <!-- │ 职责：应用图标 + 桌面端菜单栏 + 移动端折叠菜单            │ -->
-    <!-- ╰─────────────────────────────────────────────────────────╯ -->
+  <!--╭─────────────────────────────────────────────────────────╮ -->
+  <!-- │ [可抽取子组件 → AppMenu.svelte]                         │ -->
+  <!-- │ 职责：应用图标 + 桌面端菜单栏 + 移动端折叠菜单            │ -->
+  <!-- ╰─────────────────────────────────────────────────────────╯ -->
 
-    <!-- 应用图标 -->
-    <Brand></Brand>
+  <!-- 应用图标 -->
+  <Brand></Brand>
 
-    <!-- 菜单栏（中屏以上显示） -->
-    <nav class="hidden items-center md:flex">
-      {#each menus as m (m)}
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            {#snippet child({ props })}
-              <Button
-                {...props}
-                variant="ghost"
-                size="sm"
-                class="h-9 rounded-none px-2.5 font-normal hover:bg-accent/80"
-              >
-                {m}
-              </Button>
-            {/snippet}
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="start" class="z-200 min-w-44">
-            {#each menuItems as item (item)}
-              <DropdownMenu.Item>{item}</DropdownMenu.Item>
-            {/each}
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-      {/each}
-    </nav>
-
-    <!-- 移动端折叠菜单 -->
-    <div class="md:hidden">
+  <!-- 菜单栏（中屏以上显示） -->
+  <nav class="hidden items-center md:flex">
+    {#each menus as m (m)}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
@@ -89,83 +64,105 @@
               {...props}
               variant="ghost"
               size="sm"
-              class="h-9 rounded-none px-2 font-normal hover:bg-accent/80"
+              class="h-9 rounded-none px-2.5 font-normal hover:bg-accent/80"
             >
-              菜单
+              {m}
             </Button>
           {/snippet}
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="start" class="z-200">
-          {#each menus as m (m)}
-            <DropdownMenu.Item>{m}</DropdownMenu.Item>
+        <DropdownMenu.Content align="start" class="z-200 min-w-44">
+          {#each menuItems as item (item)}
+            <DropdownMenu.Item>{item}</DropdownMenu.Item>
           {/each}
         </DropdownMenu.Content>
       </DropdownMenu.Root>
-    </div>
-    <!-- ╭─── / AppMenu ───╮ -->
+    {/each}
+  </nav>
 
-    <!-- ╭─────────────────────────────────────────────────────────╮ -->
-    <!-- │ [可抽取子组件 → WindowTitle.svelte]                      │ -->
-    <!-- │ 职责：中部标题文字显示 + 唯一的窗口拖拽区域               │ -->
-    <!-- ╰─────────────────────────────────────────────────────────╯ -->
-    <div
-      class="flex flex-1 items-center justify-center px-2"
-      style="-webkit-app-region: drag;"
-      role="button"
-      tabindex="0"
-      ondblclick={() => windowStore.maximize()}
-    >
-      <span class="text-muted-foreground truncate">{windowStore.title}</span>
-    </div>
-    <!-- ╭─── / WindowTitle ───╮ -->
+  <!-- 移动端折叠菜单 -->
+  <div class="md:hidden">
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            variant="ghost"
+            size="sm"
+            class="h-9 rounded-none px-2 font-normal hover:bg-accent/80"
+          >
+            菜单
+          </Button>
+        {/snippet}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="start" class="z-200">
+        {#each menus as m (m)}
+          <DropdownMenu.Item>{m}</DropdownMenu.Item>
+        {/each}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  </div>
+  <!-- ╭─── / AppMenu ───╮ -->
 
-    <!-- ╭─────────────────────────────────────────────────────────╮ -->
-    <!-- │ [可抽取子组件 → ThemeCycler.svelte]                      │ -->
-    <!-- │ 职责：主题三态轮换 light → dark → system → light         │ -->
-    <!-- ╰─────────────────────────────────────────────────────────╯ -->
-    <div class="flex items-center">
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              onclick={cycleTheme}
-              variant="ghost"
-              size="icon"
-              class="size-9 rounded-none hover:bg-accent/80"
-            >
-              {#if currentTheme === "light"}
-                <IconSun size={16} />
-              {:else if currentTheme === "dark"}
-                <IconMoon size={16} />
-              {:else}
-                <IconDeviceDesktop size={16} />
-              {/if}
-            </Button>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content class="z-200">{themeLabel}（点击切换）</Tooltip.Content
-        >
-      </Tooltip.Root>
-    </div>
-    <!-- ╭─── / ThemeCycler ───╮ -->
+  <!-- ╭─────────────────────────────────────────────────────────╮ -->
+  <!-- │ [可抽取子组件 → WindowTitle.svelte]                      │ -->
+  <!-- │ 职责：中部标题文字显示 + 唯一的窗口拖拽区域               │ -->
+  <!-- ╰─────────────────────────────────────────────────────────╯ -->
+  <div
+    class="flex flex-1 items-center justify-center px-2"
+    style="-webkit-app-region: drag;"
+    role="button"
+    tabindex="0"
+    ondblclick={() => windowStore.maximize()}
+  >
+    <span class="text-muted-foreground truncate">{windowStore.title}</span>
+  </div>
+  <!-- ╭─── / WindowTitle ───╮ -->
 
-    <!-- 分隔竖线 -->
-    <Separator orientation="vertical" class="mx-1 h-5" />
+  <!-- ╭─────────────────────────────────────────────────────────╮ -->
+  <!-- │ [可抽取子组件 → ThemeCycler.svelte]                      │ -->
+  <!-- │ 职责：主题三态轮换 light → dark → system → light         │ -->
+  <!-- ╰─────────────────────────────────────────────────────────╯ -->
+  <div class="flex items-center">
+    <Tooltip.Root>
+      <Tooltip.Trigger>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            onclick={cycleTheme}
+            variant="ghost"
+            size="icon"
+            class="size-9 rounded-none hover:bg-accent/80"
+          >
+            {#if currentTheme === "light"}
+              <IconSun size={16} />
+            {:else if currentTheme === "dark"}
+              <IconMoon size={16} />
+            {:else}
+              <IconDeviceDesktop size={16} />
+            {/if}
+          </Button>
+        {/snippet}
+      </Tooltip.Trigger>
+      <Tooltip.Content class="z-200">{themeLabel}（点击切换）</Tooltip.Content>
+    </Tooltip.Root>
+  </div>
+  <!-- ╭─── / ThemeCycler ───╮ -->
 
-    <!-- ╭─────────────────────────────────────────────────────────╮ -->
-    <!-- │ [可抽取子组件 → LayoutToggles.svelte]                    │ -->
-    <!-- │ 职责：左侧栏/底部面板/右侧栏三栏开关                     │ -->
-    <!-- ╰─────────────────────────────────────────────────────────╯ -->
-    <!-- ╭─── / LayoutToggles ───╮ -->
-    <LayoutGroup></LayoutGroup>
+  <!-- 分隔竖线 -->
+  <Separator orientation="vertical" class="mx-1 h-5" />
 
-    <!--
+  <!-- ╭─────────────────────────────────────────────────────────╮ -->
+  <!-- │ [可抽取子组件 → LayoutToggles.svelte]                    │ -->
+  <!-- │ 职责：左侧栏/底部面板/右侧栏三栏开关                     │ -->
+  <!-- ╰─────────────────────────────────────────────────────────╯ -->
+  <!-- ╭─── / LayoutToggles ───╮ -->
+  <LayoutGroup></LayoutGroup>
+
+  <!--
       窗口控制：最小化 / 最大化-还原 / 关闭
       z-60 保证永远可点、永不被遮挡。
     -->
-    <Winctrl></Winctrl>
-  </Tooltip.Provider>
+  <Winctrl></Winctrl>
 </header>
 
 <style>

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { os } from "@orpc/server";
 import { BrowserWindow } from 'electron';
 import { WindowService } from '$libs/utils/window.js';
-import { RpcContext } from './type.js';
+import { RpcContext } from '../type.js';
 
 // ---------- 窗口状态枚举 ----------
 const WindowStateSchema = z.object({

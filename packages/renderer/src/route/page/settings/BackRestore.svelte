@@ -4,67 +4,47 @@
   import { toast } from "svelte-sonner";
   import { api } from "$lib/utils/api";
   import { configStore } from "$lib/store/config.svelte";
-
-  let fileInput: HTMLInputElement;
+  import dayjs from "dayjs";
 
   async function handleBackup() {
-    let url: string | null = null;
-    let anchor: HTMLAnchorElement | null = null;
-
     try {
       const config = await api().config.getAll();
       const json = JSON.stringify(config, null, 2);
-      const blob = new Blob([json], { type: "application/json" });
+      const defaultName = `unigen-config-${dayjs().format("YYYY-MM-DD")}.json`;
 
-      url = URL.createObjectURL(blob);
-      anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `config-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      const result = await api().system.saveFile({
+        data: json,
+        defaultName,
+        filters: "json",
+      });
 
-      document.body.appendChild(anchor);
-      anchor.click();
-
-      // 等待浏览器发起下载后再提示
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      if (result.canceled) return;
+      if (!result.success) throw new Error("写入文件失败");
 
       toast.success("备份成功");
     } catch (e) {
       toast.error(`备份失败: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      if (anchor) document.body.removeChild(anchor);
-      if (url) URL.revokeObjectURL(url);
     }
   }
 
-  function handleRestore() {
-    fileInput.click();
-  }
-
-  async function onFileSelected(e: Event) {
-    const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-
+  async function handleRestore() {
     try {
-      const content = await file.text();
-      const config = JSON.parse(content);
+      const result = await api().system.openFile({
+        filters: "json",
+      });
+
+      if (result.canceled) return;
+      if (!result.success || !result.content) throw new Error("读取文件失败");
+
+      const config = JSON.parse(result.content);
       await configStore.setAll(config);
+
       toast.success("恢复成功");
     } catch (e) {
       toast.error(`恢复失败: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      input.value = "";
     }
   }
 </script>
-
-<input
-  bind:this={fileInput}
-  type="file"
-  accept=".json"
-  class="hidden"
-  onchange={onFileSelected}
-/>
 
 <section class="space-y-4">
   <h2 class="text-lg font-medium text-foreground px-1">数据管理</h2>

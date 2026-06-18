@@ -1,7 +1,7 @@
 // src/lib/store/config.svelte.ts
 import evtbus from '$lib/utils/evtbus'
 import log from 'electron-log/renderer'
-import type { AppConfig, Provider } from '@app/main/types'
+import type { AppConfig, Model, Provider } from '@app/main/types'
 import { api } from '$lib/utils/api'
 import { setMode } from "mode-watcher";
 
@@ -16,6 +16,7 @@ class ConfigStore {
     #localModel = $state<string>('')                   // 原始值 → $state
     #providers = $state.raw<Provider[]>([])           // 复合对象整体替换 → $state.raw
     #autoupdate = $state<boolean>(true)
+    #disableHA = $state<boolean>(false)
 
     // ── 私有状态：init 异步状态机 ──
     #isLoading = $state(false)
@@ -34,6 +35,7 @@ class ConfigStore {
     get localModel() { return this.#localModel }
     get providers() { return this.#providers }
     get autoupdate() { return this.#autoupdate }
+    get disableHA() { return this.#disableHA }
 
     // ── 只读门面：init 异步状态 ──
     get isLoading() { return this.#isLoading }
@@ -53,6 +55,9 @@ class ConfigStore {
 
     /** Provider 总数 */
     readonly providerCount = $derived(this.#providers.length)
+
+    /** 模型总数 */
+    readonly totalModels = $derived(this.#providers.reduce((total, curr) => total + curr.models.length, 0))
 
     /** 所有 Provider 下 Model 总数 */
     readonly totalModelCount = $derived.by(() =>
@@ -99,6 +104,9 @@ class ConfigStore {
                 case 'autoupdate':
                     this.#autoupdate = value as AppConfig['autoupdate'];
                     break;
+                case 'disableHA':
+                    this.#disableHA = value as AppConfig['disableHA'];
+                    break;
                 default:
                     log.warn(`[ConfigStore] received cfg:set but not implement:${name}`)
             }
@@ -113,6 +121,7 @@ class ConfigStore {
         this.#localModel = config.local_model
         this.#providers = config.models
         this.#autoupdate = config.autoupdate
+        this.#disableHA = config.disableHA
         this.applyTheme();
     }
 
@@ -168,6 +177,27 @@ class ConfigStore {
         }
     }
 
+    async setDisableHA(value: AppConfig['disableHA']): Promise<void> {
+        log.debug(`[ConfigStore] setTheme() called, value=${value}`)
+        this.#savingCount++
+        this.#saveError = null
+        try {
+            await api().config.set({
+                key: 'disableHA',
+                value
+            })
+            this.#disableHA = value
+            this.#lastSaved = Date.now()
+            log.info(`[ConfigStore] theme set to "${value}"`)
+        } catch (err) {
+            this.#saveError = err instanceof Error ? err.message : String(err)
+            log.error('[ConfigStore] setDisableHA() failed', err)
+        } finally {
+            this.#savingCount--
+        }
+    }
+
+
     private async applyTheme() {
         if (this.#theme === 'system') {
             const mode = (await api().config.useDark()) ? "dark" : "light";
@@ -220,7 +250,7 @@ class ConfigStore {
     }
 
     async setAll(config: Record<string, unknown>): Promise<void> {
-        api().config.setAll(config);
+        await api().config.setAll(config);
         this.applyConfig(config as unknown as AppConfig);
     }
 
@@ -310,6 +340,13 @@ class ConfigStore {
         }
     }
 
+    async upsertProvider(provider: Provider): Promise<void> {
+        if (this.#providers.find(p => p.id === provider.id)) {
+            return await this.updateProvider(provider);
+        }
+        return await this.addProvider(provider);
+    }
+
     /** 新增 Provider */
     async addProvider(provider: Provider): Promise<void> {
         log.debug(`[ConfigStore] addProvider() called, id=${provider.id}`)
@@ -349,6 +386,81 @@ class ConfigStore {
             return
         }
         await this.setProviders(next)
+    }
+
+
+    /** 整体替换 models 列表 */
+    async setModels(pid: string, models: Model[]): Promise<void> {
+        this.#savingCount++
+        this.#saveError = null
+        try {
+            const provider = this.#providers.find((p) => p.id === pid)
+            if (provider) {
+                provider.models = models;
+            }
+            await api().config.set({
+                key: 'models',
+                value: this.#providers
+            })
+            this.#lastSaved = Date.now()
+            log.info(`[ConfigStore] models replaced for ${pid}, ${models.length} total`)
+        } catch (err) {
+            this.#saveError = err instanceof Error ? err.message : String(err)
+            log.error('[ConfigStore] setModels() failed', err)
+        } finally {
+            this.#savingCount--
+        }
+    }
+
+    /** 新增 model */
+    async addModel(pid: string, model: Model): Promise<void> {
+        log.debug(`[ConfigStore] addModel() called, pid=${pid},mid=${model.id}`)
+        const provider = this.#providers.find((p) => p.id === pid);
+        if (provider) {
+            if (provider.models.some((m) => m.id === model.id)) {
+                log.error(`[ConfigStore] addModel() duplicate id="${model.id}"`)
+                this.#saveError = `Model id ${model.id} in Provider "${provider.id}" already exists`
+                return
+            }
+            await this.setModels(pid, [...provider.models, model])
+        }
+    }
+
+    /** 移除 Provider */
+    async removeModel(pid: string, mid: string): Promise<void> {
+        log.debug(`[ConfigStore] removeModel() called, pid=${pid},mid=${mid}`)
+        const provider = this.#providers.find((p) => p.id === pid)
+        if (provider) {
+            const next = provider.models.filter((m) => m.id !== mid);
+            if (next.length === provider.models.length) {
+                log.debug(`[ConfigStore] removeModel() no-op, mid="${mid}" not found`)
+                return
+            }
+            await this.setModels(provider.id, next)
+        }
+    }
+
+    /** 更新 model（按 id 匹配替换） */
+    async updateModel(pid: string, model: Model): Promise<void> {
+        log.debug(`[ConfigStore] updateModel() called, pid=${pid},mid=${model.id}`)
+        const provider = this.#providers.find((p) => p.id === pid)
+        if (provider) {
+            let found = false
+
+            const next = provider.models.map((m) => {
+                if (m.id === model.id) {
+                    found = true
+                    return model
+                }
+                return m
+            })
+            if (!found) {
+                log.error(`[ConfigStore] updateModel() id="${model.id}" in ${pid} not found`)
+                this.#saveError = `id="${model.id}" in Provider "${pid}" not found`
+                return
+            }
+            await this.setModels(pid, next)
+        }
     }
 
     // ═══════════════════════════════════════

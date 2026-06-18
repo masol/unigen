@@ -1,5 +1,5 @@
 // import { getCountryCode } from '$libs/utils/net/ip.js';
-// import eLogger from 'electron-log';
+// import eLogger from 'electron-log/main';
 import { AppModule } from '../AppModule.js';
 import electronUpdater, { type AppUpdater, type Logger } from 'electron-updater';
 

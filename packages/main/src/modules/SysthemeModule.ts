@@ -1,7 +1,7 @@
 import { nativeTheme } from 'electron';
 import type { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../types/ModuleContext.js';
-// import Logger from 'electron-log';
+// import Logger from 'electron-log/main';
 import { broadcast } from '$libs/utils/rpcevt.js';
 
 class SysthemeModule implements AppModule {

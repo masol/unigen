@@ -8,7 +8,7 @@ import log from "electron-log/renderer";
 import type { Component } from "svelte";
 import FallbackComponent from "../../route/featured/content/fallback.svelte";
 import GeneralSetting from "../../route/page/settings/general.svelte";
-import LLMSetting from "../../route/page/settings/models/llm.svelte";
+import LLMSetting from "../../route/page/settings/llm/llm.svelte";
 
 // ── 类型 ──
 
