@@ -1,4 +1,4 @@
-import { ProviderProtocol } from '$types/appconfig.js';
+import { ProviderProtocol } from '$types/shared/model.js';
 import { modelSchema } from './model.schema.js';
 
 export const providerSchema = {

@@ -70,10 +70,10 @@
     <Tooltip.Content class="z-200">关闭</Tooltip.Content>
   </Tooltip.Root>
 </div>
-
+<!-- 
 <style>
   :global(.group:last-child:hover) {
     background-color: oklch(0.637 0.237 25.331) !important;
     color: white !important;
   }
-</style>
+</style> -->

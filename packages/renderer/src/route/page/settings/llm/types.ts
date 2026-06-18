@@ -12,13 +12,15 @@ import {
     IconArrowsSort,
     IconEye,
     IconMicrophone,
+    IconVideo,
+    IconFunction
 } from "@tabler/icons-svelte";
 
-export type { Model } from "@app/main/types"
-import type { ModelAbility, ProviderProtocol, Modality, Provider } from "@app/main/types"
+export type { Model, ModelOption } from "@app/main/types"
+import type { ModelAbility, ProviderProtocol, Provider } from "@app/main/types"
 export type ProviderConfig = Omit<Provider, "models">
 
-export type { ProviderProtocol }
+export type { ProviderProtocol, ModelAbility }
 /* ═══════════════════════════════════════════════════════════
    Helpers
    ═══════════════════════════════════════════════════════════ */
@@ -77,8 +79,10 @@ export const abilityLabels: Record<ModelAbility, string> = {
     "reasoning": "推理",
     "embedding": "嵌入",
     "rerank": "重排",
-    "vision": "视觉",
+    "vision": "图像",
     "audio": "音频",
+    "func": "函数",
+    "video": "视频",
 };
 
 export const abilityIcons: Record<ModelAbility, typeof IconMessage> = {
@@ -89,6 +93,8 @@ export const abilityIcons: Record<ModelAbility, typeof IconMessage> = {
     "rerank": IconArrowsSort,
     "vision": IconEye,
     "audio": IconMicrophone,
+    "func": IconFunction,
+    "video": IconVideo,
 };
 
 export const allAbilities: Record<string, ModelAbility> = {
@@ -97,7 +103,9 @@ export const allAbilities: Record<string, ModelAbility> = {
     embedding: 'embedding' as ModelAbility,
     rerank: 'rerank' as ModelAbility,
     vision: 'vision' as ModelAbility,
-    audio: 'audio' as ModelAbility
+    audio: 'audio' as ModelAbility,
+    func: 'func' as ModelAbility,
+    video: 'video' as ModelAbility
 };
 
 export const protocolLabels: Record<ProviderProtocol, string> = {
@@ -116,14 +124,6 @@ export const allProtocols: Record<string, ProviderProtocol> = {
     vertex: "google-vertex" as ProviderProtocol,
     huggingface: "huggingface" as ProviderProtocol
 };
-
-export const modalityLabels: Record<Modality, string> = {
-    text: "文本",
-    image: "图片",
-    audio: "音频",
-    video: "视频",
-};
-
 
 export function formatTokens(n: number): string {
     // 使用英美语系 (en-US) 保证输出 k, M, B
@@ -148,3 +148,7 @@ export type KnownProvider = Array<{
     heading: string,
     presets: ProviderPreset[]
 }>
+
+
+/** 所有能力 / 模态 / 计费模式（用于渲染选择项） */
+export const ALL_ABILITIES: ModelAbility[] = Object.values(allAbilities);

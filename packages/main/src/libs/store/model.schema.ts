@@ -1,40 +1,41 @@
-import { ModelAbility } from '$types/appconfig.js';
+import { ModelAbility } from '$types/shared/model.js';
 
 export const modelSchema = {
     type: 'object',
-    required: ['id', 'abilities', 'inputModalities', 'outputModalities', 'inctx', 'outctx', 'pricingType', 'isLocal'],
+    required: ['id', 'abilities'],
+    additionalProperties: false,
     properties: {
-        id: { type: 'string' },
-        name: { type: 'string' },
+        id: {
+            type: 'string',
+            minLength: 1
+        },
+
         abilities: {
             type: 'array',
             items: {
                 type: 'string',
                 enum: Object.values(ModelAbility)
-            }
+            },
+            uniqueItems: true,
+            minItems: 1
         },
-        inputModalities: {
-            type: 'array',
-            items: {
-                type: 'string',
-                enum: ['text', 'image', 'audio', 'video']
-            }
+
+        // 输入上下文窗口（Tokens）
+        inctx: {
+            type: 'integer',
+            minimum: 1
         },
-        outputModalities: {
-            type: 'array',
-            items: {
-                type: 'string',
-                enum: ['text', 'image', 'audio', 'video']
-            }
+
+        // 最大输出 Tokens
+        outctx: {
+            type: 'integer',
+            minimum: 1
         },
-        inctx: { type: 'number' },
-        outctx: { type: 'number' },
-        pricingType: {
-            type: 'string',
-            enum: ['free', 'per-token', 'per-request', 'local']
-        },
-        incost_1m: { type: 'number' },
-        outcost_1m: { type: 'number' },
-        isLocal: { type: 'boolean' }
+
+        // 模型能力评分
+        score: {
+            type: 'number',
+            minimum: 0
+        }
     }
-};
+} as const;

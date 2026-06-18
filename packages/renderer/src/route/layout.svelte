@@ -16,7 +16,7 @@
 <!--══════════════════════════════════════════════════════════════ -->
 <!--ROOT LAYOUT                                                  -->
 <!-- ══════════════════════════════════════════════════════════════ -->
-<Tooltip.Provider>
+<Tooltip.Provider  delayDuration={300}>
   <div class="flex w-full h-full flex-col bg-background">
     <!-- HeaderBar：固定在顶部 -->
     <HeaderBar />

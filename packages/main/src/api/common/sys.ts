@@ -5,6 +5,7 @@ import { readFile, writeFile } from 'fs/promises'
 import { basename, extname } from 'path'
 import { FileFilterPreset, FileReturnMode } from '$types/shared/api.js'
 import { RpcContext } from '../type.js'
+import { listModels } from '$libs/utils/model/list.js'
 // import Logger from 'electron-log/main.js'
 
 // ─── Zod Schemas ─────────────────────────────────────────────
@@ -445,6 +446,14 @@ const showItemInFolder = os
 //         return result.response
 //     })
 
+
+const listmodel = os
+    .input(z.object({ baseURL: z.string(), apiKey: z.string() }))
+    .output(z.array(z.record(z.string(), z.any())))
+    .handler(async ({ input }) => {
+        return await listModels(input.baseURL, input.apiKey)
+    })
+
 // ─── 导出 ─────────────────────────────────────────────────────
 
 export default {
@@ -456,5 +465,6 @@ export default {
     openExternal,
     openPath,
     showItemInFolder,
+    listmodel
     // messageBox
 }

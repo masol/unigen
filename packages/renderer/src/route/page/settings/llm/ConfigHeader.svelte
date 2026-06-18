@@ -22,7 +22,7 @@
 
 <header class="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
   <div class="space-y-2">
-    <h1 class="text-2xl font-semibold tracking-tight lg:text-3xl">模型配置</h1>
+    <h1 class="text-2xl font-semibold tracking-tight lg:text-3xl">语言模型配置</h1>
     <p class="text-sm text-muted-foreground">
       管理 AI 服务提供商及其支持的模型
     </p>

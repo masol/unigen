@@ -39,7 +39,7 @@
     open?: boolean;
     onOpenChange?: (v: boolean) => void;
     onEditConfig?: () => void;
-    onAddModel?: () => void;
+    onAddModel?: (model?: Model) => void;
     onRemoveModel?: (modelId: string) => void;
     onRemoveProvider?: () => void;
     onToggleEnabled?: (enabled: boolean) => void;
@@ -306,6 +306,7 @@
                 <ModelCard
                   {model}
                   disabled={isDisabled}
+                  onEdit={() => onAddModel?.(model)}
                   onRemove={() => onRemoveModel?.(model.id)}
                 />
               {/each}

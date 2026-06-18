@@ -165,9 +165,9 @@
   <Winctrl></Winctrl>
 </header>
 
-<style>
+<!-- <style>
   :global(.group:last-child:hover) {
     background-color: oklch(0.637 0.237 25.331) !important;
     color: white !important;
   }
-</style>
+</style> -->

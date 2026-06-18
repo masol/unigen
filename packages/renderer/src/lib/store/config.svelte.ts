@@ -4,6 +4,11 @@ import log from 'electron-log/renderer'
 import type { AppConfig, Model, Provider } from '@app/main/types'
 import { api } from '$lib/utils/api'
 import { setMode } from "mode-watcher";
+import { toast } from 'svelte-sonner';
+
+export const DefInputToken = 256000;
+export const DefOutputToken = 8192;
+export const DefScore = 50;
 
 // ── Store ──
 
@@ -14,7 +19,7 @@ class ConfigStore {
     #modelEndpoint = $state<string>('')                   // 原始值 → $state
     #embedModel = $state<string>('')                   // 原始值 → $state
     #localModel = $state<string>('')                   // 原始值 → $state
-    #providers = $state.raw<Provider[]>([])           // 复合对象整体替换 → $state.raw
+    #providers = $state<Provider[]>([])           // 复合对象整体替换 → $state.raw
     #autoupdate = $state<boolean>(true)
     #disableHA = $state<boolean>(false)
 
@@ -172,6 +177,7 @@ class ConfigStore {
         } catch (err) {
             this.#saveError = err instanceof Error ? err.message : String(err)
             log.error('[ConfigStore] setTheme() failed', err)
+            toast.error(this.#saveError);
         } finally {
             this.#savingCount--
         }
@@ -192,6 +198,7 @@ class ConfigStore {
         } catch (err) {
             this.#saveError = err instanceof Error ? err.message : String(err)
             log.error('[ConfigStore] setDisableHA() failed', err)
+            toast.error(this.#saveError);
         } finally {
             this.#savingCount--
         }
@@ -223,6 +230,7 @@ class ConfigStore {
         } catch (err) {
             this.#saveError = err instanceof Error ? err.message : String(err)
             log.error('[ConfigStore] setLang() failed', err)
+            toast.error(this.#saveError);
         } finally {
             this.#savingCount--
         }
@@ -244,6 +252,7 @@ class ConfigStore {
         } catch (err) {
             this.#saveError = err instanceof Error ? err.message : String(err)
             log.error('[ConfigStore] setModelEndpoint() failed', err)
+            toast.error(this.#saveError);
         } finally {
             this.#savingCount--
         }
@@ -270,6 +279,7 @@ class ConfigStore {
         } catch (err) {
             this.#saveError = err instanceof Error ? err.message : String(err)
             log.error('[ConfigStore] setEmbedModel() failed', err)
+            toast.error(this.#saveError);
         } finally {
             this.#savingCount--
         }
@@ -289,6 +299,7 @@ class ConfigStore {
         } catch (err) {
             this.#saveError = err instanceof Error ? err.message : String(err)
             log.error('[ConfigStore] setAutoupdate() failed', err)
+            toast.error(this.#saveError);
         } finally {
             this.#savingCount--
         }
@@ -310,6 +321,7 @@ class ConfigStore {
         } catch (err) {
             this.#saveError = err instanceof Error ? err.message : String(err)
             log.error('[ConfigStore] setLocalModel() failed', err)
+            toast.error(this.#saveError);
         } finally {
             this.#savingCount--
         }
@@ -335,6 +347,7 @@ class ConfigStore {
         } catch (err) {
             this.#saveError = err instanceof Error ? err.message : String(err)
             log.error('[ConfigStore] setProviders() failed', err)
+            toast.error(this.#saveError);
         } finally {
             this.#savingCount--
         }
@@ -376,6 +389,7 @@ class ConfigStore {
         const next = this.#providers.map((p) => {
             if (p.id === provider.id) {
                 found = true
+                provider.models = p.models;
                 return provider
             }
             return p
@@ -390,7 +404,7 @@ class ConfigStore {
 
 
     /** 整体替换 models 列表 */
-    async setModels(pid: string, models: Model[]): Promise<void> {
+    private async setModels(pid: string, models: Model[]): Promise<void> {
         this.#savingCount++
         this.#saveError = null
         try {
@@ -407,22 +421,9 @@ class ConfigStore {
         } catch (err) {
             this.#saveError = err instanceof Error ? err.message : String(err)
             log.error('[ConfigStore] setModels() failed', err)
+            toast.error(this.#saveError);
         } finally {
             this.#savingCount--
-        }
-    }
-
-    /** 新增 model */
-    async addModel(pid: string, model: Model): Promise<void> {
-        log.debug(`[ConfigStore] addModel() called, pid=${pid},mid=${model.id}`)
-        const provider = this.#providers.find((p) => p.id === pid);
-        if (provider) {
-            if (provider.models.some((m) => m.id === model.id)) {
-                log.error(`[ConfigStore] addModel() duplicate id="${model.id}"`)
-                this.#saveError = `Model id ${model.id} in Provider "${provider.id}" already exists`
-                return
-            }
-            await this.setModels(pid, [...provider.models, model])
         }
     }
 
@@ -440,8 +441,18 @@ class ConfigStore {
         }
     }
 
+    /** 新增 model */
+    private async addModel(provider: Provider, model: Model): Promise<void> {
+        if (provider.models.some((m) => m.id === model.id)) {
+            log.error(`[ConfigStore] addModel() duplicate id="${model.id}"`)
+            this.#saveError = `Model id ${model.id} in Provider "${provider.id}" already exists`
+            return
+        }
+        await this.setModels(provider.id, [...provider.models, model])
+    }
+
     /** 更新 model（按 id 匹配替换） */
-    async updateModel(pid: string, model: Model): Promise<void> {
+    async upsertModel(pid: string, model: Model): Promise<void> {
         log.debug(`[ConfigStore] updateModel() called, pid=${pid},mid=${model.id}`)
         const provider = this.#providers.find((p) => p.id === pid)
         if (provider) {
@@ -455,8 +466,10 @@ class ConfigStore {
                 return m
             })
             if (!found) {
-                log.error(`[ConfigStore] updateModel() id="${model.id}" in ${pid} not found`)
-                this.#saveError = `id="${model.id}" in Provider "${pid}" not found`
+                //新建模型。
+                await this.addModel(provider, model);
+                // log.error(`[ConfigStore] updateModel() id="${model.id}" in ${pid} not found`)
+                // this.#saveError = `id="${model.id}" in Provider "${pid}" not found`
                 return
             }
             await this.setModels(pid, next)

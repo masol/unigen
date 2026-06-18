@@ -15,191 +15,7 @@
   import ProviderConfigDialog from "./ProviderConfigDialog.svelte";
   import type { ProviderConfig } from "./types";
   import { configStore } from "$lib/store/config.svelte";
-
-  /* ═══════════════════════════════════════════════════════════
-     Mock Data
-     ═══════════════════════════════════════════════════════════ */
-
-  // const mockProviders: Provider[] = [
-  //   {
-  //     id: "openai",
-  //     protocol: "openai" as ProviderProtocol,
-  //     baseUrl: "https://api.openai.com/v1",
-  //     apiKey: "sk-proj-xxxxxxxx",
-  //     maxConn: 25,
-  //     models: [
-  //       {
-  //         id: "gpt-4o",
-  //         name: "GPT-4o",
-  //         abilities: [
-  //           "text-generation",
-  //           "code-generation",
-  //           "vision",
-  //         ] as ModelAbility[],
-  //         inputModalities: ["text", "image"],
-  //         outputModalities: ["text"],
-  //         inctx: 128_000,
-  //         outctx: 16_384,
-  //         pricingType: "per-token",
-  //         incost_1m: 2.5,
-  //         outcost_1m: 10,
-  //       },
-  //       {
-  //         id: "gpt-4o-mini",
-  //         name: "GPT-4o Mini",
-  //         abilities: [
-  //           "text-generation",
-  //           "code-generation",
-  //           "vision",
-  //         ] as ModelAbility[],
-  //         inputModalities: ["text", "image"],
-  //         outputModalities: ["text"],
-  //         inctx: 128_000,
-  //         outctx: 16_384,
-  //         pricingType: "per-token",
-  //         incost_1m: 0.15,
-  //         outcost_1m: 0.6,
-  //       },
-  //       {
-  //         id: "o3",
-  //         name: "o3",
-  //         abilities: [
-  //           "reasoning",
-  //           "text-generation",
-  //           "code-generation",
-  //           "vision",
-  //         ] as ModelAbility[],
-  //         inputModalities: ["text", "image"],
-  //         outputModalities: ["text"],
-  //         inctx: 200_000,
-  //         outctx: 100_000,
-  //         pricingType: "per-token",
-  //         incost_1m: 10,
-  //         outcost_1m: 40,
-  //       },
-  //       {
-  //         id: "text-embedding-3-large",
-  //         name: "Embedding 3 Large",
-  //         abilities: ["embedding"] as ModelAbility[],
-  //         inputModalities: ["text"],
-  //         outputModalities: ["text"],
-  //         inctx: 8_191,
-  //         outctx: 0,
-  //         pricingType: "per-token",
-  //         incost_1m: 0.13,
-  //         outcost_1m: 0,
-  //       },
-  //     ],
-  //   },
-  //   {
-  //     id: "anthropic",
-  //     protocol: "anthropic" as ProviderProtocol,
-  //     baseUrl: "https://api.anthropic.com/v1",
-  //     apiKey: "sk-ant-xxxxxxxx",
-  //     maxConn: 3,
-  //     models: [
-  //       {
-  //         id: "claude-sonnet-4-20250514",
-  //         name: "Claude Sonnet 4",
-  //         abilities: [
-  //           "text-generation",
-  //           "code-generation",
-  //           "vision",
-  //           "reasoning",
-  //         ] as ModelAbility[],
-  //         inputModalities: ["text", "image"],
-  //         outputModalities: ["text"],
-  //         inctx: 200_000,
-  //         outctx: 64_000,
-  //         pricingType: "per-token",
-  //         incost_1m: 3,
-  //         outcost_1m: 15,
-  //       },
-  //       {
-  //         id: "claude-3-5-haiku-20241022",
-  //         name: "Claude 3.5 Haiku",
-  //         abilities: ["text-generation", "code-generation"] as ModelAbility[],
-  //         inputModalities: ["text"],
-  //         outputModalities: ["text"],
-  //         inctx: 200_000,
-  //         outctx: 8_192,
-  //         pricingType: "per-token",
-  //         incost_1m: 0.8,
-  //         outcost_1m: 4,
-  //       },
-  //     ],
-  //   },
-  //   {
-  //     id: "deepseek",
-  //     protocol: "openai" as ProviderProtocol,
-  //     baseUrl: "https://api.deepseek.com/v1",
-  //     apiKey: "sk-xxxxxxxx",
-  //     maxConn: 3,
-  //     models: [
-  //       {
-  //         id: "deepseek-chat",
-  //         name: "DeepSeek-V3",
-  //         abilities: ["text-generation", "code-generation"] as ModelAbility[],
-  //         inputModalities: ["text"],
-  //         outputModalities: ["text"],
-  //         inctx: 64_000,
-  //         outctx: 8_192,
-  //         pricingType: "per-token",
-  //         incost_1m: 0.27,
-  //         outcost_1m: 1.1,
-  //       },
-  //       {
-  //         id: "deepseek-reasoner",
-  //         name: "DeepSeek-R1",
-  //         abilities: ["text-generation", "reasoning"] as ModelAbility[],
-  //         inputModalities: ["text"],
-  //         outputModalities: ["text"],
-  //         inctx: 64_000,
-  //         outctx: 8_192,
-  //         pricingType: "per-token",
-  //         incost_1m: 0.55,
-  //         outcost_1m: 2.19,
-  //       },
-  //     ],
-  //   },
-  //   {
-  //     id: "local-ollama",
-  //     protocol: "ollama" as ProviderProtocol,
-  //     baseUrl: "http://localhost:11434",
-  //     models: [
-  //       {
-  //         id: "llama3.1:8b",
-  //         name: "Llama 3.1 8B",
-  //         abilities: ["text-generation", "code-generation"] as ModelAbility[],
-  //         inputModalities: ["text"],
-  //         outputModalities: ["text"],
-  //         inctx: 131_072,
-  //         outctx: 8_192,
-  //         pricingType: "local",
-  //       },
-  //       {
-  //         id: "qwen2.5:7b",
-  //         name: "Qwen 2.5 7B",
-  //         abilities: ["text-generation", "code-generation"] as ModelAbility[],
-  //         inputModalities: ["text"],
-  //         outputModalities: ["text"],
-  //         inctx: 131_072,
-  //         outctx: 8_192,
-  //         pricingType: "local",
-  //       },
-  //       {
-  //         id: "nomic-embed-text",
-  //         name: "Nomic Embed Text",
-  //         abilities: ["embedding"] as ModelAbility[],
-  //         inputModalities: ["text"],
-  //         outputModalities: ["text"],
-  //         inctx: 8_192,
-  //         outctx: 0,
-  //         pricingType: "local",
-  //       },
-  //     ],
-  //   },
-  // ];
+  import ModelConfigDialog from "./model/ModelConfigDialog.svelte";
 
   /* ═══════════════════════════════════════════════════════════
      ConfirmState — 命令式 Promise 驱动的确认对话框状态
@@ -223,6 +39,12 @@
       confirmLabel?: string;
       destructive?: boolean;
     }): Promise<boolean> {
+      // 如果上一次请求尚未被用户处理，隐式取消它
+      if (this._resolve) {
+        this._resolve(false);
+        this._resolve = null;
+      }
+
       this.title = opts.title;
       this.message = opts.message;
       this.confirmLabel = opts.confirmLabel ?? "确认";
@@ -265,62 +87,6 @@
   const confirmState = new ConfirmState();
 
   /* ═══════════════════════════════════════════════════════════
-     ConfigStore
-     ═══════════════════════════════════════════════════════════ */
-
-  // class ConfigStore {
-  //   providers = $state<Provider[]>(mockProviders);
-
-  //   get totalModels(): number {
-  //     return this.providers.reduce((s, p) => s + p.models.length, 0);
-  //   }
-
-  //   async removeModel(providerId: string, modelId: string, modelName?: string) {
-  //     const confirmed = await confirmState.request({
-  //       title: "移除模型",
-  //       message: `确定要移除「${modelName ?? modelId}」吗？此操作不可撤销。`,
-  //       confirmLabel: "确认移除",
-  //       destructive: true,
-  //     });
-
-  //     if (!confirmed) return;
-
-  //     const provider = this.providers.find((p) => p.id === providerId);
-  //     if (provider) {
-  //       provider.models = provider.models.filter((m) => m.id !== modelId);
-  //     }
-  //   }
-
-  //   async removeProvider(providerId: string) {
-  //     const provider = this.providers.find((p) => p.id === providerId);
-  //     const count = provider?.models.length ?? 0;
-
-  //     const confirmed = await confirmState.request({
-  //       title: "移除提供商",
-  //       message: `确定要移除「${providerId}」及其 ${count} 个模型吗？此操作不可撤销。`,
-  //       confirmLabel: "确认移除",
-  //       destructive: true,
-  //     });
-
-  //     if (!confirmed) return;
-
-  //     this.providers = this.providers.filter((p) => p.id !== providerId);
-  //   }
-
-  //   async editProviderConfig(provider: Provider) {
-  //     void provider;
-  //     // TODO: await dialogStore.safeShow(ProviderConfigDialog, { ... });
-  //   }
-
-  //   async addModel(providerId: string) {
-  //     void providerId;
-  //     // TODO: await dialogStore.safeShow(AddModelDialog, { providerId });
-  //   }
-  // }
-
-  // const configStore = new ConfigStore();
-
-  /* ═══════════════════════════════════════════════════════════
      UI State
      ═══════════════════════════════════════════════════════════ */
 
@@ -331,7 +97,7 @@
   let hasProviders = $derived(configStore.providers.length > 0);
 
   /* ═══════════════════════════════════════════════════════════
-     Search & Filter
+     Actions — Provider CRUD（含确认对话框）
      ═══════════════════════════════════════════════════════════ */
 
   async function addProvider(provider?: Partial<ProviderConfig>) {
@@ -343,6 +109,60 @@
     });
   }
 
+  async function handleRemoveModel(providerId: string, modelId: string) {
+    const provider = configStore.providers.find((p) => p.id === providerId);
+    const model = provider?.models.find((m) => m.id === modelId);
+    const displayName = model?.id ?? modelId;
+
+    const confirmed = await confirmState.request({
+      title: "移除模型",
+      message: `确定要移除「${displayName}」吗？此操作不可撤销。`,
+      confirmLabel: "确认移除",
+      destructive: true,
+    });
+
+    if (!confirmed) return;
+
+    await configStore.removeModel(providerId, modelId);
+  }
+
+  async function handleRemoveProvider(providerId: string) {
+    const provider = configStore.providers.find((p) => p.id === providerId);
+    const count = provider?.models.length ?? 0;
+    const displayName = provider?.id ?? providerId;
+
+    const confirmed = await confirmState.request({
+      title: "移除提供商",
+      message: `确定要移除「${displayName}」及其 ${count} 个模型吗？此操作不可撤销。`,
+      confirmLabel: "确认移除",
+      destructive: true,
+    });
+
+    if (!confirmed) return;
+
+    await configStore.removeProvider(providerId);
+  }
+
+  async function upsertModel(pid: string, model?: Model): Promise<void> {
+    const provider = configStore.findProviderById(pid);
+    if (!provider) {
+      throw new Error(`请求增加的模型，其所属供应商${pid}无效。`);
+    }
+    await dialogStore.safeShow(ModelConfigDialog, {
+      model,
+      fetchCtx: { baseUrl: provider.baseUrl, apiKey: provider.apiKey },
+      onSave: async (model: Model): Promise<void> => {
+        console.log("save model",model)
+        await configStore.upsertModel(pid, model);
+      },
+    });
+    console.log(model);
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     Search & Filter
+     ═══════════════════════════════════════════════════════════ */
+
   function getVisibleModels(provider: Provider): Model[] {
     const q = searchStore.searchQuery.toLowerCase().trim();
     const hasAbilityFilter = searchStore.activeAbilityFilters.length > 0;
@@ -352,9 +172,7 @@
 
     return provider.models.filter((m) => {
       const modelTextMatch =
-        !q ||
-        providerNameMatch ||
-        m.id.toLowerCase().includes(q);
+        !q || providerNameMatch || m.id.toLowerCase().includes(q);
       const abilityMatch =
         !hasAbilityFilter ||
         m.abilities.some((a) => searchStore.activeAbilityFilters.includes(a));
@@ -375,9 +193,7 @@
 
       const hasMatchingModel = p.models.some((m) => {
         const modelTextMatch =
-          !q ||
-          providerTextMatch ||
-          m.id.toLowerCase().includes(q);
+          !q || providerTextMatch || m.id.toLowerCase().includes(q);
         const abilityMatch =
           !hasAbilityFilter ||
           m.abilities.some((a) => searchStore.activeAbilityFilters.includes(a));
@@ -424,10 +240,11 @@
             openStates[provider.id] = v;
           }}
           onEditConfig={() => addProvider(provider)}
-          onAddModel={() => {}}
-          onRemoveModel={(modelId) =>
-            configStore.removeModel(provider.id, modelId)}
-          onRemoveProvider={() => configStore.removeProvider(provider.id)}
+          onAddModel={async (model?: Model) => {
+            await upsertModel(provider.id, model);
+          }}
+          onRemoveModel={(modelId) => handleRemoveModel(provider.id, modelId)}
+          onRemoveProvider={() => handleRemoveProvider(provider.id)}
         />
       {/each}
 

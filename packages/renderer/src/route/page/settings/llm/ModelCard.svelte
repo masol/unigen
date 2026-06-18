@@ -1,11 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import {
-    IconTrash,
-    IconPencil,
-    IconDeviceDesktop,
-  } from "@tabler/icons-svelte";
+  import { IconTrash, IconPencil, IconStar } from "@tabler/icons-svelte";
 
   import {
     type Model,
@@ -13,6 +9,7 @@
     abilityLabels,
     abilityIcons,
   } from "./types";
+  import { DefInputToken, DefOutputToken } from "$lib/store/config.svelte";
 
   let {
     model,
@@ -39,9 +36,6 @@
   <div class="flex items-start justify-between gap-2">
     <div class="min-w-0 space-y-0.5">
       <p class="truncate text-sm font-medium">
-        {model.id}
-      </p>
-      <p class="truncate font-mono text-xs text-muted-foreground">
         {model.id}
       </p>
     </div>
@@ -87,33 +81,20 @@
     </div>
   {/if}
 
-  <!-- 上下文窗口 + 定价 -->
+  <!-- 上下文窗口 + 评分 -->
   <div class="flex items-center justify-between gap-3 text-xs">
     <div class="flex items-center gap-2.5 text-muted-foreground">
-      <span title="输入上下文窗口">↓ {formatTokens(model.inctx)}</span>
-      {#if model.outctx > 0}
-        <span title="最大输出">↑ {formatTokens(model.outctx)}</span>
-      {/if}
+      <span title="最大输入"
+        >↑ {formatTokens(model.inctx ?? DefInputToken)}</span
+      >
+      <span title="最大输出"
+        >↓ {formatTokens(model.outctx ?? DefOutputToken)}</span
+      >
     </div>
 
-    <div class="shrink-0">
-      {#if model.pricingType === "per-token" && model.incost_1m !== undefined}
-        <span class="text-muted-foreground">
-          <span class="font-medium text-primary">${model.incost_1m}</span>
-          <span class="mx-0.5 text-border">/</span>
-          <span class="font-medium text-primary">${model.outcost_1m}</span>
-          <span class="ml-0.5">per 1M</span>
-        </span>
-      {:else if model.pricingType === "local"}
-        <Badge variant="outline" class="gap-1 rounded-lg text-xs">
-          <IconDeviceDesktop size={12} stroke={1.5} />
-          本地
-        </Badge>
-      {:else if model.pricingType === "free"}
-        <Badge variant="outline" class="rounded-lg text-xs">免费</Badge>
-      {:else}
-        <Badge variant="outline" class="rounded-lg text-xs">按次计费</Badge>
-      {/if}
+    <div class="flex shrink-0 items-center gap-1 text-muted-foreground">
+      <IconStar size={12} stroke={1.5} class="text-primary" />
+      <span class="font-medium">{model.score ?? 50}</span>
     </div>
   </div>
 </div>
