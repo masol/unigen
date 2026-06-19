@@ -6,7 +6,7 @@ import {
 } from "svelte-spa-router/wrap";
 import log from "electron-log/renderer";
 import type { Component } from "svelte";
-import FallbackComponent from "../../route/featured/content/fallback.svelte";
+import FallbackComponent from "../../route/page/fallback/Main.svelte";
 import GeneralSetting from "../../route/page/settings/general.svelte";
 import LLMSetting from "../../route/page/settings/llm/llm.svelte";
 import Keybindings from '../../route/page/settings/Keybindings.svelte'
