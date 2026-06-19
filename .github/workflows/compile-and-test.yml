@@ -55,8 +55,8 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      # ========== Linux 图形和自检底层依赖维持（移除已失效的本地 curl 编译库） ==========
-      - name: Install Linux native build deps (libcurl)
+      # ========== 1️⃣ Linux 图形自检依赖 + 升级最新版 libcurl 解决 WebSocket 头文件缺失 ==========
+      - name: Install Linux GUI runtime & Latest Libcurl
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
@@ -69,25 +69,24 @@ jobs:
             libxtst6 \
             xauth \
             libgbm1 \
-            libcurl4-openssl-dev curl
+            libcurl4-openssl-dev \
+            curl
 
-      # 执行安装：通过环境变量强制让 node-libcurl 走官方预编译二进制，阻止本地 C++ 编译
+      # 执行依赖锁依赖安装
       - name: Install dependencies
         run: npm ci
         env:
-          # 核心：禁止本地 node-gyp 编译，全平台强制拉取 node-libcurl 预编译文件
-          NODE_LIBCURL_BINARY_IS_STATIC: 1            
-
-      # ========== 强制对齐 Monorepo 中的所有原生模块进行 Electron 重构 ==========
-      - name: Rebuild native modules for Electron
-        run: |
-          npx @electron/rebuild -f -w node-libcurl,better-sqlite3,node-llama-cpp,@lancedb/lancedb
-        env:
-          ELECTRON_DISABLE_SANDBOX: 1
-          # 核心：告诉 electron-rebuild 在处理 node-libcurl 时，直接去下对应的 Electron 预编译包，不要本地 build
+          # 全平台：安装时直接拉取 node-libcurl 已经预编译好的生产包，阻止依赖泛滥
           NODE_LIBCURL_BINARY_IS_STATIC: 1
 
-      #验证 electron 安装，Linux 下禁用 sandbox（CI 无SUID 权限）
+      # ========== 2️⃣ 在 Electron 重构时直接忽略 node-libcurl（因为它已无需重构） ==========
+      - name: Rebuild native modules for Electron
+        run: |
+          npx @electron/rebuild -f -w better-sqlite3,node-llama-cpp,@lancedb/lancedb
+        env:
+          ELECTRON_DISABLE_SANDBOX: 1
+
+      # 验证 electron 安装
       - name: Verify Electron installation
         run: npx electron --version
         env:
