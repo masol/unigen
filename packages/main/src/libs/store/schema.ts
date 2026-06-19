@@ -1,6 +1,7 @@
 import { Schema } from 'electron-store';
 import { AppConfig } from '$types/appconfig.js';
 import { providerSchema } from './provider.schema.js';
+import { keybindingsSchema } from './common.schema.js';
 
 export const configSchema: Schema<AppConfig> = {
     theme: {
@@ -40,5 +41,6 @@ export const configSchema: Schema<AppConfig> = {
         type: 'array',
         default: [],
         items: providerSchema // 引入服务商 schema
-    }
+    },
+    keybindings: keybindingsSchema,
 };

@@ -9,6 +9,7 @@ import type { Component } from "svelte";
 import FallbackComponent from "../../route/featured/content/fallback.svelte";
 import GeneralSetting from "../../route/page/settings/general.svelte";
 import LLMSetting from "../../route/page/settings/llm/llm.svelte";
+import Keybindings from '../../route/page/settings/Keybindings.svelte'
 
 // ── 类型 ──
 
@@ -36,6 +37,7 @@ class RouterStore {
     #routes: RouteMap = $state.raw({
         "/settings/models/llm": LLMSetting,
         "/settings/general": GeneralSetting,
+        "/settings/keybindings": Keybindings,
         "*": FallbackComponent,
     });
 

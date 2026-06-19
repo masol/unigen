@@ -5,10 +5,14 @@ import type { AppConfig, Model, Provider } from '@app/main/types'
 import { api } from '$lib/utils/api'
 import { setMode } from "mode-watcher";
 import { toast } from 'svelte-sonner';
+import { KeybindConfig } from '$lib/utils/commands/config.svelte';
 
 export const DefInputToken = 256000;
 export const DefOutputToken = 8192;
 export const DefScore = 50;
+
+
+const themeOrder: AppConfig['theme'][] = ["light", "dark", "system"];
 
 // ── Store ──
 
@@ -32,6 +36,7 @@ class ConfigStore {
     #saveError = $state<string | null>(null)
     #lastSaved = $state<number | null>(null)
 
+    public keybinding: KeybindConfig
     // ── 只读门面：配置项 ──
     get theme() { return this.#theme }
     get lang() { return this.#lang }
@@ -74,7 +79,7 @@ class ConfigStore {
 
     constructor() {
         log.info('[ConfigStore] initialized')
-
+        this.keybinding = new KeybindConfig();
         // 被动监听：外部通知需要重新加载配置
         evtbus.on("sys:usedark", (bDark) => {
             if (this.#theme === 'system') {
@@ -112,6 +117,9 @@ class ConfigStore {
                 case 'disableHA':
                     this.#disableHA = value as AppConfig['disableHA'];
                     break;
+                case 'keybindings':
+                    this.keybinding.onKeybindingUpdate(value as AppConfig['keybindings'])
+                    break;
                 default:
                     log.warn(`[ConfigStore] received cfg:set but not implement:${name}`)
             }
@@ -128,6 +136,7 @@ class ConfigStore {
         this.#autoupdate = config.autoupdate
         this.#disableHA = config.disableHA
         this.applyTheme();
+        this.keybinding.onKeybindingUpdate(config.keybindings);
     }
 
     // ═══════════════════════════════════════
@@ -159,6 +168,10 @@ class ConfigStore {
     // ═══════════════════════════════════════
     //  Actions — 单项配置 setter
     // ═══════════════════════════════════════
+    async cycleTheme(): Promise<void> {
+        const idx = themeOrder.indexOf(this.#theme);
+        this.setTheme(themeOrder[(idx + 1) % themeOrder.length]);
+    }
 
     /** 设置主题 */
     async setTheme(value: AppConfig['theme']): Promise<void> {

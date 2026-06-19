@@ -10,14 +10,12 @@
   import Brand from "./header/brand.svelte";
   import Winctrl from "./header/winctrl.svelte";
   import { configStore } from "$lib/store/config.svelte";
-
-  type ThemeMode = "light" | "dark" | "system";
+  import CommandPaletteBar from "./header/CommandPaletteBar.svelte";
 
   const menus = ["文件", "编辑", "视图", "运行", "终端", "帮助"];
   const menuItems = ["新建文件", "打开...", "保存", "另存为...", "退出"];
 
   // ── 主题三态轮换：light → dark → system → light ──
-  const themeOrder: ThemeMode[] = ["light", "dark", "system"];
   const currentTheme = $derived(configStore.theme);
   const themeLabel = $derived(
     currentTheme === "light"
@@ -28,8 +26,7 @@
   );
 
   function cycleTheme() {
-    const idx = themeOrder.indexOf(currentTheme);
-    configStore.setTheme(themeOrder[(idx + 1) % themeOrder.length]);
+    configStore.cycleTheme();
   }
 </script>
 
@@ -114,7 +111,8 @@
     tabindex="0"
     ondblclick={() => windowStore.maximize()}
   >
-    <span class="text-muted-foreground truncate">{windowStore.title}</span>
+    <!-- <div class="text-muted-foreground truncate">{windowStore.title}</div> -->
+    <CommandPaletteBar></CommandPaletteBar>
   </div>
   <!-- ╭─── / WindowTitle ───╮ -->
 

@@ -48,6 +48,7 @@
     "awilix": "^13.0.4",
     "destr": "^2.0.5",
     "electron-log": "^5.4.4",
+    "hotkeys-js": "^4.0.4",
     "memoize": "^11.0.0",
     "mitt": "^3.0.1",
     "mode-watcher": "^1.1.0",

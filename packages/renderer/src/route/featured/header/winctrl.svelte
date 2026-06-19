@@ -58,12 +58,9 @@
           onclick={() => windowStore.close()}
           variant="ghost"
           size="icon"
-          class="group h-9 w-11 rounded-none"
+          class="group h-9 w-11 rounded-none transition-colors duration-200 hover:bg-red-600"
         >
-          <IconX
-            size={16}
-            class="transition-colors duration-200 group-hover:text-white"
-          />
+          <IconX size={16} class="text-current group-hover:text-white" />
         </Button>
       {/snippet}
     </Tooltip.Trigger>

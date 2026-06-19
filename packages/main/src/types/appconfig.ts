@@ -12,5 +12,6 @@ export interface AppConfig {
     autoupdate: boolean;
     models: Provider[];
     disableHA: boolean; // 禁用硬件加速。 disableHardwareAcceleration 
+    keybindings: Record<string, string[]>;
     // 其他配置...
 }

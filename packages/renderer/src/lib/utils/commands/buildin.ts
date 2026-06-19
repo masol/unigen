@@ -1,3 +1,4 @@
+import { configStore } from "$lib/store/config.svelte";
 import type { CommandDescriptor } from "./type";
 
 import {
@@ -8,54 +9,52 @@ export const builtins: CommandDescriptor[] = [
     // ── 命令中心 ──
     // ── 导航 ──
     {
+        id: 'navigation.home',
+        label: '控制台',
+        category: 'Navigation',
+        handler: () => push("/"),
+    },
+    {
+        id: 'navigation.back',
+        label: '后退',
+        category: 'Navigation',
+        handler: () => history.back(),
+    },
+    {
+        id: 'navigation.forward',
+        label: '前进',
+        category: 'Navigation',
+        handler: () => history.forward(),
+    },
+    {
         id: 'navigation.reload',
         label: '刷新页面',
         category: 'Navigation',
         handler: () => location.reload(),
     },
-    {
-        id: 'navigation.back',
-        label: '后退',
-        category: 'Navigation',
-        handler: () => history.back(),
-    },
-    {
-        id: 'navigation.back',
-        label: '后退',
-        category: 'Navigation',
-        handler: () => history.back(),
-    },
-    {
-        id: 'navigation.home',
-        label: '前进',
-        category: 'Navigation',
-        handler: () => push("/"),
-    },
-
     // ── 外观 ──
     {
         id: 'appearance.toggleDarkMode',
-        label: '切换暗色模式',
+        label: '下一界面颜色',
         category: 'Appearance',
-        description: '在 <html> 上切换 dark 类',
+        description: '循环设置界面颜色',
         handler: () => {
-            document.documentElement.classList.toggle('dark');
-            document.documentElement.classList.contains('dark');
+            configStore.cycleTheme();
         },
     },
-    {
-        id: 'appearance.toggleFullscreen',
-        label: '切换全屏',
-        category: 'Appearance',
-        handler: async () => {
-            if (!document.fullscreenElement) {
-                await document.documentElement.requestFullscreen();
-                return true;
-            }
-            await document.exitFullscreen();
-            return false;
-        },
-    },
+    // {
+    //     id: 'appearance.toggleFullscreen',
+    //     label: '切换全屏',
+    //     category: 'Appearance',
+    //     handler: async () => {
+    //         if (!document.fullscreenElement) {
+    //             await document.documentElement.requestFullscreen();
+    //             return true;
+    //         }
+    //         await document.exitFullscreen();
+    //         return false;
+    //     },
+    // },
     {
         id: 'appearance.scrollToTop',
         label: '滚动到顶部',
@@ -94,14 +93,14 @@ export const builtins: CommandDescriptor[] = [
         },
     },
 
-    // ── 存储 ──
-    {
-        id: 'storage.localClear',
-        label: 'localStorage 清空',
-        category: 'Storage',
-        handler: () => {
-            localStorage.clear();
-            return true;
-        },
-    },
+    // // ── 存储 ──
+    // {
+    //     id: 'storage.localClear',
+    //     label: 'localStorage 清空',
+    //     category: 'Storage',
+    //     handler: () => {
+    //         localStorage.clear();
+    //         return true;
+    //     },
+    // },
 ];
