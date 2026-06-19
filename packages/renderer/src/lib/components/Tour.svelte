@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tourStore } from "$lib/store/tour.svelte";
+  import { tourStore } from "$lib/store/ui/tour.svelte";
   import { Walkthrough } from "./ui/walkthrough";
 </script>
 
@@ -14,7 +14,6 @@
       </p>
       <button
         onclick={async () => {
-          console.log("ctx=", ctx);
           await tourStore.onStep(ctx.currentStepIndex());
           ctx.next();
         }}

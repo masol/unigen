@@ -2,7 +2,7 @@
 // $lib/utils/plugin/extpoint/leftsidebar.ts
 import type { Component } from 'svelte';
 import type { PluginBaseItem, IPluginExtensionPoint } from '$lib/types/plugin/extpoint/slot';
-import { layoutStore } from '$lib/store/layout.svelte';
+import { layoutStore } from '$lib/store/ui/layout.svelte';
 import Logger from 'electron-log/renderer';
 
 /**

@@ -1,4 +1,3 @@
-<!-- ProviderConfigDialog.svelte -->
 <script lang="ts">
   import {
     DialogHeader,

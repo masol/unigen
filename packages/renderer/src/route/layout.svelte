@@ -9,8 +9,8 @@
   import ActivityBar from "./featured/activity.svelte";
   import Router from "svelte-spa-router";
   import BottomBar from "./featured/bottom/bar.svelte";
-  import { layoutStore } from "$lib/store/layout.svelte";
-  import { routerStore } from "$lib/store/route.svelte";
+  import { layoutStore } from "$lib/store/ui/layout.svelte";
+  import { routerStore } from "$lib/store/ui/route.svelte";
 </script>
 
 <!--══════════════════════════════════════════════════════════════ -->

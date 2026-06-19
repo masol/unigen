@@ -9,7 +9,7 @@
   } from "@tabler/icons-svelte";
   import type { Component, Snippet } from "svelte";
 
-  import type { PanelHeaderComponent } from "$lib/store/layout.svelte";
+  import type { PanelHeaderComponent } from "$lib/store/ui/layout.svelte";
 
   let {
     title = "面板",

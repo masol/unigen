@@ -3,7 +3,7 @@
 import type { Component } from 'svelte';
 import type { PluginBaseItem, IPluginExtensionPoint } from '$lib/types/plugin/extpoint/slot';
 import Logger from 'electron-log/renderer';
-import { routerStore } from '$lib/store/route.svelte';
+import { routerStore } from '$lib/store/ui/route.svelte';
 
 /**
  * 页面扩展定义

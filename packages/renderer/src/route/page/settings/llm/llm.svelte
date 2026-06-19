@@ -3,7 +3,7 @@
   import { Separator } from "$lib/components/ui/separator";
   import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
   import autoAnimate from "@formkit/auto-animate";
-  import { dialogStore } from "$lib/store/dialog.svelte";
+  import { dialogStore } from "$lib/store/ui/dialog.svelte";
   import { IconSearch, IconFilterOff } from "@tabler/icons-svelte";
 
   import { type Model, type Provider } from "@app/main/types";

@@ -8,8 +8,6 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
   import * as Tabs from "$lib/components/ui/tabs";
-  // import { dialogStore } from "$lib/stores/dialog.svelte";
-  // import ConfirmDialog from "$lib/components/dialogs/ConfirmDialog.svelte";
   import {
     IconKeyboard,
     IconSearch,

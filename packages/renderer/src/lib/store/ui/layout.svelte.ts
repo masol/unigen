@@ -9,7 +9,7 @@
 import log from 'electron-log/renderer'
 import type { Component } from 'svelte'
 import type { LeftSidebarItem } from '$lib/utils/plugin/extpoint/leftsidebar'
-import bottomActivities from '../../route/featured/leftside/bottom'
+import bottomActivities from '../../../route/featured/leftside/bottom'
 // ─── 类型 ────────────────────────────────────────────────────
 
 /** 三个可控面板位置 */

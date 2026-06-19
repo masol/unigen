@@ -1,4 +1,3 @@
-<!-- ModelConfigDialog.svelte -->
 <script lang="ts">
   import {
     DialogHeader,

@@ -11,7 +11,7 @@
   import PanelHeader from "$lib/components/pannel-header.svelte";
   import BarHeader from "./bar.header.svelte";
   import { rightPanelStore } from "./bar.store.svelte";
-  import { layoutStore } from "$lib/store/layout.svelte";
+  import { layoutStore } from "$lib/store/ui/layout.svelte";
 
   let isMaximized = $derived(layoutStore.maximizedPanel === "right");
 

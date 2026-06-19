@@ -2,7 +2,7 @@
 <script lang="ts">
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { Button } from "$lib/components/ui/button";
-  import { layoutStore } from "$lib/store/layout.svelte";
+  import { layoutStore } from "$lib/store/ui/layout.svelte";
   import { cn } from "$lib/utils";
   import {
     IconLayoutBottombarCollapseFilled,

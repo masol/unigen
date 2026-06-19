@@ -5,7 +5,7 @@
     DialogOverlay,
   } from "$lib/components/ui/dialog";
   // import { ScrollArea } from "$lib/components/ui/scroll-area";
-  import { dialogStore, DIALOG_SIZE_CLASSES } from "$lib/store/dialog.svelte";
+  import { dialogStore, DIALOG_SIZE_CLASSES } from "$lib/store/ui/dialog.svelte";
   import { IconX } from "@tabler/icons-svelte";
 
   const dialogs = $derived(dialogStore.dialogs);

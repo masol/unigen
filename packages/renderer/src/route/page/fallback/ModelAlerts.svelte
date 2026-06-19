@@ -4,10 +4,10 @@
   import { configStore } from "$lib/store/config.svelte";
   import type { Step } from "$lib/components/ui/walkthrough/ctx";
 
-  import { layoutStore } from "$lib/store/layout.svelte";
+  import { layoutStore } from "$lib/store/ui/layout.svelte";
   import { delay } from "$lib/utils/promise";
   import { push } from "svelte-spa-router";
-  import { tourStore } from "$lib/store/tour.svelte";
+  import { tourStore } from "$lib/store/ui/tour.svelte";
 
   const SettingId = "settings";
   const steps: Step[] = [

@@ -3,8 +3,8 @@
   import PanelHeader from "$lib/components/pannel-header.svelte";
   import BottomPanelTabs from "./bar.header.svelte";
   import { bottomPanelStore } from "./bar.store.svelte";
-  import { layoutStore } from "$lib/store/layout.svelte";
-  import HookLogViewer from "./HookLogViewer.svelte";
+  import { layoutStore } from "$lib/store/ui/layout.svelte";
+  import HookLogViewer from "./hooklog/HookLog.svelte";
 
   let isMaximized = $derived(layoutStore.maximizedPanel === "bottom");
 

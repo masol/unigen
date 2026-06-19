@@ -7,7 +7,7 @@
     IconLayoutBottombarCollapseFilled,
   } from "@tabler/icons-svelte";
   import * as Tooltip from "$lib/components/ui/tooltip";
-  import { layoutStore } from "$lib/store/layout.svelte";
+  import { layoutStore } from "$lib/store/ui/layout.svelte";
   import { Separator } from "$lib/components/ui/separator";
 </script>
 
