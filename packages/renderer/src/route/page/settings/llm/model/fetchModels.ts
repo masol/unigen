@@ -28,12 +28,8 @@ const memoizedFetch = memoize(fetchImpl, {
 export async function fetchAvailableModels(
     ctx: { baseUrl?: string; apiKey?: string },
 ): Promise<ModelOption[]> {
-
-    console.log("ctx=", ctx)
-
     if (!ctx.baseUrl || !ctx.apiKey) {
         throw new Error("试图获取模型，但是未给出baseUrl或者apiKey。");
     }
-
     return await memoizedFetch(ctx.baseUrl, ctx.apiKey);
 }

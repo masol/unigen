@@ -48,11 +48,13 @@
       push("/settings/general");
       await delay(100);
       const el = document.getElementById("settings-check-embeding");
+      // const container = document.querySelector("[data-scroll-area-viewport]");
+
       if (el) {
-        el.scrollTo({
+        el.scrollIntoView({
           behavior: "smooth",
         });
-        await delay(200);
+        await delay(100);
       }
     }
   }

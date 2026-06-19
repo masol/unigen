@@ -1,10 +1,6 @@
 <script lang="ts">
   import { tourStore } from "$lib/store/tour.svelte";
   import { Walkthrough } from "./ui/walkthrough";
-
-  $effect(() => {
-    console.log("open=", tourStore.open);
-  });
 </script>
 
 <Walkthrough bind:open={tourStore.open} steps={tourStore.steps} padding={2}>
