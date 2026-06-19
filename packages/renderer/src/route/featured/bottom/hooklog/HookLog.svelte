@@ -17,7 +17,7 @@
     title?: string;
   };
 
-  let { maxBuffer = 800, title = "System Hook Logs" }: Props = $props();
+  let { maxBuffer = 800, title = "Logs" }: Props = $props();
 
   let search = $state("");
   let activeLevels = $state<Set<LogLevel>>(

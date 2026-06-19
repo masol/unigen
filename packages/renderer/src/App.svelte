@@ -14,6 +14,7 @@
   import { configStore } from "$lib/store/config.svelte";
   import { i18nStore } from "$lib/store/i18n.svelte";
   import Tour from "$lib/components/Tour.svelte";
+  import Confirm from "$lib/components/Confirm.svelte";
 
   // 初始化完成标记：未完成时显示加载页
   let ready = $state(false);
@@ -53,7 +54,7 @@
 <Toaster position="bottom-right" richColors></Toaster>
 <ModeWatcher />
 <Tour></Tour>
-
+<Confirm></Confirm>
 <!-- 整窗：占满视口，外层不滚动 -->
 <div class="app-shell">
   <AnimatePresence list={[{ key: view }]}>

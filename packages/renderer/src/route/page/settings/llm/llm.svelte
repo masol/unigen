@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
   import autoAnimate from "@formkit/auto-animate";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
   import { IconSearch, IconFilterOff } from "@tabler/icons-svelte";
@@ -16,75 +15,7 @@
   import type { ProviderConfig } from "./types";
   import { configStore } from "$lib/store/config.svelte";
   import ModelConfigDialog from "./model/ModelConfigDialog.svelte";
-
-  /* ═══════════════════════════════════════════════════════════
-     ConfirmState — 命令式 Promise 驱动的确认对话框状态
-     ═══════════════════════════════════════════════════════════ */
-
-  class ConfirmState {
-    open = $state(false);
-    title = $state("");
-    message = $state("");
-    confirmLabel = $state("确认");
-    destructive = $state(false);
-    private _resolve: ((confirmed: boolean) => void) | null = null;
-
-    /**
-     * 发起一次确认请求，返回 Promise<boolean>。
-     * 调用方 await 即可拿到结果，确认 = true，取消/关闭 = false。
-     */
-    request(opts: {
-      title: string;
-      message: string;
-      confirmLabel?: string;
-      destructive?: boolean;
-    }): Promise<boolean> {
-      // 如果上一次请求尚未被用户处理，隐式取消它
-      if (this._resolve) {
-        this._resolve(false);
-        this._resolve = null;
-      }
-
-      this.title = opts.title;
-      this.message = opts.message;
-      this.confirmLabel = opts.confirmLabel ?? "确认";
-      this.destructive = opts.destructive ?? false;
-      this.open = true;
-
-      return new Promise<boolean>((resolve) => {
-        this._resolve = resolve;
-      });
-    }
-
-    /** 用户点击确认按钮 */
-    confirm() {
-      this._resolve?.(true);
-      this._resolve = null;
-      this.open = false;
-    }
-
-    /** 用户点击取消按钮 */
-    cancel() {
-      this._resolve?.(false);
-      this._resolve = null;
-      this.open = false;
-    }
-
-    /**
-     * AlertDialog.Root 的 onOpenChange 回调。
-     * 处理用户通过 Esc / 点击遮罩关闭对话框的场景：
-     * 若此时 _resolve 仍存在，说明既没有点确认也没有点取消，视为取消。
-     */
-    handleOpenChange(value: boolean) {
-      if (!value && this._resolve) {
-        this._resolve(false);
-        this._resolve = null;
-      }
-      this.open = value;
-    }
-  }
-
-  const confirmState = new ConfirmState();
+  import { confirmStore } from "$lib/store/ui/confirm.svelte";
 
   /* ═══════════════════════════════════════════════════════════
      UI State
@@ -114,7 +45,7 @@
     const model = provider?.models.find((m) => m.id === modelId);
     const displayName = model?.id ?? modelId;
 
-    const confirmed = await confirmState.request({
+    const confirmed = await confirmStore.request({
       title: "移除模型",
       message: `确定要移除「${displayName}」吗？此操作不可撤销。`,
       confirmLabel: "确认移除",
@@ -131,7 +62,7 @@
     const count = provider?.models.length ?? 0;
     const displayName = provider?.id ?? providerId;
 
-    const confirmed = await confirmState.request({
+    const confirmed = await confirmStore.request({
       title: "移除提供商",
       message: `确定要移除「${displayName}」及其 ${count} 个模型吗？此操作不可撤销。`,
       confirmLabel: "确认移除",
@@ -152,7 +83,7 @@
       model,
       fetchCtx: { baseUrl: provider.baseUrl, apiKey: provider.apiKey },
       onSave: async (model: Model): Promise<void> => {
-        console.log("save model",model)
+        console.log("save model", model);
         await configStore.upsertModel(pid, model);
       },
     });
@@ -282,36 +213,3 @@
     </div>
   </div>
 </div>
-
-<!-- ════════════════════════════════════════════════════════════
-     Confirm AlertDialog — 全局唯一，由 confirmState 驱动
-     ════════════════════════════════════════════════════════════ -->
-<AlertDialog.Root
-  open={confirmState.open}
-  onOpenChange={(v) => confirmState.handleOpenChange(v)}
->
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>{confirmState.title}</AlertDialog.Title>
-      <AlertDialog.Description>{confirmState.message}</AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel
-        class="rounded-xl"
-        onclick={() => confirmState.cancel()}
-      >
-        取消
-      </AlertDialog.Cancel>
-      <AlertDialog.Action
-        class={[
-          "rounded-xl",
-          confirmState.destructive &&
-            "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
-        ]}
-        onclick={() => confirmState.confirm()}
-      >
-        {confirmState.confirmLabel}
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>

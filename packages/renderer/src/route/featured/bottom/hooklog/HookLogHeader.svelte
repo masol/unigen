@@ -17,7 +17,7 @@
   import type { LogLevel, LogLevelMeta } from "./types";
 
   let {
-    title = "System Hook Logs",
+    title = "Logs",
     search = $bindable(""),
     activeLevels = $bindable<Set<LogLevel>>(new Set()),
     activeComponent = $bindable("__all__"),
