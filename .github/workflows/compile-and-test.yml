@@ -55,13 +55,13 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      # ========== 新增1：Linux 提前安装 libcurl 开发库（解决 curl-config 缺失） ==========
+      # ========== Linux 图形和自检底层依赖维持（移除已失效的本地 curl 编译库） ==========
       - name: Install Linux native build deps (libcurl)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libgtk-3-0 \
+            libgtk-3-0t64 \
             libnotify4 \
             libnss3 \
             libxss1 \
@@ -71,18 +71,12 @@ jobs:
             libgbm1 \
             libcurl4-openssl-dev curl
 
-      # ========== 新增2：Windows 安装编译工具链（兜底，防止预编译失效） ==========
-      - name: Install Windows build tools
-        if: matrix.os == 'windows-latest'
-        run: |
-          npm config set msvs_version 2022
-
-      # ========== 新增3：macOS 安装 curl 开发库 ==========
-      - name: Install macOS libcurl
-        if: matrix.os == 'macos-latest'
-        run: brew install curl
-
-      - run: npm ci
+      # 执行安装：通过环境变量强制让 node-libcurl 走官方预编译二进制，阻止本地 C++ 编译
+      - name: Install dependencies
+        run: npm ci
+        env:
+          # 核心：禁止本地 node-gyp 编译，全平台强制拉取 node-libcurl 预编译文件
+          NODE_LIBCURL_BINARY_IS_STATIC: 1            
 
       # ========== 强制对齐 Monorepo 中的所有原生模块进行 Electron 重构 ==========
       - name: Rebuild native modules for Electron
@@ -90,6 +84,8 @@ jobs:
           npx @electron/rebuild -f -w node-libcurl,better-sqlite3,node-llama-cpp,@lancedb/lancedb
         env:
           ELECTRON_DISABLE_SANDBOX: 1
+          # 核心：告诉 electron-rebuild 在处理 node-libcurl 时，直接去下对应的 Electron 预编译包，不要本地 build
+          NODE_LIBCURL_BINARY_IS_STATIC: 1
 
       #验证 electron 安装，Linux 下禁用 sandbox（CI 无SUID 权限）
       - name: Verify Electron installation
@@ -97,7 +93,11 @@ jobs:
         env:
           ELECTRON_DISABLE_SANDBOX: 1
 
-      - run: npm version "${{inputs.app-version}}" --no-git-tag-version
+      # 多包工作区版本同步
+      - name: Sync App Version
+        run: |
+          npm version "${{inputs.app-version}}" --no-git-tag-version --workspaces --include-workspace-root
+
       - run: npm run compile
         env:
           VITE_DISTRIBUTION_CHANNEL: ${{inputs.distribution-channel}}
@@ -105,6 +105,7 @@ jobs:
       - uses: actions/attest-build-provenance@v4
         with:
           subject-path: "dist/root*, dist/latest*.yml"
+
       - name: Upload compiled app
         uses: actions/upload-artifact@v7
         with:
