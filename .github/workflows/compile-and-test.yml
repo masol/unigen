@@ -12,7 +12,7 @@ on:
 
 defaults:
   run:
-    shell: "bash"
+    shell: bash
 
 permissions:
   contents: write
@@ -24,38 +24,46 @@ env:
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
   npm_config_audit: false
   npm_config_fund: false
-  # Windows 强制使用 node-libcurl 预编译二进制，避免本地编译依赖
-  npm_config_prefer_binary: true
 
 jobs:
   typecheck:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v6
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
-      - run: npm ci
-      - run: npm run typecheck --if-present
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type Check
+        run: npm run typecheck --if-present
+
   compile:
     strategy:
       fail-fast: false
       matrix:
         os:
-          - windows-latest
           - ubuntu-latest
+          - windows-latest
           - macos-latest
+
     runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v6
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
+          cache: npm
 
-      # ========== 1️⃣ Linux 纯图形运行库依赖安装（彻底移除系统级 curl 开发库阻断本地编译） ==========
-      - name: Install Linux GUI runtime deps
+      # Electron 运行依赖（Ubuntu）
+      - name: Install Linux runtime dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
@@ -66,42 +74,42 @@ jobs:
             libxss1 \
             libasound2t64 \
             libxtst6 \
-            xauth \
-            libgbm1
+            libgbm1 \
+            xauth
 
-      # ========== 2️⃣ 降维打击：在安装阶段让 node-libcurl 直接锁定并拉取 Electron 二进制 ==========
-      # 这样它在下载时就已经变成了 Electron 专属包，彻底免去后续的 @electron/rebuild 扫描
-      - name: Install dependencies with Electron Native Flags
+      # 安装所有依赖
+      - name: Install dependencies
         run: npm ci
-        env:
-          # 告诉 node-pre-gyp 管理器：现在是为 Electron 环境拉取二进制包
-          npm_config_runtime: electron
-          # 关键：手动强行对齐你当前项目里使用的 Electron 主版本号
-          npm_config_target: v41.0.3
-          npm_config_disturl: https://www.electronjs.org/headers
-          NODE_LIBCURL_BINARY_IS_STATIC: 1
 
-      # ========== 3️⃣ 彻底放弃 @electron/rebuild，改用标准原生库的专用安全重构 ==========
-      # 由于 node-libcurl 已经齐备，我们用纯标准的 npm rebuild 处理剩余的 better-sqlite3
-      - name: Rebuild other standard native modules
-        run: |
-          npm rebuild better-sqlite3 --build-from-source
-        # node-llama-cpp 和 @lancedb/lancedb 基于现代 NAPI 架构，在 Node 22/Electron 下本就免重构直接可用
+      # 重新编译 Electron Native Modules
+      #
+      # 会自动处理：
+      #   - better-sqlite3（重编）
+      #   - node-llama-cpp（自动判断）
+      #   - @lancedb/lancedb（自动判断）
+      #
+      # 无需手动维护 npm rebuild xxx
+      #
+      - name: Rebuild Electron native modules
+        working-directory: packages/main      
+        run: npx electron-builder install-app-deps
 
-      # 验证 electron 安装
       - name: Verify Electron installation
         run: npx electron --version
         env:
           ELECTRON_DISABLE_SANDBOX: 1
 
-      # 多包工作区版本同步
       - name: Sync App Version
         run: |
-          npm version "${{inputs.app-version}}" --no-git-tag-version --workspaces --include-workspace-root
+          npm version "${{ inputs.app-version }}" \
+            --no-git-tag-version \
+            --workspaces \
+            --include-workspace-root
 
-      - run: npm run compile
+      - name: Compile
+        run: npm run compile
         env:
-          VITE_DISTRIBUTION_CHANNEL: ${{inputs.distribution-channel}}
+          VITE_DISTRIBUTION_CHANNEL: ${{ inputs.distribution-channel }}
 
       - uses: actions/attest-build-provenance@v4
         with:
@@ -110,5 +118,5 @@ jobs:
       - name: Upload compiled app
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.os }}-${{inputs.distribution-channel}}
+          name: ${{ matrix.os }}-${{ inputs.distribution-channel }}
           path: dist

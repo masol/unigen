@@ -22,10 +22,10 @@ export default /**
       // 1️⃣ 动态且绝对安全的 External 配置
       external: [
         "electron",
-        // 自动将 package.json 中所有的第三方依赖（如 node-libcurl, @orpc/server 等）排除
+        // 自动将 package.json 中所有的第三方依赖（如 @orpc/server 等）排除
         ...Object.keys(pkg.dependencies || {}),
-        // 匹配子包或深层路径引用（例如 node-libcurl/config）
-        /^(node-libcurl|better-sqlite3|@lancedb\/lancedb|node-llama-cpp)/,
+        // 匹配子包或深层路径引用
+        /^(better-sqlite3|@lancedb\/lancedb|node-llama-cpp)/,
         // 匹配现代符合 ESM 规范的 node: 前缀内置模块
         /^node:/,
       ],

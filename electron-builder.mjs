@@ -23,7 +23,6 @@ export default /** @type import('electron-builder').Configuration */
     pkg.main,
     "!node_modules/@app/**",
     // 1️⃣ 使用 **/ 匹配子 packages 下的 node_modules
-    "**/node_modules/node-libcurl/**/*",
     "**/node_modules/better-sqlite3/**/*",
     "**/node_modules/@lancedb/**/*",
     "**/node_modules/node-llama-cpp/**/*",
@@ -31,7 +30,6 @@ export default /** @type import('electron-builder').Configuration */
   ],
   asar: true,
   asarUnpack: [
-    "**/node_modules/node-libcurl/**/*",
     "**/node_modules/better-sqlite3/**/*",
     "**/node_modules/@lancedb/**/*",
     "**/node_modules/node-llama-cpp/**/*",
