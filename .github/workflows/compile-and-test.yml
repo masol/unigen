@@ -58,6 +58,11 @@ jobs:
 
       - run: npm ci
 
+      - name: Check native bindings
+        run: |
+          node -e "require('better-sqlite3'); console.log('sqlite OK')"
+          node -e "require('@lancedb/lancedb'); console.log('lancedb OK')"
+    
       - name: Rebuild Electron native modules
         run: npx electron-builder install-app-deps
 
