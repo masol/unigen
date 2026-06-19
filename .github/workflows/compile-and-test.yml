@@ -24,6 +24,8 @@ env:
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
   npm_config_audit: false
   npm_config_fund: false
+  # Windows 强制使用 node-libcurl 预编译二进制，避免本地编译依赖
+  npm_config_prefer_binary: true
 
 jobs:
   typecheck:
@@ -52,16 +54,9 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-      - run: npm ci
 
-      #验证 electron 安装，Linux 下禁用 sandbox（CI 无SUID 权限）
-      - name: Verify Electron installation
-        run: npx electron --version
-        env:
-          ELECTRON_DISABLE_SANDBOX: 1
-
-      # Linux 上安装 electron 运行所需的系统库
-      - name: Install Linux dependencies
+      # ========== 新增1：Linux 提前安装 libcurl 开发库（解决 curl-config 缺失） ==========
+      - name: Install Linux native build deps (libcurl)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
@@ -73,18 +68,39 @@ jobs:
             libasound2t64 \
             libxtst6 \
             xauth \
-            libgbm1
+            libgbm1 \
+            libcurl4-openssl-dev curl
+
+      # ========== 新增2：Windows 安装编译工具链（兜底，防止预编译失效） ==========
+      - name: Install Windows build tools
+        if: matrix.os == 'windows-latest'
+        run: |
+          npm config set msvs_version 2022
+
+      # ========== 新增3：macOS 安装 curl 开发库 ==========
+      - name: Install macOS libcurl
+        if: matrix.os == 'macos-latest'
+        run: brew install curl
+
+      - run: npm ci
+
+      # ========== 强制对齐 Monorepo 中的所有原生模块进行 Electron 重构 ==========
+      - name: Rebuild native modules for Electron
+        run: |
+          npx @electron/rebuild -f -w node-libcurl,better-sqlite3,node-llama-cpp,@lancedb/lancedb
+        env:
+          ELECTRON_DISABLE_SANDBOX: 1
+
+      #验证 electron 安装，Linux 下禁用 sandbox（CI 无SUID 权限）
+      - name: Verify Electron installation
+        run: npx electron --version
+        env:
+          ELECTRON_DISABLE_SANDBOX: 1
 
       - run: npm version "${{inputs.app-version}}" --no-git-tag-version
       - run: npm run compile
         env:
           VITE_DISTRIBUTION_CHANNEL: ${{inputs.distribution-channel}}
-
-      # - run: npm run test --if-present
-      #   if: matrix.os != 'ubuntu-latest'
-
-      # - run: xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" -- npm run test --if-present
-      #   if: matrix.os == 'ubuntu-latest'
 
       - uses: actions/attest-build-provenance@v4
         with:

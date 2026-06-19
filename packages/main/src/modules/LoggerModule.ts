@@ -5,7 +5,7 @@ import log from 'electron-log/main';
 class LoggerModule implements AppModule {
   enable({ app }: ModuleContext): void {
     log.initialize();
-    log.info('Logger initialized in the main process');
+    log.info(`Logger initialized in the path: "${log.transports.file.getFile().path}"`);
 
     app.on('ready', () => {
       log.info('Electron app is ready');

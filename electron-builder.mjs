@@ -22,7 +22,19 @@ export default /** @type import('electron-builder').Configuration */
     "LICENSE*",
     pkg.main,
     "!node_modules/@app/**",
+    // 1️⃣ 使用 **/ 匹配子 packages 下的 node_modules
+    "**/node_modules/node-libcurl/**/*",
+    "**/node_modules/better-sqlite3/**/*",
+    "**/node_modules/@lancedb/**/*",
+    "**/node_modules/node-llama-cpp/**/*",
     ...(await getListOfFilesFromEachWorkspace()),
+  ],
+  asar: true,
+  asarUnpack: [
+    "**/node_modules/node-libcurl/**/*",
+    "**/node_modules/better-sqlite3/**/*",
+    "**/node_modules/@lancedb/**/*",
+    "**/node_modules/node-llama-cpp/**/*",
   ],
   extraResources: [{ from: "packages/main/drizzle", to: "resources/drizzle" }],
 });
