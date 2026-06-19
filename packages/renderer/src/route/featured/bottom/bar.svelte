@@ -4,6 +4,7 @@
   import BottomPanelTabs from "./bar.header.svelte";
   import { bottomPanelStore } from "./bar.store.svelte";
   import { layoutStore } from "$lib/store/layout.svelte";
+  import HookLogViewer from "./HookLogViewer.svelte";
 
   let isMaximized = $derived(layoutStore.maximizedPanel === "bottom");
 
@@ -65,8 +66,8 @@
           <span class="inline-block h-3.5 w-1.5 animate-pulse bg-foreground/70"
           ></span>
         </div>
-      {:else if bottomPanelStore.activeTab === "problems"}
-        <p class="text-muted-foreground p-2">目前未检测到工作区中的问题。</p>
+      {:else if bottomPanelStore.activeTab === "logger"}
+        <HookLogViewer></HookLogViewer>
       {:else if bottomPanelStore.activeTab === "output"}
         <p class="text-muted-foreground p-2">暂无输出内容。</p>
       {/if}

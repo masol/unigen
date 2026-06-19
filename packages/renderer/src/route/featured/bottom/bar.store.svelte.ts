@@ -7,7 +7,7 @@ type BottomTab = {
 function createBottomPanelStore() {
     let activeTab = $state("terminal");
     const tabs = $state<BottomTab[]>([
-        { id: "problems", label: "问题", badge: 0 },
+        { id: "logger", label: "日志", badge: 3 },
         { id: "output", label: "输出", badge: 0 },
         { id: "terminal", label: "终端", badge: 0 },
     ]);

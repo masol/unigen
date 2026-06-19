@@ -12,7 +12,7 @@ on:
 
 defaults:
   run:
-    shell: bash
+    shell: "bash"
 
 permissions:
   contents: write
@@ -28,28 +28,22 @@ env:
 jobs:
   typecheck:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
-
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Type Check
-        run: npm run typecheck --if-present
+          cache: "npm"
+      - run: npm ci
+      - run: npm run typecheck --if-present
 
   compile:
     strategy:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
           - windows-latest
+          - ubuntu-latest
           - macos-latest
 
     runs-on: ${{ matrix.os }}
@@ -60,36 +54,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
+          cache: "npm"
 
-      # Electron 运行依赖（Ubuntu）
-      - name: Install Linux runtime dependencies
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-0t64 \
-            libnotify4 \
-            libnss3 \
-            libxss1 \
-            libasound2t64 \
-            libxtst6 \
-            libgbm1 \
-            xauth
+      - run: npm ci
 
-      # 安装所有依赖
-      - name: Install dependencies
-        run: npm ci
-
-      # 重新编译 Electron Native Modules
-      #
-      # 会自动处理：
-      #   - better-sqlite3（重编）
-      #   - node-llama-cpp（自动判断）
-      #   - @lancedb/lancedb（自动判断）
-      #
-      # 无需手动维护 npm rebuild xxx
-      #
       - name: Rebuild Electron native modules
         run: npx electron-builder install-app-deps
 
@@ -98,17 +66,25 @@ jobs:
         env:
           ELECTRON_DISABLE_SANDBOX: 1
 
-      - name: Sync App Version
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
         run: |
-          npm version "${{ inputs.app-version }}" \
-            --no-git-tag-version \
-            --workspaces \
-            --include-workspace-root
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-0 \
+            libnotify4 \
+            libnss3 \
+            libxss1 \
+            libasound2t64 \
+            libxtst6 \
+            xauth \
+            libgbm1
 
-      - name: Compile
-        run: npm run compile
+      - run: npm version "${{inputs.app-version}}" --no-git-tag-version
+
+      - run: npm run compile
         env:
-          VITE_DISTRIBUTION_CHANNEL: ${{ inputs.distribution-channel }}
+          VITE_DISTRIBUTION_CHANNEL: ${{inputs.distribution-channel}}
 
       - uses: actions/attest-build-provenance@v4
         with:
@@ -117,5 +93,5 @@ jobs:
       - name: Upload compiled app
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.os }}-${{ inputs.distribution-channel }}
+          name: ${{ matrix.os }}-${{inputs.distribution-channel}}
           path: dist
