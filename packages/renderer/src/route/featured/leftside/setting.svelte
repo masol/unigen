@@ -301,6 +301,7 @@
                     ? "bg-primary/8 text-foreground"
                     : "text-foreground/70 hover:bg-accent/40 hover:text-foreground",
                 ]}
+                id="settings-{item.id}"
                 aria-current={isActive ? "page" : undefined}
                 onclick={() => navigateTo(item.path)}
               >

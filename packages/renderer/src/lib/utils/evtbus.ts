@@ -13,19 +13,12 @@ export type Events = {
     "winstate": WindowEventPayload;
     "cfg:setall": AppConfig;
     "cfg:set": { name: string; value: unknown };
-    "sys:usedark": boolean  
+    "sys:usedark": boolean  // 更改了操作系统的深色/浅色模式。
+    "lang:changed": string  // 更新了语言设置。
     // 用户相关事件
     "user:login": { id: number; name: string; avatar?: string };
     "user:logout": void;
     "user:update": { id: number; fields: Partial<{ name: string; avatar: string }> };
-
-    // 消息相关事件
-    "message": string;
-    "notification": { title: string; content: string; type?: "info" | "warning" | "error" };
-
-    // 页面/应用状态事件
-    "ready": void;
-
 };
 
 export type EventNameType = keyof Events;

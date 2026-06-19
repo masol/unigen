@@ -97,7 +97,12 @@ class ConfigStore {
                     this.#theme = value as AppConfig['theme'];
                     break;
                 case 'lang':
-                    this.#lang = value as AppConfig['lang'];
+                    {
+                        const nlang = value as AppConfig['lang'];
+                        if (this.#lang !== nlang) {
+                            evtbus.emit("lang:changed", nlang)
+                        }
+                    }
                     break;
                 case 'modelEndpoint':
                     this.#modelEndpoint = value as AppConfig['model_endpoint'];
@@ -128,7 +133,10 @@ class ConfigStore {
 
     private applyConfig(config: AppConfig) {
         this.#theme = config.theme
-        this.#lang = config.lang
+        if (this.#lang !== config.lang) {
+            this.#lang = config.lang
+            evtbus.emit("lang:changed", config.lang)
+        }
         this.#modelEndpoint = config.model_endpoint
         this.#embedModel = config.embed_model
         this.#localModel = config.local_model
@@ -237,7 +245,10 @@ class ConfigStore {
                 key: 'lang',
                 value
             })
-            this.#lang = value
+            if (this.#lang !== value) {
+                this.#lang = value
+                evtbus.emit("lang:changed", value)
+            }
             this.#lastSaved = Date.now()
             log.info(`[ConfigStore] lang set to "${value}"`)
         } catch (err) {

@@ -103,6 +103,7 @@
           {#snippet child({ props })}
             <button
               {...props}
+              id="botactivity-{activity.id}"
               class={[
                 "relative flex size-10 items-center justify-center rounded-lg transition-all duration-200",
                 "hover:bg-accent/60",

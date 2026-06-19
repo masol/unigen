@@ -12,6 +12,8 @@
   import { Toaster } from "$lib/components/ui/sonner";
   import { pluginStore } from "$lib/store/plugin.svelte";
   import { configStore } from "$lib/store/config.svelte";
+  import { i18nStore } from "$lib/store/i18n.svelte";
+  import Tour from "$lib/components/Tour.svelte";
 
   // 初始化完成标记：未完成时显示加载页
   let ready = $state(false);
@@ -25,10 +27,10 @@
       // 初始化事件机制，evtbus生效。唯一返回windowsId的机会。
       const wid = await setupEvt();
       windowStore.init(wid);
+      await configStore.init(); // 先加载配置信息。
 
       //初始化pluginSystem.
-
-      await Promise.all([pluginStore.init(), configStore.init()]);
+      await Promise.all([pluginStore.init(), i18nStore.init()]);
 
       await windowStore.maximize();
 
@@ -50,6 +52,7 @@
 
 <Toaster position="bottom-right" richColors></Toaster>
 <ModeWatcher />
+<Tour></Tour>
 
 <!-- 整窗：占满视口，外层不滚动 -->
 <div class="app-shell">

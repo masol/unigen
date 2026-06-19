@@ -12,6 +12,7 @@
     {#snippet child({ props })}
       <button
         {...props}
+        id="home-control"
         onclick={handleClick}
         class="group ml-3 flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold text-white transition-all duration-200 hover:scale-110 hover:shadow-lg active:scale-95"
       >

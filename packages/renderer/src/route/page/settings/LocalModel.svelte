@@ -336,6 +336,7 @@
             {#snippet child({ props })}
               <button
                 {...props}
+                id="settings-check-embeding"
                 class={[
                   "flex items-center justify-center size-9 rounded-xl border bg-background transition-all duration-200 hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0",
                   embeddingStatus === "success" &&
