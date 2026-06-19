@@ -1,11 +1,12 @@
 import { z } from 'zod'
 import { os } from '@orpc/server'
-import { BrowserWindow, dialog, shell } from 'electron'
-import { readFile, writeFile } from 'fs/promises'
-import { basename, extname } from 'path'
+import { app, BrowserWindow, dialog, shell } from 'electron'
+import { mkdir, readFile, writeFile } from 'fs/promises'
+import { join, basename, extname } from 'path'
 import { FileFilterPreset, FileReturnMode } from '$types/shared/api.js'
 import { RpcContext } from '../type.js'
 import { listModels } from '$libs/utils/model/list.js'
+import Logger from 'electron-log/main'
 // import Logger from 'electron-log/main.js'
 
 // ─── Zod Schemas ─────────────────────────────────────────────
@@ -279,81 +280,6 @@ const openFile = os
     })
 
 /**
- * 打开多个文件 —— 仅返回路径列表（适合批量导入场景）
- */
-const openFiles = os
-    .input(
-        z.object({
-            filters: filtersInputSchema,
-        }),
-    )
-    .output(
-        z.object({
-            success: z.boolean(),
-            canceled: z.boolean().optional(),
-            filePaths: z.array(z.string()).optional(),
-        }),
-    )
-    .handler(async ({ input, context }) => {
-        const { filters } = input
-        const resolvedFilters = resolveFilters(filters) ?? [{ name: 'All Files', extensions: ['*'] }]
-
-        const { canceled, filePaths } = await withModalWindow(context, (parent) => {
-            return dialog.showOpenDialog(parent, {
-                filters: resolvedFilters,
-                properties: ['openFile', 'multiSelections'],
-            });
-        });
-
-        if (canceled || filePaths.length === 0) {
-            return { success: false, canceled: true }
-        }
-
-        return { success: true, canceled: false, filePaths }
-    })
-
-/**
- * 打开目录选择对话框
- */
-const openDirectory = os
-    .input(
-        z.object({
-            /** 对话框标题 */
-            title: z.string().optional(),
-            /** 默认路径 */
-            defaultPath: z.string().optional(),
-            /** 是否允许多选 */
-            multiSelect: z.boolean().optional().default(false),
-        }),
-    )
-    .output(
-        z.object({
-            success: z.boolean(),
-            canceled: z.boolean().optional(),
-            dirPaths: z.array(z.string()).optional(),
-        }),
-    )
-    .handler(async ({ input, context }) => {
-        const { title, defaultPath, multiSelect } = input
-        const properties: Electron.OpenDialogOptions['properties'] = ['openDirectory', 'createDirectory']
-        if (multiSelect) properties.push('multiSelections')
-
-        const { canceled, filePaths } = await withModalWindow(context, (parent) => {
-            return dialog.showOpenDialog(parent, {
-                title,
-                defaultPath,
-                properties,
-            });
-        });
-
-        if (canceled || filePaths.length === 0) {
-            return { success: false, canceled: true }
-        }
-
-        return { success: true, canceled: false, dirPaths: filePaths }
-    })
-
-/**
  * 使用系统默认程序打开外部 URL（浏览器打开网址）
  */
 const openExternal = os
@@ -394,64 +320,44 @@ const showItemInFolder = os
         return true
     })
 
-// const MessageBoxInputSchema = z.object({
-//     // 弹窗类型图标
-//     type: z.enum(['none', 'info', 'warning', 'error', 'question']).default('question'),
-//     // 标题（仅Windows生效）
-//     title: z.string().optional(),
-//     // 主文本
-//     message: z.string(),
-//     // 分行详情文本，不支持HTML，仅\n换行
-//     detail: z.string().optional(),
-//     // 按钮文案，固定格式 [取消, 确认]
-//     buttons: z.array(z.string()).min(1).default(['取消', '确定']),
-//     // 默认回车选中按钮下标
-//     defaultId: z.number().int().nonnegative().default(0),
-//     // ESC/关闭弹窗返回下标，恒定返回-1.
-//     // cancelId: z.number().int().default(0),
-//     // Windows 禁用蓝色链接按钮样式
-//     noLink: z.boolean().default(true),
-//     icon: z.any().optional(), // 支持NativeImage或字符串路径
-// })
-
-// const messageBox = os
-//     .input(MessageBoxInputSchema)
-//     .output(z.number())
-//     .handler(async ({ input, context }) => {
-//         // modal: true 强制阻塞父窗口，不能切换其他窗口
-//         const result = await withModalWindow(context, (parent) => {
-//             const focusHandle = () => {
-//                 console.log("focused..")
-//             }
-//             try {
-//                 parent.once("focus", focusHandle);
-//                 const ac = new AbortController();
-//                 // ac.signal.onabort = () => console.log('aborted!');
-//                 const result = dialog.showMessageBox(parent, {
-//                     ...input,
-//                     signal: ac.signal,
-//                     // 恒定设置cancelId为-1，区分三种情况：
-//                     // - 返回按钮索引(0,1,2...) = 用户点击了对应按钮
-//                     // - 返回-1 = 用户按了ESC键 或 点击了窗口关闭按钮
-//                     cancelId: -1
-//                 });
-
-//                 return result
-//             } finally {
-//                 parent.off("focus", focusHandle);
-//             }
-
-//         });
-//         // 点击第二个按钮（确定）返回 true，取消/关闭返回 false
-//         return result.response
-//     })
-
-
 const listmodel = os
     .input(z.object({ baseURL: z.string(), apiKey: z.string() }))
     .output(z.array(z.record(z.string(), z.any())))
     .handler(async ({ input }) => {
         return await listModels(input.baseURL, input.apiKey)
+    })
+
+
+
+const getPath = os
+    .input(z.object({ name: z.string(), sub: z.array(z.string()).optional(), create: z.boolean().optional() }))
+    .output(z.string())
+    .handler(async ({ input }) => {
+        const dataPath = app.getPath("userData");
+        let basePath;
+        switch (input.name) {
+            case 'llm':
+                basePath = join(dataPath, "models", "llm", ...input.sub ?? [])
+                break;
+            case 'embeding':
+                basePath = join(dataPath, "models", "embeding", ...input.sub ?? [])
+                break;
+            case 'logs':
+                return Logger.transports.file.getFile().path
+            default:
+                try {
+                    // @ts-expect-error 无类型。
+                    const tempPath = app.getPath(input.name);
+                    basePath = join(tempPath, ...input.sub ?? [])
+                } catch (e) {
+                    void e;
+                    return ""
+                }
+        }
+        if (basePath && input.create) {
+            await mkdir(basePath, { recursive: true })
+        }
+        return basePath;
     })
 
 // ─── 导出 ─────────────────────────────────────────────────────
@@ -460,11 +366,9 @@ export default {
     saveFile,
     saveBinaryFile,
     openFile,
-    openFiles,
-    openDirectory,
     openExternal,
     openPath,
     showItemInFolder,
-    listmodel
-    // messageBox
+    listmodel,
+    getPath
 }

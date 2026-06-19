@@ -2,7 +2,10 @@
 import { z } from 'zod'
 import { os } from '@orpc/server'
 import { configService } from '$libs/store/index.js'
-import { nativeTheme } from 'electron'
+import { app, nativeTheme } from 'electron'
+import { basename, join } from 'path'
+import FastGlob from 'fast-glob'
+import { mkdir } from 'fs/promises'
 
 /**
  * 获取整个配置对象
@@ -59,11 +62,45 @@ const useDark = os
         return nativeTheme.shouldUseDarkColorsForSystemIntegratedUI
     })
 
+async function getModels(sub: string): Promise<Array<{ value: string, label: string }>> {
+    const dataPath = app.getPath("userData");
+    const basepath = join(dataPath, "models", sub);
+    await mkdir(basepath, { recursive: true });
+    const files = await FastGlob(FastGlob.convertPathToPattern(basepath) + '/**/*.gguf', {
+        absolute: true
+    })
+    return files.map(f => {
+        return {
+            value: f,
+            label: basename(f)
+        }
+    })
+}
+
+const getEmbedings = os
+    .output(z.array(z.object({
+        value: z.string(),
+        label: z.string()
+    })))
+    .handler(async () => {
+        return getModels("embeding");
+    })
+
+const getllms = os
+    .output(z.array(z.object({
+        value: z.string(),
+        label: z.string()
+    })))
+    .handler(async () => {
+        return getModels("llm");
+    })
 
 export default {
     getAll,
     setAll,
     get,
     set,
-    useDark
+    useDark,
+    getEmbedings,
+    getllms
 }
