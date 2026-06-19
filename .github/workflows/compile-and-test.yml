@@ -38,7 +38,6 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm run typecheck --if-present
-
   compile:
     strategy:
       fail-fast: false
@@ -55,8 +54,8 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      # ========== 1️⃣ Linux 图形自检依赖 + 升级最新版 libcurl 解决 WebSocket 头文件缺失 ==========
-      - name: Install Linux GUI runtime & Latest Libcurl
+      # ========== 1️⃣ Linux 纯图形运行库依赖安装（彻底移除系统级 curl 开发库阻断本地编译） ==========
+      - name: Install Linux GUI runtime deps
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
@@ -68,23 +67,26 @@ jobs:
             libasound2t64 \
             libxtst6 \
             xauth \
-            libgbm1 \
-            libcurl4-openssl-dev \
-            curl
+            libgbm1
 
-      # 执行依赖锁依赖安装
-      - name: Install dependencies
+      # ========== 2️⃣ 降维打击：在安装阶段让 node-libcurl 直接锁定并拉取 Electron 二进制 ==========
+      # 这样它在下载时就已经变成了 Electron 专属包，彻底免去后续的 @electron/rebuild 扫描
+      - name: Install dependencies with Electron Native Flags
         run: npm ci
         env:
-          # 全平台：安装时直接拉取 node-libcurl 已经预编译好的生产包，阻止依赖泛滥
+          # 告诉 node-pre-gyp 管理器：现在是为 Electron 环境拉取二进制包
+          npm_config_runtime: electron
+          # 关键：手动强行对齐你当前项目里使用的 Electron 主版本号
+          npm_config_target: v41.0.3
+          npm_config_disturl: https://www.electronjs.org/headers
           NODE_LIBCURL_BINARY_IS_STATIC: 1
 
-      # ========== 2️⃣ 在 Electron 重构时直接忽略 node-libcurl（因为它已无需重构） ==========
-      - name: Rebuild native modules for Electron
+      # ========== 3️⃣ 彻底放弃 @electron/rebuild，改用标准原生库的专用安全重构 ==========
+      # 由于 node-libcurl 已经齐备，我们用纯标准的 npm rebuild 处理剩余的 better-sqlite3
+      - name: Rebuild other standard native modules
         run: |
-          npx @electron/rebuild -f -w better-sqlite3,node-llama-cpp,@lancedb/lancedb
-        env:
-          ELECTRON_DISABLE_SANDBOX: 1
+          npm rebuild better-sqlite3 --build-from-source
+        # node-llama-cpp 和 @lancedb/lancedb 基于现代 NAPI 架构，在 Node 22/Electron 下本就免重构直接可用
 
       # 验证 electron 安装
       - name: Verify Electron installation
