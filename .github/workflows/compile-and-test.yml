@@ -91,7 +91,6 @@ jobs:
       # 无需手动维护 npm rebuild xxx
       #
       - name: Rebuild Electron native modules
-        working-directory: packages/main      
         run: npx electron-builder install-app-deps
 
       - name: Verify Electron installation
