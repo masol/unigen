@@ -9,36 +9,36 @@
     IconLoader2,
   } from "@tabler/icons-svelte";
 
-  type LoadingAction = "open" | "new" | null;
-  let loading = $state<LoadingAction>(null);
-  let isBusy = $derived(loading !== null);
-
   async function handleOpenProject() {
-    if (isBusy) return;
-    loading = "open";
+    if (projectStore.isBusy) return;
+    projectStore.loading = "open";
     try {
       await projectStore.open();
       await new Promise((r) => setTimeout(r, 1200));
     } finally {
-      loading = null;
+      projectStore.loading = null;
     }
   }
 
   async function handleNewProject() {
-    if (isBusy) return;
-    loading = "new";
+    if (projectStore.isBusy) return;
+    projectStore.loading = "new";
     try {
       // TODO: 调用新建项目逻辑
       await new Promise((r) => setTimeout(r, 1200));
     } finally {
-      loading = null;
+      projectStore.loading = null;
     }
   }
 </script>
 
 <div class="flex gap-3 pt-2">
-  <Button class="rounded-xl" disabled={isBusy} onclick={handleOpenProject}>
-    {#if loading === "open"}
+  <Button
+    class="rounded-xl"
+    disabled={projectStore.isBusy}
+    onclick={handleOpenProject}
+  >
+    {#if projectStore.loading === "open"}
       <IconLoader2 class="size-4 animate-spin" stroke={1.5} />
     {:else}
       <IconFolderOpen class="size-4" stroke={1.5} />
@@ -49,10 +49,10 @@
   <Button
     variant="outline"
     class="rounded-xl"
-    disabled={isBusy}
+    disabled={projectStore.isBusy}
     onclick={handleNewProject}
   >
-    {#if loading === "new"}
+    {#if projectStore.loading === "new"}
       <IconLoader2 class="size-4 animate-spin" stroke={1.5} />
     {:else}
       <IconFolderPlus class="size-4" stroke={1.5} />

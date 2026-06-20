@@ -1,4 +1,5 @@
 import { api } from "$lib/utils/api";
+type LoadingAction = "open" | "new" | null;
 
 class ProjectStore {
     // ── 私有状态 ──────────────────────────────────────────────
@@ -9,11 +10,13 @@ class ProjectStore {
      * 选 $state 深度响应：需要对 Meta 字段做 mutation（busy / status / …）
      */
     #path = $state<string>("");
+    loading = $state<LoadingAction>(null);
 
     opened = $derived(this.#path.trim().length > 0)
     get path() {
         return this.#path;
     }
+    isBusy = $derived(this.loading !== null);
 
 
     async open(pathName?: string): Promise<boolean> {
