@@ -13,6 +13,9 @@ export const secondSchema: Schema<SecondConfig> = {
                 "path": {
                     "type": "string",
                 },
+                "type": {
+                    "type": "string",
+                },
                 "time": {
                     "type": "number",
                 }

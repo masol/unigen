@@ -1,6 +1,7 @@
 // 轻量DI容器，未使用轻量DI框架(如awilix)，因为其还是太重，本DI不涉及外部扩展代码的问题。
 
 import { NotifyContract } from "$types/index.js";
+import Logger from "electron-log/main.js";
 import { PrjDB } from "./controllers/drizzle.js";
 import type { IProjectController, IProjectContext, ControllerConstructor } from "./type.js";
 
@@ -55,5 +56,11 @@ export class ProjectContainer implements IProjectContext {
         }
         // 3. 内部唯一安全的断言，由于 register 和 resolve 泛型 T 严格绑定，此转换 100% 安全
         return instance as T;
+    }
+
+
+    async open(path: string): Promise<boolean> {
+        Logger.debug(`[Project] open ${path}`)
+        return true;
     }
 }

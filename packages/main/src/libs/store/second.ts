@@ -47,10 +47,11 @@ class ConfigService {
         })
     }
 
-    newProject(path: string, time: number) {
+    newProject(path: string, time: number, type: string) {
         this.lru.set(path, {
             path,
-            time
+            time,
+            type
         });
         this.onUpdate();
     }

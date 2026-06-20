@@ -21,6 +21,7 @@ export interface AppConfig {
 export type RecentProject = {
     path: string;
     time: number;
+    type: string;
 }
 
 // 无需备份与恢复的第二配置。

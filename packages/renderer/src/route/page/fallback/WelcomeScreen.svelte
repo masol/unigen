@@ -3,14 +3,6 @@
   import ModelAlerts from "./ModelAlerts.svelte";
   import WelcomeActions from "./WelcomeActions.svelte";
   import RecentProjects from "./RecentProjects.svelte";
-
-  function handleOpenProject() {
-    // TODO: 调用打开项目逻辑
-  }
-
-  function handleNewProject() {
-    // TODO: 调用新建项目逻辑
-  }
 </script>
 
 <div class="mx-auto flex h-full w-full max-w-2xl flex-col gap-10 p-8 md:p-12">
@@ -26,10 +18,7 @@
         打开已有项目或创建新项目以开始
       </p>
     </div>
-    <WelcomeActions
-      onOpenProject={handleOpenProject}
-      onNewProject={handleNewProject}
-    />
+    <WelcomeActions />
   </section>
 
   <RecentProjects />
