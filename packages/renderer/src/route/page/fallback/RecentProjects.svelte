@@ -2,44 +2,21 @@
   import { IconClock, IconFolder } from "@tabler/icons-svelte";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { i18nStore } from "$lib/store/i18n.svelte";
-
-  interface RecentProject {
-    id: string;
-    name: string;
-    path: string;
-    lastOpenedAt: number;
-  }
-
-  let projects = $state<RecentProject[]>([]);
-  let loading = $state(true);
-  let error = $state<string | null>(null);
-
-  async function load() {
-    loading = true;
-    error = null;
-    try {
-      // 人为延时，体现加载效果；正式环境可去掉
-      await new Promise((r) => setTimeout(r, 600));
-      projects = [];
-      //   projects = await api().<RecentProject[]>("/recent-projects");
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
-
-  $effect(() => {
-    load();
-  });
+  import { recentProjectsStore } from "./recent-projects.svelte";
+  import type { RecentProject } from "@app/main/types";
 
   function formatDate(ts: number) {
     return i18nStore.dayjs(ts).fromNow();
   }
 
   function handleOpen(project: RecentProject) {
-    // TODO: 打开指定项目
-    void project;
+    void recentProjectsStore.open(project);
+  }
+
+  // 从路径里推断显示名（type 中无 name 字段，取最后一段）
+  function pickName(path: string): string {
+    const seg = path.replace(/[\\/]+$/, "").split(/[\\/]/);
+    return seg[seg.length - 1] || path;
   }
 </script>
 
@@ -51,7 +28,7 @@
     <span>最近项目</span>
   </div>
 
-  {#if loading}
+  {#if recentProjectsStore.isLoading}
     <ul class="space-y-1.5">
       {#each Array.from({ length: 3 }, (_, i) => i) as idx (idx)}
         <li class="flex items-center gap-3 rounded-lg px-3 py-2.5">
@@ -64,13 +41,15 @@
         </li>
       {/each}
     </ul>
-  {:else if error}
-    <p class="text-sm text-muted-foreground">加载失败：{error}</p>
-  {:else if projects.length === 0}
+  {:else if recentProjectsStore.error}
+    <p class="text-sm text-muted-foreground">
+      加载失败：{recentProjectsStore.error}
+    </p>
+  {:else if recentProjectsStore.isEmpty}
     <p class="text-sm text-muted-foreground">暂无最近项目</p>
   {:else}
     <ul class="space-y-1">
-      {#each projects as project (project.id)}
+      {#each recentProjectsStore.projects as project (project.path)}
         <li>
           <button
             type="button"
@@ -81,13 +60,15 @@
               class="size-5 shrink-0 text-muted-foreground group-hover:text-foreground"
             />
             <div class="min-w-0 flex-1">
-              <div class="truncate text-sm font-medium">{project.name}</div>
+              <div class="truncate text-sm font-medium">
+                {pickName(project.path)}
+              </div>
               <div class="truncate text-xs text-muted-foreground">
                 {project.path}
               </div>
             </div>
             <span class="shrink-0 text-xs text-muted-foreground">
-              {formatDate(project.lastOpenedAt)}
+              {formatDate(project.time)}
             </span>
           </button>
         </li>

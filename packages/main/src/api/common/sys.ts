@@ -1,16 +1,15 @@
 import { z } from 'zod'
 import { os } from '@orpc/server'
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, dialog, shell } from 'electron'
 import { mkdir, writeFile } from 'fs/promises'
 import { join } from 'path'
-import { FileFilterPreset } from '$types/shared/api.js'
-import { RpcContext } from '../type.js'
 import { listModels } from '$libs/utils/model/list.js'
 import Logger from 'electron-log/main'
 import { Hook, LogMessage, Transport } from 'electron-log'
+import { WindowService } from '$libs/utils/window.js'
+import { FileFilterPreset } from '$types/shared/api/sys.js'
 
 // ─── Zod Schemas ─────────────────────────────────────────────
-
 const fileFilterPresetSchema = z.enum(FileFilterPreset)
 
 const customFilterSchema = z.object({
@@ -59,32 +58,6 @@ function resolveFilters(
 }
 
 // ─── RPC 接口 ─────────────────────────────────────────────────
-const dialogOpenSet = new Set<number>()
-
-async function withModalWindow<T>(
-    context: Record<string, unknown>,
-    fn: (parent: BrowserWindow) => Promise<T>,
-): Promise<T> {
-    const ctx = context as RpcContext;
-    const parent = BrowserWindow.fromId(ctx?.project?.wid)
-    if (!parent) {
-        throw new Error("无法定位当前窗口！")
-    }
-
-    if (dialogOpenSet.has(parent.id)) {
-        throw new Error(`Window ${parent.id} already has a modal dialog open`)
-    }
-    dialogOpenSet.add(parent.id)
-    parent.setEnabled(false)
-
-    try {
-        return await fn(parent)
-    } finally {
-        parent.setEnabled(true)
-        parent.focus()
-        dialogOpenSet.delete(parent.id)
-    }
-}
 
 /**
  * 保存文件
@@ -110,7 +83,7 @@ const saveFile = os
         if (!noDialog) {
             const resolvedFilters = resolveFilters(filters) ?? [{ name: 'All Files', extensions: ['*'] }]
 
-            const { canceled, filePath } = await withModalWindow(context, (parent) => {
+            const { canceled, filePath } = await WindowService.instance.withModalWindow(context, (parent) => {
                 return dialog.showSaveDialog(parent, {
 
                     defaultPath: defaultName,
@@ -154,7 +127,7 @@ const saveBinaryFile = os
         if (!noDialog) {
             const resolvedFilters = resolveFilters(filters) ?? [{ name: 'All Files', extensions: ['*'] }]
 
-            const { canceled, filePath } = await withModalWindow(context, (parent) => {
+            const { canceled, filePath } = await WindowService.instance.withModalWindow(context, (parent) => {
                 return dialog.showSaveDialog(parent, {
                     defaultPath: defaultName,
                     filters: resolvedFilters,

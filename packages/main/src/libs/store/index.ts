@@ -5,7 +5,7 @@ import { configSchema } from './schema.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
 import { getCurrentProject } from '$libs/utils/api.js';
 
-export class ConfigService {
+class ConfigService {
     private store: Store<AppConfig>;
 
     constructor(store: Store<AppConfig>) {

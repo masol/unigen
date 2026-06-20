@@ -7,7 +7,7 @@ import { RpcContext } from "./type.js";
 import { alsMiddleware } from "./als.js";
 import config from './common/cfg.js'
 import system from './common/sys.js'
-
+import project from './project/index.js'
 
 // ==========================================
 // 3. 构建应用路由器（将中间件链条挂载到顶层）
@@ -18,7 +18,8 @@ const appRouter = os
         plugin,
         window,
         config,
-        system
+        system,
+        project
     });
 
 export type AppRouter = typeof appRouter;

@@ -1,5 +1,5 @@
 //── 真实共享模块导入（Vite 打包阶段静态解析） ──
-import CorePlugin from '../../../../plugins/core'
+import CorePlugin from '../../../../plugins/video'
 
 // ══════════════════════════ 内置共享模块 ══════════════════════════
 
@@ -16,5 +16,5 @@ import CorePlugin from '../../../../plugins/core'
  *   外部调用 pluginLoader.addSharedModule(specifier, mod)
  */
 export const BUILTIN_MODULES: Record<string, unknown> = {
-    'plugin-core': CorePlugin,        // core plugin.
+    'video': CorePlugin,        // core plugin.
 }

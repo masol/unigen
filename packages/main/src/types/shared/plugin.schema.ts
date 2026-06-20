@@ -16,10 +16,9 @@ export const PluginInfoSchema = z.object({
     name: z.string(),
     version: z.string(),
     description: z.string(),
+    iconName: z.string(),
     scope: PluginScopeSchema,
     installed: z.boolean(),
-    installedAt: z.number().nullable(),
     config: z.record(z.string(), z.unknown()),
-    statusChangedAt: z.number().nullable(),
     status: PluginStatusSchema,
 })

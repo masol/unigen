@@ -6,6 +6,7 @@ import { app, nativeTheme } from 'electron'
 import { basename, join } from 'path'
 import FastGlob from 'fast-glob'
 import { mkdir } from 'fs/promises'
+import { secondConfig } from '$libs/store/second.js'
 
 /**
  * 获取整个配置对象
@@ -51,6 +52,20 @@ const set = os
         const { key, value } = input
         configService().set(key as any, value as any)
         return true
+    })
+
+
+/**
+ * 获取最近项目列表
+ * schema 校验失败时异常直接上抛，由调用者处理
+ */
+const recents = os
+    .output(z.array(z.object({
+        path: z.string(),
+        time: z.number()
+    })))
+    .handler(async () => {
+        return secondConfig().recents;
     })
 
 /**
@@ -102,5 +117,6 @@ export default {
     set,
     useDark,
     getEmbedings,
-    getllms
+    getllms,
+    recents
 }

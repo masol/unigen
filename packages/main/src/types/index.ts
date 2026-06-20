@@ -1,5 +1,6 @@
 export type { AppClient, NotifyContract } from './shared/api.js'
 export type { WindowEventPayload, WindowEventType } from './shared/rpcevt.js'
 export type { ModuleSource, PluginInfo, PluginStatus, PluginScope } from './shared/plugin.js'
-export type { AppConfig } from './appconfig.js'
+export type { AppConfig, RecentProject } from './appconfig.js'
 export type { Provider, Model, ProviderProtocol, ModelAbility, ModelOption } from './shared/model.js'
+export type { FileFilterPreset } from './shared/api/sys.js'

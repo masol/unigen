@@ -21,9 +21,9 @@ export const configSchema: Schema<AppConfig> = {
         type: 'boolean',
         default: false,
     },
-    model_endpoint: {
+    plugin: { // 新项目类型插件名。
         type: 'string',
-        default: ""
+        default: "video"
     },
     embed_model: {
         type: 'string',

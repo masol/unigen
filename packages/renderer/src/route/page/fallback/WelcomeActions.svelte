@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import { configStore } from "$lib/store/config.svelte";
+  import { pluginStore } from "$lib/store/plugin.svelte";
   import { IconFolderOpen, IconFolderPlus } from "@tabler/icons-svelte";
 
   interface Props {
@@ -16,6 +18,6 @@
   </Button>
   <Button variant="outline" class="rounded-xl" onclick={onNewProject}>
     <IconFolderPlus class="size-4" />
-    新建项目
+    新建项目({pluginStore.getPluginName(configStore.projectype)})
   </Button>
 </div>

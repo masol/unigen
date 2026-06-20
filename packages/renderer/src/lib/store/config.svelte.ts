@@ -20,7 +20,7 @@ class ConfigStore {
     // ── 私有状态：配置项 ──
     #theme = $state<AppConfig['theme']>('system') // 原始值（三选一枚举） → $state
     #lang = $state<string>('zh-CN')              // 原始值 → $state
-    #modelEndpoint = $state<string>('')                   // 原始值 → $state
+    #projectype = $state<string>('')                   // 原始值 → $state
     #embedModel = $state<string>('')                   // 原始值 → $state
     #localModel = $state<string>('')                   // 原始值 → $state
     #providers = $state<Provider[]>([])           // 复合对象整体替换 → $state.raw
@@ -40,7 +40,7 @@ class ConfigStore {
     // ── 只读门面：配置项 ──
     get theme() { return this.#theme }
     get lang() { return this.#lang }
-    get modelEndpoint() { return this.#modelEndpoint }
+    get projectype() { return this.#projectype }
     get embedModel() { return this.#embedModel }
     get localModel() { return this.#localModel }
     get providers() { return this.#providers }
@@ -104,8 +104,8 @@ class ConfigStore {
                         }
                     }
                     break;
-                case 'modelEndpoint':
-                    this.#modelEndpoint = value as AppConfig['model_endpoint'];
+                case 'plugin':
+                    this.#projectype = value as AppConfig['plugin'];
                     break;
                 case 'embed_model':
                     this.#embedModel = value as AppConfig['embed_model'];
@@ -137,7 +137,7 @@ class ConfigStore {
             this.#lang = config.lang
             evtbus.emit("lang:changed", config.lang)
         }
-        this.#modelEndpoint = config.model_endpoint
+        this.#projectype = config.plugin
         this.#embedModel = config.embed_model
         this.#localModel = config.local_model
         this.#providers = config.models
@@ -261,16 +261,16 @@ class ConfigStore {
     }
 
     /** 设置模型下载端点 */
-    async setModelEndpoint(value: string): Promise<void> {
+    async setProjectype(value: string): Promise<void> {
         log.debug(`[ConfigStore] setModelEndpoint() called, value=${value}`)
         this.#savingCount++
         this.#saveError = null
         try {
             await api().config.set({
-                key: 'model_endpoint',
+                key: 'plugin',
                 value
             })
-            this.#modelEndpoint = value
+            this.#projectype = value
             this.#lastSaved = Date.now()
             log.info('[ConfigStore] model_endpoint updated')
         } catch (err) {

@@ -5,6 +5,16 @@ import { BUILDIN_PLUGINS } from '$lib/utils/plugin/shared/plugin'
 import type { PluginInfo, PluginScope } from '@app/main/types'
 import pMap from 'p-map'
 import { api } from '$lib/utils/api'
+import { IconPlug, IconVideo } from "@tabler/icons-svelte";
+
+function getIcon(name: string): typeof IconVideo {
+    switch (name) {
+        case 'video':
+            return IconVideo;
+        default:
+            return IconPlug
+    }
+}
 
 // ══════════════════════════════════════════════════════════════
 // 类型
@@ -23,6 +33,7 @@ interface PluginMeta extends PluginInfo {
     runtimeLoaded: boolean
     /** core 插件不可卸载 */
     readonly canUninstall: boolean
+    readonly icon: typeof IconVideo
 }
 
 const MaxLoading = 6
@@ -39,6 +50,7 @@ function toMeta(info: PluginInfo): PluginMeta {
         get canUninstall() {
             return this.scope !== 'core'
         },
+        icon: getIcon(info.iconName)
     }
 }
 
@@ -103,7 +115,7 @@ class PluginStore {
         [...this.#metas.values()].filter((p) => p.scope === 'system'),
     )
     readonly projectPlugins = $derived.by(() =>
-        [...this.#metas.values()].filter((p) => p.scope === 'project'),
+        [...this.#metas.values()].filter((p) => p.installed && p.status === 'enabled' && p.scope === 'project'),
     )
 
     /** 是否有任何操作进行中 */
@@ -176,6 +188,15 @@ class PluginStore {
         return result.success
     }
 
+    // 获取指定id的插件名称。
+    getPluginName(plugId: string): string {
+        const meta = this.#metas.get(plugId);
+        if (meta) {
+            return meta.name
+        }
+        return plugId;
+    }
+
     /**
      * 持久化插件信息到后端
      * 提取 meta 中的 PluginInfo 部分（排除运行时状态）
@@ -189,10 +210,9 @@ class PluginStore {
                 description: meta.description,
                 scope: meta.scope,
                 installed: meta.installed,
-                installedAt: meta.installedAt,
                 status: meta.status,
-                statusChangedAt: meta.statusChangedAt,
                 config: meta.config,
+                iconName: meta.iconName
             }
 
             const success = await api().plugin.updatePlugin(pluginInfo)
@@ -353,7 +373,6 @@ class PluginStore {
         try {
             // 修改状态
             meta.status = 'enabled'
-            meta.statusChangedAt = Date.now()
 
             // 持久化
             await this.#persistPlugin(meta)
@@ -408,7 +427,6 @@ class PluginStore {
 
             // 修改状态
             meta.status = 'disabled'
-            meta.statusChangedAt = Date.now()
             meta.errorMessage = undefined
 
             // 持久化
@@ -471,8 +489,6 @@ class PluginStore {
             // 修改状态
             meta.installed = true
             meta.status = 'enabled'
-            meta.installedAt = Date.now()
-            meta.statusChangedAt = Date.now()
 
             // 持久化
             await this.#persistPlugin(meta)
@@ -533,8 +549,6 @@ class PluginStore {
             meta.installed = false
             meta.status = 'disabled'
             meta.errorMessage = undefined
-            meta.installedAt = null
-            meta.statusChangedAt = Date.now()
 
             // 删除持久化数据
             await api().plugin.rmPlugin({ pluginId })
@@ -611,7 +625,6 @@ class PluginStore {
 
             meta.runtimeLoaded = true
             meta.status = 'enabled'
-            meta.statusChangedAt = Date.now()
             meta.errorMessage = undefined
 
             log.info(`[PluginStore] plugin reloaded: ${pluginId}`)

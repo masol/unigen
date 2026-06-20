@@ -2,6 +2,7 @@ import { BrowserWindow, screen, Rectangle } from "electron";
 import { AppInitConfig } from "$types/AppInitConfig.js";
 import { WindowEventPayload, WindowEventType } from "$types/shared/rpcevt.js";
 import { notify } from "./rpcevt.js";
+import { RpcContext } from "../../api/type.js";
 
 // ─── 工具函数 ───────────────────────────────────────────────────
 
@@ -23,6 +24,7 @@ export class WindowService {
   readonly #preload: { path: string };
   readonly #renderer: { path: string } | URL;
   readonly #openDevTools: boolean;
+  private readonly dialogOpenSet = new Set<number>()
 
   constructor({
     initConfig,
@@ -137,6 +139,34 @@ export class WindowService {
 
     return browserWindow;
   }
+
+
+  // 确保弹出窗口在renderer下显示。只能被Rpc调用。
+  async withModalWindow<T>(
+    context: Record<string, unknown>,
+    fn: (parent: BrowserWindow) => Promise<T>,
+  ): Promise<T> {
+    const ctx = context as RpcContext;
+    const parent = BrowserWindow.fromId(ctx?.project?.wid)
+    if (!parent) {
+      throw new Error("无法定位当前窗口！")
+    }
+
+    if (this.dialogOpenSet.has(parent.id)) {
+      throw new Error(`Window ${parent.id} already has a modal dialog open`)
+    }
+    this.dialogOpenSet.add(parent.id)
+    parent.setEnabled(false)
+
+    try {
+      return await fn(parent)
+    } finally {
+      parent.setEnabled(true)
+      parent.focus()
+      this.dialogOpenSet.delete(parent.id)
+    }
+  }
+
 
   // ── 窗口操作 ─────────────────────────────────────────────────
 

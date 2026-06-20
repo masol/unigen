@@ -6,6 +6,7 @@
   import LocalModel from "./LocalModel.svelte";
   import AutoUpdator from "./AutoUpdator.svelte";
   import BackRestore from "./BackRestore.svelte";
+  import ProjectType from "./ProjectType.svelte";
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
@@ -45,7 +46,7 @@
         <!-- │ [可抽取子组件 → DataSection.svelte]                 │ -->
         <!-- │ 职责：数据备份与恢复操作入口                        │ -->
         <!-- ╰─────────────────────────────────────────────────────╯ -->
-
+        <ProjectType></ProjectType>
         <!-- ╭─── / DataSection ───╮ -->
 
         <AutoUpdator></AutoUpdator>
