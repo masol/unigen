@@ -1,17 +1,12 @@
 <script lang="ts">
   import { Separator } from "$lib/components/ui/separator";
   import { IconWifi, IconWifiOff } from "@tabler/icons-svelte";
+  import { hookLogStore } from "./hook-log.store.svelte";
 
   let {
     filteredCount = 0,
-    totalCount = 0,
-    maxBuffer = 800,
-    connected = false,
   }: {
     filteredCount?: number;
-    totalCount?: number;
-    maxBuffer?: number;
-    connected?: boolean;
   } = $props();
 </script>
 
@@ -21,13 +16,14 @@
   <div class="flex items-center gap-3">
     <span class="font-mono">
       显示 <span class="text-foreground font-medium">{filteredCount}</span> /
-      <span class="text-foreground font-medium">{totalCount}</span>
+      <span class="text-foreground font-medium">{hookLogStore.logs.length}</span
+      >
     </span>
     <Separator orientation="vertical" class="h-3.5" />
-    <span>缓冲上限 {maxBuffer} 条</span>
+    <span>缓冲上限 {hookLogStore.maxBuffer} 条</span>
   </div>
   <div class="flex items-center gap-2 font-mono">
-    {#if connected}
+    {#if hookLogStore.connected}
       <IconWifi size={14} stroke={1.5} class="text-emerald-500" />
       <span>connected</span>
     {:else}

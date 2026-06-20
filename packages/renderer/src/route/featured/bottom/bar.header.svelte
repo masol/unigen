@@ -10,7 +10,7 @@
   import type { Component } from "svelte";
 
   const iconMap: Record<string, Component<any>> = {
-    problems: IconAlertTriangle as unknown as Component<any>,
+    logger: IconAlertTriangle as unknown as Component<any>,
     output: IconNote as unknown as Component<any>,
     terminal: IconTerminal2 as unknown as Component<any>,
   };

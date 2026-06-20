@@ -20,6 +20,7 @@
     IconMinus,
     IconFolder,
   } from "@tabler/icons-svelte";
+  import { confirmStore } from "$lib/store/ui/confirm.svelte";
 
   // ── Types ──────────────────────────────────────────────────
   type CommandInfo = Omit<CommandDescriptor, "handler">;
@@ -190,11 +191,13 @@
   }
 
   async function clearAllBindings() {
-    // const confirmed = await dialogStore.safeShow(ConfirmDialog, {
-    //   title: "清空全部快捷键？",
-    //   message: "此操作将删除所有命令的键盘快捷方式，且无法撤销。",
-    // });
-    // if (!confirmed) return;
+    const confirmed = await confirmStore.request({
+      title: "清空全部快捷键？",
+      message: "此操作将删除所有命令的键盘快捷方式，且无法撤销。",
+      destructive: true,
+      variant: "question",
+    });
+    if (!confirmed) return;
     configStore.keybinding.clearBindings();
   }
 

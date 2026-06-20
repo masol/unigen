@@ -2,55 +2,49 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
+  import { Switch } from "$lib/components/ui/switch";
+  import { Label } from "$lib/components/ui/label";
   import * as Tooltip from "$lib/components/ui/tooltip";
-  import * as Select from "$lib/components/ui/select";
+  // import * as Select from "$lib/components/ui/select";
   import {
-    IconTerminal2,
+    IconAlertTriangle,
     IconSearch,
     IconTrash,
     IconPlayerPause,
     IconPlayerPlay,
-    IconDownload,
     IconX,
     IconCircleFilled,
+    IconFolder,
   } from "@tabler/icons-svelte";
-  import type { LogLevel, LogLevelMeta } from "./types";
+  import type { LogLevelMeta } from "./types";
+  import { hookLogStore } from "./hook-log.store.svelte";
+  import { api } from "$lib/utils/api";
+  import type { LogLevel } from "electron-log";
 
   let {
     title = "Logs",
-    search = $bindable(""),
-    activeLevels = $bindable<Set<LogLevel>>(new Set()),
-    activeComponent = $bindable("__all__"),
-    knownComponents = [],
-    stats = { debug: 0, info: 0, warn: 0, error: 0 },
+    stats = { debug: 0, info: 0, warn: 0, error: 0, verbose: 0, silly: 0 },
     levelMeta = {} as Record<LogLevel, LogLevelMeta>,
-    connected = false,
-    paused = false,
-    onTogglePause = () => {},
-    onClear = () => {},
-    onExport = () => {},
   }: {
     title?: string;
-    search?: string;
-    activeLevels?: Set<LogLevel>;
-    activeComponent?: string;
-    knownComponents?: string[];
     stats?: Record<LogLevel, number>;
     levelMeta?: Record<LogLevel, LogLevelMeta>;
-    connected?: boolean;
-    paused?: boolean;
-    onTogglePause?: () => void;
-    onClear?: () => void;
-    onExport?: () => void;
   } = $props();
 
   function toggleLevel(level: LogLevel) {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    const next = new Set(activeLevels);
+    const next = new Set(hookLogStore.activeLevels);
     if (next.has(level)) next.delete(level);
     else next.add(level);
     if (next.size === 0) next.add(level);
-    activeLevels = next;
+    hookLogStore.activeLevels = next;
+  }
+
+  async function showInExplorer() {
+    const logFilepath = await api().system.getPath({ name: "logs" });
+    await api().system.showItemInFolder({
+      path: logFilepath,
+    });
   }
 </script>
 
@@ -61,16 +55,16 @@
     <div
       class="bg-primary/10 text-primary border-border/50 flex size-8 items-center justify-center rounded-xl border"
     >
-      <IconTerminal2 size={18} stroke={1.5} />
+      <IconAlertTriangle size={18} stroke={1.5} />
     </div>
     <span class="text-sm font-medium">{title}</span>
     <span
       class="border-border/50 bg-muted/50 inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs"
     >
-      {#if connected}
+      {#if hookLogStore.connected}
         <IconCircleFilled size={8} class="animate-pulse text-emerald-500" />
         <span class="text-muted-foreground">streaming</span>
-      {:else if paused}
+      {:else if hookLogStore.paused}
         <IconCircleFilled size={8} class="text-amber-500" />
         <span class="text-muted-foreground">paused</span>
       {:else}
@@ -83,11 +77,11 @@
   <Separator orientation="vertical" class="h-6" />
 
   <div class="flex items-center gap-1.5">
-    {#each ["debug", "info", "warn", "error"] as lv (lv)}
+    {#each ["silly", "debug", "info", "verbose", "warn", "error"] as lv (lv)}
       {@const meta = levelMeta[lv as LogLevel]}
       {@const Icon = meta.icon}
       {@const count = stats[lv as LogLevel]}
-      {@const isActive = activeLevels.has(lv as LogLevel)}
+      {@const isActive = hookLogStore.activeLevels.has(lv as LogLevel)}
       <Tooltip.Provider delayDuration={150}>
         <Tooltip.Root>
           <Tooltip.Trigger>
@@ -128,15 +122,15 @@
         class="text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2"
       />
       <Input
-        bind:value={search}
+        bind:value={hookLogStore.search}
         placeholder="搜索..."
         class="h-8 rounded-xl pl-8 pr-8 text-xs"
       />
-      {#if search}
+      {#if hookLogStore.search}
         <button
           type="button"
           class="text-muted-foreground hover:text-foreground absolute right-2.5 top-1/2 -translate-y-1/2 transition-all duration-200"
-          onclick={() => (search = "")}
+          onclick={() => (hookLogStore.search = "")}
           aria-label="清除搜索"
         >
           <IconX size={14} stroke={1.5} />
@@ -144,21 +138,53 @@
       {/if}
     </div>
 
-    <Select.Root type="single" bind:value={activeComponent}>
+    <!-- <Select.Root type="single" bind:value={hookLogStore.activeScope}>
       <Select.Trigger class="h-8 w-35 rounded-xl text-xs">
-        {activeComponent === "__all__" ? "全部组件" : activeComponent}
+        {hookLogStore.activeScope === "__all__"
+          ? "全部组件"
+          : hookLogStore.activeScope}
       </Select.Trigger>
       <Select.Content>
         <Select.Item value="__all__">全部组件</Select.Item>
-        {#each knownComponents as c (c)}
+        {#each hookLogStore.knownComponents as c (c)}
           <Select.Item value={c}>{c}</Select.Item>
         {/each}
       </Select.Content>
-    </Select.Root>
+    </Select.Root> -->
 
     <Separator orientation="vertical" class="h-6" />
 
+    <!-- Keepalive 开关 -->
     <Tooltip.Provider delayDuration={150}>
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <div
+              {...props}
+              class="border-border/50 bg-muted/30 flex h-8 items-center gap-2 rounded-xl border px-2.5"
+            >
+              <Label
+                for="keepalive-switch"
+                class="text-muted-foreground cursor-pointer text-xs font-medium"
+              >
+                常驻
+              </Label>
+              <Switch
+                id="keepalive-switch"
+                checked={hookLogStore.keepalive}
+                onCheckedChange={(v) => (hookLogStore.keepalive = v)}
+                class="scale-75"
+              />
+            </div>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>
+          {hookLogStore.keepalive
+            ? "已开启：窗口关闭后保持连接"
+            : "已关闭：窗口关闭后断开连接"}
+        </Tooltip.Content>
+      </Tooltip.Root>
+
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
@@ -167,9 +193,9 @@
               variant="ghost"
               size="sm"
               class="h-8 rounded-xl px-2"
-              onclick={onTogglePause}
+              onclick={() => hookLogStore.togglePause()}
             >
-              {#if paused}
+              {#if hookLogStore.paused}
                 <IconPlayerPlay size={16} stroke={1.5} />
               {:else}
                 <IconPlayerPause size={16} stroke={1.5} />
@@ -177,7 +203,9 @@
             </Button>
           {/snippet}
         </Tooltip.Trigger>
-        <Tooltip.Content>{paused ? "继续接收" : "暂停接收"}</Tooltip.Content>
+        <Tooltip.Content
+          >{hookLogStore.paused ? "继续接收" : "暂停接收"}</Tooltip.Content
+        >
       </Tooltip.Root>
 
       <Tooltip.Root>
@@ -188,20 +216,20 @@
               variant="ghost"
               size="sm"
               class="h-8 rounded-xl px-2"
-              onclick={onExport}
+              onclick={showInExplorer}
             >
-              <IconDownload size={16} stroke={1.5} />
+              <IconFolder size={16} stroke={1.5} />
             </Button>
           {/snippet}
         </Tooltip.Trigger>
-        <Tooltip.Content>导出为 JSON</Tooltip.Content>
+        <Tooltip.Content>在资源管理器中打开日志</Tooltip.Content>
       </Tooltip.Root>
 
       <Button
         variant="ghost"
         size="sm"
         class="h-8 rounded-xl px-2"
-        onclick={onClear}
+        onclick={() => hookLogStore.clear()}
       >
         <IconTrash size={16} stroke={1.5} />
       </Button>

@@ -1,6 +1,5 @@
 <script lang="ts">
   import {
-    IconCheck,
     IconBrain,
     IconLoader2,
     IconMessageChatbot,
@@ -11,10 +10,11 @@
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { configStore } from "$lib/store/config.svelte";
   import { api } from "$lib/utils/api";
-  import { allAbilities } from "./llm/types";
+  import { allAbilities } from "../llm/types";
+  import { confirmStore } from "$lib/store/ui/confirm.svelte";
 
-  //═══════════════════════════════════════════════════════════
-  // Reactive bindings
+  // ═══════════════════════════════════════════════════════════
+  // Reactive bindings — configStore 是唯一真相，两个值都 derive
   // ═══════════════════════════════════════════════════════════
   let embeddingModel = $derived(configStore.embedModel);
   let textModel = $derived(configStore.localModel);
@@ -53,13 +53,11 @@
     if (open && !embeddingFetched && !embeddingLoading) {
       embeddingLoading = true;
       try {
-        embeddingModels = (await api().config.getEmbedings()).map((item) => {
-          return {
-            value: item.value,
-            label: item.label,
-            note: "本地模型",
-          };
-        });
+        embeddingModels = (await api().config.getEmbedings()).map((item) => ({
+          value: item.value,
+          label: item.label,
+          note: "本地模型",
+        }));
         configStore.providers.forEach((provider) => {
           provider.models.forEach((model) => {
             if (model.abilities.includes(allAbilities.embedding)) {
@@ -72,6 +70,9 @@
           });
         });
         embeddingFetched = true;
+        if (embeddingModels.length === 0 && configStore.embedModel.length > 0) {
+          configStore.setEmbedModel("");
+        }
       } catch (error) {
         console.error("Failed to fetch embedding models:", error);
         embeddingModels = [];
@@ -85,14 +86,15 @@
     if (open && !textFetched && !textLoading) {
       textLoading = true;
       try {
-        textModels = (await api().config.getllms()).map((item) => {
-          return {
-            value: item.value,
-            label: item.label,
-            note: "",
-          };
-        });
+        textModels = (await api().config.getllms()).map((item) => ({
+          value: item.value,
+          label: item.label,
+          note: "",
+        }));
         textFetched = true;
+        if (textModels.length === 0 && configStore.localModel.length > 0) {
+          configStore.setLocalModel("");
+        }
       } catch (error) {
         console.error("Failed to fetch text models:", error);
         textModels = [];
@@ -104,21 +106,35 @@
 
   // ═══════════════════════════════════════════════════════════
   // Model selection handlers
-  // ═══════════════════════════════════
-  function handleEmbeddingChange(value: string) {
-    if (value) {
-      configStore.setEmbedModel(value);
+  // ═══════════════════════════════════════════════════════════
+  async function handleEmbeddingChange(value: string) {
+    if (value === configStore.embedModel) return true;
+
+    // 已有旧值时才弹确认
+    if (configStore.embedModel.length > 0) {
+      const confirmed = await confirmStore.request({
+        title: "需要重建数据",
+        message:
+          "嵌入模型变更，所有历史项目，打开时都需要重建存储数据，您确定要变更嵌入模型吗？",
+        variant: "question",
+      });
+      // 取消：什么都不做。embeddingModel 是 derived,
+      // Select 会跟随 configStore 自动回退到旧值。
+      if (!confirmed) return false;
     }
+
+    await configStore.setEmbedModel(value);
+    return true;
   }
 
   function handleTextChange(value: string) {
-    if (value) {
+    if (value && value !== configStore.localModel) {
       configStore.setLocalModel(value);
     }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // Open model directory (留空函数供用户实现)
+  // Open model directory
   // ═══════════════════════════════════════════════════════════
   async function openEmbeddingModelDirectory() {
     const targetPath = await api().system.getPath({
@@ -163,14 +179,11 @@
           </p>
         </div>
       </div>
-      <!--╭─────────────────────────────────────────────────────╮ -->
-      <!-- │ [可抽取子组件 → AsyncModelSelect.svelte]│ -->
-      <!-- │ 职责：异步加载模型列表的下拉选择器                 │ -->
-      <!-- ╰─────────────────────────────────────────────────────╯ -->
+
       <div class="flex items-center gap-2 w-full lg:w-96 shrink-0">
         <Select.Root
           type="single"
-          value={embeddingModel}
+          bind:value={() => embeddingModel, (v) => handleEmbeddingChange(v)}
           onValueChange={handleEmbeddingChange}
           onOpenChange={handleEmbeddingOpen}
         >
@@ -205,13 +218,6 @@
                         {model.note}
                       </p>
                     </div>
-                    {#if embeddingModel === model.value}
-                      <IconCheck
-                        size={16}
-                        stroke={1.5}
-                        class="text-primary shrink-0"
-                      />
-                    {/if}
                   </div>
                 </Select.Item>
               {/each}
@@ -297,13 +303,6 @@
                         {model.note}
                       </p>
                     </div>
-                    {#if textModel === model.value}
-                      <IconCheck
-                        size={16}
-                        stroke={1.5}
-                        class="text-primary shrink-0"
-                      />
-                    {/if}
                   </div>
                 </Select.Item>
               {/each}

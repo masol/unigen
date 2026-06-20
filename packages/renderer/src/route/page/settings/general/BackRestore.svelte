@@ -6,6 +6,8 @@
   import { configStore } from "$lib/store/config.svelte";
   import dayjs from "dayjs";
 
+  let fileInput: HTMLInputElement;
+
   async function handleBackup() {
     try {
       const config = await api().config.getAll();
@@ -27,16 +29,25 @@
     }
   }
 
-  async function handleRestore() {
+  // 点击“恢复数据”：触发浏览器端文件选择对话框
+  function handleRestoreClick() {
+    fileInput?.click();
+  }
+
+  // 浏览器端对话框选中文件后：读取内容并继续向下送
+  async function handleFileChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+
+    // 重置 value，保证选择同一文件也能再次触发 change
+    input.value = "";
+    if (!file) return;
+
     try {
-      const result = await api().system.openFile({
-        filters: "json",
-      });
+      const content = await file.text();
+      if (!content) throw new Error("读取文件失败");
 
-      if (result.canceled) return;
-      if (!result.success || !result.content) throw new Error("读取文件失败");
-
-      const config = JSON.parse(result.content);
+      const config = JSON.parse(content);
       await configStore.setAll(config);
 
       toast.success("恢复成功");
@@ -83,7 +94,7 @@
         <Button
           variant="outline"
           class="rounded-xl gap-2 transition-all duration-200"
-          onclick={handleRestore}
+          onclick={handleRestoreClick}
         >
           <IconDatabaseImport size={16} stroke={1.5} />
           恢复数据
@@ -91,4 +102,13 @@
       </div>
     </div>
   </div>
+
+  <!-- 恢复：浏览器端隐藏文件输入 -->
+  <input
+    bind:this={fileInput}
+    type="file"
+    accept="application/json,.json"
+    class="hidden"
+    onchange={handleFileChange}
+  />
 </section>

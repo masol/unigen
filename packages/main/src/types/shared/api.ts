@@ -33,15 +33,3 @@ export enum FileFilterPreset {
     DOC = 'doc',
     ALL = 'all',
 }
-
-/**
- * 文件读取后的返回模式
- * - content : 文本文件 → utf-8 字符串；二进制文件 → data-URI (base64)
- * - path    : 只返回文件绝对路径（大文件 / 视频 / 音频推荐）
- */
-export enum FileReturnMode {
-    /** 返回文件内容（文本 utf-8 / 二进制 base64 data-uri） */
-    CONTENT = 'content',
-    /** 仅返回文件路径，由渲染进程通过 custom protocol 访问 */
-    PATH = 'path',
-}

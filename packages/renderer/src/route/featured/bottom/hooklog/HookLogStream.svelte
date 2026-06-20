@@ -2,34 +2,51 @@
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { Button } from "$lib/components/ui/button";
   import { IconSearch } from "@tabler/icons-svelte";
-  import type { LogEntry, LogLevel, LogLevelMeta } from "./types";
+  import type { LogLevelMeta } from "./types";
+  import type { LogLevel, LogMessage } from "electron-log";
   import autoAnimate from "@formkit/auto-animate";
+  import { hookLogStore } from "./hook-log.store.svelte";
+  import { i18nStore } from "$lib/store/i18n.svelte";
 
   let {
     filtered = [],
-    loading = false,
-    search = "",
-    activeComponent = "__all__",
     levelMeta = {} as Record<LogLevel, LogLevelMeta>,
-    onResetFilters = () => {},
+    formatData,
   }: {
-    filtered?: LogEntry[];
-    loading?: boolean;
-    search?: string;
-    activeComponent?: string;
+    filtered?: LogMessage[];
     levelMeta?: Record<LogLevel, LogLevelMeta>;
-    onResetFilters?: () => void;
+    formatData: (data: unknown[]) => string;
   } = $props();
+
+  /**
+   * 格式化日期为 HH:mm:ss.SSS
+   */
+  function formatTime(date: Date | string | undefined): string {
+    if (!date) return "";
+    return i18nStore.dayjs(date).format("HH:mm:ss.SSS");
+  }
+
+  /**
+   * 为每条日志生成一个稳定的 key
+   * LogMessage 本身没有 id，使用 date + logId + 索引组合保证稳定
+   */
+  function entryKey(entry: LogMessage, index: number): string {
+    const t =
+      entry.date instanceof Date
+        ? entry.date.getTime()
+        : new Date(entry.date ?? 0).getTime();
+    return `${t}-${entry.logId ?? "_"}-${entry.level}-${index}`;
+  }
 </script>
 
 <div class="flex-1 overflow-y-auto px-3 py-2 font-mono text-xs">
-  {#if loading}
+  {#if !hookLogStore.connected}
     <div class="space-y-1.5">
       {#each Array.from({ length: 12 }, (_, idx) => idx) as index (index)}
         <div class="flex items-center gap-2.5">
-          <Skeleton class="h-3.5 w-12 rounded-lg" />
-          <Skeleton class="h-3.5 w-20 rounded-lg" />
+          <Skeleton class="h-3.5 w-1 rounded-lg" />
           <Skeleton class="h-3.5 w-24 rounded-lg" />
+          <Skeleton class="h-3.5 w-16 rounded-lg" />
           <Skeleton class="h-3.5 flex-1 rounded-lg" />
         </div>
       {/each}
@@ -49,12 +66,12 @@
           尝试调整搜索关键词或重新启用某些级别 / 组件过滤
         </p>
       </div>
-      {#if search || activeComponent !== "__all__"}
+      {#if hookLogStore.search.length > 0 || hookLogStore.activeLevels.size !== 6}
         <Button
           variant="outline"
           size="sm"
           class="mt-2 rounded-xl"
-          onclick={onResetFilters}
+          onclick={() => hookLogStore.resetFilters()}
         >
           重置过滤器
         </Button>
@@ -62,29 +79,44 @@
     </div>
   {:else}
     <div class="space-y-0.5" use:autoAnimate>
-      {#each filtered as entry (entry.id)}
+      {#each filtered as entry, index (entryKey(entry, index))}
         {@const meta = levelMeta[entry.level]}
-        <!-- 添加 animate-fade-in 实现淡入效果 -->
         <div
-          class="hover:bg-muted/50 animate-fade-in group flex items-start gap-2.5 rounded-xl px-3 py-1.5 transition-all duration-200"
+          class="hover:bg-muted/50 animate-fade-in group flex items-stretch gap-2.5 rounded-xl px-2 py-1.5 transition-all duration-200"
         >
-          <div class={["mt-0.5 w-11 shrink-0 tabular-nums", meta.tone]}>
-            {entry.level}
+          <!-- 级别色条：替代原级别前缀，作为视觉锚点 -->
+          <div
+            class={["w-0.5 shrink-0 self-stretch rounded-full", meta?.bar]}
+            aria-label={entry.level}
+          ></div>
+
+          <!-- 时间戳：跟随级别色，降低不透明度作为次级信息 -->
+          <div
+            class={["mt-0.5 w-24 shrink-0 tabular-nums opacity-60", meta?.tone]}
+          >
+            {formatTime(entry.date)}
           </div>
-          <div class="text-muted-foreground w-20 shrink-0 tabular-nums">
-            {entry.time}
-          </div>
-          {#if entry.component}
+
+          <!-- Scope 标签：使用与筛选按钮一致的 chip 风格 -->
+          {#if entry.scope}
             <div
-              class="bg-primary/10 text-primary shrink-0 rounded-lg px-1.5 py-0.5 text-xs font-medium"
+              class={[
+                "mt-0.5 shrink-0 self-start rounded-lg border px-1.5 py-0.5 text-xs font-medium",
+                meta?.chip,
+              ]}
             >
-              {entry.component}
+              {entry.scope}
             </div>
-          {:else}
-            <div class="w-16 shrink-0"></div>
           {/if}
-          <div class="text-foreground min-w-0 flex-1 wrap-break-word">
-            {entry.message}
+
+          <!-- 消息正文：使用级别 tone 完整着色，模拟 electron-log 控制台输出 -->
+          <div
+            class={[
+              "mt-0.5 min-w-0 flex-1 wrap-break-word whitespace-pre-wrap",
+              meta?.tone,
+            ]}
+          >
+            {formatData(entry.data)}
           </div>
         </div>
       {/each}

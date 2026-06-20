@@ -1,169 +1,171 @@
-import type { LogLevel, LogEntry } from './types';
+import log from 'electron-log/renderer'
+import { api } from '$lib/utils/api'
+import type { LogLevel, LogMessage } from 'electron-log'
 
-const MOCK_COMPONENTS: (string | null)[] = [
-    "LayoutStore",
-    "AppLoader",
-    "RpcClient",
-    "AuthService",
-    "FileExplorer",
-    "TerminalView",
-    "NotificationHub",
-    "WindowManager",
-    null,
-    "SocketBridge",
-    "ThemeEngine",
-    "PluginHost",
+const ALL_LEVELS: LogLevel[] = [
+    "error",
+    "warn",
+    "info",
+    "verbose",
+    "debug",
+    "silly",
 ];
 
-const MOCK_MESSAGES: Record<LogLevel, string[]> = {
-    info: [
-        "activity registered, id=file-explorer, total=1",
-        "connection established to ws://localhost:9000",
-        "user session restored from cache (uid=42)",
-        "plugin loaded: media-preview v2.3.1",
-        "workspace synced successfully (124 files)",
-        'theme switched to "Graphite Dark"',
-        "hook registered: onWindowFocus → LayoutStore.refresh",
-    ],
-    debug: [
-        "state transition: idle → loading",
-        "cache hit: /api/system/config (12ms)",
-        "event dispatched: layout.resize { w: 1280, h: 720 }",
-        "rendering 47 items in viewport",
-        "rpc frame size=2.4kb, channel=system",
-        "reactive deps recomputed in 0.8ms",
-    ],
-    warn: [
-        "slow query detected: 1245ms on /system/manifest",
-        "deprecated API usage: legacy.openWindow()",
-        "reconnection attempt 2/5 in 3s",
-        "frame budget exceeded: 22ms (target 16ms)",
-    ],
-    error: [
-        "failed to fetch manifest: NetworkError",
-        "unhandled rejection in worker thread #3",
-        "permission denied: /sys/devices/cpu",
-        "rpc timeout: system.hooklog after 5000ms",
-    ],
-};
 
-function pad(n: number, w = 2) {
-    return String(n).padStart(w, "0");
-}
+class HookLogStore {
+    private abortError = new Error("abort");
+    // ── 配置 ──
+    readonly #maxBuffer: number
+    private controller: AbortController | null = null;
 
-function nowTime() {
-    const d = new Date();
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
-}
+    // ── 私有状态 ──
+    // 高频细粒度 mutation（unshift / pop）→ $state（非 raw）
+    #logs = $state<LogMessage[]>([])
+    #connected = $state(false) //流是否在消费中
+    #paused = $state(false)
+    #error = $state<string | null>(null)
+    #lastUpdated = $state<number | null>(null)
+    keepalive = $state(true);
+    // 过滤条件。
+    search = $state("");
+    activeLevels = $state<Set<LogLevel>>(new Set(ALL_LEVELS));
+    activeScope = $state("__all__")
+    knownComponents: string[] = $state([]);
 
-function randomLog(): LogEntry {
-    const weights: LogLevel[] = [
-        "info",
-        "info",
-        "info",
-        "info",
-        "debug",
-        "debug",
-        "warn",
-        "error",
-    ];
-    const level = weights[Math.floor(Math.random() * weights.length)];
-    const component =
-        MOCK_COMPONENTS[Math.floor(Math.random() * MOCK_COMPONENTS.length)];
-    const pool = MOCK_MESSAGES[level];
-    const message = pool[Math.floor(Math.random() * pool.length)];
-    return {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-        level,
-        time: nowTime(),
-        component,
-        message,
-    };
-}
+    // ── 内部句柄（不响应、不暴露） ──
+    #stream: AsyncGenerator<LogMessage> | null = null
+    #runPromise: Promise<void> | null = null
 
-async function* mockHookLog(): AsyncGenerator<LogEntry> {
-    while (true) {
-        await new Promise((r) => setTimeout(r, 220 + Math.random() * 1100));
-        yield randomLog();
+    constructor(maxBuffer = 800) {
+        this.#maxBuffer = maxBuffer
     }
-}
 
-function createHookLogStore(maxBuffer = 800) {
-    let logs = $state<LogEntry[]>([]);
-    let connected = $state(false);
-    let paused = $state(false);
-    let cancelled = false;
+    // ── 只读门面 ──
+    get logs() {
+        return this.#logs
+    }
+    get connected() {
+        return this.#connected
+    }
+    get paused() {
+        return this.#paused
+    }
+    get error() {
+        return this.#error
+    }
+    get lastUpdated() {
+        return this.#lastUpdated
+    }
+    get maxBuffer() {
+        return this.#maxBuffer
+    }
 
-    async function consumeStream() {
-        const stream = mockHookLog();
-        connected = true;
+    // ── 派生 ──
+    readonly count = $derived(this.#logs.length)
+    readonly isEmpty = $derived(this.#logs.length === 0)
+
+    // ── Action ──
+    resetFilters() {
+        this.search = "";
+        this.activeScope = "__all__";
+        this.activeLevels = new Set(ALL_LEVELS);
+    }
+    /**
+     * 启动日志流消费。重复调用安全：已在运行则直接返回当前 run promise。
+     */
+    start(): Promise<void> {
+        if (this.#runPromise) {
+            log.debug('[HookLogStore] start() ignored, already running')
+            return this.#runPromise
+        }
+        log.debug('[HookLogStore] start() called')
+        this.#runPromise = this.#run()
+        return this.#runPromise
+    }
+
+    /**
+     * 停止日志流消费。通过向 generator 发送 return signal 让其优雅退出，
+     * 等待 #run() finally 块执行完毕后再 resolve，
+     * 保证调用方收到 promise 时 connected 已经为 false。
+     */
+    async stop(): Promise<void> {
+        if (!this.#runPromise) {
+            log.debug('[HookLogStore] stop() ignored, not running')
+            return
+        }
+        log.debug('[HookLogStore] stop() called, signalling stream return')
         try {
-            for await (const entry of stream) {
-                if (cancelled) break;
-                if (paused) continue;
-                logs.unshift(entry);
-                if (logs.length > maxBuffer) {
-                    logs.pop();
+            // 通知 generator 终止：mockHookLog 内部的 await/yield 会被打断，函数正常返回
+            if (this.#stream) {
+                this.abort();
+                await this.#stream.return(undefined)
+            }
+            // 等待 #run() 的 for-await 完整退出、finally 执行完
+            await this.#runPromise
+            // log.info('[HookLogStore] stopped')
+        } catch (err) {
+            log.error('[HookLogStore] stop() failed', err)
+        }
+    }
+
+    /**
+     * 暂停 / 恢复：不切断流，只是丢弃期间的条目。
+     */
+    togglePause(): void {
+        this.#paused = !this.#paused
+        log.debug(`[HookLogStore] paused=${this.#paused}`)
+    }
+
+    clear(): void {
+        this.#logs = []
+        log.debug('[HookLogStore] logs cleared')
+    }
+
+    private abort() {
+        try {
+            this.controller?.abort(this.abortError);
+        } catch (e) {
+            console.log("abort error =", e)
+            // abort 本身极少抛错，兜底捕获
+        } finally {
+            this.controller = null;
+        }
+    }
+    // ── 内部：流消费主循环 ──
+    async #run(): Promise<void> {
+        this.abort();
+        this.#connected = true
+        this.#error = null
+        // TODO: 替换为 const stream = api().system.hookLog()
+        // this.#stream = mockHookLog()
+        this.controller = new AbortController();
+        const { signal } = this.controller;
+        this.#stream = await api().system.streamLogs({}, { signal });
+
+        log.info('[HookLogStore] stream consumption started')
+        try {
+            for await (const entry of this.#stream) {
+                if (this.#paused) continue
+                this.#logs.unshift(entry)
+                if (this.#logs.length > this.#maxBuffer) {
+                    this.#logs.pop()
                 }
+                this.#lastUpdated = Date.now()
+            }
+            log.info('[HookLogStore] stream completed')
+        } catch (err) {
+            if (err === this.abortError) {
+                log.info('[HookLogStore] stream consumption abort')
+            } else {
+                this.#error = err instanceof Error ? err.message : String(err)
+                log.error('[HookLogStore] stream consumption failed', err)
             }
         } finally {
-            connected = false;
+            this.#stream = null
+            this.#runPromise = null
+            this.#connected = false
         }
     }
-
-    function start() {
-        if (cancelled) {
-            cancelled = false;
-        }
-        if (!connected && !paused) {
-            consumeStream();
-        }
-    }
-
-    function stop() {
-        cancelled = true;
-        connected = false;
-    }
-
-    function togglePause() {
-        paused = !paused;
-        if (!paused && !connected && !cancelled) {
-            consumeStream();
-        }
-    }
-
-    function clear() {
-        logs = [];
-    }
-
-    function seedHistory() {
-        const seed: LogEntry[] = [];
-        const baseTime = Date.now() - 60 * 1000;
-        for (let i = 0; i < 24; i++) {
-            const e = randomLog();
-            const d = new Date(baseTime + i * 1800);
-            e.time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
-            seed.push(e);
-        }
-        logs = seed.reverse();
-    }
-
-    return {
-        get logs() {
-            return logs;
-        },
-        get connected() {
-            return connected;
-        },
-        get paused() {
-            return paused;
-        },
-        start,
-        stop,
-        togglePause,
-        clear,
-        seedHistory,
-    };
 }
 
-export const hookLogStore = createHookLogStore();
+export const hookLogStore = new HookLogStore()
