@@ -5,6 +5,7 @@ import { WindowService } from '$libs/utils/window.js';
 import { BrowserWindow, dialog } from 'electron';
 import { RpcContext } from '../type.js';
 import { projectManager } from '$libs/project/manager.js';
+import { configService } from '$libs/store/index.js';
 
 const open = os
     .input(z.string().optional())
@@ -50,7 +51,18 @@ const info = os
         return result;
     });
 
+
+const dep = os
+    .output(z.array(z.string()))
+    .handler(async ({ context }) => {
+        const ctx = context as RpcContext;
+        void ctx;
+        const result = [configService().get("plugin")];
+        return result;
+    });
+
 export default {
     open,
-    info
+    info,
+    dep
 }

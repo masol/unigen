@@ -1,4 +1,5 @@
 import { api } from "$lib/utils/api";
+import { pluginStore } from "./plugin.svelte";
 type LoadingAction = "open" | "new" | null;
 
 class ProjectStore {
@@ -10,6 +11,7 @@ class ProjectStore {
      * 选 $state 深度响应：需要对 Meta 字段做 mutation（busy / status / …）
      */
     #path = $state<string>("");
+    #depPlugins: string[] = [];
     loading = $state<LoadingAction>(null);
 
     opened = $derived(this.#path.trim().length > 0)
@@ -23,6 +25,8 @@ class ProjectStore {
         const bOpend = await api().project.open(pathName);
         if (bOpend) {
             this.#path = await api().project.info("path");
+            this.#depPlugins = await api().project.dep();
+            await pluginStore.ensurePlugins(this.#depPlugins);
         }
         return false;
     }

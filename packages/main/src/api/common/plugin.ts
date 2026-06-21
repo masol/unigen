@@ -14,7 +14,9 @@ const load = os
         })
     })
 
-const getSysplugins = os
+// 获取给定id对应的PluginInfo信息。返回的status必须在这里设置为enable.
+const getPlugins = os
+    .input(z.array(z.string()))
     .output(z.array(PluginInfoSchema))
     .handler(async (): Promise<PluginInfo[]> => {
         return []
@@ -41,7 +43,7 @@ const rmPlugin = os
 
 export default {
     load,
-    getSysplugins,
+    getPlugins,
     updatePlugin,
     rmPlugin,
 }

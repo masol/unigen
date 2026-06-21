@@ -10,6 +10,7 @@ import log from 'electron-log/renderer'
 import type { Component } from 'svelte'
 import type { LeftSidebarItem } from '$lib/utils/plugin/extpoint/leftsidebar'
 import bottomActivities from '../../../route/featured/leftside/bottom'
+import { SvelteMap } from 'svelte/reactivity'
 // ─── 类型 ────────────────────────────────────────────────────
 
 /** 三个可控面板位置 */
@@ -30,7 +31,7 @@ class LayoutStore {
     //  使用 Map 存储便于 O(1) 查找/删除；对外暴露排序后的数组
     //  Map 内部有增删 mutation → $state（深度响应）
     // ══════════════════════════════════════════════════════════
-    #topActivityMap = $state<Map<string, LeftSidebarItem>>(new Map())
+    #topActivityMap = $state<Map<string, LeftSidebarItem>>(new SvelteMap())
 
     /** 按 order 升序排列的活动栏项目（只读派生） */
     readonly topActivities = $derived.by(() => {
@@ -174,6 +175,7 @@ class LayoutStore {
         }
 
         this.#topActivityMap.set(item.id, item)
+        // this.#topActivityMap = new Map(this.#topActivityMap);
         log.info(`[LayoutStore] activity registered, id=${item.id}, total=${this.#topActivityMap.size}`)
     }
 

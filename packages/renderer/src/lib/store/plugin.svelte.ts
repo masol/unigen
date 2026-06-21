@@ -1,4 +1,3 @@
-// src/lib/store/plugin.svelte.ts
 import log from 'electron-log/renderer'
 import { pluginRuntime } from '$lib/utils/plugin'
 import { BUILDIN_PLUGINS } from '$lib/utils/plugin/shared/plugin'
@@ -134,7 +133,7 @@ class PluginStore {
     // ── 构造 ──────────────────────────────────────────────────
 
     constructor() {
-        log.info('[PluginStore] initialized')
+        log.info('[PluginStore] created')
     }
 
     // ── 内部辅助 ──────────────────────────────────────────────
@@ -234,7 +233,7 @@ class PluginStore {
      * 全局初始化
      *
      * 1. 初始化 pluginRuntime（注入平台服务、启动 loader）
-     * 2. 注册 BUILTIN_PLUGINS（core），并发激活运行时
+     * 2. 注册 BUILTIN_PLUGINS，并发激活运行时
      * 3. 通过 API 获取系统级插件，注册并激活已启用项
      *
      * 由应用启动流程统一调用一次（外部 guard 保证幂等）
@@ -251,6 +250,8 @@ class PluginStore {
             // Step 2：注册并激活 core 插件
             this.#register(BUILDIN_PLUGINS)
 
+            // @TODO 通过API获取当前系统配置的全部Plugins.然后激活并注册。
+
             const coreMetas = [...this.#metas.values()].filter(
                 (p) => p.scope === 'core' && p.installed && p.status === 'enabled',
             )
@@ -263,8 +264,10 @@ class PluginStore {
 
             log.info(`[PluginStore] core plugins loaded — ${coreMetas.length} item(s)`)
 
-            // Step 3：获取系统级插件
-            const systemInfos: PluginInfo[] = await api().plugin.getSysplugins()
+            // Step 3：注册系统级插件
+            const systemInfos: PluginInfo[] = [...this.#metas.values()].filter(
+                (p) => p.scope === 'system' && p.installed && p.status === 'enabled',
+            )
             this.#register(systemInfos)
 
             const systemEnabledMetas = systemInfos
@@ -287,28 +290,61 @@ class PluginStore {
         }
     }
 
+    async #regPlugins(pluginIds: string[]): Promise<void> {
+        log.debug(`[regPlugins] called for ${pluginIds}`)
+        this.#isLoading = true
+        this.#error = null
+
+        try {
+            const loadPlugins = pluginIds.filter((id) => !this.#metas.get(id))
+
+            if (loadPlugins.length > 0) {
+                const plugin2Reg = await api().plugin.getPlugins(loadPlugins);
+                this.#register(plugin2Reg)
+            }
+        } finally {
+            this.#isLoading = false
+        }
+    }
+
     /**
-     * 加载项目级插件（由 projectStore 在项目打开时调用）
+     * 维护项目依赖插件，确保只有depPlugins集合被激活（由 projectStore 在项目打开时调用）
      *
-     * @param infos 项目配置中声明的插件完整信息（scope 应为 'project'）
+     * @param pluginIds 项目配置中声明的依赖插件列表。
+     *
+     */
+    async ensurePlugins(depPlugins: string[]): Promise<void> {
+        await this.#unloadProjectPlugins(depPlugins); // 卸载除depPlugins之外的项目级插件。
+        if (depPlugins.length > 0) {
+            await this.#regPlugins(depPlugins);
+            await this.#loadProjectPlugins(depPlugins);
+        }
+    }
+
+    /**
+     * 加载项目依赖插件（由 projectStore 在项目打开时调用）
+     *
+     * @param pluginIds 项目配置中声明的依赖的插件列表。
      *
      * 流程：
-     *   - 注册尚未在列表中的插件（scope 强制为 'project'）
      *   - 对所有 enabled 且运行时未加载的项目插件激活运行时
      */
-    async loadProjectPlugins(infos: PluginInfo[]): Promise<void> {
-        if (infos.length === 0) return
+    async #loadProjectPlugins(depPlugins: string[]): Promise<void> {
+        if (depPlugins.length === 0) return
         log.debug(
-            `[PluginStore] loadProjectPlugins() called, count=${infos.length}`,
+            `[PluginStore] loadProjectPlugins() called, count=${depPlugins.length}`,
         )
 
         this.#isLoading = true
         this.#error = null
 
         try {
+            const infos = [...this.#metas.values()].filter(
+                (p) => depPlugins.indexOf(p.id) >= 0,
+            )
             // 强制 scope = 'project'，防止项目配置越权声明 core / system
             const normalized = infos.map((p) => ({ ...p, scope: 'project' as PluginScope }))
-            this.#register(normalized)
+            // this.#register(normalized)
 
             const toLoad = normalized
                 .filter((p) => p.installed && p.status === 'enabled')
@@ -335,14 +371,15 @@ class PluginStore {
     }
 
     /**
-     * 卸载所有项目级插件运行时（由 projectStore 在项目关闭时调用）
+     * - @param pluginKeeped  需要保留的插件id数组--用于项目打开环节。
+     * 卸载给定的项目级插件运行时（由 projectStore 在项目关闭/打开时调用）
      * 不从列表中移除，仅停用运行时，保留 meta 供界面展示
      */
-    async unloadProjectPlugins(): Promise<void> {
+    async #unloadProjectPlugins(pluginKeeped: string[]): Promise<void> {
         log.debug('[PluginStore] unloadProjectPlugins() called')
 
         const projectMetas = [...this.#metas.values()].filter(
-            (p) => p.scope === 'project' && p.runtimeLoaded,
+            (p) => p.scope === 'project' && p.runtimeLoaded && pluginKeeped.indexOf(p.id) < 0,
         )
 
         await Promise.all(projectMetas.map((m) => this.#unloadRuntime(m)))
