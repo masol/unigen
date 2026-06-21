@@ -3,12 +3,7 @@
   import * as Popover from "$lib/components/ui/popover";
   import * as Command from "$lib/components/ui/command";
   import { cn } from "$lib/utils";
-  import {
-    IconSearch,
-    IconCheck,
-    IconChevronDown,
-    IconPlus,
-  } from "@tabler/icons-svelte";
+  import { IconSearch, IconCheck, IconPlus } from "@tabler/icons-svelte";
   import type { ProviderPreset } from "./types";
 
   import { KNOWN_PROVIDERS, findPreset } from "./providers";
@@ -25,6 +20,7 @@
 
   let open = $state(false);
   let triggerWidth = $state(0);
+  let triggerHeight = $state(40);
 
   const selectedPreset = $derived(findPreset(selectedId));
 
@@ -39,7 +35,11 @@
   }
 </script>
 
-<div bind:clientWidth={triggerWidth}>
+<div
+  class="relative"
+  bind:clientWidth={triggerWidth}
+  bind:clientHeight={triggerHeight}
+>
   <Popover.Root bind:open>
     <Popover.Trigger>
       {#snippet child({ props })}
@@ -50,7 +50,8 @@
             "flex h-10 w-full items-center gap-3 rounded-xl border border-input bg-background px-3 text-sm",
             "transition-all duration-200 hover:bg-accent/30",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            open && "ring-2 ring-ring",
+            // 打开时隐藏 trigger 的视觉表现，让弹层"无缝接管"该位置
+            open && "pointer-events-none opacity-0",
           )}
         >
           <IconSearch class="size-4 shrink-0 text-muted-foreground" />
@@ -71,25 +72,27 @@
               搜索预设提供商…
             </span>
           {/if}
-
-          <IconChevronDown
-            class={cn(
-              "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-              open && "rotate-180",
-            )}
-          />
         </button>
       {/snippet}
     </Popover.Trigger>
 
+    <!--
+      关键：side="bottom" + sideOffset={-triggerHeight}
+      → 让弹层从 trigger 的顶部开始向下展开，
+        正好完整覆盖原按钮，避免用户被"两个相似控件"困扰。
+    -->
     <Popover.Content
-      class="overflow-hidden rounded-xl p-0"
+      class={cn(
+        "overflow-hidden rounded-xl border border-border/60 bg-popover p-0 shadow-xl",
+        "animate-fade-in",
+      )}
       align="start"
-      sideOffset={4}
+      side="bottom"
+      sideOffset={-triggerHeight}
       style="width: {triggerWidth}px; z-index: 9999;"
     >
-      <Command.Root>
-        <Command.Input placeholder="输入名称搜索…" />
+      <Command.Root class="rounded-xl">
+        <Command.Input placeholder="输入名称搜索…" class="h-10" />
         <Command.List class="max-h-72">
           <Command.Empty>未找到匹配的提供商</Command.Empty>
 

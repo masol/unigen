@@ -1,4 +1,4 @@
-// import { getCountryCode } from '$libs/utils/net/ip.js';
+// import { getCountryCode } from '$libs/utils/sys/ip.js';
 // import eLogger from 'electron-log/main';
 import { AppModule } from '../AppModule.js';
 import electronUpdater, { type AppUpdater, type Logger } from 'electron-updater';

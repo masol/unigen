@@ -34,7 +34,12 @@ export default /** @type import('electron-builder').Configuration */
     "**/node_modules/@lancedb/**/*",
     "**/node_modules/node-llama-cpp/**/*",
   ],
-  extraResources: [{ from: "packages/main/drizzle", to: "resources/drizzle" }],
+  extraResources: [
+    {
+      from: "packages/main/src/libs/utils/db/migrations",
+      to: "drizzle",
+    },
+  ],
 });
 
 /**

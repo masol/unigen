@@ -5,7 +5,7 @@ import { configService } from '$libs/store/index.js'
 import { app, nativeTheme } from 'electron'
 import { basename, join } from 'path'
 import FastGlob from 'fast-glob'
-import { mkdir } from 'fs/promises'
+import { ensureDir } from 'fs-extra'
 import { secondConfig } from '$libs/store/second.js'
 
 /**
@@ -80,7 +80,7 @@ const useDark = os
 async function getModels(sub: string): Promise<Array<{ value: string, label: string }>> {
     const dataPath = app.getPath("userData");
     const basepath = join(dataPath, "models", sub);
-    await mkdir(basepath, { recursive: true });
+    await ensureDir(basepath);
     const files = await FastGlob(FastGlob.convertPathToPattern(basepath) + '/**/*.gguf', {
         absolute: true
     })

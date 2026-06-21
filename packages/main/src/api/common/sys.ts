@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { os } from '@orpc/server'
 import { app, dialog, shell } from 'electron'
-import { mkdir, writeFile } from 'fs/promises'
+import { ensureDir } from 'fs-extra'
+import { writeFile } from 'fs/promises'
 import { join } from 'path'
 import { listModels } from '$libs/utils/model/list.js'
 import Logger from 'electron-log/main'
@@ -227,7 +228,7 @@ const getPath = os
                 }
         }
         if (basePath && input.create) {
-            await mkdir(basePath, { recursive: true })
+            await ensureDir(basePath)
         }
         return basePath;
     })

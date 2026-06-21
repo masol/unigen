@@ -14,7 +14,6 @@
     projectStore.loading = "open";
     try {
       await projectStore.open();
-      await new Promise((r) => setTimeout(r, 1200));
     } finally {
       projectStore.loading = null;
     }
@@ -24,8 +23,7 @@
     if (projectStore.isBusy) return;
     projectStore.loading = "new";
     try {
-      // TODO: 调用新建项目逻辑
-      await new Promise((r) => setTimeout(r, 1200));
+      await projectStore.create();
     } finally {
       projectStore.loading = null;
     }

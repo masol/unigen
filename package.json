@@ -4,7 +4,7 @@
   "version": "0.0.3",
   "type": "module",
   "author": {
-    "email": "masol.li@gamil.com",
+    "email": "masol.li@gmail.com",
     "name": "lizhutang",
     "url": "https://lizt.top"
   },
@@ -16,6 +16,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
+    "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "build": "npm run build -ws --if-present",
     "compile": "npm run build && electron-builder build --config electron-builder.mjs -p never",
     "test": "npx playwright test ./tests/e2e.spec.ts",
@@ -31,6 +32,8 @@
     "@types/node": "25.9.3",
     "@typescript-eslint/eslint-plugin": "^8.61.0",
     "@typescript-eslint/parser": "^8.61.0",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
     "electron": "^41.0.3",
     "electron-builder": "26.8.1",
     "esbuild": "^0.28.1",

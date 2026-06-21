@@ -2,7 +2,7 @@ import { onError, ORPCError, os } from "@orpc/server";
 import window from './common/window.js';
 import plugin from './common/plugin.js';
 import { RPCHandler } from "@orpc/server/message-port";
-import Logger from "electron-log";
+// import Logger from "electron-log/main.js";
 import { RpcContext } from "./type.js";
 import { alsMiddleware } from "./als.js";
 import config from './common/cfg.js'
@@ -31,7 +31,8 @@ export function getOrpcHandler(): RPCHandler<RpcContext> {
         handler = new RPCHandler<RpcContext>(appRouter, {
             interceptors: [
                 onError((error, context) => {
-                    Logger.error('oRPC Server Error:', error, context);
+                    void context;
+                    // Logger.error('oRPC Server Error:', error, context);
                     // 重新抛出，错误透传给客户端。@todo: 这里需要处理不是从Error派生的异常，重新从Error派生。
                     // 如果不是 ORPCError，包装一层下发前端
                     if (!(error instanceof ORPCError)) {

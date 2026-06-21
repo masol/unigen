@@ -1,5 +1,3 @@
-import { NotifyContract } from "$types/index.js";
-
 /**
  * 定义项目上下文的公共接口（契约）
  * 子控制器只认识这个接口，不认识具体的 ProjectContext 类
@@ -7,10 +5,7 @@ import { NotifyContract } from "$types/index.js";
 export interface IProjectContext {
     readonly path: string;
     readonly wid: number;
-
-    // 统一的通信服务,通知本项目所属Window.
-    notify(evtName: string, evt: NotifyContract): void;
-
+    register<T extends IProjectController>(token: ControllerConstructor<T>): void;
     // 允许子控制器之间通过接口互相获取同级服务
     getService<T extends IProjectController>(token: ControllerConstructor<T>): T | null;
 }
@@ -19,7 +14,8 @@ export interface IProjectContext {
  * 子控制器的统一生命周期接口
  */
 export interface IProjectController {
-    init(): Promise<void>; // 进入init时,ProjectPath必定有效，构造函数时可能无效。
+    // 移除init,改为自维护。
+    // init(): Promise<void>; // 进入init时,ProjectPath必定有效，构造函数时可能无效。
     dispose(): void;
 }
 
@@ -29,3 +25,6 @@ export interface IProjectController {
 // 约束 2：其实例必须实现 IProjectController 接口
 export type ControllerConstructor<T extends IProjectController = IProjectController> =
     new (context: IProjectContext) => T;
+
+
+export const metaDirName = 'meta'

@@ -2,6 +2,8 @@
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import type { Snippet } from "svelte";
   import WelcomeScreen from "./WelcomeScreen.svelte";
+  import { projectStore } from "$lib/store/project.svelte";
+  import Dashboard from "./Dashboard.svelte";
 
   interface Props {
     children?: Snippet;
@@ -13,6 +15,8 @@
   <div class="h-full w-full">
     {#if children}
       {@render children()}
+    {:else if projectStore.opened}
+      <Dashboard></Dashboard>
     {:else}
       <WelcomeScreen />
     {/if}
