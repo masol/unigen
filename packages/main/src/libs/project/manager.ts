@@ -41,22 +41,6 @@ class ProjectManager {
         }
         return prj
     }
-
-
-    // createProject(path:string,wid:number):number{
-
-    // }
-
-    // 返回大于0的值，表示创建成功。否则是错误值。
-    // reloadProject(path: string, wid: number): number {
-    //     const old = this.getByPath(path);
-    //     const old2 = this.getByWindow(wid)
-    //     if (old || old2) {
-    //         return -1;
-    //     }
-
-    //     return this.prjId;
-    // }
 }
 
 
