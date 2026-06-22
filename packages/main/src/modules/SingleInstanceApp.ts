@@ -1,13 +1,16 @@
-import {AppModule} from '../AppModule.js';
+import { lifecycle } from '$libs/utils/sys/lifecycle.js';
+import { AppModule } from '../AppModule.js';
 import * as Electron from 'electron';
 
 class SingleInstanceApp implements AppModule {
-  enable({app}: {app: Electron.App}): void {
+  enable({ app }: { app: Electron.App }): void {
     const isSingleInstance = app.requestSingleInstanceLock();
     if (!isSingleInstance) {
       app.quit();
       process.exit(0);
     }
+    //主进程，监听before-quit，执行清理动作。
+    lifecycle.init(app);
   }
 }
 

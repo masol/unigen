@@ -14,9 +14,9 @@ export interface IProjectContext {
  * 子控制器的统一生命周期接口
  */
 export interface IProjectController {
-    // 移除init,改为自维护。
-    // init(): Promise<void>; // 进入init时,ProjectPath必定有效，构造函数时可能无效。
-    dispose(): void;
+    // 在项目打开/创建之后，依次调用初始化。
+    init?(): void | Promise<void>; // 进入init时,ProjectPath必定有效，构造函数时可能无效。
+    dispose?(): void | Promise<void>;
 }
 
 

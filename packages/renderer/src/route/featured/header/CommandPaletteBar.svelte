@@ -12,8 +12,8 @@
     IconArrowDown,
   } from "@tabler/icons-svelte";
   import { commandCenter } from "$lib/utils/commands/center";
-  import { windowStore } from "$lib/store/window.svelte";
   import { configStore } from "$lib/store/config.svelte";
+  import { projectStore } from "$lib/store/project.svelte";
 
   // ─── Types ───
   interface CommandEntry {
@@ -26,7 +26,7 @@
   // ─── State ───
   let isOpen = $state(false);
   let query = $state("");
-  let title = $derived(windowStore.title);
+  let title = $derived(projectStore.path || "unigen");
   let selectedIndex = $state(0);
   let inputEl: HTMLInputElement | undefined = $state();
 

@@ -28,10 +28,6 @@ export class PrjDB implements IProjectController {
             : path.join(__dirname, '../src/libs/utils/db/migrations');
 
         Logger.info(`[Project:DB] migrationsPath= ${this.migrationsPath}`)
-        app.on('will-quit', () => {
-            // 确保在进程完全消失前，所有挂起的 SQL 写入完成，文件被正常解锁
-            this.close();
-        });
     }
 
     static ensure(prj: IProjectContext): PrjDB {

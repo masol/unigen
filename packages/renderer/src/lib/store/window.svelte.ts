@@ -19,7 +19,6 @@ export type WindowVisualState = 'normal' | 'maximized' | 'minimized'
 class WindowStore {
   // ── 窗口标识（纯内部） ──
   #wid = -1                // 原始值 
-  #title = $state('unigen — workspace')                   // 原始值 → $state
 
   // ── 核心状态 ──
   #visualState = $state<WindowVisualState>('normal')       // 原始值 → $state
@@ -39,7 +38,6 @@ class WindowStore {
   }
 
   // ── 只读门面 ──
-  get title(): string { return this.#title }
   get visualState(): WindowVisualState { return this.#visualState }
   get isFocused(): boolean { return this.#isFocused }
 
@@ -66,12 +64,6 @@ class WindowStore {
   init(wid: number): void {
     this.#wid = wid
     log.info(`[WindowStore] bound wid=${wid}`)
-  }
-
-  // ── Actions ──
-  setTitle(title: string): void {
-    log.debug(`[WindowStore] setTitle() title="${title}"`)
-    this.#title = title
   }
 
   async maximize(): Promise<void> {
