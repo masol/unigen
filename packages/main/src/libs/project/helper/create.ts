@@ -45,7 +45,8 @@ export async function createProject(prj: IProjectContext, bForce = false): Promi
 
     const pdb = PrjDB.ensure(prj);
     await pdb.open(true);
-    pdb.set("dep", [configService().get("plugin")])
+    pdb.set("dep", [configService().get("plugin")]);
+    pdb.set("version", __APP_VERSION__);
 
     return true
 }

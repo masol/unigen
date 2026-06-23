@@ -2,6 +2,7 @@ import { getNodeMajorVersion } from "@app/electron-versions";
 import { spawn } from "child_process";
 import electronPath from "electron";
 import pkg from "./package.json" assert { type: "json" }; // 引入 package.json
+import rootPkg from "../../package.json" assert { type: "json" };
 
 export default /**
  * @type {import('vite').UserConfig}
@@ -37,6 +38,10 @@ export default /**
     reportCompressedSize: false,
   },
   plugins: [handleHotReload()],
+  define: {
+    // 注入为全局常量，确保加上 JSON.stringify
+    __APP_VERSION__: JSON.stringify(rootPkg.version),
+  },
 });
 
 /**

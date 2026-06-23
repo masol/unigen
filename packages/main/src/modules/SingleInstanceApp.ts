@@ -1,4 +1,4 @@
-import { lifecycle } from '$libs/utils/sys/lifecycle.js';
+import { appLife } from '$libs/utils/tapable/applife.js';
 import { AppModule } from '../AppModule.js';
 import * as Electron from 'electron';
 
@@ -10,7 +10,7 @@ class SingleInstanceApp implements AppModule {
       process.exit(0);
     }
     //主进程，监听before-quit，执行清理动作。
-    lifecycle.init(app);
+    appLife.init(app);
   }
 }
 

@@ -3,7 +3,7 @@ import pTimeout from 'p-timeout';
 import type { App } from 'electron';
 import Logger from 'electron-log/main.js';
 
-class LifecycleManager {
+class AppLife {
     public hooks = {
         beforeQuit: new AsyncParallelHook<[]>()
     };
@@ -19,7 +19,7 @@ class LifecycleManager {
             e.preventDefault();
 
             try {
-                Logger.log('[Lifecycle] 开始并行执行退出任务...');
+                Logger.log('[AppLife] 开始并行执行退出任务...');
 
                 await pTimeout(
                     this.hooks.beforeQuit.promise(),
@@ -29,13 +29,13 @@ class LifecycleManager {
                     }
                 );
 
-                Logger.log('[Lifecycle] 所有任务按时完成。');
+                Logger.log('[AppLife] 所有任务按时完成。');
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } catch (err: any) {
                 if (err.name === 'TimeoutError') {
-                    Logger.warn(`[Lifecycle] 退出清理超时，正在强行关闭...`);
+                    Logger.warn(`[AppLife] 退出清理超时，正在强行关闭...`);
                 } else {
-                    Logger.error(`[Lifecycle] 某个插件在退出时崩溃: ${err?.message || err}`);
+                    Logger.error(`[AppLife] 某个插件在退出时崩溃: ${err?.message || err}`);
                 }
             } finally {
                 this.isCleanedUp = true;
@@ -45,4 +45,4 @@ class LifecycleManager {
     }
 }
 
-export const lifecycle = new LifecycleManager();
+export const appLife = new AppLife();

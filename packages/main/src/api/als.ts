@@ -5,8 +5,10 @@
 
 import { AlsStore } from "$types/shared/api.js";
 import { AsyncLocalStorage } from "async_hooks";
-import { os } from "@orpc/server";
+import { ORPCError, os } from "@orpc/server";
 import { RpcContext } from "./type.js";
+import { type ProjectContainer } from "$libs/project/project.js";
+import { COMMON_ORPC_ERROR_DEFS } from '@orpc/client';
 
 
 const asyncLocalStorage = new AsyncLocalStorage<AlsStore>();
@@ -31,7 +33,18 @@ export const alsMiddleware = os.middleware(async ({ context, next }) => {
 // ==========================================
 // 4. 便捷的上下文获取工具函数 (方便底层 libs 代码随时调用)
 // ==========================================
-export function getCurrentProject() {
+export function getCurrentProject(): ProjectContainer | undefined {
     const store = asyncLocalStorage.getStore();
     return store?.project;
+}
+
+export function ensureCurrentPrj(): ProjectContainer {
+    const prj = getCurrentProject();
+    if (!prj) {
+        throw new ORPCError(COMMON_ORPC_ERROR_DEFS.NOT_FOUND.message, {
+            status: COMMON_ORPC_ERROR_DEFS.TOO_MANY_REQUESTS.status,
+            message: "无法获取到当前活动项目，没有通过Orpc接口驱动？"
+        })
+    }
+    return prj
 }

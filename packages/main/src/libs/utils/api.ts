@@ -1,1 +1,1 @@
-export { getCurrentProject } from '../../api/als.js'
+export { ensureCurrentPrj, getCurrentProject } from '../../api/als.js'

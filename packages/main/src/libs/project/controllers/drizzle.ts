@@ -11,6 +11,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { eq } from 'drizzle-orm'
 import { ORPCError } from "@orpc/server";
 import { COMMON_ORPC_ERROR_DEFS } from "@orpc/client";
+import { PrjJob } from "../helper/job.js";
 
 const dbName = 'db.sqlite'
 
@@ -20,6 +21,7 @@ export class PrjDB implements IProjectController {
     private migrationsPath: string = ""
     private dqlite: Database.Database | null = null;
     private db: DrizzleType | null = null;
+    #job: PrjJob | null = null;
     constructor(private ctx: IProjectContext) {
         const __dirname = path.dirname(fileURLToPath(import.meta.url));
         this.migrationsPath = app.isPackaged
@@ -28,6 +30,16 @@ export class PrjDB implements IProjectController {
             : path.join(__dirname, '../src/libs/utils/db/migrations');
 
         Logger.info(`[Project:DB] migrationsPath= ${this.migrationsPath}`)
+    }
+
+    get job(): PrjJob {
+        if (!this.#job) {
+            throw new ORPCError(COMMON_ORPC_ERROR_DEFS.NOT_FOUND.message, {
+                status: COMMON_ORPC_ERROR_DEFS.TOO_MANY_REQUESTS.status,
+                message: `未初始化的项目任务队列！`
+            })
+        }
+        return this.#job;
     }
 
     static ensure(prj: IProjectContext): PrjDB {
@@ -42,6 +54,9 @@ export class PrjDB implements IProjectController {
     }
 
     close() {
+        if (this.#job) {
+            this.#job.forceShutdown();
+        }
         if (this.dqlite && this.dqlite.open) {
             try {
                 Logger.info('[Database] 正在安全断开数据库连接，写入 WAL 缓冲区...');
@@ -81,6 +96,8 @@ export class PrjDB implements IProjectController {
 
         this.db = drizzle(this.dqlite, { schema });
         migrate(this.db, { migrationsFolder: this.migrationsPath });
+        this.#job = new PrjJob(this.dqlite);
+        await this.#job.init();
     }
 
     // 1. 让检查方法直接返回非空的 DrizzleType

@@ -1,4 +1,4 @@
-import { lifecycle } from '$libs/utils/sys/lifecycle.js';
+import { appLife } from '$libs/utils/tapable/applife.js';
 import Logger from 'electron-log/main.js';
 import { ProjectContainer } from './project.js'
 import pMap from 'p-map'
@@ -8,7 +8,7 @@ class ProjectManager {
     private prjId = 0;
     private projects: ProjectContainer[] = [];
     constructor() {
-        lifecycle.hooks.beforeQuit.tapPromise('ProjectManager', async () => {
+        appLife.hooks.beforeQuit.tapPromise('ProjectManager', async () => {
             Logger.debug('[ProjectManager] 正在清理资源...');
 
             await pMap(

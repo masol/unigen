@@ -8,7 +8,10 @@
   import { Switch } from "$lib/components/ui/switch";
   import { Separator } from "$lib/components/ui/separator";
   import { Badge } from "$lib/components/ui/badge";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import { configStore } from "$lib/store/config.svelte";
+  import { api } from "$lib/utils/api";
+  import { onMount } from "svelte";
 
   // ═══════════════════════════════════════════════════════════
   // State — Update
@@ -21,10 +24,15 @@
       configStore.setAutoupdate(newValue);
     },
   };
+
+  let appVersion = $state<string | null>(null);
+
+  onMount(async () => {
+    appVersion = await api().system.version();
+  });
   // ═══════════════════════════════════════════════════════════
   // Constants & Presets
   // ═══════════════════════════════════════════════════════════
-  const APP_VERSION = "v0.0.3";
 </script>
 
 <section class="space-y-4">
@@ -49,9 +57,16 @@
         <div class="min-w-0">
           <div class="flex items-center gap-2.5">
             <p class="text-sm font-medium text-foreground">当前版本</p>
-            <Badge variant="secondary" class="rounded-lg font-mono text-xs"
-              >{APP_VERSION}</Badge
-            >
+            {#if appVersion === null}
+              <Skeleton class="h-5 w-20 rounded-lg" />
+            {:else}
+              <Badge
+                variant="secondary"
+                class="rounded-lg font-mono text-xs animate-fade-in"
+              >
+                {appVersion}
+              </Badge>
+            {/if}
           </div>
           <p class="text-xs text-muted-foreground mt-0.5">
             检查是否有新版本可用

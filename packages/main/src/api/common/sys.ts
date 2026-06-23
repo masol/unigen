@@ -200,6 +200,11 @@ const listmodel = os
         return await listModels(input.baseURL, input.apiKey)
     })
 
+const version = os
+    .output(z.string())
+    .handler(async () => {
+        return __APP_VERSION__
+    })
 
 
 const getPath = os
@@ -314,5 +319,6 @@ export default {
     showItemInFolder,
     listmodel,
     getPath,
-    streamLogs
+    streamLogs,
+    version
 }
