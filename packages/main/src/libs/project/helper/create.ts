@@ -7,6 +7,7 @@ import Logger from "electron-log/main.js";
 import { isDirEmpty } from "$libs/utils/sys/fs.js";
 import { emptyDir } from "fs-extra";
 import { configService } from "$libs/store/index.js";
+import { LanceDB } from "../controllers/lance.js";
 
 
 
@@ -14,6 +15,8 @@ export async function openProject(prj: IProjectContext): Promise<void> {
     Logger.debug(`[Project] open ${prj.path}`)
     const pdb = PrjDB.ensure(prj);
     await pdb.open(false);
+    const lance = LanceDB.ensure(prj);
+    await lance.upcert();
 }
 
 export async function closeProject(prj: IProjectContext): Promise<void> {
@@ -21,8 +24,11 @@ export async function closeProject(prj: IProjectContext): Promise<void> {
     if (!prj.path) { // 未打开项目，关闭之。
         return;
     }
+
     const pdb = PrjDB.ensure(prj);
     pdb.close();
+    const lance = LanceDB.ensure(prj);
+    lance.close();
 }
 
 
@@ -47,7 +53,12 @@ export async function createProject(prj: IProjectContext, bForce = false): Promi
     await pdb.open(true);
     pdb.set("dep", [configService().get("plugin")]);
     pdb.set("version", __APP_VERSION__);
-
+    const embed = configService().get("embed_model");
+    if (embed) {
+        pdb.set("embed", configService().get("embed_model"));
+        const lance = LanceDB.ensure(prj);
+        await lance.upcert();
+    }
     return true
 }
 

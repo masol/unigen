@@ -1,6 +1,6 @@
 import { app } from "electron";
 import path, { join } from "path";
-import { metaDirName, type IProjectContext, type IProjectController } from "../type.js";
+import { metaDirName, type IProjectContext } from "../type.js";
 import { fileURLToPath } from "url";
 import Logger from "electron-log/main.js";
 import { ensureDir, pathExists } from "fs-extra";
@@ -12,17 +12,19 @@ import { eq } from 'drizzle-orm'
 import { ORPCError } from "@orpc/server";
 import { COMMON_ORPC_ERROR_DEFS } from "@orpc/client";
 import { PrjJob } from "../helper/job.js";
+import { BaseProjectController } from "./base.js";
 
 const dbName = 'db.sqlite'
 
 type DrizzleType = BetterSQLite3Database<typeof schema>;
 
-export class PrjDB implements IProjectController {
+export class PrjDB extends BaseProjectController {
     private migrationsPath: string = ""
     private dqlite: Database.Database | null = null;
     private db: DrizzleType | null = null;
     #job: PrjJob | null = null;
-    constructor(private ctx: IProjectContext) {
+    constructor(ctx: IProjectContext) {
+        super(ctx)
         const __dirname = path.dirname(fileURLToPath(import.meta.url));
         this.migrationsPath = app.isPackaged
             ? path.join(process.resourcesPath, 'drizzle') // 生产环境：拷贝的物理路径
@@ -40,17 +42,6 @@ export class PrjDB implements IProjectController {
             })
         }
         return this.#job;
-    }
-
-    static ensure(prj: IProjectContext): PrjDB {
-        const pdb = prj.getService(PrjDB);
-        if (!pdb) {
-            throw new ORPCError(COMMON_ORPC_ERROR_DEFS.NOT_FOUND.message, {
-                status: COMMON_ORPC_ERROR_DEFS.NOT_FOUND.status,
-                message: "无法获取到项目数据库对象。"
-            })
-        }
-        return pdb;
     }
 
     close() {
