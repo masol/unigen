@@ -193,7 +193,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
             {
                 id: "xai",
                 label: "xAI",
-                protocol: allProtocols.openai,
+                protocol: allProtocols.xai,
                 baseUrl: "https://api.x.ai/v1",
                 website: "https://console.x.ai/",
                 note: "打造能回答复杂宇宙问题的智能科技，深入探索世界本质",

@@ -7,7 +7,7 @@ import Logger from "electron-log/main.js";
 import { isDirEmpty } from "$libs/utils/sys/fs.js";
 import { emptyDir } from "fs-extra";
 import { configService } from "$libs/store/index.js";
-import { LanceDB } from "../controllers/lance.js";
+import { LanceDB } from "../controllers/lance/index.js";
 
 
 
@@ -30,7 +30,6 @@ export async function closeProject(prj: IProjectContext): Promise<void> {
     const lance = LanceDB.ensure(prj);
     lance.close();
 }
-
 
 
 export async function createProject(prj: IProjectContext, bForce = false): Promise<boolean> {
@@ -61,14 +60,3 @@ export async function createProject(prj: IProjectContext, bForce = false): Promi
     }
     return true
 }
-
-
-// export function projectGet<T>(prj: IProjectContext, key: string): T | null {
-//     return PrjDB.ensure(prj).get<T>(key);
-// }
-
-
-// // eslint-disable-next-line @typescript-eslint/no-explicit-any
-// export function projectSet(prj: IProjectContext, key: string, value: any): void {
-//     PrjDB.ensure(prj).set(key, value);
-// }

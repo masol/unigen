@@ -1,0 +1,10 @@
+import type { LanguageModelV3 } from '@ai-sdk/provider';
+import type { Provider } from '$types/index.js';
+import { createProvider } from './provider.js';
+
+
+//provider: $llama-cpp： node-llama-cpp: 以$开头的Provider为内建Provider.
+export function createModel(provider: Provider, modelId: string): LanguageModelV3 {
+    const pvInst = createProvider(provider);
+    return pvInst.languageModel(modelId);
+}

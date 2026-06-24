@@ -22,6 +22,7 @@ export enum ProviderProtocol {
     Ollama = 'ollama',
     Anthropic = 'anthropic',
     GoogleVertex = 'google-vertex',
+    Xai = 'xai',
     HuggingFace = 'huggingface',
 }
 

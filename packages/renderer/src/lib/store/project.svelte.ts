@@ -52,10 +52,18 @@ class ProjectStore {
         }
     }
 
+    private async doCreate(bForce: boolean, pathName?: string): Promise<boolean> {
+        await api().project.create({ path: pathName, force: bForce });
+        this.#path = await api().project.info("path");
+        this.#depPlugins = await api().project.get("dep");
+        await pluginStore.ensurePlugins(this.#depPlugins);
+        return true;
+    }
+
     async create(pathName?: string): Promise<boolean> {
-        let realPathname = pathName;
+        let realPathname: string | undefined;
         try {
-            await api().project.create({ path: pathName, force: false });
+            return await this.doCreate(false, pathName);
         } catch (e) {
             if (e instanceof ORPCError && e.status === COMMON_ORPC_ERROR_DEFS.UNSUPPORTED_MEDIA_TYPE.status) {
                 // 不做任何处理。继续向下强制执行。
@@ -76,11 +84,7 @@ class ProjectStore {
         }
 
         try {
-            await api().project.create({ path: realPathname, force: true });
-            this.#path = await api().project.info("path");
-            this.#depPlugins = await api().project.get("dep");
-            await pluginStore.ensurePlugins(this.#depPlugins);
-            return true;
+            return await this.doCreate(true, realPathname);
         } catch (e) {
             return this.procError(e);
         }

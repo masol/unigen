@@ -110,18 +110,20 @@ export const allAbilities: Record<string, ModelAbility> = {
 
 export const protocolLabels: Record<ProviderProtocol, string> = {
     "openai": "OpenAI",
-    "ollama": "Ollama",
     "anthropic": "Anthropic",
-    "google-vertex": "Vertex AI",
-    "huggingface": "HuggingFace",
+    "google-vertex": "Google AI",
+    "xai": "xai",
+    "ollama": "Ollama",
+    "huggingface": "HusggingFace",
 };
 
 
 export const allProtocols: Record<string, ProviderProtocol> = {
     openai: "openai" as ProviderProtocol,
-    ollama: "ollama" as ProviderProtocol,
     anthropic: "anthropic" as ProviderProtocol,
     vertex: "google-vertex" as ProviderProtocol,
+    xai: "xai" as ProviderProtocol,
+    ollama: "ollama" as ProviderProtocol,
     huggingface: "huggingface" as ProviderProtocol
 };
 

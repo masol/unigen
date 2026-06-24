@@ -9,10 +9,9 @@ import { BetterSQLite3Database, drizzle } from 'drizzle-orm/better-sqlite3'
 import * as schema from '$libs/utils/db/schema/index.js'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { eq } from 'drizzle-orm'
-import { ORPCError } from "@orpc/server";
-import { COMMON_ORPC_ERROR_DEFS } from "@orpc/client";
 import { PrjJob } from "../helper/job.js";
 import { BaseProjectController } from "./base.js";
+import { throwNotfound } from "$libs/utils/err.js";
 
 const dbName = 'db.sqlite'
 
@@ -36,10 +35,7 @@ export class PrjDB extends BaseProjectController {
 
     get job(): PrjJob {
         if (!this.#job) {
-            throw new ORPCError(COMMON_ORPC_ERROR_DEFS.NOT_FOUND.message, {
-                status: COMMON_ORPC_ERROR_DEFS.TOO_MANY_REQUESTS.status,
-                message: `未初始化的项目任务队列！`
-            })
+            throwNotfound(`未初始化的项目任务队列！`)
         }
         return this.#job;
     }
@@ -70,10 +66,7 @@ export class PrjDB extends BaseProjectController {
         const exists = await pathExists(dbPath);
         if (!exists) {
             if (!bCreate) {
-                throw new ORPCError(COMMON_ORPC_ERROR_DEFS.NOT_FOUND.message, {
-                    status: COMMON_ORPC_ERROR_DEFS.NOT_FOUND.status,
-                    message: `项目“${this.ctx.path}”的数据库不存在！`
-                })
+                throwNotfound(`项目“${this.ctx.path}”的数据库不存在！`)
             }
             await ensureDir(join(this.ctx.path, metaDirName));
         }

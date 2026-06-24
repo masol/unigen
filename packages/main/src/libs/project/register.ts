@@ -1,5 +1,5 @@
 import { PrjDB } from "./controllers/drizzle.js";
-import { LanceDB } from "./controllers/lance.js";
+import { LanceDB } from "./controllers/lance/index.js";
 import { IProjectContext } from "./type.js";
 
 
