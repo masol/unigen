@@ -18,10 +18,10 @@ import {
     type ChatSessionModelFunctions,
     LlamaGrammar,
 } from "node-llama-cpp";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { ModelIdentifier } from "./huggingface-types.js";
 import Logger from "electron-log/main.js";
+import { llmPath } from "$libs/utils/sys/dir.js";
 
 export interface NodeLlamaCppProviderConfig {
     /**
@@ -99,11 +99,7 @@ export class NodeLlamaCppProvider {
         if (config.providerId) {
             this.providerId = config.providerId;
         } else {
-            let providerId = "node-llama-cpp";
-            if (config.model.startsWith("hf:")) {
-                providerId = "🤗 Hugging Face";
-            }
-            this.providerId = providerId;
+            this.providerId = "node-llama-cpp";
         }
 
         // If session is provided, use it
@@ -130,10 +126,7 @@ export class NodeLlamaCppProvider {
         }
 
         this.initPromise = (async () => {
-            const cwd = process.cwd();
-            const defaultModelsDirectory = cwd.endsWith(".mastra/output")
-                ? path.join(cwd, "../../models")
-                : "./models";
+            const defaultModelsDirectory = llmPath();
             // Resolve model path
             const modelsDir =
                 this.config.modelsDirectory || defaultModelsDirectory;

@@ -92,8 +92,16 @@
           note: "",
         }));
         textFetched = true;
-        if (textModels.length === 0 && configStore.localModel.length > 0) {
-          configStore.setLocalModel("");
+        if (textModels.length === 0) {
+          if (configStore.localModel.length > 0) {
+            configStore.setLocalModel("");
+          }
+        } else {
+          textModels.push({
+            value: "",
+            label: "不使用本地模型",
+            note: "禁用本地模型，释放本地算力",
+          });
         }
       } catch (error) {
         console.error("Failed to fetch text models:", error);
@@ -127,8 +135,9 @@
     return true;
   }
 
-  function handleTextChange(value: string) {
-    if (value && value !== configStore.localModel) {
+  function handleTextChange(realValue: string) {
+    const value = realValue.trim();
+    if (value !== configStore.localModel) {
       configStore.setLocalModel(value);
     }
   }

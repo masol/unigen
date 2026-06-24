@@ -9,6 +9,8 @@ import Logger from 'electron-log/main'
 import { Hook, LogMessage, Transport } from 'electron-log'
 import { WindowService } from '$libs/utils/window.js'
 import { FileFilterPreset } from '$types/shared/api/sys.js'
+import { embedingPath, llmPath } from '$libs/utils/sys/dir.js'
+import { genText } from '$libs/utils/model/factory/node-llama-cpp/local.js'
 
 // ─── Zod Schemas ─────────────────────────────────────────────
 const fileFilterPresetSchema = z.enum(FileFilterPreset)
@@ -211,14 +213,13 @@ const getPath = os
     .input(z.object({ name: z.string(), sub: z.array(z.string()).optional(), create: z.boolean().optional() }))
     .output(z.string())
     .handler(async ({ input }) => {
-        const dataPath = app.getPath("userData");
         let basePath;
         switch (input.name) {
             case 'llm':
-                basePath = join(dataPath, "models", "llm", ...input.sub ?? [])
+                basePath = join(llmPath(), ...input.sub ?? [])
                 break;
             case 'embeding':
-                basePath = join(dataPath, "models", "embeding", ...input.sub ?? [])
+                basePath = join(embedingPath(), ...input.sub ?? [])
                 break;
             case 'logs':
                 return Logger.transports.file.getFile().path
@@ -311,6 +312,15 @@ const streamLogs = os
     });
 
 
+
+const genTextApi = os
+    .input(z.string())
+    .output(z.string())
+    .handler(async ({ input }) => {
+        return await genText(input)
+    })
+
+
 export default {
     saveFile,
     saveBinaryFile,
@@ -320,5 +330,6 @@ export default {
     listmodel,
     getPath,
     streamLogs,
-    version
+    version,
+    genText: genTextApi
 }
