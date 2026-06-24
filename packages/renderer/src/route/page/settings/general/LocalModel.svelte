@@ -2,7 +2,7 @@
   import {
     IconBrain,
     IconLoader2,
-    IconMessageChatbot,
+    // IconMessageChatbot,
     IconFolderOpen,
   } from "@tabler/icons-svelte";
   import * as Select from "$lib/components/ui/select";
@@ -17,7 +17,6 @@
   // Reactive bindings — configStore 是唯一真相，两个值都 derive
   // ═══════════════════════════════════════════════════════════
   let embeddingModel = $derived(configStore.embedModel);
-  let textModel = $derived(configStore.localModel);
 
   // ═══════════════════════════════════════════════════════════
   // Model lists state
@@ -25,15 +24,16 @@
   let embeddingModels = $state<
     Array<{ value: string; label: string; note: string }>
   >([]);
-  let textModels = $state<
-    Array<{ value: string; label: string; note: string }>
-  >([]);
 
   let embeddingLoading = $state(false);
-  let textLoading = $state(false);
 
   let embeddingFetched = $state(false);
-  let textFetched = $state(false);
+  // let textModel = $derived(configStore.localModel);
+  // let textModels = $state<
+  //   Array<{ value: string; label: string; note: string }>
+  // >([]);
+  // let textFetched = $state(false);
+  // let textLoading = $state(false);
 
   // ═══════════════════════════════════════════════════════════
   // Computed selected items for display
@@ -41,9 +41,6 @@
   let selectedEmbeddingLabel = $derived(
     embeddingModels.find((m) => m.value === embeddingModel)?.label ||
       embeddingModel,
-  );
-  let selectedTextLabel = $derived(
-    textModels.find((m) => m.value === textModel)?.label || textModel,
   );
 
   // ═══════════════════════════════════════════════════════════
@@ -82,36 +79,6 @@
     }
   }
 
-  async function handleTextOpen(open: boolean) {
-    if (open && !textFetched && !textLoading) {
-      textLoading = true;
-      try {
-        textModels = (await api().config.getllms()).map((item) => ({
-          value: item.value,
-          label: item.label,
-          note: "",
-        }));
-        textFetched = true;
-        if (textModels.length === 0) {
-          if (configStore.localModel.length > 0) {
-            configStore.setLocalModel("");
-          }
-        } else {
-          textModels.push({
-            value: "",
-            label: "不使用本地模型",
-            note: "禁用本地模型，释放本地算力",
-          });
-        }
-      } catch (error) {
-        console.error("Failed to fetch text models:", error);
-        textModels = [];
-      } finally {
-        textLoading = false;
-      }
-    }
-  }
-
   // ═══════════════════════════════════════════════════════════
   // Model selection handlers
   // ═══════════════════════════════════════════════════════════
@@ -135,29 +102,59 @@
     return true;
   }
 
-  function handleTextChange(realValue: string) {
-    const value = realValue.trim();
-    if (value !== configStore.localModel) {
-      configStore.setLocalModel(value);
-    }
-  }
-
+  // let selectedTextLabel = $derived(
+  //   textModels.find((m) => m.value === textModel)?.label || textModel,
+  // );
+  // async function handleTextOpen(open: boolean) {
+  //   if (open && !textFetched && !textLoading) {
+  //     textLoading = true;
+  //     try {
+  //       textModels = (await api().config.getllms()).map((item) => ({
+  //         value: item.value,
+  //         label: item.label,
+  //         note: "",
+  //       }));
+  //       textFetched = true;
+  //       if (textModels.length === 0) {
+  //         if (configStore.localModel.length > 0) {
+  //           configStore.setLocalModel("");
+  //         }
+  //       } else {
+  //         textModels.push({
+  //           value: "",
+  //           label: "不使用本地模型",
+  //           note: "禁用本地模型，释放本地算力",
+  //         });
+  //       }
+  //     } catch (error) {
+  //       console.error("Failed to fetch text models:", error);
+  //       textModels = [];
+  //     } finally {
+  //       textLoading = false;
+  //     }
+  //   }
+  // }
+  // function handleTextChange(realValue: string) {
+  //   const value = realValue.trim();
+  //   if (value !== configStore.localModel) {
+  //     configStore.setLocalModel(value);
+  //   }
+  // }
+  // async function openTextModelDirectory() {
+  //   const targetPath = await api().system.getPath({
+  //     name: "llm",
+  //     create: true,
+  //   });
+  //   if (targetPath) {
+  //     await api().system.showItemInFolder({ path: targetPath });
+  //   }
+  // }
   // ═══════════════════════════════════════════════════════════
   // Open model directory
   // ═══════════════════════════════════════════════════════════
   async function openEmbeddingModelDirectory() {
     const targetPath = await api().system.getPath({
       name: "embeding",
-      create: true,
-    });
-    if (targetPath) {
-      await api().system.showItemInFolder({ path: targetPath });
-    }
-  }
-
-  async function openTextModelDirectory() {
-    const targetPath = await api().system.getPath({
-      name: "llm",
       create: true,
     });
     if (targetPath) {
@@ -255,7 +252,7 @@
     <Separator class="bg-border/30" />
 
     <!-- ── Row: 本地文本模型 ── -->
-    <div
+    <!-- <div
       class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 lg:gap-8 p-6"
     >
       <div class="flex items-center gap-4 shrink-0">
@@ -334,6 +331,6 @@
           <Tooltip.Content>打开模型目录</Tooltip.Content>
         </Tooltip.Root>
       </div>
-    </div>
+    </div> -->
   </div>
 </section>
