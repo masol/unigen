@@ -10,7 +10,6 @@ import Logger from 'electron-log/main.js';
 
 /**
    * 创建 OpenAI 模型
-   * @param modelName - 模型名称．
    * @param strict - true 为严格模式，false 为兼容模式
    */
 function createOpenAIModel(
@@ -18,7 +17,6 @@ function createOpenAIModel(
     baseURL?: string,
     strict: boolean = true,
 ): ProviderV3 {
-    void strict;
     return createOpenAI({
         apiKey,
         baseURL,
@@ -105,7 +103,6 @@ function createOllamaModel(baseURL?: string): ProviderV3 {
     */
 function createProviderByProtocol(
     protocol: ProviderProtocol,
-    modelName: string,
     apiKey: string,
     baseURL?: string
 ): ProviderV3 {

@@ -1,4 +1,4 @@
-import { type IProjectContext, type IProjectController } from "../type.js";
+import type { ControllerConstructor, IProjectContext, IProjectController } from "../type.js";
 import { throwNotfound } from "$libs/utils/err.js";
 
 
@@ -12,22 +12,20 @@ export abstract class BaseProjectController implements IProjectController {
     dispose?(): void | Promise<void> { }
 
     /**
-     * 终极解法：彻底移除方法名后的 <T> 泛型
-     * 通过返回带有 {} 的交叉类型，欺骗编译器放行静态继承检查，同时完美保留子类类型推导
+     * 底层公共核心逻辑，仅供子类调用
      */
-    static ensure(
-        this: new (ctx: IProjectContext) => BaseProjectController,
+    protected static coreEnsure<T extends BaseProjectController>(
+        ctor: ControllerConstructor<T>,
         ctx: IProjectContext
+    ): T {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ): BaseProjectController & Record<string, any> {
-        // 运行时 this 就是具体的子类构造函数（例如 PrjDB）
-        const instance = ctx.getService(this);
+        const instance = ctx.getService(ctor as any);
 
         if (!instance) {
-            throwNotfound(`无法获取到 ${this.name} 对象。`)
+            throwNotfound(`无法获取到 ${ctor.name} 对象。`);
         }
 
-        return instance;
+        return instance as T;
     }
 }
 

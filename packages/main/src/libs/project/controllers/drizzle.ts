@@ -33,6 +33,9 @@ export class PrjDB extends BaseProjectController {
         Logger.info(`[Project:DB] migrationsPath= ${this.migrationsPath}`)
     }
 
+    static ensure(ctx: IProjectContext) { return this.coreEnsure(this, ctx); }
+
+
     get job(): PrjJob {
         if (!this.#job) {
             throwNotfound(`未初始化的项目任务队列！`)

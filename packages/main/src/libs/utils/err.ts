@@ -16,3 +16,29 @@ export function throwNotfound(message: string): never {
         message
     })
 }
+
+
+export function throwPrecondition(message: string): never {
+    throw new ORPCError(COMMON_ORPC_ERROR_DEFS.PRECONDITION_FAILED.message, {
+        status: COMMON_ORPC_ERROR_DEFS.PRECONDITION_FAILED.status,
+        message
+    })
+}
+
+
+export function throwUnprcessable(message: string): never {
+    throw new ORPCError(COMMON_ORPC_ERROR_DEFS.UNPROCESSABLE_CONTENT.message, {
+        status: COMMON_ORPC_ERROR_DEFS.UNPROCESSABLE_CONTENT.status,
+        message
+    })
+}
+
+
+
+export function throwNotimplement(message: string): never {
+    throw new ORPCError(COMMON_ORPC_ERROR_DEFS.NOT_IMPLEMENTED.message, {
+        status: COMMON_ORPC_ERROR_DEFS.NOT_IMPLEMENTED.status,
+        message
+    })
+}
+

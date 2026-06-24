@@ -1,4 +1,4 @@
-import type { JSONObject } from '@ai-sdk/provider';
+import type { EmbeddingModelV3, JSONObject } from '@ai-sdk/provider';
 import type { Provider } from '$types/index.js';
 import type { EmbedManyResult, EmbedResult } from 'ai';
 import { embed, embedMany } from 'ai'
@@ -16,19 +16,12 @@ export type EmbedFunc = (value: string, opts?: EmbedingOptions) => Promise<Embed
 export type EmbedManyFunc = (value: string[], opts?: EmbedingOptions) => Promise<EmbedManyResult>
 
 export type EmbedingInfo = {
-    vecSize: number;
     embed: EmbedFunc;
     embedMany: EmbedManyFunc;
 }
 
-//provider: $llama-cpp： node-llama-cpp: 以$开头的Provider为内建Provider.
-export function createEmbeding(provider: Provider, modelId: string): EmbedingInfo {
-    const pvInst = createProvider(provider);
-
-    const embedModel = pvInst.embeddingModel(modelId);
-
+function getAiEmbeding(embedModel: EmbeddingModelV3): Omit<EmbedingInfo, "vecSize"> {
     return {
-        vecSize: 10,
         embed: async (value: string, opts?: EmbedingOptions): Promise<EmbedResult> => {
             return await embed({
                 ...opts,
@@ -44,4 +37,11 @@ export function createEmbeding(provider: Provider, modelId: string): EmbedingInf
             })
         }
     }
+}
+
+//provider: $llama-cpp： node-llama-cpp: 以$开头的Provider为内建Provider.
+export function createEmbeding(provider: Provider, modelId: string): EmbedingInfo {
+    const pvInst = createProvider(provider);
+
+    return getAiEmbeding(pvInst.embeddingModel(modelId))
 }
