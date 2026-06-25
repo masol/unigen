@@ -38,16 +38,26 @@
     if (hours < 24) return `${hours} 小时前`;
     return date.toLocaleDateString("zh-CN");
   }
+
+  let isUser = $derived(message.role === "user");
 </script>
 
-<div class="group flex gap-4 animate-fade-in">
+<!--╭─────────────────────────────────────────────────────╮ -->
+<!-- │ [可抽取子组件 → ChatMessageBubble.svelte]           │ -->
+<!-- │ 职责：单条消息气泡，含头像、内容、时间戳与复制按钮  │ -->
+<!-- ╰─────────────────────────────────────────────────────╯ -->
+<div
+  class="group flex gap-3 px-4 py-3 transition-all duration-200 animate-fade-in {isUser
+    ? 'bg-transparent'
+    : 'bg-muted/30'}"
+>
   <Avatar.Root class="size-8 shrink-0 rounded-xl border border-border/50">
     <Avatar.Fallback
-      class="rounded-xl {message.role === 'user'
+      class="rounded-xl {isUser
         ? 'bg-primary/10 text-primary'
-        : 'bg-muted text-muted-foreground'}"
+        : 'bg-accent text-muted-foreground'}"
     >
-      {#if message.role === "user"}
+      {#if isUser}
         <IconUser size={16} stroke={1.5} />
       {:else}
         <IconRobot size={16} stroke={1.5} />
@@ -55,10 +65,10 @@
     </Avatar.Fallback>
   </Avatar.Root>
 
-  <div class="flex-1 space-y-2">
+  <div class="flex min-w-0 flex-1 flex-col gap-2">
     <div class="flex items-center gap-2">
       <span class="text-sm font-medium">
-        {message.role === "user" ? "你" : "AI 助手"}
+        {isUser ? "你" : "AI 助手"}
       </span>
       <span class="text-xs text-muted-foreground">
         {formatTime(message.timestamp)}
@@ -66,18 +76,18 @@
     </div>
 
     <div
-      class="prose prose-sm max-w-none rounded-2xl border border-border/50 bg-muted/30 p-4 text-sm text-foreground transition-all duration-200 group-hover:border-border/80 group-hover:shadow-sm"
+      class="prose prose-sm max-w-none text-sm text-foreground **:text-foreground [&_code]:text-foreground"
     >
       <Markdown content={message.content} />
     </div>
 
     <div
-      class="flex items-center gap-2 opacity-0 transition-all group-hover:opacity-100"
+      class="flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
     >
       <Button
         variant="ghost"
         size="sm"
-        class="h-7 gap-2 rounded-lg px-3 text-xs"
+        class="h-7 gap-1.5 rounded-lg px-2.5 text-xs"
         onclick={handleCopy}
       >
         {#if copied}
@@ -91,3 +101,4 @@
     </div>
   </div>
 </div>
+<!-- ╭─── / ChatMessageBubble ───╮ -->

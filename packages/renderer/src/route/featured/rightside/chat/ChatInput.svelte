@@ -1,19 +1,18 @@
 <!-- src/lib/components/chat/ChatInput.svelte -->
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
+  // import { Separator } from "$lib/components/ui/separator";
   import { IconSend } from "@tabler/icons-svelte";
+  import { messageStore } from "./msg.svelte";
 
   let {
     value = $bindable(""),
     placeholder = "输入消息... (Enter 发送，Shift+Enter 换行)",
-    disabled = false,
     hint = "AI 可能会出错，请仔细核对重要信息",
     onSend = () => {},
   }: {
     value?: string;
     placeholder?: string;
-    disabled?: boolean;
     hint?: string;
     onSend?: () => void;
   } = $props();
@@ -25,19 +24,17 @@
     }
   }
 
-  let canSend = $derived(value.trim().length > 0 && !disabled);
+  let canSend = $derived(value.trim().length > 0 && !messageStore.isLoading);
 </script>
 
-<Separator />
-
-<div class="border-t border-border/50 p-6">
-  <div class="flex items-end gap-3">
+<div class="shrink-0 border-t border-border/50">
+  <div class="flex items-end gap-3 px-4 py-3">
     <textarea
       bind:value
       onkeydown={handleKeydown}
       {placeholder}
-      {disabled}
-      class="min-h-[80px] max-h-[200px] flex-1 resize-none rounded-xl border border-input bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+      disabled={messageStore.isLoading}
+      class="min-h-20 max-h-50 flex-1 resize-none rounded-xl border border-input bg-background/50 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50"
     ></textarea>
 
     <Button
@@ -50,7 +47,7 @@
     </Button>
   </div>
 
-  <p class="mt-3 text-xs text-muted-foreground">
+  <p class="px-4 pb-3 text-xs text-muted-foreground">
     {hint}
   </p>
 </div>

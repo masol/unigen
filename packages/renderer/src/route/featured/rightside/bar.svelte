@@ -34,7 +34,7 @@
   ];
 </script>
 
-<div class="flex h-full w-full flex-col bg-background">
+<div class="flex h-full flex-col border-l border-border/50 bg-muted/20">
   <!-- ╭─────────────────────────────────────────────────────╮ -->
   <!-- │ PanelHeader：BarHeader 作为 headerComponent 传入    │ -->
   <!-- │ BarHeader 通过 store 切换 tab → bar 感知并切换内容  │ -->
@@ -43,7 +43,8 @@
     {isMaximized}
     onToggleMaximize={() => layoutStore.toggleMaximizePanel("right")}
     onClose={() => layoutStore.closePanel("right")}
-    showClose
+    showMaximize={true}
+    showClose={true}
     headerComponent={BarHeader}
   />
 
@@ -54,7 +55,7 @@
     <div class="p-2">
       {#if rightPanelStore.activeTab === "outline"}
         <div class="space-y-0.5" use:autoAnimate>
-          <ChatComponet></ChatComponet>
+          <ChatComponet />
         </div>
       {:else if rightPanelStore.activeTab === "timeline"}
         <div class="space-y-1 pt-1" use:autoAnimate>
@@ -62,7 +63,7 @@
             <div
               class="flex items-start gap-2.5 rounded-xl p-2 transition-all duration-200 hover:bg-accent/60"
             >
-              <IconPointFilled class="size-3.5 shrink-0 mt-0.5 text-primary" />
+              <IconPointFilled class="mt-0.5 size-3.5 shrink-0 text-primary" />
               <div class="min-w-0 flex-1">
                 <p class="truncate text-xs font-medium text-foreground/90">
                   {item.label}

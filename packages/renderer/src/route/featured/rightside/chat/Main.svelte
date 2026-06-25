@@ -26,17 +26,10 @@
   }
 </script>
 
-<div class="flex h-full w-full flex-col bg-background">
+<div class="flex h-full w-full flex-col">
   <ChatHeader canClear={messageStore.hasMessages} onClear={handleClear} />
 
-  <ChatMessageList
-    messages={messageStore.messages}
-    isLoading={messageStore.isLoading}
-  />
+  <ChatMessageList />
 
-  <ChatInput
-    bind:value={inputValue}
-    disabled={messageStore.isLoading}
-    onSend={handleSend}
-  />
+  <ChatInput bind:value={inputValue} onSend={handleSend} />
 </div>
