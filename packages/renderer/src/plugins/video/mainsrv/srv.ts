@@ -13,7 +13,7 @@ export class PluginMainService {
         for (const activity of activities) {
             this.ctx.extActivity.register(activity)
         }
-        log.info('插件初始化完成');
+        log.info('[PluginMainService] 插件初始化完成');
     }
 
     // 插件销毁、资源清理
@@ -22,6 +22,6 @@ export class PluginMainService {
         for (const activity of activities) {
             this.ctx.extActivity.unregister(activity.id)
         }        
-        log.info('插件资源已释放');
+        log.info('[PluginMainService] 插件资源已释放');
     }
 }

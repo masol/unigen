@@ -21,7 +21,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { ModelIdentifier } from "./huggingface-types.js";
 import Logger from "electron-log/main.js";
-import { llmPath } from "$libs/utils/sys/dir.js";
+import { rerankPath } from "$libs/utils/sys/dir.js";
 
 export interface NodeLlamaCppProviderConfig {
     /**
@@ -126,7 +126,7 @@ export class NodeLlamaCppProvider {
         }
 
         this.initPromise = (async () => {
-            const defaultModelsDirectory = llmPath();
+            const defaultModelsDirectory = rerankPath();
             // Resolve model path
             const modelsDir =
                 this.config.modelsDirectory || defaultModelsDirectory;

@@ -9,7 +9,7 @@ import Logger from 'electron-log/main'
 import { Hook, LogMessage, Transport } from 'electron-log'
 import { WindowService } from '$libs/utils/window.js'
 import { FileFilterPreset } from '$types/shared/api/sys.js'
-import { embedingPath, llmPath } from '$libs/utils/sys/dir.js'
+import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
 import { genText } from '$libs/utils/model/factory/node-llama-cpp/local.js'
 
 // ─── Zod Schemas ─────────────────────────────────────────────
@@ -216,7 +216,8 @@ const getPath = os
         let basePath;
         switch (input.name) {
             case 'llm':
-                basePath = join(llmPath(), ...input.sub ?? [])
+            case 'rerank':
+                basePath = join(rerankPath(), ...input.sub ?? [])
                 break;
             case 'embeding':
                 basePath = join(embedingPath(), ...input.sub ?? [])

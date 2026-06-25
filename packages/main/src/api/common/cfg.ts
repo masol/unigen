@@ -101,13 +101,13 @@ const getEmbedings = os
         return getModels("embeding");
     })
 
-const getllms = os
+const getReranks = os
     .output(z.array(z.object({
         value: z.string(),
         label: z.string()
     })))
     .handler(async () => {
-        return getModels("llm");
+        return getModels("rerank");
     })
 
 export default {
@@ -117,6 +117,6 @@ export default {
     set,
     useDark,
     getEmbedings,
-    getllms,
+    getReranks,
     recents
 }

@@ -1,26 +1,64 @@
-import { embedding, connect, type Table, type Connection, VectorQuery } from '@lancedb/lancedb';
+import type { Connection } from '@lancedb/lancedb';
 import { metaDirName, type IProjectContext } from '../../type.js';
 import { join } from 'node:path';
 import Logger from 'electron-log/main.js';
 import { BaseProjectController } from '../base.js';
 import { throwNotfound, throwNotimplement, throwPrecondition, throwUnprcessable } from '$libs/utils/err.js';
 import pMap from 'p-map'
-import { lanceName, tNames } from './const.js';
 import { createEmbeding, type EmbedingInfo } from '$libs/utils/model/factory/embed.js';
 import { PrjDB } from '../drizzle.js';
 import { configService } from '$libs/store/index.js';
 import { cluster, isNumber } from 'radashi'
 import { Provider } from '$types/index.js';
-import { createSchema } from './schema.js';
+import { ILanceDB } from './type.js';
+import { getLanceDB, type LanceDBType } from './lancedb.js'
+import { TableBase, TableConstructor } from './tablebase.js';
+import { initAllTables } from './tables/index.js';
 
+export const lanceDirName = "lance"
 
-export class LanceDB extends BaseProjectController {
+// @TODO: 实现项目类型接口，此处需要调用类型接口来创建和维护表格。当前为了简化，全部硬编码在此处。
+
+export class LanceDB extends BaseProjectController implements ILanceDB {
     #db: Connection | null = null;
     #embed: EmbedingInfo | null = null;
     #embeddingSize: number = -1;
-    readonly tables: Record<string, Table> = {}
+    #lanceInst: LanceDBType | null = null;
+
+    private registry = new Map<TableConstructor, TableBase>();
+
     constructor(ctx: IProjectContext) {
         super(ctx)
+    }
+
+    async addTable<T extends TableBase>(token: TableConstructor<T>, name: string): Promise<void> {
+        // 2. 自动实例化：利用统一的构造函数契约，在容器内部 new 出来
+        const instance = new token(this, name);
+        await instance.init(this.db);
+        this.registry.set(token, instance);
+    }
+
+    getTable<T extends TableBase>(token: TableConstructor<T>): T | null {
+        const instance = this.registry.get(token);
+        if (!instance) {
+            return null;
+        }
+        // 3. 内部唯一安全的断言，由于 register 和 resolve 泛型 T 严格绑定，此转换 100% 安全
+        return instance as T;
+    }
+
+    get embedSize(): number {
+        if (!isNumber(this.#embeddingSize) || this.#embeddingSize <= 0) {
+            throwPrecondition("[LanceDB] lanceDB未启用向量支持。")
+        }
+        return this.#embeddingSize;
+    }
+
+    get lanceInst(): LanceDBType {
+        if (!this.#lanceInst) {
+            throwPrecondition("LanceDB未初始化!")
+        }
+        return this.#lanceInst
     }
 
     async doEmbedding(batch: string[]): Promise<number[][]> {
@@ -50,41 +88,6 @@ export class LanceDB extends BaseProjectController {
     static ensure(ctx: IProjectContext) { return this.coreEnsure(this, ctx); }
 
 
-    /**
-    *  托管式添加,please see https://docs.lancedb.com/embedding    (why visit openai anyway?) 
-    */
-    public async autoAdd(tName: string, items: Array<{ text: string;[key: string]: unknown }>) {
-        const table = this.ensureTable(tName);
-
-        // 提取文本
-        const texts = items.map(item => item.text);
-
-        // 计算向量
-        const vectors = await this.doEmbedding(texts);
-
-        // 组装回包含 vector 的最终数据并写入 LanceDB
-        const recordsToInsert = items.map((item, index) => ({
-            ...item,
-            vector: vectors[index]
-        }));
-
-        await table.add(recordsToInsert);
-    }
-
-    /**
-     * 自动转换并检索: please see https://docs.lancedb.com/embedding    (why visit openai anyway?) 
-     */
-    public async autoSearch(tName: string, queryText: string): Promise<VectorQuery> {
-        const table = this.ensureTable(tName);
-
-        // 自动将单条搜索文本转化为向量（转成数组形式投喂给批量函数）
-        const queryVector = await this.doEmbedding([queryText]);
-
-        // 直接进行向量检索
-        return table
-            .vectorSearch(queryVector[0])
-    }
-
     // 是否成功创建--是否提供了系统级的embed.
     get opened(): boolean {
         return !!this.#db;
@@ -102,14 +105,6 @@ export class LanceDB extends BaseProjectController {
             throwNotfound(`lance无法获取向量服务`)
         }
         return this.#embed;
-    }
-
-    ensureTable(name: string): Table {
-        const t = this.tables[name];
-        if (!t) {
-            throwNotfound(`[LanceDB] 表 ${name} 未加载`);
-        }
-        return t;
     }
 
     private async initEmbed() {
@@ -154,22 +149,25 @@ export class LanceDB extends BaseProjectController {
             // console.log("this.#embeddingSize=", this.#embeddingSize);
             prjdb.set("vecModelName", finalEmbedModelName);
             prjdb.set("embdingSize", this.#embeddingSize);
+        } else {
+            this.#embeddingSize = embdingSize;
         }
+        Logger.debug(`[LanceDB] 使用${finalEmbedModelName}嵌入向量，维度为${this.#embeddingSize}`)
     }
 
     async upcert(): Promise<void> {
         if (this.#db) return;
-        const lancePath = join(this.ctx.path, metaDirName, lanceName);
+        const lancePath = join(this.ctx.path, metaDirName, lanceDirName);
 
         try {
+            this.#lanceInst = await getLanceDB();
 
-            console.log("embedding.getRegistry()=", embedding.getRegistry())
             await this.initEmbed();
 
-            this.#db = await connect(lancePath, {
+            this.#db = await this.lanceInst.connect(lancePath, {
                 storageOptions: { timeout: '10s' }
             });
-            await this.initTables();
+            await initAllTables(this);
 
             Logger.debug(`[LanceDB] 数据库已成功连接.`);
             return;
@@ -192,6 +190,11 @@ export class LanceDB extends BaseProjectController {
         try {
             Logger.debug('[LanceDB] 正在安全释放资源并关闭连接...');
 
+            for (const tableInstance of this.registry.values()) {
+                tableInstance.close();
+            }
+            this.registry.clear();
+
             // 调用连接实例的关闭方法
             this.#db.close();
 
@@ -201,30 +204,5 @@ export class LanceDB extends BaseProjectController {
             Logger.error('[LanceDB] 关闭数据库时发生错误:', error);
             // throw error;
         }
-    }
-
-    private async loadTable(tName: string) {
-        const schema = createSchema(tName, this.#embeddingSize);
-        // 3. 调用 createEmptyTable 创建空表
-        this.tables[tName] = (await this.db.createEmptyTable(tName, schema));
-    }
-
-    private async initTables() {
-        const tables = await this.db.tableNames();
-
-        const tableNames = Object.values(tNames);
-
-        await pMap(
-            tableNames,
-            async (name) => {
-                if (tables.includes(name)) {
-                    Logger.debug(`[LanceDB] 表 [${name}] 已存在，跳过创建。`);
-                    this.tables[name] = (await this.db.openTable(name));
-                } else {
-                    await this.loadTable(name)
-                }
-            },
-            { concurrency: 6 }
-        )
     }
 };

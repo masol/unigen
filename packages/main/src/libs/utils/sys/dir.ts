@@ -2,9 +2,11 @@ import { app } from "electron";
 import { join } from "node:path";
 
 
-export function llmPath(): string {
+
+// 2026-6-26: 废弃本地LLM支持，所有本地LLM配置，实际是rerank模型。
+export function rerankPath(): string {
     const dataPath = app.getPath("userData");
-    return join(dataPath, "models", "llm")
+    return join(dataPath, "models", "rerank")
 }
 
 

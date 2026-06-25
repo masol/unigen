@@ -2,7 +2,7 @@
   import {
     IconBrain,
     IconLoader2,
-    // IconMessageChatbot,
+    IconArrowsSort,
     IconFolderOpen,
   } from "@tabler/icons-svelte";
   import * as Select from "$lib/components/ui/select";
@@ -28,12 +28,12 @@
   let embeddingLoading = $state(false);
 
   let embeddingFetched = $state(false);
-  // let textModel = $derived(configStore.localModel);
-  // let textModels = $state<
-  //   Array<{ value: string; label: string; note: string }>
-  // >([]);
-  // let textFetched = $state(false);
-  // let textLoading = $state(false);
+  let rerankModel = $derived(configStore.localModel);
+  let rerankModels = $state<
+    Array<{ value: string; label: string; note: string }>
+  >([]);
+  let rerankFetched = $state(false);
+  let rerankLoading = $state(false);
 
   // ═══════════════════════════════════════════════════════════
   // Computed selected items for display
@@ -61,7 +61,7 @@
               embeddingModels.push({
                 value: `::${provider.id}::${model.id}`,
                 label: model.id,
-                note: "远程模型",
+                note: "远程嵌入模型",
               });
             }
           });
@@ -102,53 +102,64 @@
     return true;
   }
 
-  // let selectedTextLabel = $derived(
-  //   textModels.find((m) => m.value === textModel)?.label || textModel,
-  // );
-  // async function handleTextOpen(open: boolean) {
-  //   if (open && !textFetched && !textLoading) {
-  //     textLoading = true;
-  //     try {
-  //       textModels = (await api().config.getllms()).map((item) => ({
-  //         value: item.value,
-  //         label: item.label,
-  //         note: "",
-  //       }));
-  //       textFetched = true;
-  //       if (textModels.length === 0) {
-  //         if (configStore.localModel.length > 0) {
-  //           configStore.setLocalModel("");
-  //         }
-  //       } else {
-  //         textModels.push({
-  //           value: "",
-  //           label: "不使用本地模型",
-  //           note: "禁用本地模型，释放本地算力",
-  //         });
-  //       }
-  //     } catch (error) {
-  //       console.error("Failed to fetch text models:", error);
-  //       textModels = [];
-  //     } finally {
-  //       textLoading = false;
-  //     }
-  //   }
-  // }
-  // function handleTextChange(realValue: string) {
-  //   const value = realValue.trim();
-  //   if (value !== configStore.localModel) {
-  //     configStore.setLocalModel(value);
-  //   }
-  // }
-  // async function openTextModelDirectory() {
-  //   const targetPath = await api().system.getPath({
-  //     name: "llm",
-  //     create: true,
-  //   });
-  //   if (targetPath) {
-  //     await api().system.showItemInFolder({ path: targetPath });
-  //   }
-  // }
+  let selectedRerankLabel = $derived(
+    rerankModels.find((m) => m.value === rerankModel)?.label || rerankModel,
+  );
+  async function handleTextOpen(open: boolean) {
+    if (open && !rerankFetched && !rerankLoading) {
+      rerankLoading = true;
+      try {
+        rerankModels = (await api().config.getReranks()).map((item) => ({
+          value: item.value,
+          label: item.label,
+          note: "",
+        }));
+        configStore.providers.forEach((provider) => {
+          provider.models.forEach((model) => {
+            if (model.abilities.includes(allAbilities.rerank)) {
+              embeddingModels.push({
+                value: `::${provider.id}::${model.id}`,
+                label: model.id,
+                note: "远程重排模型",
+              });
+            }
+          });
+        });
+        rerankFetched = true;
+        if (rerankModels.length === 0) {
+          if (configStore.localModel.length > 0) {
+            configStore.setLocalModel("");
+          }
+        } else {
+          rerankModels.push({
+            value: "",
+            label: "不使用重排模型",
+            note: "缺失重排，会降低召回准确率，降低任务质量。",
+          });
+        }
+      } catch (error) {
+        console.error("Failed to fetch text models:", error);
+        rerankModels = [];
+      } finally {
+        rerankLoading = false;
+      }
+    }
+  }
+  function handleRerankChange(realValue: string) {
+    const value = realValue.trim();
+    if (value !== configStore.localModel) {
+      configStore.setLocalModel(value);
+    }
+  }
+  async function openRerankDirectory() {
+    const targetPath = await api().system.getPath({
+      name: "rerank",
+      create: true,
+    });
+    if (targetPath) {
+      await api().system.showItemInFolder({ path: targetPath });
+    }
+  }
   // ═══════════════════════════════════════════════════════════
   // Open model directory
   // ═══════════════════════════════════════════════════════════
@@ -251,22 +262,22 @@
 
     <Separator class="bg-border/30" />
 
-    <!-- ── Row: 本地文本模型 ── -->
-    <!-- <div
+    <!-- ── Row: 本地Rerank模型 ── -->
+    <div
       class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 lg:gap-8 p-6"
     >
       <div class="flex items-center gap-4 shrink-0">
         <div
           class="flex items-center justify-center size-9 rounded-lg bg-muted shrink-0"
         >
-          <IconMessageChatbot
+          <IconArrowsSort
             size={20}
             stroke={1.5}
             class="text-muted-foreground"
           />
         </div>
         <div>
-          <p class="text-sm font-medium text-foreground">本地文本模型</p>
+          <p class="text-sm font-medium text-foreground">本地重排模型</p>
           <p class="text-xs text-muted-foreground mt-0.5">
             自行下载 GGUF 模型，存放至最右侧目录
           </p>
@@ -276,29 +287,29 @@
       <div class="flex items-center gap-2 w-full lg:w-96 shrink-0">
         <Select.Root
           type="single"
-          value={textModel}
-          onValueChange={handleTextChange}
+          value={rerankModel}
+          onValueChange={handleRerankChange}
           onOpenChange={handleTextOpen}
         >
           <Select.Trigger class="min-w-0 flex-1 rounded-xl">
             <span class="truncate">
-              {selectedTextLabel || "选择文本模型…"}
+              {selectedRerankLabel || "选择重排模型…"}
             </span>
           </Select.Trigger>
           <Select.Content class="rounded-xl max-h-80">
-            {#if textLoading}
+            {#if rerankLoading}
               <div
                 class="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"
               >
                 <IconLoader2 size={16} stroke={1.5} class="animate-spin" />
                 <span>正在加载模型列表…</span>
               </div>
-            {:else if textModels.length === 0}
+            {:else if rerankModels.length === 0}
               <div class="py-8 text-center text-sm text-muted-foreground">
-                暂无文本模型,请下载模型文件并存入右侧目录
+                暂无重排模型,请将模型文件存入右侧目录
               </div>
             {:else}
-              {#each textModels as model (model.value)}
+              {#each rerankModels as model (model.value)}
                 <Select.Item value={model.value} class="rounded-lg">
                   <div class="flex items-center justify-between gap-3 w-full">
                     <div class="flex-1 min-w-0">
@@ -322,7 +333,7 @@
               <button
                 {...props}
                 class="flex items-center justify-center size-9 rounded-xl border border-input bg-background text-muted-foreground transition-all duration-200 hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
-                onclick={openTextModelDirectory}
+                onclick={openRerankDirectory}
               >
                 <IconFolderOpen size={16} stroke={1.5} />
               </button>
@@ -331,6 +342,6 @@
           <Tooltip.Content>打开模型目录</Tooltip.Content>
         </Tooltip.Root>
       </div>
-    </div> -->
+    </div>
   </div>
 </section>
