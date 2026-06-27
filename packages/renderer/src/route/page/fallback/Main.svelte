@@ -3,7 +3,7 @@
   import type { Snippet } from "svelte";
   import WelcomeScreen from "./WelcomeScreen.svelte";
   import { projectStore } from "$lib/store/project.svelte";
-  import Dashboard from "./Dashboard.svelte";
+  import Dashboard from "./Dashboard/Dashboard.svelte";
 
   interface Props {
     children?: Snippet;
