@@ -6,7 +6,7 @@ import { throwNotfound } from "$libs/utils/err.js";
  * 统一的项目控制器抽象基类
  */
 export abstract class BaseProjectController implements IProjectController {
-    constructor(protected ctx: IProjectContext) { }
+    constructor(protected readonly ctx: IProjectContext) { }
 
     init?(): void | Promise<void> { }
     dispose?(): void | Promise<void> { }

@@ -319,10 +319,7 @@
     ></div>
 
     <div class="relative flex flex-col items-center gap-6 text-center">
-      <div
-        use:autoAnimate
-        class="flex min-h-10 items-center justify-center"
-      >
+      <div use:autoAnimate class="flex min-h-10 items-center justify-center">
         {#if runState === "idle"}
           <div class="flex items-center gap-2 text-sm text-muted-foreground">
             <IconInfoCircle size={16} stroke={1.5} />

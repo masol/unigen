@@ -20,11 +20,10 @@ export async function openProject(prj: IProjectContext): Promise<void> {
 }
 
 export async function closeProject(prj: IProjectContext): Promise<void> {
-    Logger.debug(`[Project] close ${prj.path}`)
     if (!prj.path) { // 未打开项目，关闭之。
         return;
     }
-
+    Logger.debug(`[Project] close ${prj.path}`)
     const pdb = PrjDB.ensure(prj);
     pdb.close();
     const lance = LanceDB.ensure(prj);

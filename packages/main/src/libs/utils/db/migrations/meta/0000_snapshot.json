@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "00b3e7cf-6cbc-4ed7-9fe4-8a9b8c9a2475",
+  "id": "ccd12c85-82cb-4ccb-8941-bd688f5927ec",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "kv_store": {
@@ -33,6 +33,100 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "exec_frame": {
+      "name": "exec_frame",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "wf_version": {
+          "name": "wf_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "deps": {
+          "name": "deps",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'{}'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'PENDING'"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "idx_execframe_wf_version": {
+          "name": "idx_execframe_wf_version",
+          "columns": [
+            "wf_version"
+          ],
+          "isUnique": false
+        },
+        "idx_execframe_key": {
+          "name": "idx_execframe_key",
+          "columns": [
+            "key"
+          ],
+          "isUnique": false
+        },
+        "idx_execframe_version": {
+          "name": "idx_execframe_version",
+          "columns": [
+            "version"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "exec_frame_wf_version_key_pk": {
+          "columns": [
+            "wf_version",
+            "key"
+          ],
+          "name": "exec_frame_wf_version_key_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     }

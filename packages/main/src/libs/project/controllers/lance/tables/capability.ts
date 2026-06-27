@@ -15,7 +15,7 @@ export function getSchema(vecSize: number) {
         // UUID
         new Field("id", new FixedSizeBinary(16), false),
 
-        // 向量（用于检索）
+        // 向量（用于检索）储存output(对应text)
         new Field(
             "vector",
             new FixedSizeList(vecSize, new Field("item", new Float32(), false)),
@@ -27,7 +27,7 @@ export function getSchema(vecSize: number) {
         new Field("role", new Utf8(), false),
         new Field("goal", new Utf8(), false),
         new Field("input", new List(new Field("item", new Utf8(), false)), false),
-        new Field("output", new List(new Field("item", new Utf8(), false)), false),
+        new Field("text", new List(new Field("item", new Utf8(), false)), false),
         new Field("process", new List(new Field("item", new Utf8(), false)), false),
 
         new Field(
@@ -55,7 +55,7 @@ export function getSchema(vecSize: number) {
 
 
 
-export class TableFact extends TableBase {
+export class TableCapa extends TableBase {
     constructor(lance: ILanceDB, name: string) {
         super(lance, name)
     }

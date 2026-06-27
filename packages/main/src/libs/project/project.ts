@@ -1,11 +1,16 @@
 // 轻量DI容器，未使用轻量DI框架(如awilix)，因为其还是太重，本DI不涉及外部扩展代码的问题。
 
+import { configService } from "$libs/store/index.js";
+import { throwPrecondition } from "$libs/utils/err.js";
+import { pluginManager } from "$plugins/manager.js";
 import { closeProject, createProject, openProject } from "./helper/create.js";
+import type { IProjectPlugin } from "./plugin.js";
 import { registProjectBuildin } from "./register.js";
 import type { IProjectController, IProjectContext, ControllerConstructor } from "./type.js";
 
 export class ProjectContainer implements IProjectContext {
     #path = "";
+    #plugin: IProjectPlugin | null = null; // plugin type.
     #wid = -1;
     #prjId = -1; // used for ProjectMananger(not for controller).
 
@@ -18,6 +23,13 @@ export class ProjectContainer implements IProjectContext {
 
     async init(projectPath: string): Promise<void> {
         this.#path = projectPath;
+    }
+
+    get plugin(): IProjectPlugin {
+        if (this.#plugin) {
+            return this.#plugin;
+        }
+        throwPrecondition("未加载对应插件")
     }
 
     get prjId(): number {
@@ -53,8 +65,10 @@ export class ProjectContainer implements IProjectContext {
 
     // 创建失败，返回错误信息。成功返回空字符串。
     async open(path: string): Promise<void> {
-        this.#path = path;
         try {
+            await this.close();
+            this.#path = path;
+            this.#plugin = await pluginManager.load(configService().get("plugin"))
             await openProject(this);
         } catch (e) {
             this.#path = "";
@@ -63,8 +77,10 @@ export class ProjectContainer implements IProjectContext {
     }
 
     async create(path: string, bForce = false): Promise<void> {
-        this.#path = path;
         try {
+            await this.close();
+            this.#path = path;
+            this.#plugin = await pluginManager.load(configService().get("plugin"))
             await createProject(this, bForce);
         } catch (e) {
             this.#path = "";
@@ -74,6 +90,10 @@ export class ProjectContainer implements IProjectContext {
 
     async close(): Promise<void> {
         try {
+            if (this.#plugin) {
+                await this.#plugin.dispose();
+                this.#plugin = null;
+            }
             await closeProject(this);
         } finally {
             this.#path = ""

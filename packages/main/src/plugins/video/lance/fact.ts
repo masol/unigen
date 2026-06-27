@@ -1,5 +1,5 @@
-import { TableBase } from "../tablebase.js";
-import { ILanceDB } from "../type.js";
+import { TableBase } from "$libs/project/controllers/lance/tablebase.js";
+import { ILanceDB } from "$libs/project/controllers/lance/type.js";
 import { Schema, Field, Utf8, FixedSizeList, Float32, Bool, List, Int32, FixedSizeBinary } from "apache-arrow";
 
 

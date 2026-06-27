@@ -167,7 +167,7 @@ export class LanceDB extends BaseProjectController implements ILanceDB {
             this.#db = await this.lanceInst.connect(lancePath, {
                 storageOptions: { timeout: '10s' }
             });
-            await initAllTables(this);
+            await initAllTables(this, this.ctx);
 
             Logger.debug(`[LanceDB] 数据库已成功连接.`);
             return;

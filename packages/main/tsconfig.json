@@ -13,6 +13,7 @@
       "@app/preload": ["../preload"],
       "@app/renderer": ["../renderer"],
       "$types/*": ["./src/types/*"],
+      "$plugins/*": ["./src/plugins/*"],
       "$libs/*": ["./src/libs/*"]
     }
   },

@@ -1,3 +1,5 @@
+import type { IProjectPlugin } from "./plugin.js";
+
 /**
  * 定义项目上下文的公共接口（契约）
  * 子控制器只认识这个接口，不认识具体的 ProjectContext 类
@@ -5,6 +7,7 @@
 export interface IProjectContext {
     readonly path: string;
     readonly wid: number;
+    readonly plugin: IProjectPlugin;
     register<T extends IProjectController>(token: ControllerConstructor<T>): void;
     // 允许子控制器之间通过接口互相获取同级服务
     getService<T extends IProjectController>(token: ControllerConstructor<T>): T | null;

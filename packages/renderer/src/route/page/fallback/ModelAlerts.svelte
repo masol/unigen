@@ -91,6 +91,6 @@
 {#if !configStore.localModel}
   <div class="flex items-center gap-1.5 px-1 text-xs text-muted-foreground/60">
     <IconInfoCircle class="size-3.5" />
-    <span>未设置本地语言模型，这可能会浪费本地算力</span>
+    <span>未设置重排模型，这会降低任务正确度</span>
   </div>
 {/if}
