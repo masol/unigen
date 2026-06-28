@@ -4,8 +4,9 @@
   import { onMount } from "svelte";
 
   import ScriptLibrary from "./ScriptLibrary.svelte";
-  import { inputStore } from "./store.svelte";
+  import { inputStore } from "./input.svelte";
   import ReferenceStylePanel from "./ReferenceStylePanel.svelte";
+  import CommonPanel from "./CommonPanel.svelte";
 
   onMount(() => {
     inputStore.init();
@@ -16,6 +17,7 @@
 <ScrollArea class="flex-1 pr-1">
   <Accordion.Root type="multiple" class="space-y-3">
     <ScriptLibrary />
+    <CommonPanel></CommonPanel>
     <ReferenceStylePanel />
   </Accordion.Root>
 </ScrollArea>

@@ -1,5 +1,5 @@
 <!--╭─────────────────────────────────────────────────────╮ -->
-<!-- │ 职责：剧本集区域 — 顺序文本段落的追加/编辑/删除         │ -->
+<!-- │ 职责：剧本集区域 — 顺序文本段落的添加/编辑/删除         │ -->
 <!-- ╰─────────────────────────────────────────────────────╯ -->
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
@@ -16,7 +16,7 @@
     IconAlertTriangle,
   } from "@tabler/icons-svelte";
   import autoAnimate from "@formkit/auto-animate";
-  import { inputStore } from "./store.svelte";
+  import { inputStore } from "./input.svelte";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
   import ScriptSegmentDialog from "./ScriptSegmentDialog.svelte";
@@ -37,7 +37,7 @@
     const content = await dialogStore.safeShow(
       ScriptSegmentDialog,
       {
-        title: "追加剧本",
+        title: "添加剧本",
         initialText: "",
       },
       {
@@ -53,12 +53,15 @@
   async function handleEdit(item: ScriptItemType) {
     if (loading) return;
 
-    const origContent = "";
+    const origContent = await inputStore.getContent(item.id);
     const content = await dialogStore.safeShow(
       ScriptSegmentDialog,
       {
         title: "编辑剧本",
+        description:
+          "剧本变动，需要重新计算，相当于新建项目，非必要不改动剧本。",
         initialText: origContent ?? "",
+        alert: true,
       },
       {
         size: "xl",
@@ -130,7 +133,7 @@
           </div>
         {/if}
 
-        <!-- 醒目的追加剧本按钮 -->
+        <!-- 醒目的添加剧本按钮 -->
         <Button
           class="w-full rounded-xl shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl"
           onclick={handleAppend}
@@ -141,7 +144,7 @@
             处理中…
           {:else}
             <IconPlus size={18} stroke={1.5} />
-            追加剧本
+            添加剧本
           {/if}
         </Button>
 
@@ -170,7 +173,7 @@
                       第 {i + 1} 次
                     </Badge>
                     <span class="text-xs text-muted-foreground">
-                      {(item.content ?? "").trim().length} 字
+                      {item.size ?? 0} 字
                     </span>
                   </div>
 

@@ -107,6 +107,14 @@ export class PrjDB extends BaseProjectController {
             .run(); // ⚡ 同步执行，执行完后此行代码才向下走
     }
 
+
+    remove(key: string): void {
+        const db = this.getInitedDB();
+        db.delete(schema.kvStore)
+            .where(eq(schema.kvStore.key, key))
+            .run();
+    }
+
     get<T>(key: string): T | null {
         const db = this.getInitedDB();
         const result = db

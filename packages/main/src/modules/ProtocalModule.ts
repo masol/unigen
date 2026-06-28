@@ -1,9 +1,9 @@
 import Logger from 'electron-log/main';
 import { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../types/ModuleContext.js';
-// src/main/protocol.ts
 import { protocol, net, app } from 'electron'
 import { pathToFileURL } from 'url'
+import { resolve } from 'path';
 
 const PROTOCAL_NAME = "appfile"
 /**
@@ -22,7 +22,7 @@ const PROTOCAL_NAME = "appfile"
 /** 第一步：在 app ready 之前调用 */
 export function registerSchemes(): void {
     if (app.isReady()) {
-        Logger.error(`试图注册协议${PROTOCAL_NAME},但是已经就绪。`)
+        Logger.error(`试图注册协议${PROTOCAL_NAME},但是app已经就绪。`)
     }
     //   console.log('顶层同步：app.isReady() =', app.isReady()) // false
 
@@ -43,10 +43,30 @@ export function registerSchemes(): void {
 
 function registerFileProtocol(): void {
     protocol.handle(PROTOCAL_NAME, (request) => {
-        // app-file:///absolute/path/to/file  →  file:///absolute/path/to/file
-        const url = request.url.replace(`${PROTOCAL_NAME}://`, 'file://')
-        // net.fetch 天然支持 Range header，可实现视频 seek
-        return net.fetch(pathToFileURL(decodeURIComponent(new URL(url).pathname)).href, {
+
+        // 1. 拿到最原始的 URL 字符串
+        const rawUrl = request.url
+
+        // 2. 剥离自定义协议头（保留后面的全部内容）
+        // 例如: "myproto://home/masol/..." -> "home/masol/..."
+        // 或者: "myproto:///home/masol/..." -> "/home/masol/..."
+        const prefixLength = `${PROTOCAL_NAME}://`.length
+        let remainingPath = rawUrl.slice(prefixLength)
+
+        // 3. URL 解码（处理中文、空格等转义字符）
+        remainingPath = decodeURIComponent(remainingPath)
+
+        // 4. 利用 path.resolve() 跨平台转为系统绝对路径
+        // - 如果剩余部分是 "home/masol/..."，resolve("/") 会把它安全变成 Linux 的 "/home/masol/..."
+        // - 如果在 Windows 上是 "C:/data/..."，resolve() 会自动识别盘符并转为 "C:\data\..."
+        const realFsPath = resolve('/', remainingPath)
+
+        // 5. 转为标准 file:// URL
+        const targetFileUrl = pathToFileURL(realFsPath).href
+
+        // console.log("targetFileUrl=", targetFileUrl)
+
+        return net.fetch(targetFileUrl, {
             headers: request.headers,
         })
     })

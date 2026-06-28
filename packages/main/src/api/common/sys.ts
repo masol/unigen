@@ -10,7 +10,8 @@ import { Hook, LogMessage, Transport } from 'electron-log'
 import { WindowService } from '$libs/utils/window.js'
 import { FileFilterPreset } from '$types/shared/api/sys.js'
 import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
-import { genText } from '$libs/utils/model/factory/node-llama-cpp/local.js'
+// import { genText } from '$libs/utils/model/factory/node-llama-cpp/local.js'
+import { throwCancel } from '$libs/utils/err.js'
 
 // ─── Zod Schemas ─────────────────────────────────────────────
 const fileFilterPresetSchema = z.enum(FileFilterPreset)
@@ -61,6 +62,53 @@ function resolveFilters(
 }
 
 // ─── RPC 接口 ─────────────────────────────────────────────────
+
+/**
+ * 打开文件
+ * - filters: 可选的文件类型过滤
+ */
+const openFile = os
+    .input(
+        z.object({
+            multi: z.boolean().optional(),
+            showHiddenFiles: z.boolean().optional(),
+            directory: z.boolean().optional(),
+            filters: filtersInputSchema,
+        }),
+    )
+    .output(z.array(z.string()))
+    .handler(async ({ input, context }) => {
+        const { filters, multi, showHiddenFiles, directory } = input
+        const resolvedFilters = resolveFilters(filters) ?? [{ name: 'All Files', extensions: ['*'] }]
+
+        const { canceled, filePaths } = await WindowService.instance.withModalWindow(context, (parent) => {
+            const props: Array<"showHiddenFiles" | "openFile" | "openDirectory" | "multiSelections" | "createDirectory" | "promptToCreate" | "noResolveAliases" | "treatPackageAsDirectory" | "dontAddToRecent"> = [];
+            if (multi) {
+                props.push('multiSelections')
+            }
+            if (showHiddenFiles) {
+                props.push('showHiddenFiles')
+            }
+            if (directory) {
+                props.push('openDirectory')
+            } else {
+                props.push('openFile')
+            }
+
+            return dialog.showOpenDialog(parent, {
+                filters: resolvedFilters,
+                properties: ['dontAddToRecent', ...props],
+            })
+        })
+
+        if (canceled) {
+            throwCancel("用户取消");
+        }
+
+        return filePaths
+    })
+
+
 
 /**
  * 保存文件
@@ -314,15 +362,16 @@ const streamLogs = os
 
 
 
-const genTextApi = os
-    .input(z.string())
-    .output(z.string())
-    .handler(async ({ input }) => {
-        return await genText(input)
-    })
+// const genTextApi = os
+//     .input(z.string())
+//     .output(z.string())
+//     .handler(async ({ input }) => {
+//         return await genText(input)
+//     })
 
 
 export default {
+    openFile,
     saveFile,
     saveBinaryFile,
     openExternal,
@@ -331,6 +380,5 @@ export default {
     listmodel,
     getPath,
     streamLogs,
-    version,
-    genText: genTextApi
+    version
 }

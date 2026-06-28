@@ -3,12 +3,14 @@
 import { configService } from "$libs/store/index.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import { pluginManager } from "$plugins/manager.js";
+import { join } from "node:path";
 import { closeProject, createProject, openProject } from "./helper/create.js";
 import type { IProjectPlugin } from "./plugin.js";
 import { registProjectBuildin } from "./register.js";
-import type { IProjectController, IProjectContext, ControllerConstructor } from "./type.js";
+import { type IProjectController, type IProjectContext, type ControllerConstructor, metaDirName } from "./type.js";
 
 export class ProjectContainer implements IProjectContext {
+    // 项目根目录。
     #path = "";
     #plugin: IProjectPlugin | null = null; // plugin type.
     #wid = -1;
@@ -62,6 +64,16 @@ export class ProjectContainer implements IProjectContext {
         // 3. 内部唯一安全的断言，由于 register 和 resolve 泛型 T 严格绑定，此转换 100% 安全
         return instance as T;
     }
+
+    getPath(partName: 'meta' | 'visualref'): string {
+        switch (partName) {
+            case 'meta':
+                return metaDirName;
+            case 'visualref':
+                return join(this.#path, metaDirName, 'visualref');
+        }
+    }
+
 
     // 创建失败，返回错误信息。成功返回空字符串。
     async open(path: string): Promise<void> {

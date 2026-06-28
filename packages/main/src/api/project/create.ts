@@ -141,6 +141,14 @@ const close = os
         return ctx.project.close();
     });
 
+
+const rm = os
+    .input(z.string())
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        return PrjDB.ensure(ctx.project).remove(input);
+    });
+
 export default {
     open,
     create,
@@ -148,5 +156,6 @@ export default {
     get,
     getWithTime,
     set,
+    rm,
     close
 }

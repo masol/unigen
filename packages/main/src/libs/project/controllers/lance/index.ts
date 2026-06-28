@@ -49,7 +49,7 @@ export class LanceDB extends BaseProjectController implements ILanceDB {
 
     get embedSize(): number {
         if (!isNumber(this.#embeddingSize) || this.#embeddingSize <= 0) {
-            throwPrecondition("[LanceDB] lanceDB未启用向量支持。")
+            throwPrecondition("[LanceDB] 未配置向量支持。")
         }
         return this.#embeddingSize;
     }

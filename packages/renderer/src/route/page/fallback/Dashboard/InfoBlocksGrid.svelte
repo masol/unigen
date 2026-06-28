@@ -6,7 +6,7 @@
     IconChevronRight,
     IconCircleCheckFilled,
   } from "@tabler/icons-svelte";
-  import { dashboardStore, type InfoBlock } from "./dashboard.svelte";
+  import { dashboardStore } from "./dashboard.svelte";
 </script>
 
 <div class="grid grid-cols-1 gap-6 md:grid-cols-3 animate-fade-in">

@@ -10,6 +10,13 @@ export const UNIGEN_ERROR_DEFS = {
 
 
 
+export function throwCancel(message: string): never {
+    throw new ORPCError(UNIGEN_ERROR_DEFS.USER_CANCEL.message, {
+        status: UNIGEN_ERROR_DEFS.USER_CANCEL.status,
+        message
+    })
+}
+
 export function throwNotfound(message: string): never {
     throw new ORPCError(COMMON_ORPC_ERROR_DEFS.NOT_FOUND.message, {
         status: COMMON_ORPC_ERROR_DEFS.NOT_FOUND.status,

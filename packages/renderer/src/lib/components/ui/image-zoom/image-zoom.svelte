@@ -88,7 +88,7 @@
 
 {#if isOpen && currentImageData}
 	<div
-		class={cn('fixed inset-0 z-[10000] flex items-center justify-center bg-black/90', className)}
+		class={cn('fixed inset-0 z-9999 flex items-center justify-center bg-black/90', className)}
 		transition:fade={{ duration: 150 }}
 		aria-modal="true"
 		role="dialog"

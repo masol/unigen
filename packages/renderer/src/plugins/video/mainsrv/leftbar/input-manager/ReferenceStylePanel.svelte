@@ -1,10 +1,6 @@
-<!--╭─────────────────────────────────────────────────────╮ -->
-<!-- │ 职责：参考风格区域 — 选择/展示整体风格参考图（多图 grid） │ -->
-<!-- ╰─────────────────────────────────────────────────────╯ -->
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import * as Accordion from "$lib/components/ui/accordion";
   import * as ImageZoom from "$lib/components/ui/image-zoom";
@@ -13,40 +9,83 @@
     IconPlus,
     IconPalette,
     IconLoader2,
+    IconX,
   } from "@tabler/icons-svelte";
   import autoAnimate from "@formkit/auto-animate";
-  import { inputStore } from "./store.svelte";
+  import { inputStore } from "./input.svelte";
+  import { confirmStore } from "$lib/store/ui/confirm.svelte";
+  import { ORPCError } from "@orpc/client";
+  import { toast } from "svelte-sonner";
+  import { api } from "$lib/utils/api";
+  import { path2URL } from "$lib/utils/str";
 
-  // 默认收起风格参考
   let accordionValue = $state("");
-
-  // 选择/上传中的状态（转圈）
   let isUploading = $state(false);
 
-  // 隐藏的文件选择器引用，由按钮触发点击
-  let fileInput = $state<HTMLInputElement | null>(null);
+  const COMMON_ORPC_ERROR_DEFS = {
+    UNSUPPORTED_MEDIA_TYPE: { status: 415 },
+    TOO_MANY_REQUESTS: { status: 429 },
+  };
 
-  function handlePick() {
+  async function handlePick() {
     if (isUploading) return;
-    fileInput?.click();
-  }
-
-  async function handleSelect(event: Event) {
-    const target = event.currentTarget as HTMLInputElement;
-    const files = target.files;
-    if (!files || files.length === 0) return;
-
-    console.log("files[0].",files[0])
-    // fileName 即 url，这里把选中的本地图片转为可访问的 url
-    const urls = Array.from(files).map((file) => file.name);
 
     isUploading = true;
     try {
-      await inputStore.addVisual(urls);
+      const result = await api().system.openFile({ filters: "image" });
+
+      console.log("result=", result);
+
+      let realPathname: string[];
+
+      if (typeof result === "string") {
+        realPathname = [result];
+      } else if (Array.isArray(result)) {
+        realPathname = result;
+      } else {
+        throw new Error("Invalid openFile result");
+      }
+
+      await inputStore.addVisualRef(realPathname);
+    } catch (e: unknown) {
+      procError(e);
     } finally {
       isUploading = false;
-      // 重置，确保同一文件再次选择也能触发 change
-      target.value = "";
+    }
+  }
+
+  function procError(e: unknown): boolean {
+    let msg: string;
+    if (e instanceof ORPCError) {
+      if (e.status === 601) {
+        return false;
+      } else if (e.status === COMMON_ORPC_ERROR_DEFS.TOO_MANY_REQUESTS.status) {
+        toast.success(e.message);
+        return false;
+      }
+      msg = e.message || e.code;
+    } else {
+      msg = e instanceof Error ? e.message : String(e);
+    }
+    toast.error(msg);
+    return false;
+  }
+
+  async function handleRemove(image: string, event: MouseEvent) {
+    event.stopPropagation();
+    event.preventDefault();
+
+    const confirmed = await confirmStore.request({
+      title: "确认删除",
+      message: "确定要删除这张参考图吗？",
+    });
+
+    if (confirmed) {
+      try {
+        await inputStore.rmVisualRef(image);
+      } catch (e: unknown) {
+        procError(e);
+      }
     }
   }
 </script>
@@ -77,17 +116,6 @@
 
     <Accordion.Content class="px-3 pb-4">
       <div class="space-y-3">
-        <!-- 隐藏的文件选择器 -->
-        <Input
-          bind:ref={fileInput}
-          type="file"
-          accept="image/*"
-          multiple
-          class="hidden"
-          onchange={handleSelect}
-        />
-
-        <!-- 醒目的选择图片按钮（带 loading 状态） -->
         <Button
           class="w-full rounded-xl shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl"
           disabled={isUploading}
@@ -107,21 +135,33 @@
             <!--╭─────────────────────────────────────────────────────╮ -->
             <!-- │ 职责：以 grid 渲染参考图卡片，点击可放大查看           │ -->
             <!-- ╰─────────────────────────────────────────────────────╯ -->
-            <div use:autoAnimate class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {#each inputStore.visualStyle as item (item.id)}
-                <div
-                  class="group relative aspect-square overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl animate-fade-in"
-                >
-                  <ImageZoom.Root>
+            <ImageZoom.Root>
+              <div
+                use:autoAnimate
+                class="grid grid-cols-2 gap-3 sm:grid-cols-3"
+              >
+                {#each inputStore.visualStyle as item (item)}
+                  <div
+                    class="group relative aspect-square overflow-hidden rounded-2xl border border-border/50 bg-muted"
+                  >
                     <ImageZoom.Trigger
-                      src={item.fileName}
-                      alt={item.fileName}
-                      class="h-full w-full cursor-zoom-in object-cover transition-transform duration-200 group-hover:scale-105"
+                      src={path2URL(item)}
+                      alt={item}
+                      class="h-full w-full object-cover"
                     />
-                  </ImageZoom.Root>
-                </div>
-              {/each}
-            </div>
+
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      class="absolute right-0 top-0 h-5 w-5 rounded-lg opacity-0 shadow-xl transition-all duration-200 group-hover:opacity-100 hover:-translate-y-0.5"
+                      onclick={(e) => handleRemove(item, e)}
+                    >
+                      <IconX size={16} stroke={1.5} />
+                    </Button>
+                  </div>
+                {/each}
+              </div>
+            </ImageZoom.Root>
             <!-- ╭─── / ReferenceStyleGrid ───╮ -->
           {:else}
             <!--╭─────────────────────────────────────────────────────╮ -->

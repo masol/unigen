@@ -10,8 +10,7 @@ export type ScriptBar = {
 
 export type ScriptItem = {
     id: string;
-    length: string;
-    createdAt: number;
+    size: number;
     updatedAt: number;
 };
 
@@ -28,7 +27,6 @@ export type ReferenceItem = {
     id: string;
     kind: 'voice' | 'image' | 'video',
     fileName: string;
-    createdAt: number;
 };
 
 export type ReferenceDraft = {

@@ -43,7 +43,7 @@ const DAYJS_LOCALE_MAP: Record<string, string> = {
 function setDayjsLocale(locale: string): void {
     const dayjsLocale = DAYJS_LOCALE_MAP[locale.toLowerCase()] || 'zh-cn';
     dayjs.locale(dayjsLocale);
-    console.log('dayjsLocale=', dayjsLocale);
+    // console.log('dayjsLocale=', dayjsLocale);
 }
 
 /**

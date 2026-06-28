@@ -89,7 +89,7 @@ let user = $state({ name: 'Alice', age: 25 });
         this.setLoading(true);
 
         try {
-            const text = await api().system.genText(userMessage);
+            const text = `resp to ${userMessage}`; // await api().system.genText(userMessage);
             this.addMessage({
                 role: "assistant",
                 content: text,

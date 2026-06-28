@@ -26,13 +26,15 @@
     description?: string;
     placeholder?: string;
     initialText?: string;
+    alert?: boolean;
   } & DialogComponentProps<string>;
 
   let {
     title = "新建剧本",
     description = "在下方粘贴自然语言剧本内容(不限字数)。",
-    placeholder = "在此输入剧本正文内容。人物、简介、制作要求等请在「要求」中设置。……",
+    placeholder = "在此输入剧本正文内容。人物、简介、制作要求等请在「全局要求」中设置。……",
     initialText = "",
+    alert = false,
     onClose,
     onCancel,
   }: Props = $props();
@@ -40,7 +42,6 @@
   // svelte-ignore state_referenced_locally
   let text = $state(initialText);
   const isValid = $derived(text.trim().length > 0);
-  const isEditing = $derived(initialText.length > 0);
 
   function handleSave() {
     if (!isValid) return;
@@ -50,7 +51,7 @@
 
 <DialogHeader>
   <DialogTitle>{title}</DialogTitle>
-  {#if isEditing}
+  {#if alert}
     <div
       class="flex items-start gap-2.5 rounded-xl border border-destructive/50 bg-destructive/10 px-4 py-3"
     >
@@ -60,7 +61,7 @@
         class="mt-0.5 shrink-0 text-destructive"
       />
       <p class="text-sm font-medium leading-relaxed text-destructive">
-        剧本变动，需要重新计算，相当于新建项目，非必要不改动剧本。
+        {description}
       </p>
     </div>
   {:else}
