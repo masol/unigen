@@ -4,6 +4,7 @@
 import log from "electron-log/renderer";
 import { confirmStore } from "$lib/store/ui/confirm.svelte";
 import { IconBook2, IconSparkles, IconVideo } from "@tabler/icons-svelte";
+import { api } from "$lib/utils/api";
 
 // ─── 类型 ───────────────────────────────────────────────────────
 export type RunState = "idle" | "running" | "terminating";
@@ -72,6 +73,8 @@ const mockMessages: { level: LogLevel; msg: string }[] = [
     { level: "info", msg: "运动模糊与镜头推拉渲染中 …" },
     { level: "success", msg: "章节 1/24 渲染完成 · 输出至 ./out/ch01.mp4" },
 ];
+export type RunTarget = "segmentation" | "shot" | "entities" | "voice" | "storyboard" | "visual" | "video" | "post"
+
 
 // ─── Store ──────────────────────────────────────────────────────
 class DashboardStore {
@@ -80,6 +83,7 @@ class DashboardStore {
     #elapsedSeconds = $state(0); // 原始值 → $state
     #terminatingSeconds = $state(0); // 原始值 → $state
     #logs = $state.raw<LogEntry[]>([]); // 仅整体替换（spread 新数组）→ $state.raw
+    #target = $state<RunTarget>("post"); // 运行目标。
 
     // ── 私有非响应式资源 ─────────────────────────────────────────
     #logTimer: ReturnType<typeof setInterval> | null = null;
@@ -121,6 +125,9 @@ class DashboardStore {
     }
 
     // ── 只读门面 ─────────────────────────────────────────────────
+    get target(): RunTarget {
+        return this.#target;
+    }
     get runState() {
         return this.#runState;
     }
@@ -144,6 +151,14 @@ class DashboardStore {
     }
     get buttonLabel() {
         return this.#buttonLabel;
+    }
+
+    async setTarget(newTarget: RunTarget): Promise<void> {
+        await api().project.set({
+            key: "target",
+            value: newTarget
+        });
+        this.#target = newTarget;
     }
 
     // ── 工具 ─────────────────────────────────────────────────────

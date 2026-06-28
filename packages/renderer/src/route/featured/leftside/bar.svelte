@@ -34,7 +34,7 @@
   />
 
   <!-- Panel content -->
-  <ScrollArea class="flex-1">
+  <ScrollArea class="flex-1 min-h-0">
     <div class="p-2">
       {#if currentItem?.component}
         <currentItem.component />

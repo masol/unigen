@@ -116,6 +116,14 @@ const get = os
         return PrjDB.ensure(ctx.project).get(input);
     });
 
+const getWithTime = os
+    .input(z.string())
+    .output(z.object({ value: z.any(), updatedAt: z.string().nullable() }).nullable())
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        return PrjDB.ensure(ctx.project).getWithTime(input);
+    });
+
 const set = os
     .input(z.object({
         key: z.string(),
@@ -138,6 +146,7 @@ export default {
     create,
     info,
     get,
+    getWithTime,
     set,
     close
 }

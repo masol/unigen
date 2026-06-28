@@ -118,6 +118,20 @@ export class PrjDB extends BaseProjectController {
         return result ? (result.value as T) : null;
     }
 
+    getWithTime<T>(key: string): { value: T, updatedAt: string | null } | null {
+        const db = this.getInitedDB();
+        const result = db
+            .select({ value: schema.kvStore.value, updatedAt: schema.kvStore.updatedAt })
+            .from(schema.kvStore)
+            .where(eq(schema.kvStore.key, key))
+            .get(); // ⚡ 同步执行
+
+        return result ? ({
+            value: result.value as T,
+            updatedAt: result.updatedAt
+        }) : null;
+    }
+
 
     dispose(): void {
         this.close();
