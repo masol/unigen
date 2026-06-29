@@ -62,7 +62,7 @@ class ProjectStore {
             console.log("this.#runState=", this.#runState)
         } catch (e) {
             this.procError(e);
-        }
+        }   
     }
 
     async stop(bForce = false): Promise<void> {
