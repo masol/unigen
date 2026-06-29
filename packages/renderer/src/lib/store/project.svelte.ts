@@ -58,7 +58,8 @@ class ProjectStore {
     async start(): Promise<void> {
         try {
             await api().project.start();
-            this.#runState = "running";
+            this.#runState = await api().project.runState(); // "running";
+            console.log("this.#runState=", this.#runState)
         } catch (e) {
             this.procError(e);
         }
@@ -67,7 +68,7 @@ class ProjectStore {
     async stop(bForce = false): Promise<void> {
         try {
             await api().project.stop(bForce);
-            this.#runState = bForce ? "idle" : "terminating";
+            this.#runState = await api().project.runState(); // bForce ? "idle" : "terminating";
         } catch (e) {
             this.procError(e);
         }

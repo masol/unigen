@@ -37,8 +37,20 @@ export class WorkflowRunner {
     }
 
     stop(bForce: boolean = false) {
+        if (this.#state === "idle") {
+            return;
+        }
+
         if (this.#ctx) {
             this.#ctx.triggerAbort(bForce);
+        }
+        if (bForce) {
+            // 清空#running等环境。
+            this.#ctx = null;
+            this.#running = null;
+            this.#state = "idle";
+        } else {
+            this.#state = "terminating"
         }
     }
 
@@ -55,6 +67,7 @@ export class WorkflowRunner {
     // 3. 核心运行函数：按“代”并行
     async run(ctx: IWorkflowContext): Promise<void> {
         this.#startTime = new Date().getTime();
+        this.#state = "running";
         // 收集计算出的“代”队列
         const generations: string[][] = [];
 
@@ -130,5 +143,6 @@ export class WorkflowRunner {
             Logger.debug('\n--- DAG 所有任务执行完成 ---');
         }
         ctx.prj.notify("task_finished", this.#startTime)
+        this.#state = "idle";
     }
 }
