@@ -30,7 +30,7 @@ class TourStore {
     /**
      * 开启引导，必须提供步骤和回调
      */
-    start(steps: Step[], callback: TourCallback): void {
+    start(steps: Step[], callback: TourCallback | null = null): void {
         log.debug(`[TourStore] start() called, steps count=${steps.length}`)
 
         if (!steps || steps.length === 0) {

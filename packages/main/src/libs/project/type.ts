@@ -8,7 +8,8 @@ export interface IProjectContext {
     readonly path: string;
     readonly wid: number;
     readonly plugin: IProjectPlugin;
-    getPath(partName: 'meta'|'visualref'): string;
+    getPath(partName: 'meta' | 'visualref'): string;
+    notify(evtName: string, payload: unknown, srcId?: number): boolean
     register<T extends IProjectController>(token: ControllerConstructor<T>): void;
     // 允许子控制器之间通过接口互相获取同级服务
     getService<T extends IProjectController>(token: ControllerConstructor<T>): T | null;

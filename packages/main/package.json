@@ -32,6 +32,8 @@
     "electron-updater": "6.8.9",
     "fast-glob": "^3.3.3",
     "fs-extra": "^11.3.5",
+    "graphology": "^0.26.0",
+    "graphology-dag": "^0.4.1",
     "lru-cache": "^11.5.1",
     "node-llama-cpp": "^3.18.1",
     "p-timeout": "^7.0.1",

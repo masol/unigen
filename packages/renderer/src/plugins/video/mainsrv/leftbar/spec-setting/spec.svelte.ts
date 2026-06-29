@@ -9,6 +9,119 @@ import log from 'electron-log/renderer';
 import { api } from '$lib/utils/api';
 import { DbKeys } from '../../../dbkeys';
 
+export const episodeDurations = [
+    {
+        value: "unlimited",
+        label: "不分集",
+        sub: "由剧情自动切分",
+        short: "DUR",
+    },
+    { value: "30s", label: "30 秒", sub: "快速短片", short: "DUR" },
+    { value: "60s", label: "60 秒", sub: "标准短视频", short: "DUR" },
+    { value: "3min", label: "3 分钟", sub: "中等篇幅", short: "DUR" },
+    { value: "5min", label: "5 分钟", sub: "完整短剧", short: "DUR" },
+    { value: "10min", label: "10 分钟", sub: "迷你剧", short: "DUR" },
+    { value: "20min", label: "20 分钟", sub: "网络短剧", short: "DUR" },
+    { value: "40min", label: "40 分钟", sub: "标准电视剧单集", short: "DUR" },
+    { value: "60min", label: "60 分钟", sub: "长篇剧集", short: "DUR" },
+] as const;
+
+export const videoLanguages = [
+    {
+        value: "zh",
+        label: "中文",
+        code: "ZH",
+        sub: "普通话 / 简体",
+        tone: "from-rose-500 to-amber-500",
+    },
+    {
+        value: "en",
+        label: "English",
+        code: "EN",
+        sub: "美式英语",
+        tone: "from-sky-500 to-indigo-500",
+    },
+    {
+        value: "ja",
+        label: "日本語",
+        code: "JA",
+        sub: "标准日语",
+        tone: "from-pink-500 to-fuchsia-500",
+    },
+    {
+        value: "ko",
+        label: "한국어",
+        code: "KO",
+        sub: "标准韩语",
+        tone: "from-emerald-500 to-teal-500",
+    },
+    {
+        value: "es",
+        label: "Español",
+        code: "ES",
+        sub: "西班牙语",
+        tone: "from-orange-500 to-red-500",
+    },
+    {
+        value: "fr",
+        label: "Français",
+        code: "FR",
+        sub: "法语",
+        tone: "from-blue-500 to-cyan-500",
+    },
+] as const;
+
+export const videoStyles = [
+    {
+        value: "cinematic",
+        label: "电影",
+        sub: "浅景深 / 宽银幕构图",
+        swatch: "from-amber-700/40 via-stone-800/30 to-neutral-900/50",
+    },
+    {
+        value: "anime",
+        label: "动漫",
+        sub: "赛璐璐 / 高饱和 / 描边",
+        swatch: "from-pink-400/50 via-fuchsia-500/40 to-indigo-500/50",
+    },
+    {
+        value: "cg",
+        label: "CG / 3D",
+        sub: "PBR / 全局光照",
+        swatch: "from-cyan-400/40 via-blue-600/40 to-slate-900/50",
+    },
+    {
+        value: "live",
+        label: "真人写实",
+        sub: "实拍 / 自然光 / 真实纹理",
+        swatch: "from-emerald-400/30 via-teal-500/30 to-slate-800/50",
+    },
+    {
+        value: "watercolor",
+        label: "水墨 / 国风",
+        sub: "晕染 / 留白 / 东方意境",
+        swatch: "from-stone-300/50 via-zinc-400/30 to-stone-700/50",
+    },
+    {
+        value: "comic",
+        label: "美式漫画",
+        sub: "硬朗线条 / 网点 / 高对比",
+        swatch: "from-yellow-400/50 via-orange-500/40 to-red-600/50",
+    },
+    {
+        value: "pixel",
+        label: "像素 / 复古游戏",
+        sub: "8-bit / 16-bit 像素艺术",
+        swatch: "from-lime-400/50 via-green-500/40 to-emerald-700/50",
+    },
+    {
+        value: "noir",
+        label: "黑色电影",
+        sub: "高反差 / 单色光影",
+        swatch: "from-zinc-300/40 via-zinc-700/50 to-black/60",
+    },
+] as const;
+
 class SpecStore {
     // ── 私有状态（细粒度修改 → $state） ──
     #aspectRatio = $state<string>('9:16');
@@ -24,6 +137,13 @@ class SpecStore {
     #isLoading = $state(true);
     #error = $state<string | null>(null);
     #lastUpdated = $state<number | null>(null);
+
+    readonly specSummary = $derived.by(() => {
+        const style = videoStyles.find(vs => vs.value === this.#style);
+        const duration = episodeDurations.find(ed => ed.value === this.#duration);
+        const lang = videoLanguages.find(vl => vl.value === this.#language);
+        return `${style ? `${style.label}风格 ・ ` : ""}${this.#aspectRatio} ・ ${duration ? `单集${duration.label} ・ ` : ""}${lang ? lang.sub : ""}`
+    })
 
     // 重入保护
     #initInFlight = false;

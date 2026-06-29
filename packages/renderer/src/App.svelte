@@ -15,6 +15,7 @@
   import { i18nStore } from "$lib/store/i18n.svelte";
   import Tour from "$lib/components/Tour.svelte";
   import Confirm from "$lib/components/Confirm.svelte";
+  import { projectStore } from "$lib/store/project.svelte";
 
   // 初始化完成标记：未完成时显示加载页
   let ready = $state(false);
@@ -34,6 +35,8 @@
       await Promise.all([pluginStore.init(), i18nStore.init()]);
 
       await windowStore.maximize();
+
+      await projectStore.init();
 
       // 给加载动画一个最小展示时间，避免闪烁（不需要可删除）
       // await new Promise((r) => setTimeout(r, 600));

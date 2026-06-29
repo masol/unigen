@@ -3,6 +3,9 @@ import { toast } from "svelte-sonner";
 import { pluginStore } from "./plugin.svelte";
 import { COMMON_ORPC_ERROR_DEFS, ORPCError } from "@orpc/client";
 import { confirmStore } from "./ui/confirm.svelte";
+import type { RunState } from "@app/main/types";
+import evtbus from "$lib/utils/evtbus";
+
 type LoadingAction = "open" | "new" | null;
 
 class ProjectStore {
@@ -15,13 +18,25 @@ class ProjectStore {
      */
     #path = $state<string>("");
     #depPlugins: string[] = [];
+    #runState = $state<RunState>("idle");
     loading = $state<LoadingAction>(null);
 
     opened = $derived(this.#path.trim().length > 0)
     get path() {
         return this.#path;
     }
+    get runState(): RunState {
+        return this.#runState;
+    }
+
     isBusy = $derived(this.loading !== null);
+
+    constructor() {
+        evtbus.on("task_finished", () => {
+            console.log("task finished!!!");
+            this.#runState = "idle";
+        })
+    }
 
     private procError(e: unknown): boolean {
         let msg: string;
@@ -38,6 +53,47 @@ class ProjectStore {
         }
         toast.error(msg);
         return false;
+    }
+
+    async start(): Promise<void> {
+        try {
+            await api().project.start();
+            this.#runState = "running";
+        } catch (e) {
+            this.procError(e);
+        }
+    }
+
+    async stop(bForce = false): Promise<void> {
+        try {
+            await api().project.stop(bForce);
+            this.#runState = bForce ? "idle" : "terminating";
+        } catch (e) {
+            this.procError(e);
+        }
+    }
+
+    async watiFinish(): Promise<void> {
+        try {
+            await api().project.waitFinish();
+            this.#runState = "idle";
+        } catch (e) {
+            this.procError(e);
+        }
+    }
+
+
+    async init(): Promise<void> {
+        try {
+            this.#path = await api().project.info("path");
+            if (this.#path) {
+                // 已经打开了项目。同步依赖插件。
+                this.#depPlugins = await api().project.get("dep");
+                await pluginStore.ensurePlugins(this.#depPlugins);
+            }
+        } catch (e) {
+            this.procError(e);
+        }
     }
 
     async open(pathName?: string): Promise<boolean> {

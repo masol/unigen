@@ -5,9 +5,9 @@ import log from "electron-log/renderer";
 import { confirmStore } from "$lib/store/ui/confirm.svelte";
 import { IconBook2, IconSparkles, IconVideo } from "@tabler/icons-svelte";
 import { api } from "$lib/utils/api";
+import { projectStore } from "$lib/store/project.svelte";
 
 // ─── 类型 ───────────────────────────────────────────────────────
-export type RunState = "idle" | "running" | "terminating";
 export type LogLevel = "info" | "success" | "warn" | "error";
 
 export interface LogEntry {
@@ -79,7 +79,6 @@ export type RunTarget = "segmentation" | "shot" | "entities" | "voice" | "storyb
 // ─── Store ──────────────────────────────────────────────────────
 class DashboardStore {
     // ── 私有状态（精确选型）──────────────────────────────────────
-    #runState = $state<RunState>("idle"); // 原始值 → $state
     #elapsedSeconds = $state(0); // 原始值 → $state
     #terminatingSeconds = $state(0); // 原始值 → $state
     #logs = $state.raw<LogEntry[]>([]); // 仅整体替换（spread 新数组）→ $state.raw
@@ -89,33 +88,30 @@ class DashboardStore {
     #logTimer: ReturnType<typeof setInterval> | null = null;
     #clockTimer: ReturnType<typeof setInterval> | null = null;
     #terminateTimer: ReturnType<typeof setInterval> | null = null;
-    #finalizeFallback: ReturnType<typeof setTimeout> | null = null;
     #msgIndex = 0;
 
-    // 由 orchestrator 注入的业务回调，保持本文件无 Svelte 组件依赖
-    #onOpenPanel: ((key: InfoBlock["key"]) => void) | null = null;
 
     // ── 派生 ─────────────────────────────────────────────────────
     readonly #statusLabel = $derived(
-        this.#runState === "idle"
+        projectStore.runState === "idle"
             ? "空闲"
-            : this.#runState === "running"
+            : projectStore.runState === "running"
                 ? "运行中"
                 : "正在终止",
     );
 
     readonly #hintText = $derived(
-        this.#runState === "idle"
-            ? "点击下方按钮，开始将小说转换为视频。"
-            : this.#runState === "running"
+        projectStore.runState === "idle"
+            ? "点击下方按钮，开始将剧本转换为视频。"
+            : projectStore.runState === "running"
                 ? "每一步结果都会自动保存，再次运行不会重复计算。可随时点击「终止」，已完成的部分不会丢失。"
                 : "正在等待当前这一步完成后安全停止。若此刻强制关机，当前正在进行的这一步将作废，需要重新计算。",
     );
 
     readonly #buttonLabel = $derived(
-        this.#runState === "idle"
+        projectStore.runState === "idle"
             ? "开始运行"
-            : this.#runState === "running"
+            : projectStore.runState === "running"
                 ? "终止任务"
                 : "强制停止",
     );
@@ -129,7 +125,7 @@ class DashboardStore {
         return this.#target;
     }
     get runState() {
-        return this.#runState;
+        return projectStore.runState;
     }
     get elapsedSeconds() {
         return this.#elapsedSeconds;
@@ -184,16 +180,19 @@ class DashboardStore {
         if (this.#logTimer) clearInterval(this.#logTimer);
         if (this.#clockTimer) clearInterval(this.#clockTimer);
         if (this.#terminateTimer) clearInterval(this.#terminateTimer);
-        if (this.#finalizeFallback) clearTimeout(this.#finalizeFallback);
         this.#logTimer = this.#clockTimer = this.#terminateTimer = null;
-        this.#finalizeFallback = null;
     };
 
     // ── 状态机 ───────────────────────────────────────────────────
     async #startRunning() {
         log.debug("[DashboardStore] startRunning() called");
-        this.#runState = "running";
-        this.#elapsedSeconds = 0;
+        await projectStore.start();
+        // this.#runState = "running";
+        const startime = await api().project.startTime();
+        const nowTime = new Date().getTime();
+
+        this.#elapsedSeconds = startime > 0 ? Math.floor((nowTime - startime) / 1000) : 0;
+
         this.#logs = [];
         this.#msgIndex = 0;
         this.#pushLog("info", "任务已启动 · 节点连接正常");
@@ -216,25 +215,21 @@ class DashboardStore {
             clearInterval(this.#logTimer);
             this.#logTimer = null;
         }
-        this.#runState = "terminating";
+        // this.#runState = "terminating";
         this.#terminatingSeconds = 0;
         this.#pushLog("warn", "收到终止信号 · 等待当前节点安全收尾 …");
         log.info("[DashboardStore] terminating requested");
+        projectStore.stop(false);
 
         this.#terminateTimer = setInterval(() => {
             this.#terminatingSeconds += 1;
         }, 1000);
-
-        this.#finalizeFallback = setTimeout(() => {
-            if (this.#runState === "terminating")
-                this.#finalizeStop("节点收尾完成 · 任务已安全终止");
-        }, 6000);
     }
 
     #finalizeStop(message: string) {
+        projectStore.stop(true);
         this.#clearTimers();
         this.#pushLog("success", message);
-        this.#runState = "idle";
         this.#elapsedSeconds = 0;
         this.#terminatingSeconds = 0;
         log.info(`[DashboardStore] run stopped: ${message}`);
@@ -243,15 +238,15 @@ class DashboardStore {
     // ── 对外方法（子组件调用，箭头字段确保 this 绑定）──────────────
     handleMainButton = async (): Promise<void> => {
         log.debug(
-            `[DashboardStore] handleMainButton() called, runState=${this.#runState}`,
+            `[DashboardStore] handleMainButton() called, runState=${projectStore.runState}`,
         );
 
-        if (this.#runState === "idle") {
+        if (projectStore.runState === "idle") {
             await this.#startRunning();
             return;
         }
 
-        if (this.#runState === "running") {
+        if (projectStore.runState === "running") {
             // const ok = await confirmStore.request({
             //     title: "终止当前任务？",
             //     message:
@@ -262,7 +257,7 @@ class DashboardStore {
             return;
         }
 
-        if (this.#runState === "terminating") {
+        if (projectStore.runState === "terminating") {
             const ok = await confirmStore.request({
                 title: "强制立即停止？",
                 message:
@@ -273,21 +268,6 @@ class DashboardStore {
         }
     };
 
-    openPanel = (key: InfoBlock["key"]): void => {
-        log.debug(`[DashboardStore] openPanel() called, key=${key}`);
-        // 1. 优先回调给 orchestrator 注入的业务函数
-        if (this.#onOpenPanel) {
-            this.#onOpenPanel(key);
-            return;
-        }
-        // 2. 尚未注入业务回调
-        log.warn(`[DashboardStore] openPanel 未注入业务回调: ${key}`);
-    };
-
-    setOpenPanelHandler = (fn: (key: InfoBlock["key"]) => void): void => {
-        log.debug("[DashboardStore] setOpenPanelHandler() called");
-        this.#onOpenPanel = fn;
-    };
 
     destroy = (): void => {
         log.debug("[DashboardStore] destroy() called");

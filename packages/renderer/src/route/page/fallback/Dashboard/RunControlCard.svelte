@@ -23,6 +23,9 @@
   } from "@tabler/icons-svelte";
   import * as Select from "$lib/components/ui/select";
   import { dashboardStore, type RunTarget } from "./dashboard.svelte";
+  import { tourStore } from "$lib/store/ui/tour.svelte";
+  import type { Step } from "$lib/components/ui/walkthrough/ctx";
+  import { inputStore } from "../../../../plugins/video/mainsrv/leftbar/input-manager";
 
   function fmtTime(s: number) {
     const m = Math.floor(s / 60);
@@ -115,6 +118,28 @@
     } finally {
       isUpdatingTarget = false;
     }
+  }
+
+  const steps: Step[] = [
+    {
+      target: "ib-input-manager",
+      title: "没有剧本",
+      description: "点击这里打开剧本集管理，添加剧本后，开始运行",
+      position: "top",
+    },
+  ];
+
+  async function handleMainbutton(): Promise<void> {
+    if (dashboardStore.runState === "idle") {
+      const totalSize = inputStore.scripts.reduce((acc, item) => {
+        return acc + item.size;
+      }, 0);
+      if (totalSize <= 0) {
+        tourStore.start(steps);
+        return;
+      }
+    }
+    await dashboardStore.handleMainButton();
   }
 </script>
 
@@ -263,7 +288,7 @@
 
     <button
       type="button"
-      onclick={() => dashboardStore.handleMainButton()}
+      onclick={handleMainbutton}
       class={[
         "group relative flex size-44 items-center justify-center rounded-full border border-border/50 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background",
         dashboardStore.runState === "idle" &&

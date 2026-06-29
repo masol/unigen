@@ -7,7 +7,7 @@ export async function initAllTables(lanceDB: ILanceDB, prj: IProjectContext) {
 
     const tasks: Promise<void>[] = [];
     tasks.push(lanceDB.addTable(TableCapa, "capability"));
-    tasks.push(prj.plugin.initLanceTables(lanceDB, prj));
+    tasks.push(prj.plugin.initLanceTables(lanceDB));
 
     await Promise.all(tasks);
 }

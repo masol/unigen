@@ -8,7 +8,6 @@ import { copy, ensureDir, pathExists } from 'fs-extra';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import Logger from 'electron-log/main.js';
-// import { PrjCreator } from '$libs/project/helper/create.js';
 
 const visualref = os
     .output(z.array(z.string()))

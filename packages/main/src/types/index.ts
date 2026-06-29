@@ -4,3 +4,4 @@ export type { ModuleSource, PluginInfo, PluginStatus, PluginScope } from './shar
 export type { AppConfig, RecentProject } from './appconfig.js'
 export type { Provider, Model, ProviderProtocol, ModelAbility, ModelOption } from './shared/model.js'
 export type { FileFilterPreset } from './shared/api/sys.js'
+export type { RunState } from './blueprint/state.js'

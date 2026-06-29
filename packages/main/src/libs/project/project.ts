@@ -8,6 +8,8 @@ import { closeProject, createProject, openProject } from "./helper/create.js";
 import type { IProjectPlugin } from "./plugin.js";
 import { registProjectBuildin } from "./register.js";
 import { type IProjectController, type IProjectContext, type ControllerConstructor, metaDirName } from "./type.js";
+import { notify } from "$libs/utils/rpcevt.js";
+import { BrowserWindow } from "electron";
 
 export class ProjectContainer implements IProjectContext {
     // 项目根目录。
@@ -25,6 +27,16 @@ export class ProjectContainer implements IProjectContext {
 
     async init(projectPath: string): Promise<void> {
         this.#path = projectPath;
+    }
+
+    notify(evtName: string, payload: unknown, srcId = -1): boolean {
+        const win: BrowserWindow | null = BrowserWindow.fromId(this.#wid);
+
+        if (win && !win.isDestroyed()) {
+            notify(win, evtName, payload, srcId);
+            return true;
+        }
+        return false;
     }
 
     get plugin(): IProjectPlugin {
@@ -80,7 +92,7 @@ export class ProjectContainer implements IProjectContext {
         try {
             await this.close();
             this.#path = path;
-            this.#plugin = await pluginManager.load(configService().get("plugin"))
+            this.#plugin = await pluginManager.load(configService().get("plugin"), this)
             await openProject(this);
         } catch (e) {
             this.#path = "";
@@ -92,7 +104,7 @@ export class ProjectContainer implements IProjectContext {
         try {
             await this.close();
             this.#path = path;
-            this.#plugin = await pluginManager.load(configService().get("plugin"))
+            this.#plugin = await pluginManager.load(configService().get("plugin"), this)
             await createProject(this, bForce);
         } catch (e) {
             this.#path = "";
