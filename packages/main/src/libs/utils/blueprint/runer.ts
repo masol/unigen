@@ -1,7 +1,6 @@
 import type { IRunnerContext } from '$types/blueprint/context.js';
 import { RunState } from '$types/index.js';
 import Logger from 'electron-log/main.js';
-import { loadRunner } from './runner/index.js';
 
 
 export class CapaRunner {
@@ -62,7 +61,8 @@ export class CapaRunner {
         this.#state = "running";
 
         try {
-            const caparunner = loadRunner(ctx, capaId);
+            // @todo: 现阶段，runner并未动态变更，是否缓存caparunner? -- 需要使用updatedAt来缓存。
+            const caparunner = ctx.loadRunner(capaId);
 
             if (!caparunner) {
                 ctx.prj.notify("task_finished", { success: false, reason: `无法创建${capaId}对应的Runner` })

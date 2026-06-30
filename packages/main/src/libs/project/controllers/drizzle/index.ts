@@ -9,7 +9,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import * as schema from '$libs/utils/db/schema/index.js'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { eq } from 'drizzle-orm'
-import { PrjJob } from "../../helper/job.js";
+// import { PrjJob } from "../../helper/job.js";
 import { BaseProjectController } from "../base.js";
 import { throwNotfound, throwPrecondition } from "$libs/utils/err.js";
 import { DrizzleDBType } from "./type.js";
@@ -22,7 +22,7 @@ export class PrjDB extends BaseProjectController {
     private migrationsPath: string = ""
     private dqlite: Database.Database | null = null;
     private db: DrizzleDBType | null = null;
-    #job: PrjJob | null = null;
+    // #job: PrjJob | null = null;
     constructor(ctx: IProjectContext) {
         super(ctx)
         const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -44,17 +44,17 @@ export class PrjDB extends BaseProjectController {
     }
 
 
-    get job(): PrjJob {
-        if (!this.#job) {
-            throwNotfound(`未初始化的项目任务队列！`)
-        }
-        return this.#job;
-    }
+    // get job(): PrjJob {
+    //     if (!this.#job) {
+    //         throwNotfound(`未初始化的项目任务队列！`)
+    //     }
+    //     return this.#job;
+    // }
 
     close() {
-        if (this.#job) {
-            this.#job.forceShutdown();
-        }
+        // if (this.#job) {
+        //     this.#job.forceShutdown();
+        // }
         if (this.dqlite && this.dqlite.open) {
             try {
                 Logger.info('[Database] 正在安全断开数据库连接，写入 WAL 缓冲区...');
@@ -106,8 +106,8 @@ export class PrjDB extends BaseProjectController {
 
         this.db = drizzle(this.dqlite, { schema });
         migrate(this.db, { migrationsFolder: this.migrationsPath });
-        this.#job = new PrjJob(this.dqlite);
-        await this.#job.init();
+        // this.#job = new PrjJob(this.dqlite);
+        // await this.#job.init();
     }
 
     // 1. 让检查方法直接返回非空的 DrizzleType

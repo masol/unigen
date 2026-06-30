@@ -43,13 +43,16 @@ export class Plugin extends PluginBase {
 
         const prjDb = PrjDB.ensure(prj);
 
-        const newcapa = prjDb.upsertCapa({
-            id: entryId,
-            name: "#workflow",
-            process: [wfstr]
-        })
+        const oldEntry = prjDb.getCapaById(entryId);
+        if (!oldEntry) {
+            const newcapa = prjDb.upsertCapa({
+                id: entryId,
+                name: "#workflow",
+                process: [wfstr]
+            })
+            console.log("newcapa=", newcapa)
+        }
 
-        console.log("newcapa=", newcapa)
 
         prjDb.set(ProjectDbKeys.entry_capa, entryId);
 

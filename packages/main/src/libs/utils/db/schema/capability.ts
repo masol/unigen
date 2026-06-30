@@ -1,6 +1,6 @@
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
-import type { FewShotExample } from './capahelper.js';
+import type { CapaIOType, FewShotExample } from './capahelper.js';
 
 /**
  * 2. 定义 Drizzle ORM Schema (SQLite 兼容版本)
@@ -20,8 +20,8 @@ export const capabilities = sqliteTable('capabilities', {
     // 2. SQLite 不支持原生 Array（文本数组）
     // 最佳实践：使用 text 类型的 json 模式模拟，并指定 TypeScript 泛型
     // 注意：SQLite 的默认值需要传入安全的 JSON 字符串字符串 '[]'
-    input: text('input', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
-    output: text('output', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+    input: text('input', { mode: 'json' }).$type<CapaIOType[]>().notNull().default(sql`'[]'`),
+    output: text('output', { mode: 'json' }).$type<CapaIOType[]>().notNull().default(sql`'[]'`),
     process: text('process', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
     negative: text('negative', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
     criteria: text('criteria', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),

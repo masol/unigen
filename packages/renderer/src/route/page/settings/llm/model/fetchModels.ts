@@ -1,18 +1,20 @@
 // fetchModels.ts
 import { api } from "$lib/utils/api";
 import type { ModelOption } from "../types";
-import memoize from 'memoize';
+// import memoize from 'memoize';
+import pMemoize from 'p-memoize';   // 负责所有【异步】请求/I/O
 
 
 async function fetchImpl(baseURL: string, apiKey: string): Promise<ModelOption[]> {
     const result = await api().system.listmodel({ baseURL, apiKey })
-    console.log("result=", result);
+    // console.log("result=", result);
     return result as ModelOption[]
 }
 
-const memoizedFetch = memoize(fetchImpl, {
-    cacheKey: arguments_ => arguments_.join(','),
-    maxAge: 120000,
+const memoizedFetch = pMemoize(fetchImpl, {
+    cacheKey: ([baseURL, apiKey]) => `${baseURL},${apiKey}`,
+    maxAge: 300000, // 5分钟。
+    // shouldCache: (result) => { } // 默认就是“失败不缓存”的
 });
 
 /**

@@ -2,6 +2,8 @@ import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { IProjectContext } from '$libs/project/type.js';
 import { IRunnerContext } from '$types/blueprint/context.js';
 import log from 'electron-log/main.js';
+import { ICapaRunner } from './runner/type.js';
+import { loadRunner } from './runner/index.js';
 
 
 export class RunnerContext implements IRunnerContext {
@@ -62,6 +64,11 @@ export class RunnerContext implements IRunnerContext {
     remove(key: string): void {
         this.prjdb.remove(key);
     }
+
+    loadRunner(capaId: string): ICapaRunner | null {
+        return loadRunner(this, capaId);
+    }
+
 
     // ==========================================
     // 📝 日志接口 (适配 electron-log) 

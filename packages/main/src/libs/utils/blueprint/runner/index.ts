@@ -5,15 +5,17 @@ import type { IRunnerContext } from "$types/blueprint/context.js";
 import { DirectedGraph } from "graphology";
 import { ICapaRunner } from "./type.js";
 import { DagRunner } from "./dagrunner.js";
+import { intereg } from "./intereg.js";
+// import memoize from 'memoize';
 
 
+// 不需要使用memoize来缓存，并没有太高开销，反而增加内存泄漏风险(ICapaRunner被缓存而无法释放)
 function loadDag(capa: Capability): ICapaRunner | null {
-
     const graphString = capa.process?.join('');
     if (graphString) {
         const serializedObject = JSON.parse(graphString);
         const dag = DirectedGraph.from(serializedObject);
-        return new DagRunner(dag);
+        return new DagRunner(capa, dag);
     }
     return null;
 }
@@ -24,11 +26,12 @@ export function loadRunner(ctx: IRunnerContext, capaId: string): ICapaRunner | n
     const capa = prjdb.getCapaById(capaId);
     if (!capa) return null;
     if (isWorkflow(capa)) {
+        // console.log("capa==", capa)
         return loadDag(capa);
     }
     const interName = getInternalName(capa);
     if (interName) {
-        throwNotimplement(`尚未实现Internal Run:${interName}`)
+        return intereg.get(interName);
     }
     throwNotimplement(`尚未实现通用LLM调用:${capa}`)
 }

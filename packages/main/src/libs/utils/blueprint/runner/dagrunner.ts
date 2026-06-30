@@ -1,23 +1,61 @@
 import type { IRunnerContext } from '$types/blueprint/context.js';
 import Logger from 'electron-log/main.js';
 import { DirectedGraph } from 'graphology'
-import { forEachTopologicalGeneration } from 'graphology-dag';
+import { forEachTopologicalGeneration, hasCycle } from 'graphology-dag';
 import { delay } from '../../promise.js';
-import type { ICapaRunner } from './type.js';
+import { throwNotfound, throwPrecondition } from '$libs/utils/err.js';
+import { BaseRunner } from './base.js';
+import { Capability } from '$types/blueprint/capability.js';
 
-export class DagRunner implements ICapaRunner {
-    constructor(protected dag: DirectedGraph) {
+export class DagRunner extends BaseRunner {
+    constructor(capa: Capability, protected dag: DirectedGraph) {
+        super(capa);
     }
 
-    private async execTask(id: string): Promise<void> {
+    private async execTask(ctx: IRunnerContext, id: string): Promise<unknown> {
+
         await delay(Math.random() * 10000);
         Logger.debug(`runnig id:${id}`);
+        return;
+
+        const runner = ctx.loadRunner(id);
+        if (runner) {
+            await runner?.run(ctx);
+        } else {
+            throwNotfound(`无法加载id为${id}的能力对象。`)
+        }
+    }
+
+    /**
+ * 前置校验图的合法性
+ */
+    private validateGraph(): void {
+        // 1. 空图检查
+        if (this.dag.order === 0) {
+            const msg = '工作流中没有任何节点，无法执行。';
+            Logger.error(msg);
+            throwPrecondition(msg);
+        }
+
+        if (hasCycle(this.dag)) {
+            const msg = '工作流初始化失败：检测到图结构中存在死循环（循环依赖）！';
+            Logger.error(msg);
+            throwPrecondition(msg);
+        }
+
+        // @todo: 当前图中如果有孤儿节点(Disconnected Nodes:出入度都为0)，会在第一代中将其执行，这里是否预检查及处理？
     }
 
     // 3. 核心运行函数：按“代”并行
-    async run(ctx: IRunnerContext): Promise<void> {
+    // DAG不需要输入，也不返回值。
+    async runImpl(ctx: IRunnerContext, _input: unknown[]): Promise<unknown> {
         // 收集计算出的“代”队列
         const generations: string[][] = [];
+
+        this.validateGraph();
+
+        // 状态检查：如果校验完就已经被取消了，直接退出
+        if (ctx.isAborted || ctx.isForceKilled) return;
 
         forEachTopologicalGeneration(this.dag, (generation) => {
             // generation 是一个包含当前代所有节点 ID 的数组
@@ -38,7 +76,7 @@ export class DagRunner implements ICapaRunner {
             Logger.debug(`\n[第 ${i + 1} 代] 准备并行执行节点: ${JSON.stringify(currentGen)}`);
 
             // 2. 映射任务：建议修改 execTask 签名，将 ctx 或 ctx.signal 传入，以便底层任务能感知取消
-            const promises = currentGen.map(id => this.execTask(id));
+            const promises = currentGen.map(id => this.execTask(ctx, id));
 
             // 1. 提前定义好监听函数和 reject 引用
             let abortHandler: (() => void) | null = null;

@@ -1,4 +1,5 @@
 import type { IProjectContext } from "$libs/project/type.js";
+import { ICapaRunner } from "$libs/utils/blueprint/runner/type.js";
 
 export interface IRunnerContext {
     /** 原生的 Web API AbortSignal，可透传给支持取消的异步底层操作 */
@@ -40,6 +41,14 @@ export interface IRunnerContext {
      * @param force 是否属于强制杀死
      */
     triggerAbort(force?: boolean): void;
+
+
+    /**
+     * 加载特定能力id对应的执行对象。
+     * @param capaId capability id.
+     */
+    loadRunner(capaId: string): ICapaRunner | null
+
 
     // ==========================================
     // 📝 日志接口 (适配 electron-log)
