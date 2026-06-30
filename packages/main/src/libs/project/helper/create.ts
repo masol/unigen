@@ -1,13 +1,14 @@
 // import { pathExists } from "fs-extra";
 import { ORPCError } from "@orpc/server";
 import { COMMON_ORPC_ERROR_DEFS } from "@orpc/client";
-import { PrjDB } from "../controllers/drizzle.js";
+import { PrjDB } from "../controllers/drizzle/index.js";
 import { IProjectContext } from "../type.js";
 import Logger from "electron-log/main.js";
 import { isDirEmpty } from "$libs/utils/sys/fs.js";
 import { emptyDir } from "fs-extra";
 import { configService } from "$libs/store/index.js";
 import { LanceDB } from "../controllers/lance/index.js";
+import { ProjectDbKeys } from "../dbkeys.js";
 
 
 
@@ -16,7 +17,9 @@ export async function openProject(prj: IProjectContext): Promise<void> {
     const pdb = PrjDB.ensure(prj);
     await pdb.open(false);
     const lance = LanceDB.ensure(prj);
-    await lance.upcert();
+    await lance.open();
+
+    await prj.plugin.init(prj, false);
 }
 
 export async function closeProject(prj: IProjectContext): Promise<void> {
@@ -49,13 +52,15 @@ export async function createProject(prj: IProjectContext, bForce = false): Promi
 
     const pdb = PrjDB.ensure(prj);
     await pdb.open(true);
-    pdb.set("dep", [configService().get("plugin")]);
+    pdb.set(ProjectDbKeys.depplugins, [configService().get("plugin")]);
     pdb.set("version", __APP_VERSION__);
     const embed = configService().get("embed_model");
     if (embed) {
         pdb.set("embed", configService().get("embed_model"));
         const lance = LanceDB.ensure(prj);
-        await lance.upcert();
+        await lance.open();
     }
+
+    await prj.plugin.init(prj, true);
     return true
 }

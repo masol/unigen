@@ -1,26 +1,14 @@
-import type { EmbeddingModelV3, JSONObject } from '@ai-sdk/provider';
+import type { EmbeddingModelV3 } from '@ai-sdk/provider';
 import type { Provider } from '$types/index.js';
 import type { EmbedManyResult, EmbedResult } from 'ai';
+import type { EmbedingImpl, EmbedingOptions, EmbedingOp } from './type.js';
 import { embed, embedMany } from 'ai'
 import { createProvider } from './provider.js';
+import { localEmbeding } from './node-llama-cpp/embed.js';
+import { AutoPrefixEmbed } from './autoprefix.js';
 
 
-export type EmbedingOptions = {
-    providerOptions?: Record<string, JSONObject>,
-    maxRetries?: number,
-    abortSignal?: AbortSignal,
-    headers?: Record<string, string>
-}
-
-export type EmbedFunc = (value: string, opts?: EmbedingOptions) => Promise<EmbedResult>
-export type EmbedManyFunc = (value: string[], opts?: EmbedingOptions) => Promise<EmbedManyResult>
-
-export type EmbedingInfo = {
-    embed: EmbedFunc;
-    embedMany: EmbedManyFunc;
-}
-
-function getAiEmbeding(embedModel: EmbeddingModelV3): Omit<EmbedingInfo, "vecSize"> {
+function getAiEmbeding(embedModel: EmbeddingModelV3): EmbedingImpl {
     return {
         embed: async (value: string, opts?: EmbedingOptions): Promise<EmbedResult> => {
             return await embed({
@@ -39,9 +27,19 @@ function getAiEmbeding(embedModel: EmbeddingModelV3): Omit<EmbedingInfo, "vecSiz
     }
 }
 
-//provider: $llama-cpp： node-llama-cpp: 以$开头的Provider为内建Provider.
-export function createEmbeding(provider: Provider, modelId: string): EmbedingInfo {
-    const pvInst = createProvider(provider);
 
-    return getAiEmbeding(pvInst.embeddingModel(modelId))
+//provider: $llama-cpp： node-llama-cpp: 以$开头的Provider为内建Provider.
+export async function createEmbeding(modelId: string, provider?: Provider): Promise<EmbedingOp> {
+    let embedHandle: EmbedingImpl;
+    if (provider) {
+        const pvInst = createProvider(provider);
+
+        embedHandle = getAiEmbeding(pvInst.embeddingModel(modelId))
+    } else {
+        // 创建本地embeding. 
+        embedHandle = await localEmbeding.init(modelId);
+    }
+
+    return new AutoPrefixEmbed(embedHandle, modelId);
+
 }

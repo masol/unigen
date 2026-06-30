@@ -1,4 +1,4 @@
-import type { IWorkflowContext } from "./context.js";
+import type { IRunnerContext } from "./context.js";
 import type { RunState } from "./state.js";
 
 export interface IWorkflowController {
@@ -6,7 +6,7 @@ export interface IWorkflowController {
     /** 
      * 获取对外的只读上下文实例
      */
-    readonly context: IWorkflowContext;
+    readonly context: IRunnerContext;
 
     /**
      * 触发工作流终止

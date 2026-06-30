@@ -1,45 +1,32 @@
 import { ILanceDB } from "$libs/project/controllers/lance/type.js";
 import { IProjectPlugin } from "$libs/project/plugin.js";
 import { IProjectContext } from "$libs/project/type.js";
-import { WorkflowContext } from "$libs/utils/blueprint/context.js";
-import { WorkflowRunner } from "$libs/utils/blueprint/runer.js";
-import { throwPrecondition } from "$libs/utils/err.js";
-import type { RunState } from "$types/index.js";
-import { DirectedGraph } from "graphology";
 import { PluginBase } from "../pluginbase.js";
 import { TableFact } from "./lance/fact.js";
+import { LanceDB } from "$libs/project/controllers/lance/index.js";
+import { DirectedGraph } from "graphology";
+import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
+import { ProjectDbKeys } from "$libs/project/dbkeys.js";
 
+
+const entryId = "40f832db-9735-4de0-91b1-df17311aa27d";
 
 export class Plugin extends PluginBase {
     static type: string = "video";
     static async create(prj: IProjectContext): Promise<IProjectPlugin> {
         const inst = new Plugin(prj);
-        await inst.init();
         return inst;
     }
     ////////////////////////////////////////////////
-    #runner: WorkflowRunner | null = null;
 
     constructor(protected ctx: IProjectContext) {
         super();
     }
 
-    private ensureRunner(): WorkflowRunner {
-        if (!this.#runner) {
-            throwPrecondition("[video plugin] runner未初始化。")
-        }
-        return this.#runner;
-    }
+    async init(prj: IProjectContext, _bCreate: boolean) {
+        const lance = LanceDB.ensure(prj);
+        await this.initLanceTables(lance);
 
-    get runState(): RunState {
-        return this.#runner ? this.#runner.state : 'idle';
-    }
-
-    get startTime(): number {
-        return this.#runner ? this.#runner.startTime : 0;
-    }
-
-    async init() {
         const graph = new DirectedGraph();
         graph.addNode('A');
         graph.addNode('B');
@@ -51,26 +38,38 @@ export class Plugin extends PluginBase {
         graph.addEdge('B', 'D'); // B 执行完才能执行 D
         graph.addEdge('C', 'D'); // C 执行完才能执行 D
 
-        this.#runner = new WorkflowRunner(graph);
+        const serializedObject = graph.export();
+        const wfstr = JSON.stringify(serializedObject);
+
+        const prjDb = PrjDB.ensure(prj);
+
+        const newcapa = prjDb.upsertCapa({
+            id: entryId,
+            name: "#workflow",
+            process: [wfstr]
+        })
+
+        console.log("newcapa=", newcapa)
+
+        prjDb.set(ProjectDbKeys.entry_capa, entryId);
+
+        // const graph = new DirectedGraph();
+        // graph.addNode('A');
+        // graph.addNode('B');
+        // graph.addNode('C');
+        // graph.addNode('D');
+
+        // graph.addEdge('A', 'B'); // A 执行完才能执行 B
+        // graph.addEdge('A', 'C'); // A 执行完才能执行 C
+        // graph.addEdge('B', 'D'); // B 执行完才能执行 D
+        // graph.addEdge('C', 'D'); // C 执行完才能执行 D
+
+        // this.#runner = new CapaRunner(graph);
     }
 
-    async initLanceTables(lanceDB: ILanceDB): Promise<void> {
+    private async initLanceTables(lanceDB: ILanceDB): Promise<void> {
         const tasks: Promise<void>[] = [];
         tasks.push(lanceDB.addTable(TableFact, "fact"));
         await Promise.all(tasks);
     }
-
-    async waitFinish(): Promise<void> {
-        return this.ensureRunner().waitFinish();
-    }
-
-    start(): void {
-        const ctx = new WorkflowContext(this.ctx);
-        this.ensureRunner().start(ctx);
-    }
-
-    stop(bForce: boolean): void {
-        this.ensureRunner().stop(bForce);
-    }
-
 }

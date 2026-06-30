@@ -8,7 +8,7 @@ import { projectManager } from '$libs/project/manager.js';
 // import { configService } from '$libs/store/index.js';
 import { UNIGEN_ERROR_DEFS } from '$libs/utils/err.js';
 import { COMMON_ORPC_ERROR_DEFS } from "@orpc/client"
-import { PrjDB } from '$libs/project/controllers/drizzle.js';
+import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 // import { PrjCreator } from '$libs/project/helper/create.js';
 
 const open = os

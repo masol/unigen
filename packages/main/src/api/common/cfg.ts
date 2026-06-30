@@ -2,11 +2,12 @@
 import { z } from 'zod'
 import { os } from '@orpc/server'
 import { configService } from '$libs/store/index.js'
-import { app, nativeTheme } from 'electron'
-import { basename, join } from 'path'
+import { nativeTheme } from 'electron'
+import { basename } from 'path'
 import FastGlob from 'fast-glob'
 import { ensureDir } from 'fs-extra'
 import { secondConfig } from '$libs/store/second.js'
+import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
 
 /**
  * 获取整个配置对象
@@ -77,9 +78,7 @@ const useDark = os
         return nativeTheme.shouldUseDarkColorsForSystemIntegratedUI
     })
 
-async function getModels(sub: string): Promise<Array<{ value: string, label: string }>> {
-    const dataPath = app.getPath("userData");
-    const basepath = join(dataPath, "models", sub);
+async function getModels(basepath: string): Promise<Array<{ value: string, label: string }>> {
     await ensureDir(basepath);
     const files = await FastGlob(FastGlob.convertPathToPattern(basepath) + '/**/*.gguf', {
         absolute: true
@@ -98,7 +97,7 @@ const getEmbedings = os
         label: z.string()
     })))
     .handler(async () => {
-        return getModels("embeding");
+        return getModels(embedingPath());
     })
 
 const getReranks = os
@@ -107,7 +106,7 @@ const getReranks = os
         label: z.string()
     })))
     .handler(async () => {
-        return getModels("rerank");
+        return getModels(rerankPath());
     })
 
 export default {

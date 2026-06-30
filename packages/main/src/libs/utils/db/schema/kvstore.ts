@@ -1,10 +1,10 @@
-import { sqliteTable, text, blob } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 export const kvStore = sqliteTable('kv_store', {
     key: text('key').primaryKey(),
 
-    value: blob('value', { mode: 'json' })
+    value: text('value', { mode: 'json' })
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .$type<Record<string, any> | any[] | string | number | boolean>()
         .notNull(),

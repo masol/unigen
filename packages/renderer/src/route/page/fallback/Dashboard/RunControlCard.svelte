@@ -42,31 +42,31 @@
     step: number;
   }[] = [
     {
-      value: "segmentation",
-      label: "剧本分段",
-      desc: "完成剧本切分后停止",
-      icon: IconScissors,
-      step: 1,
-    },
-    {
       value: "shot",
-      label: "镜头规划",
-      desc: "完成镜头序列拆分后停止",
+      label: "镜头目标",
+      desc: "确定镜头要表达的目标",
       icon: IconCamera,
-      step: 2,
+      step: 1,
     },
     {
       value: "entities",
       label: "实体生成",
       desc: "完成人物 / 场景实体抽取后停止",
       icon: IconUsers,
-      step: 3,
+      step: 2,
     },
     {
       value: "voice",
       label: "语音生成",
       desc: "完成台词配音合成后停止",
       icon: IconMicrophone,
+      step: 3,
+    },
+    {
+      value: "segmentation",
+      label: "镜头确定",
+      desc: "确定镜头拍摄细节",
+      icon: IconScissors,
       step: 4,
     },
     {

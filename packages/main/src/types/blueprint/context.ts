@@ -1,6 +1,6 @@
 import type { IProjectContext } from "$libs/project/type.js";
 
-export interface IWorkflowContext {
+export interface IRunnerContext {
     /** 原生的 Web API AbortSignal，可透传给支持取消的异步底层操作 */
     readonly signal: AbortSignal;
 

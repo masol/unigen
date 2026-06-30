@@ -15,7 +15,7 @@ export type Events = {
     "cfg:set": { name: string; value: unknown };
     "sys:usedark": boolean  // 更改了操作系统的深色/浅色模式。
     "lang:changed": string  // 更新了语言设置。
-    "task_finished": number // 任务结束，启动时间。
+    "task_finished": { success: boolean, reason?: string } // 任务结束，启动时间。
     // 用户相关事件
     "user:login": { id: number; name: string; avatar?: string };
     "user:logout": void;

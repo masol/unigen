@@ -1,4 +1,4 @@
-import { sqliteTable, text, blob, integer, index, primaryKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, index, primaryKey } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 
@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm';
 // 整体被视为一个frame(表达一次workflow自演化)
 export const execFrame = sqliteTable('exec_frame', {
     key: text('key').notNull(),
-    value: blob('value', { mode: 'json' })
+    value: text('value', { mode: 'json' })
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .$type<Record<string, any> | any[] | string | number | boolean>()
         .notNull(),

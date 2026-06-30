@@ -5,6 +5,7 @@ import { COMMON_ORPC_ERROR_DEFS, ORPCError } from "@orpc/client";
 import { confirmStore } from "./ui/confirm.svelte";
 import type { RunState } from "@app/main/types";
 import evtbus from "$lib/utils/evtbus";
+import { DbKeys } from "../../plugins/video/dbkeys";
 
 type LoadingAction = "open" | "new" | null;
 
@@ -32,8 +33,8 @@ class ProjectStore {
     isBusy = $derived(this.loading !== null);
 
     constructor() {
-        evtbus.on("task_finished", () => {
-            console.log("task finished!!!");
+        evtbus.on("task_finished", (evt) => {
+            console.log("task finished!!!", evt.success, evt.reason ?? "");
             this.#runState = "idle";
         })
     }
@@ -62,7 +63,7 @@ class ProjectStore {
             console.log("this.#runState=", this.#runState)
         } catch (e) {
             this.procError(e);
-        }   
+        }
     }
 
     async stop(bForce = false): Promise<void> {
@@ -89,7 +90,7 @@ class ProjectStore {
             this.#path = await api().project.info("path");
             if (this.#path) {
                 // 已经打开了项目。同步依赖插件。
-                this.#depPlugins = await api().project.get("dep");
+                this.#depPlugins = await api().project.get(DbKeys.depplugins);
                 await pluginStore.ensurePlugins(this.#depPlugins);
             }
         } catch (e) {
@@ -101,7 +102,7 @@ class ProjectStore {
         try {
             await api().project.open(pathName);
             this.#path = await api().project.info("path");
-            this.#depPlugins = await api().project.get("dep");
+            this.#depPlugins = await api().project.get(DbKeys.depplugins);
             await pluginStore.ensurePlugins(this.#depPlugins);
             return true;
         } catch (e) {
@@ -112,7 +113,7 @@ class ProjectStore {
     private async doCreate(bForce: boolean, pathName?: string): Promise<boolean> {
         await api().project.create({ path: pathName, force: bForce });
         this.#path = await api().project.info("path");
-        this.#depPlugins = await api().project.get("dep");
+        this.#depPlugins = await api().project.get(DbKeys.depplugins);
         await pluginStore.ensurePlugins(this.#depPlugins);
         return true;
     }

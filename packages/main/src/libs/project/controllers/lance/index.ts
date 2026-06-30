@@ -3,17 +3,14 @@ import { metaDirName, type IProjectContext } from '../../type.js';
 import { join } from 'node:path';
 import Logger from 'electron-log/main.js';
 import { BaseProjectController } from '../base.js';
-import { throwNotfound, throwNotimplement, throwPrecondition, throwUnprcessable } from '$libs/utils/err.js';
-import pMap from 'p-map'
-import { createEmbeding, type EmbedingInfo } from '$libs/utils/model/factory/embed.js';
-import { PrjDB } from '../drizzle.js';
-import { configService } from '$libs/store/index.js';
-import { cluster, isNumber } from 'radashi'
-import { Provider } from '$types/index.js';
+import { throwNotfound, throwPrecondition } from '$libs/utils/err.js';
+import type { EmbedingOp, EmbedType } from '$libs/utils/model/factory/type.js';
+import { PrjDB } from '../drizzle/index.js';
 import { ILanceDB } from './type.js';
 import { getLanceDB, type LanceDBType } from './lancedb.js'
 import { TableBase, TableConstructor } from './tablebase.js';
 import { initAllTables } from './tables/index.js';
+import { LanceEmbeding } from './embed.js';
 
 export const lanceDirName = "lance"
 
@@ -21,9 +18,8 @@ export const lanceDirName = "lance"
 
 export class LanceDB extends BaseProjectController implements ILanceDB {
     #db: Connection | null = null;
-    #embed: EmbedingInfo | null = null;
-    #embeddingSize: number = -1;
     #lanceInst: LanceDBType | null = null;
+    #embedInst: LanceEmbeding = new LanceEmbeding();
 
     private registry = new Map<TableConstructor, TableBase>();
 
@@ -48,10 +44,7 @@ export class LanceDB extends BaseProjectController implements ILanceDB {
     }
 
     get embedSize(): number {
-        if (!isNumber(this.#embeddingSize) || this.#embeddingSize <= 0) {
-            throwPrecondition("[LanceDB] 未配置向量支持。")
-        }
-        return this.#embeddingSize;
+        return this.#embedInst.embedSize;
     }
 
     get lanceInst(): LanceDBType {
@@ -61,31 +54,12 @@ export class LanceDB extends BaseProjectController implements ILanceDB {
         return this.#lanceInst
     }
 
-    async doEmbedding(batch: string[]): Promise<number[][]> {
-        // 你的模型生成向量逻辑，返回 Array<Array<number>>
-        // 1. 使用 radashi 的 cluster 将数组切分为最多 9 个一组的二维数组--千问
-        const chunks = cluster(batch, 9); // e.g. [['a', 'b', ...], ['x', 'y']]
-
-
-        const nestedResults = await pMap(
-            chunks,
-            async (chunk) => {
-                // 调用你的本地/远程模型接口
-                const result = await this.#embed?.embedMany(chunk);
-                if (!result?.embeddings) {
-                    throwUnprcessable("[LanceDB] Embedding 批处理失败.")
-                }
-                return result?.embeddings;
-            },
-            { concurrency: 6 }
-        );
-        // 3. nestedResults 是一个三维数组 [[[...], [...]], [[...]]]
-        // 使用原生的 .flat() 将其展平为 LanceDB 需要的二维数组 (Array<Array<number>>)
-        return nestedResults.flat();
+    async doEmbedding(batch: string[], type: EmbedType): Promise<number[][]> {
+        return this.#embedInst.doEmbedding(batch, type);
     }
 
 
-    static ensure(ctx: IProjectContext) { return this.coreEnsure(this, ctx); }
+    static ensure(ctx: IProjectContext): LanceDB { return this.coreEnsure(this, ctx); }
 
 
     // 是否成功创建--是否提供了系统级的embed.
@@ -100,62 +74,17 @@ export class LanceDB extends BaseProjectController implements ILanceDB {
         return this.#db;
     }
 
-    get embed(): EmbedingInfo {
-        if (!this.#embed) {
-            throwNotfound(`lance无法获取向量服务`)
-        }
-        return this.#embed;
+    get embed(): EmbedingOp {
+        return this.#embedInst.embed;
     }
 
     private async initEmbed() {
         const prjdb = PrjDB.ensure(this.ctx);
-        const curVecModelName = configService().get("embed_model");
-        if (!curVecModelName) {
-            const msg = "[LanceDB] 未设置向量模型，这将禁用RAG及知识消歧，降低任务准确度。";
-            Logger.warn(msg)
-            throwPrecondition(msg);
-        }
-
-        const vecModelName = prjdb.get<string>("vecModelName")
-        const embdingSize = prjdb.get<number>("embdingSize")
-        if (vecModelName && vecModelName !== curVecModelName) {
-            throwNotimplement(`尚未支持lanceDB切换向量模型，期望模型:${vecModelName}`)
-        }
-
-        const finalEmbedModelName = vecModelName || curVecModelName;
-
-        const providers = configService().get('models');
-        let providerCfg: Provider | undefined;
-        let modelId: string | undefined;
-        // vecModelName
-        if (finalEmbedModelName?.startsWith("::")) {
-            const embedModelInfo = finalEmbedModelName.split("::");
-            modelId = embedModelInfo.at(-1);
-            const pdId = embedModelInfo.at(-2);
-            providerCfg = providers.find((p) => p.id === pdId);
-        } else {
-            throwNotimplement("尚未实现本地嵌入")
-        }
-
-        if (!providerCfg || !modelId) {
-            throwPrecondition(`未设置/已删除对应的向量嵌入的提供商:${finalEmbedModelName}`)
-        }
-
-        this.#embed = createEmbeding(providerCfg, modelId);
-        if (!isNumber(embdingSize) || embdingSize <= 0) {
-            // 需要计算当前向量模型的尺寸。
-            const vecInfo = await this.embed.embed("x");
-            this.#embeddingSize = vecInfo.embedding.length
-            // console.log("this.#embeddingSize=", this.#embeddingSize);
-            prjdb.set("vecModelName", finalEmbedModelName);
-            prjdb.set("embdingSize", this.#embeddingSize);
-        } else {
-            this.#embeddingSize = embdingSize;
-        }
-        Logger.debug(`[LanceDB] 使用${finalEmbedModelName}嵌入向量，维度为${this.#embeddingSize}`)
+        return await this.#embedInst.init(prjdb);
     }
 
-    async upcert(): Promise<void> {
+    // 打开数据库库，如果已经打开，直接返回。
+    async open(): Promise<void> {
         if (this.#db) return;
         const lancePath = join(this.ctx.path, metaDirName, lanceDirName);
 
@@ -167,7 +96,7 @@ export class LanceDB extends BaseProjectController implements ILanceDB {
             this.#db = await this.lanceInst.connect(lancePath, {
                 storageOptions: { timeout: '10s' }
             });
-            await initAllTables(this, this.ctx);
+            await initAllTables(this);
 
             Logger.debug(`[LanceDB] 数据库已成功连接.`);
             return;

@@ -1,10 +1,10 @@
-import { PrjDB } from '$libs/project/controllers/drizzle.js';
+import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { IProjectContext } from '$libs/project/type.js';
-import { IWorkflowContext } from '$types/blueprint/context.js';
+import { IRunnerContext } from '$types/blueprint/context.js';
 import log from 'electron-log/main.js';
 
 
-export class WorkflowContext implements IWorkflowContext {
+export class RunnerContext implements IRunnerContext {
     readonly signal: AbortSignal;
     readonly prj: IProjectContext;
     readonly prjdb: PrjDB;

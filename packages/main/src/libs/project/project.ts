@@ -25,9 +25,9 @@ export class ProjectContainer implements IProjectContext {
         registProjectBuildin(this);
     }
 
-    async init(projectPath: string): Promise<void> {
-        this.#path = projectPath;
-    }
+    // async init(projectPath: string): Promise<void> {
+    //     this.#path = projectPath;
+    // }
 
     notify(evtName: string, payload: unknown, srcId = -1): boolean {
         const win: BrowserWindow | null = BrowserWindow.fromId(this.#wid);
