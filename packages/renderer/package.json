@@ -12,7 +12,7 @@
   },
   "devDependencies": {
     "@fontsource-variable/inter": "^5.2.8",
-    "@inlang/paraglide-js": "^2.19.0",
+    "@inlang/paraglide-js": "^2.20.2",
     "@internationalized/date": "^3.12.2",
     "@lucide/svelte": "^0.554.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
@@ -21,7 +21,7 @@
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.0",
     "@tsconfig/svelte": "^5.0.8",
-    "@types/node": "^25.9.3",
+    "@types/node": "^26.1.0",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
     "paneforge": "^1.0.2",
@@ -45,19 +45,19 @@
   "dependencies": {
     "@floating-ui/dom": "^1.7.6",
     "@formkit/auto-animate": "^0.9.0",
-    "@orpc/client": "^1.14.5",
-    "awilix": "^13.0.4",
+    "@orpc/client": "^1.14.6",
+    "awilix": "^13.0.5",
     "dayjs": "^1.11.21",
     "destr": "^2.0.5",
     "electron-log": "^5.4.4",
     "hotkeys-js": "^4.0.4",
     "mitt": "^3.0.1",
     "mode-watcher": "^1.1.0",
-    "p-map": "^7.0.4",
+    "p-map": "^7.0.5",
     "p-memoize": "^8.0.0",
     "p-timeout": "^7.0.1",
     "radashi": "^12.9.1",
     "svelte-motion": "^0.12.2",
-    "svelte-spa-router": "^5.1.0"
+    "svelte-spa-router": "^5.1.1"
   }
 }
