@@ -9,7 +9,7 @@
     IconAlertTriangle,
     IconClock,
   } from "@tabler/icons-svelte";
-  import { dashboardStore } from "./dashboard.svelte";
+  import { dashboardStore } from "./dashstore";
 
   function fmtTime(s: number) {
     const m = Math.floor(s / 60);

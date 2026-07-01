@@ -8,7 +8,7 @@
   import RunControlCard from "./RunControlCard.svelte";
   import InfoBlocksGrid from "./InfoBlocksGrid.svelte";
   import RunLogPanel from "./RunLogPanel.svelte";
-  import { dashboardStore } from "./dashboard.svelte";
+  import { dashboardStore } from "./dashstore";
 
   onDestroy(() => dashboardStore.destroy());
 </script>
