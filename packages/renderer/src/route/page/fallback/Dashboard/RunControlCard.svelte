@@ -22,7 +22,7 @@
     IconWand,
   } from "@tabler/icons-svelte";
   import * as Select from "$lib/components/ui/select";
-  import { dashboardStore, type RunTarget } from "./dashstore";
+  import { dashboardStore, type RunTarget } from "./dashstore.svelte";
   import { tourStore } from "$lib/store/ui/tour.svelte";
   import type { Step } from "$lib/components/ui/walkthrough/ctx";
   import { inputStore } from "../../../../plugins/video/mainsrv/leftbar/input-manager";

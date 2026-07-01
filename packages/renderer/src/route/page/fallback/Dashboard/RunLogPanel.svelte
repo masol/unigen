@@ -13,7 +13,7 @@
     IconCircleDashed,
     IconLoader2,
   } from "@tabler/icons-svelte";
-  import { dashboardStore } from "./dashstore";
+  import { dashboardStore } from "./dashstore.svelte";
 
   function nowStr() {
     const d = new Date();
