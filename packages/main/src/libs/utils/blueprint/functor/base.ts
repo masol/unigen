@@ -2,7 +2,7 @@
 import { Capability } from "$types/blueprint/capability.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import { isPlainObject } from "radashi";
-import { ICapaRunner } from "./type.js";
+import { ICapaFunctor } from "./type.js";
 import { CapaIOType } from "$libs/utils/db/schema/capahelper.js";
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 
@@ -16,7 +16,7 @@ function getOutputValue(output: any, idx: number): any {
     return null;
 }
 
-export abstract class BaseRunner implements ICapaRunner {
+export abstract class BaseFunctor implements ICapaFunctor {
 
     constructor(protected capa: Capability) { }
 

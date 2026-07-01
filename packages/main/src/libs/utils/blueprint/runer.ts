@@ -62,7 +62,7 @@ export class CapaRunner {
 
         try {
             // @todo: 现阶段，runner并未动态变更，是否缓存caparunner? -- 需要使用updatedAt来缓存。
-            const caparunner = ctx.loadRunner(capaId);
+            const caparunner = ctx.loadFunctor(capaId);
 
             if (!caparunner) {
                 ctx.prj.notify("task_finished", { success: false, reason: `无法创建${capaId}对应的Runner` })

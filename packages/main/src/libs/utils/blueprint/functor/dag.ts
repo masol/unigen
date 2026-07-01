@@ -4,10 +4,10 @@ import { DirectedGraph } from 'graphology'
 import { forEachTopologicalGeneration, hasCycle } from 'graphology-dag';
 import { delay } from '../../promise.js';
 import { throwNotfound, throwPrecondition } from '$libs/utils/err.js';
-import { BaseRunner } from './base.js';
+import { BaseFunctor } from './base.js';
 import { Capability } from '$types/blueprint/capability.js';
 
-export class DagRunner extends BaseRunner {
+export class DagFunctor extends BaseFunctor {
     constructor(capa: Capability, protected dag: DirectedGraph) {
         super(capa);
     }
@@ -18,7 +18,7 @@ export class DagRunner extends BaseRunner {
         Logger.debug(`runnig id:${id}`);
         return;
 
-        const runner = ctx.loadRunner(id);
+        const runner = ctx.loadFunctor(id);
         if (runner) {
             await runner?.run(ctx);
         } else {

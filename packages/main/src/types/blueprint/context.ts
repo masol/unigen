@@ -1,5 +1,5 @@
 import type { IProjectContext } from "$libs/project/type.js";
-import { ICapaRunner } from "$libs/utils/blueprint/runner/type.js";
+import { ICapaFunctor } from "$libs/utils/blueprint/functor/type.js";
 
 export interface IRunnerContext {
     /** 原生的 Web API AbortSignal，可透传给支持取消的异步底层操作 */
@@ -47,7 +47,7 @@ export interface IRunnerContext {
      * 加载特定能力id对应的执行对象。
      * @param capaId capability id.
      */
-    loadRunner(capaId: string): ICapaRunner | null
+    loadFunctor(capaId: string): ICapaFunctor | null
 
 
     // ==========================================
