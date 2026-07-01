@@ -1,4 +1,4 @@
-import type { EmbeddingModelV3 } from '@ai-sdk/provider';
+import type { EmbeddingModelV4 } from '@ai-sdk/provider';
 import type { Provider } from '$types/index.js';
 import type { EmbedManyResult, EmbedResult } from 'ai';
 import type { EmbedingImpl, EmbedingOptions, EmbedingOp } from './type.js';
@@ -8,7 +8,7 @@ import { localEmbeding } from './node-llama-cpp/embed.js';
 import { AutoPrefixEmbed } from './autoprefix.js';
 
 
-function getAiEmbeding(embedModel: EmbeddingModelV3): EmbedingImpl {
+function getAiEmbeding(embedModel: EmbeddingModelV4): EmbedingImpl {
     return {
         embed: async (value: string, opts?: EmbedingOptions): Promise<EmbedResult> => {
             return await embed({

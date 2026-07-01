@@ -65,7 +65,7 @@ export abstract class TableBase {
         const texts = items.map(item => item.text);
 
         // 计算向量
-        const vectors = await this.lancedb.doEmbedding(texts);
+        const vectors = await this.lancedb.doEmbedding(texts, "document");
 
         // 组装回包含 vector 的最终数据并写入 LanceDB
         const recordsToInsert = items.map((item, index) => ({
@@ -83,7 +83,7 @@ export abstract class TableBase {
         const table = this.ensureTable();
 
         // 自动将单条搜索文本转化为向量（转成数组形式投喂给批量函数）
-        const queryVector = await this.lancedb.doEmbedding([queryText]);
+        const queryVector = await this.lancedb.doEmbedding([queryText], "query");
 
         // 直接进行向量检索
         return table

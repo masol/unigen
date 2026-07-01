@@ -2,7 +2,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createXai } from '@ai-sdk/xai';
-import type { ProviderV3 } from '@ai-sdk/provider';
+import type { ProviderV4 } from '@ai-sdk/provider';
 import type { Provider } from '$types/index.js';
 import { ProviderProtocol } from '$types/shared/model.js'
 import Logger from 'electron-log/main.js';
@@ -16,7 +16,7 @@ function createOpenAIModel(
     apiKey: string,
     baseURL?: string,
     strict: boolean = true,
-): ProviderV3 {
+): ProviderV4 {
     return createOpenAI({
         apiKey,
         baseURL,
@@ -41,7 +41,7 @@ function createOpenAIModel(
 function createAnthropicModel(
     apiKey: string,
     baseURL?: string
-): ProviderV3 {
+): ProviderV4 {
     return createAnthropic({
         apiKey,
         baseURL
@@ -54,7 +54,7 @@ function createAnthropicModel(
 function createXaiModel(
     apiKey: string,
     baseURL?: string
-): ProviderV3 {
+): ProviderV4 {
     return createXai({
         apiKey,
         baseURL
@@ -67,7 +67,7 @@ function createXaiModel(
 function createGoogleModel(
     apiKey: string,
     baseURL?: string
-): ProviderV3 {
+): ProviderV4 {
     return createGoogleGenerativeAI({
         apiKey,
         baseURL
@@ -80,7 +80,7 @@ function createGoogleModel(
 function createHuggingFaceModel(
     apiKey: string,
     baseURL?: string
-): ProviderV3 {
+): ProviderV4 {
     return createOpenAI({
         apiKey,
         baseURL: baseURL || 'https://api-inference.huggingface.co/v1'
@@ -91,7 +91,7 @@ function createHuggingFaceModel(
 /**
  * 创建 Ollama 模型
  */
-function createOllamaModel(baseURL?: string): ProviderV3 {
+function createOllamaModel(baseURL?: string): ProviderV4 {
     return createOpenAI({
         apiKey: 'ollama', // Ollama 不需要真实的 API key
         baseURL: baseURL || 'http://localhost:11434/v1'
@@ -105,7 +105,7 @@ function createProviderByProtocol(
     protocol: ProviderProtocol,
     apiKey: string,
     baseURL?: string
-): ProviderV3 {
+): ProviderV4 {
     switch (protocol) {
         case 'openai':
             return createOpenAIModel(apiKey, baseURL, true);
@@ -132,7 +132,7 @@ function createProviderByProtocol(
 }
 
 //provider: $llama-cpp： node-llama-cpp: 以$开头的Provider为内建Provider.
-export function createProvider(provider: Provider): ProviderV3 {
+export function createProvider(provider: Provider): ProviderV4 {
     const apiKey = provider.apiKey ?? "";
     const baseURL = provider.baseUrl.trim();
     const protocol = provider.protocol || ProviderProtocol.OpenAI;
