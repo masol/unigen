@@ -4,8 +4,7 @@ inputs:
   renderer-template:
     description: "Define what vite template should be used to create renderer in case if renderer package doesn't exist"
     required: false
-    default: ''
-
+    default: ""
 
 runs:
   using: "composite"
@@ -16,9 +15,17 @@ runs:
         Xvfb :99 -screen 0 1280x960x24 &
         echo "DISPLAY=:99" >> $GITHUB_ENV
 
+    # 用 corepack 启用 pnpm（读取 package.json 的 packageManager 字段）
+    - name: Enable corepack (pnpm)
+      shell: bash
+      run: |
+        corepack enable
+        corepack prepare --activate
+
     - uses: actions/setup-node@v4
       with:
-        node-version: 'latest'
+        node-version: "latest"
+        cache: "pnpm"
 
     - name: Check if renderer directory exists
       id: check-renderer
@@ -31,16 +38,16 @@ runs:
       shell: bash
 
     - run: |
-        npm run create-renderer -- -- --template ${{inputs.renderer-template}}
-        npm start --workspace @app/integrate-renderer
+        pnpm run create-renderer -- --template ${{inputs.renderer-template}}
+        pnpm --filter @app/integrate-renderer start
       shell: bash
       if: inputs.renderer-template != '' && steps.check-renderer.outputs.RENDERER_EXIST == 'false'
 
     - name: Install Dependencies
       run: >-
-        if [ "${{ steps.check-renderer.outputs.RENDERER_EXIST }}" == "true" ] && [ -f "package-lock.json" ]; then
-          npm ci
+        if [ "${{ steps.check-renderer.outputs.RENDERER_EXIST }}" == "true" ] && [ -f "pnpm-lock.yaml" ]; then
+          pnpm install --frozen-lockfile
         else
-          npm install
+          pnpm install
         fi
       shell: bash

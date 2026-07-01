@@ -9,20 +9,19 @@
     "url": "https://lizt.top"
   },
   "main": "packages/entry-point.mjs",
-  "workspaces": [
-    "packages/*"
-  ],
+  "packageManager": "pnpm@11.5.2",
   "engines": {
     "node": ">=22.0.0"
   },
   "scripts": {
+    "preinstall": "npx only-allow pnpm",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
-    "build": "npm run build -ws --if-present",
-    "compile": "npm run build && electron-builder build --config electron-builder.mjs -p never",
-    "test": "npx playwright test ./tests/e2e.spec.ts",
+    "build": "pnpm -r --if-present run build",
+    "compile": "pnpm run build && electron-builder build --config electron-builder.mjs -p never",
+    "test": "pnpm exec playwright test ./tests/e2e.spec.ts",
     "start": "node packages/dev-mode.js",
-    "typecheck": "npm run typecheck -ws --if-present",
-    "renderer:add": "npm run add --workspace @app/renderer"
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "renderer:add": "pnpm --dir packages/renderer add"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",
@@ -45,10 +44,11 @@
     "playwright": "^1.58.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.61.0",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "@app/preload": "workspace:*"
   },
   "dependencies": {
-    "@app/main": "*"
+    "@app/main": "workspace:*"
   },
   "allowScripts": {
     "electron@41.0.3": true,

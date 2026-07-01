@@ -6,6 +6,7 @@ import { confirmStore } from "./ui/confirm.svelte";
 import type { RunState } from "@app/main/types";
 import evtbus from "$lib/utils/evtbus";
 import { DbKeys } from "../../plugins/video/dbkeys";
+import Logger from "electron-log/renderer";
 
 type LoadingAction = "open" | "new" | null;
 
@@ -53,6 +54,7 @@ class ProjectStore {
             msg = e instanceof Error ? e.message : String(e)
         }
         toast.error(msg);
+        Logger.error("ProjectStore error:", e);
         return false;
     }
 

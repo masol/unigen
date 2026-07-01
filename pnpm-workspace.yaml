@@ -1,0 +1,17 @@
+packages:
+  - "packages/*"
+nodeLinker: hoisted
+hoistingLimits: dependencies
+allowBuilds:
+  better-sqlite3: true
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  node-llama-cpp: true
+  unrs-resolver: true
+minimumReleaseAgeExclude:
+  - '@ai-sdk/anthropic@4.0.4'
+  - '@ai-sdk/gateway@4.0.7'
+  - ai@7.0.9
+  - '@orpc/client'
+  - '@orpc/server'

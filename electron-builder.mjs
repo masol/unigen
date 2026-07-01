@@ -2,6 +2,8 @@ import pkg from "./package.json" with { type: "json" };
 import mapWorkspaces from "@npmcli/map-workspaces";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import fg from "fast-glob";
+import { readFile } from "node:fs/promises";
 
 export default /** @type import('electron-builder').Configuration */
 ({
@@ -100,27 +102,41 @@ export default /** @type import('electron-builder').Configuration */
  * └── package.json
  * ```
  */
+
 async function getListOfFilesFromEachWorkspace() {
-  /**
-   * @type {Map<string, string>}
-   */
-  const workspaces = await mapWorkspaces({
-    cwd: process.cwd(),
-    pkg,
-  });
+  // 1. 直接硬编码工作区目录,无需解析pnpm-workspace.yaml。因此无需引入fast-glob以及yaml库了。
+  const workspaceDirs = [
+    "packages/main",
+    "packages/electron-versions",
+    "packages/integrate-renderer",
+    "packages/preload",
+    "packages/renderer",
+  ];
 
   const allFilesToInclude = [];
 
-  for (const [name, path] of workspaces) {
-    const pkgPath = join(path, "package.json");
-    const { default: workspacePkg } = await import(pathToFileURL(pkgPath), {
-      with: { type: "json" },
-    });
+  for (const dir of workspaceDirs) {
+    // 2. 假设每个子目录下都有 package.json
+    const pkgPath = join(process.cwd(), dir, "package.json");
 
-    let patterns = workspacePkg.files || ["dist/**", "package.json"];
+    try {
+      const { default: workspacePkg } = await import(pathToFileURL(pkgPath), {
+        with: { type: "json" },
+      });
 
-    patterns = patterns.map((p) => join("node_modules", name, p));
-    allFilesToInclude.push(...patterns);
+      // 3. 提取 files 配置，如果没有则使用默认值
+      const patterns = workspacePkg.files ?? ["dist/**", "package.json"];
+
+      // 4. 拼接 node_modules 路径并收集
+      allFilesToInclude.push(
+        ...patterns.map((pattern) =>
+          join("node_modules", workspacePkg.name, pattern),
+        ),
+      );
+    } catch (err) {
+      // 容错：如果某个目录下没有 package.json，跳过即可
+      console.warn(`Skipping ${dir}: No valid package.json found.`);
+    }
   }
 
   return allFilesToInclude;

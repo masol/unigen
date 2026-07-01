@@ -45,7 +45,7 @@
   "dependencies": {
     "@floating-ui/dom": "^1.7.6",
     "@formkit/auto-animate": "^0.9.0",
-    "@orpc/client": "^1.14.5",
+    "@orpc/client": "^1.14.6",
     "awilix": "^13.0.4",
     "dayjs": "^1.11.21",
     "destr": "^2.0.5",

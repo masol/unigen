@@ -30,12 +30,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Enable corepack (pnpm)
+        run: |
+          corepack enable
+          corepack prepare --activate
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
-      - run: npm ci
-      - run: npm run typecheck --if-present
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck --if-present
 
   compile:
     strategy:
@@ -51,23 +58,28 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Enable corepack (pnpm)
+        run: |
+          corepack enable
+          corepack prepare --activate
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
+          cache: "pnpm"
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
       - name: Check native bindings
         run: |
           node -e "require('better-sqlite3'); console.log('sqlite OK')"
           node -e "require('@lancedb/lancedb'); console.log('lancedb OK')"
-    
+
       - name: Rebuild Electron native modules
-        run: npx electron-builder install-app-deps
+        run: pnpm exec electron-builder install-app-deps
 
       - name: Verify Electron installation
-        run: npx electron --version
+        run: pnpm exec electron --version
         env:
           ELECTRON_DISABLE_SANDBOX: 1
 
@@ -85,9 +97,9 @@ jobs:
             xauth \
             libgbm1
 
-      - run: npm version "${{inputs.app-version}}" --no-git-tag-version
+      - run: pnpm version "${{inputs.app-version}}" --no-git-tag-version
 
-      - run: npm run compile
+      - run: pnpm run compile
         env:
           VITE_DISTRIBUTION_CHANNEL: ${{inputs.distribution-channel}}
 

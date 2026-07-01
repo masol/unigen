@@ -14,6 +14,7 @@ const isProd = process.env.VITE_MODE !== 'dev' && process.env.NODE_ENV !== 'deve
 // https://vite.dev/config/
 export default defineConfig({
   resolve: {
+    preserveSymlinks: false,
     alias: {
       $lib: path.resolve(__dirname, './src/lib'),
     },
