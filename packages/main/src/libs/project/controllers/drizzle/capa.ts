@@ -2,8 +2,8 @@ import { intereg } from "$libs/utils/blueprint/functor/intereg.js";
 import { capabilities } from "$libs/utils/db/schema/capability.js";
 import { throwNotimplement } from "$libs/utils/err.js";
 import type { Capability } from "$types/blueprint/capability.js";
+import { eq } from 'drizzle-orm';
 import type { DrizzleDBType } from "./type.js";
-import { eq } from 'drizzle-orm'
 
 export function upsertCapability(db: DrizzleDBType, capability: Partial<Capability>): Capability {
     if (intereg.hasId(capability.id ?? "")) {
@@ -40,6 +40,7 @@ export function upsertCapability(db: DrizzleDBType, capability: Partial<Capabili
 
 
 export function getCapabilityById(db: DrizzleDBType, id: string): Capability | null {
+    // Logger.debug(`[PrjDB] getCapabilityById: ${id}`);
     const internalCapa = intereg.capaById(id);
     if (internalCapa) {
         return internalCapa;

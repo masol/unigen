@@ -1,0 +1,24 @@
+CREATE TABLE
+	`kv_store` (
+		`key` text PRIMARY KEY NOT NULL,
+		`value` text NOT NULL,
+		`updated_at` text DEFAULT CURRENT_TIMESTAMP
+	);
+
+--> statement-breakpoint
+CREATE TABLE
+	`capabilities` (
+		`id` text PRIMARY KEY NOT NULL,
+		`name` text DEFAULT '' NOT NULL,
+		`role` text DEFAULT '' NOT NULL,
+		`goal` text DEFAULT '' NOT NULL,
+		`version` integer DEFAULT 0 NOT NULL,
+		`input` text DEFAULT '[]' NOT NULL,
+		`output` text DEFAULT '[]' NOT NULL,
+		`process` text DEFAULT '[]' NOT NULL,
+		`negative` text DEFAULT '[]' NOT NULL,
+		`criteria` text DEFAULT '[]' NOT NULL,
+		`fewshot` text DEFAULT '[]' NOT NULL,
+		`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+		`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
+	);

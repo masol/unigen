@@ -1,4 +1,8 @@
 {
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "explicit"
+  },
   "workbench.colorCustomizations": {
     "activityBar.activeBackground": "#ff6433",
     "activityBar.background": "#ff6433",
@@ -24,7 +28,6 @@
   "peacock.remoteColor": "#ff3d00",
   "workbench.iconTheme": "material-icon-theme",
   "material-icon-theme.folders.theme": "specific",
-
   // 1）给父包染色（精确路径，不递归所有 *）
   "material-icon-theme.folders.associations": {
     "packages/main": "app",

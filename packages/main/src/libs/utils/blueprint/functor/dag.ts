@@ -1,26 +1,25 @@
+import { throwNotfound, throwPrecondition } from '$libs/utils/err.js';
+import { Capability } from '$types/blueprint/capability.js';
 import type { IRunnerContext } from '$types/blueprint/context.js';
 import Logger from 'electron-log/main.js';
-import { DirectedGraph } from 'graphology'
+import { DirectedGraph } from 'graphology';
 import { forEachTopologicalGeneration, hasCycle } from 'graphology-dag';
-import { delay } from '../../promise.js';
-import { throwNotfound, throwPrecondition } from '$libs/utils/err.js';
 import { BaseFunctor } from './base.js';
-import { Capability } from '$types/blueprint/capability.js';
 
 export class DagFunctor extends BaseFunctor {
     constructor(capa: Capability, protected dag: DirectedGraph) {
         super(capa);
     }
 
-    private async execTask(ctx: IRunnerContext, id: string): Promise<unknown> {
+    private async execTask(ctx: IRunnerContext, id: string): Promise<void> {
 
-        await delay(Math.random() * 10000);
-        Logger.debug(`runnig id:${id}`);
-        return;
+        // await delay(Math.random() * 10000);
+        // Logger.debug(`runnig id:${id}`);
+        // return;
 
         const runner = ctx.loadFunctor(id);
         if (runner) {
-            await runner?.run(ctx);
+            await runner.run(ctx);
         } else {
             throwNotfound(`无法加载id为${id}的能力对象。`)
         }
@@ -47,8 +46,7 @@ export class DagFunctor extends BaseFunctor {
     }
 
     // 3. 核心运行函数：按“代”并行
-    // DAG不需要输入，也不返回值。
-    async runImpl(ctx: IRunnerContext, _input: unknown[]): Promise<unknown> {
+    async run(ctx: IRunnerContext): Promise<void> {
         // 收集计算出的“代”队列
         const generations: string[][] = [];
 

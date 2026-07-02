@@ -8,7 +8,7 @@ export const ProjectDbKeys = {
     entry_capa: "entry_capa", // 入口的capability.(默认执行的capability)
 
     /// 下面是video插件定义的keys，先写这里了，应该移入video plugin.
-    scripts: "scripts",
+    scripts: "script",
     synopsis: "synopsis",
     character_specifications: 'character_specifications',
     book_name: 'book_name',

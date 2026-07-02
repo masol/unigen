@@ -2,11 +2,14 @@ import { nativeTheme } from 'electron';
 import type { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../types/ModuleContext.js';
 // import Logger from 'electron-log/main';
+import { intereg } from '$libs/utils/blueprint/index.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
 
-class SysthemeModule implements AppModule {
+// unigen的应用级初始化。
+class UnigenModule implements AppModule {
     enable({ app }: ModuleContext): void {
         app.whenReady().then(() => {
+            intereg.init();
             nativeTheme.themeSource = 'system'
 
             // 3. 监听系统主题切换（实时变化）
@@ -24,6 +27,6 @@ class SysthemeModule implements AppModule {
     }
 }
 
-export function systhemeModule(...args: ConstructorParameters<typeof SysthemeModule>) {
-    return new SysthemeModule(...args);
+export function unigenModule(...args: ConstructorParameters<typeof UnigenModule>) {
+    return new UnigenModule(...args);
 }

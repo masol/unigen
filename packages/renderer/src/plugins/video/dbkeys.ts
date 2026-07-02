@@ -1,7 +1,7 @@
 
 export const DbKeys = {
     // input-manangers.
-    scripts: "scripts",
+    scripts: "script",
     synopsis: "synopsis",
     character_specifications: 'character_specifications',
     book_name: 'book_name',

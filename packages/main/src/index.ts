@@ -1,16 +1,17 @@
-import type { AppInitConfig } from './types/AppInitConfig.js';
+import Logger from 'electron-log/main.js';
 import { createModuleRunner } from './ModuleRunner.js';
-import { disallowMultipleAppInstance } from './modules/SingleInstanceApp.js';
-import { createWindowManagerModule } from './modules/WindowManager.js';
 import { terminateAppOnLastWindowClose } from './modules/ApplicationTerminatorOnLastWindowClose.js';
-import { hardwareAccelerationMode } from './modules/HardwareAccelerationModule.js';
 import { autoUpdater } from './modules/AutoUpdater.js';
 import { allowInternalOrigins } from './modules/BlockNotAllowdOrigins.js';
 import { allowExternalUrls } from './modules/ExternalUrls.js';
+import { hardwareAccelerationMode } from './modules/HardwareAccelerationModule.js';
 import { loggerModule } from './modules/LoggerModule.js';
 import { orpcModule } from './modules/OrpcModule.js';
-import { systhemeModule } from './modules/SysthemeModule.js';
 import { protocalModule, registerSchemes } from './modules/ProtocalModule.js';
+import { disallowMultipleAppInstance } from './modules/SingleInstanceApp.js';
+import { unigenModule } from './modules/UnigenModule.js';
+import { createWindowManagerModule } from './modules/WindowManager.js';
+import type { AppInitConfig } from './types/AppInitConfig.js';
 
 export async function initApp(initConfig: AppInitConfig) {
   registerSchemes();
@@ -42,7 +43,10 @@ export async function initApp(initConfig: AppInitConfig) {
           : [],
       ))
     )
-    .init(systhemeModule());
+    .init(unigenModule());
 
   await moduleRunner;
+
+  // @TODO: system inited,notify browser here!!
+  Logger.debug("todo: system inited,notify browser here!!")
 }

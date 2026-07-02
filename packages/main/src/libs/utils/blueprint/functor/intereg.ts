@@ -1,22 +1,28 @@
-import { getInternalName } from "$libs/utils/db/schema/capahelper2.js";
+import { getInternalName } from "$libs/utils/blueprint/capa/is.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import type { Capability } from "$types/blueprint/capability.js";
-import type { InterBase } from "./inter/base.js";
+import type { BaseFunctor } from "./base.js";
+import { getAllInternal } from "./inter/index.js";
 import { ICapaFunctor } from "./type.js";
 
 
 class InterReg {
-
     // name to InterBase
-    #intermap: Map<string, InterBase> = new Map();
+    #namemap: Map<string, BaseFunctor> = new Map();
     // id to InterBase
-    #idmap: Map<string, InterBase> = new Map();
+    #idmap: Map<string, BaseFunctor> = new Map();
 
     constructor() {
+        const allInternal = getAllInternal();
+        allInternal.forEach(i => {
+            this.reg(i);
+        })
     }
 
+    init() { }
+
     has(name: string): boolean {
-        return this.#intermap.has(name);
+        return this.#namemap.has(name);
     }
 
     hasId(id: string): boolean {
@@ -25,7 +31,7 @@ class InterReg {
 
     // 通过名称获取capa的id.
     idByName(name: string): string | null {
-        const capa = this.#intermap.get(name);
+        const capa = this.#namemap.get(name);
         return capa?.capa.id ?? null;
     }
 
@@ -36,19 +42,53 @@ class InterReg {
     }
 
     get(name: string): ICapaFunctor | null {
-        const ret = this.#intermap.get(name);
+        const ret = this.#namemap.get(name);
         return ret ? ret : null;
     }
 
-    // 强制全体从baseRunner派生 -- inter也需要响应Input/output结构的动态变化。
-    set(functor: InterBase): void {
-        const interName = getInternalName(functor.capa);
+    rm(name: string): void {
+        const capa = this.#namemap.get(name);
+        if (capa) {
+            this.#namemap.delete(name);
+            if (capa.capa.id) {
+                this.#idmap.delete(capa.capa.id);
+            }
+        }
+    }
 
-        if (!interName || !functor.capa.id) {
+    rmById(id: string): void {
+        const capa = this.#idmap.get(id);
+        if (capa) {
+            this.#idmap.delete(id);
+            const interName = getInternalName(capa.capa);
+            if (interName) {
+                this.#namemap.delete(interName);
+            }
+        }
+    }
+
+    // 强制全体从InterBase派生 -- inter也需要响应Input/output结构的动态变化。
+    reg(functor: BaseFunctor): void {
+        const interName = getInternalName(functor.capa);
+        const id = functor.capa.id;
+
+        if (!interName || !id) {
             throwPrecondition(`capa id or name is empty, cannot register intereg: ${JSON.stringify(functor.capa)}`);
         }
-        this.#intermap.set(interName, functor);
-        this.#idmap.set(functor.capa.id, functor);
+
+        // 1. 如果有同名的旧数据，通过 rm 方法把它的 name 和 id 彻底从两个 Map 中抹去
+        if (this.has(interName)) {
+            this.rm(interName);
+        }
+
+        // 2. 如果有同 ID 的旧数据（比如名字改了但 ID 没变），通过 rmById 彻底抹去
+        if (this.hasId(id)) {
+            this.rmById(id);
+        }
+
+        // 3. 此时两边都已经是一张白纸，安全写入新引用的指针
+        this.#namemap.set(interName, functor);
+        this.#idmap.set(id, functor);
     }
 }
 

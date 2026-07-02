@@ -1,5 +1,5 @@
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
-import { type Capability, getInternalName, isWorkflow } from "$libs/utils/db/schema/capahelper2.js";
+import { type Capability, getInternalName, isWorkflow } from "$libs/utils/blueprint/capa/is.js";
 import { throwNotimplement } from "$libs/utils/err.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { DirectedGraph } from "graphology";

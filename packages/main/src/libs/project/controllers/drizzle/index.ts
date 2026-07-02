@@ -1,20 +1,21 @@
+import * as schema from '$libs/utils/db/schema/index.js';
+import Database from 'better-sqlite3';
+import { eq } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { app } from "electron";
-import path, { join } from "path";
-import { metaDirName, type IProjectContext } from "../../type.js";
-import { fileURLToPath } from "url";
 import Logger from "electron-log/main.js";
 import { ensureDir, pathExists } from "fs-extra";
-import Database from 'better-sqlite3'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
-import * as schema from '$libs/utils/db/schema/index.js'
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
-import { eq } from 'drizzle-orm'
+import path, { join } from "path";
+import { fileURLToPath } from "url";
+import { metaDirName, type IProjectContext } from "../../type.js";
 // import { PrjJob } from "../../helper/job.js";
-import { BaseProjectController } from "../base.js";
 import { throwNotfound, throwPrecondition } from "$libs/utils/err.js";
-import { DrizzleDBType } from "./type.js";
 import type { Capability } from "$types/blueprint/capability.js";
-import { upsertCapability, getCapabilityById, deleteCapabilityById } from './capa.js'
+import type { PrjTimeStore } from "$types/prjstore.js";
+import { BaseProjectController } from "../base.js";
+import { deleteCapabilityById, getCapabilityById, upsertCapability } from './capa.js';
+import type { DrizzleDBType } from "./type.js";
 
 const dbName = 'db.sqlite'
 
@@ -149,7 +150,7 @@ export class PrjDB extends BaseProjectController {
         return result ? (result.value as T) : null;
     }
 
-    getWithTime<T>(key: string): { value: T, updatedAt: string | null } | null {
+    getWithTime<T>(key: string): PrjTimeStore<T> | null {
         const db = this.getInitedDB();
         const result = db
             .select({ value: schema.kvStore.value, updatedAt: schema.kvStore.updatedAt })
