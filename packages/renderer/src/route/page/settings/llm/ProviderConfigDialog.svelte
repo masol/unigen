@@ -1,43 +1,46 @@
 <script lang="ts">
+  import * as Alert from "$lib/components/ui/alert";
+  import { Button } from "$lib/components/ui/button";
   import {
-    DialogHeader,
-    DialogTitle,
     DialogDescription,
     DialogFooter,
+    DialogHeader,
+    DialogTitle,
   } from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import * as Tooltip from "$lib/components/ui/tooltip";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import * as Alert from "$lib/components/ui/alert";
+  import type { DialogComponentProps } from "$lib/types/dialog";
+  import { api } from "$lib/utils/api";
+  import autoAnimate from "@formkit/auto-animate";
   import {
-    IconKey,
+    IconAdjustments,
+    IconAlertCircle,
+    IconCheck,
+    IconChevronDown,
+    IconExternalLink,
     IconEye,
     IconEyeOff,
-    IconWorld,
-    IconChevronDown,
-    IconCheck,
-    IconAlertCircle,
+    IconKey,
     IconLoader2,
     IconPlus,
-    IconTrash,
-    IconExternalLink,
+    IconRouter,
     IconServer,
-    IconAdjustments,
+    IconTrash,
+    IconWorld,
   } from "@tabler/icons-svelte";
-  import autoAnimate from "@formkit/auto-animate";
-  import type { DialogComponentProps } from "$lib/types/dialog";
+  import { toast } from "svelte-sonner";
+  import { isURL } from "validator";
+  import ProviderPresetCombobox from "./ProviderPresetCombobox.svelte";
+  import { findPreset } from "./providers";
   import {
-    type ProviderProtocol,
-    protocolLabels,
     allProtocols,
+    protocolLabels,
     type ProviderConfig,
     type ProviderPreset,
+    type ProviderProtocol,
   } from "./types";
-  import ProviderPresetCombobox from "./ProviderPresetCombobox.svelte";
-  import { api } from "$lib/utils/api";
-  import { findPreset } from "./providers";
 
   /* ─── Props ─── */
   type Props = {
@@ -48,6 +51,7 @@
   let { config, onSave, onClose, onCancel }: Props = $props();
 
   /* ─── 模式判定 ─── */
+  // svelte-ignore state_referenced_locally
   const isEditMode = !!config?.id;
   const initialPreset = config?.id ? findPreset(config!.id) : null;
 
@@ -63,6 +67,7 @@
   let apiKey = $state(config?.apiKey ?? "");
   let maxConn = $state<number | undefined>(config?.maxConn ?? 1);
   let websiteUrl = $state(initialPreset?.website ?? "");
+  let proxyUrl = $state(config?.proxyUrl ?? "");
 
   async function openExternal(url: string) {
     await api().system.openExternal({ url });
@@ -135,22 +140,54 @@
     isSubmitting = true;
     errorMessage = "";
 
-    const headers: Record<string, string> = {};
-    for (const entry of headerEntries) {
-      const k = entry.key.trim();
-      if (k) headers[k] = entry.value;
-    }
-
-    const result: ProviderConfig = {
-      id: providerId.trim(),
-      protocol,
-      baseUrl: baseUrl.trim(),
-      apiKey: apiKey.trim() || undefined,
-      maxConn,
-      headers: Object.keys(headers).length > 0 ? headers : undefined,
-    };
-
     try {
+      const headers: Record<string, string> = {};
+      for (const entry of headerEntries) {
+        const k = entry.key.trim();
+        if (k) headers[k] = entry.value;
+      }
+
+      let msg = "";
+      if (baseUrl.trim().length === 0) {
+        msg = "服务端点必须填写。";
+      } else if (
+        !isURL(baseUrl, {
+          protocols: ["http", "https", "ws", "wss"],
+        })
+      ) {
+        msg = "服务端点必须是有效的URL。";
+      }
+      if (msg) {
+        toast.error(msg);
+        const el = document.getElementById("dlg-base-url");
+        el?.focus();
+        return;
+      }
+
+      if (
+        proxyUrl.trim().length > 0 &&
+        !isURL(proxyUrl, {
+          protocols: ["http", "https", "socks5", "socks4"],
+        })
+      ) {
+        toast.error(
+          `如果设置代理，必须是一个合法的URL(支持协议"http", "https", "socks5", "socks4")`,
+        );
+        const el = document.getElementById("dlg-proxy-url");
+        el?.focus();
+        return;
+      }
+
+      const result: ProviderConfig = {
+        id: providerId.trim(),
+        protocol,
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim() || undefined,
+        proxyUrl: proxyUrl.trim() || undefined,
+        maxConn,
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
+      };
+
       if (onSave) await onSave(result);
       onClose(result);
     } catch (e) {
@@ -337,6 +374,21 @@
           min="1"
         />
       </div>
+    </div>
+
+    <div
+      class={[
+        "flex items-center gap-2 transition-all duration-200",
+        !proxyUrl ? "opacity-30 hover:opacity-75" : "opacity-100",
+      ]}
+    >
+      <IconRouter class="size-5 shrink-0 text-muted-foreground" stroke={1.5} />
+      <Input
+        bind:value={proxyUrl}
+        id="dlg-proxy-url"
+        placeholder="代理地址（可选）"
+        class="min-w-0 flex-1 rounded-xl border-dashed"
+      />
     </div>
   </div>
   <!-- ╭─── / ConnectionConfigSection ───╮ -->

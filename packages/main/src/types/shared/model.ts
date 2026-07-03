@@ -63,7 +63,7 @@ export interface Provider {
     apiKey?: string;         // 部分本地服务商可选
     maxConn?: number;    // 服务商级别的全局最大并发数 (账户总并发限制--maxConnections,不再设置RPC/TPM)        
     // 网络配置
-    // proxyUrl?: string;       // 独立代理设置
+    proxyUrl?: string;       // 独立代理设置
     headers?: Record<string, string>; // 自定义请求头
     disabled?: boolean,
     models: Model[];         // 该服务商持有的模型列表

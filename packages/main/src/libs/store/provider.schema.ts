@@ -26,6 +26,10 @@ export const providerSchema = {
             minLength: 1
         },
 
+        proxyUrl: {
+            type: 'string',
+        },
+
         // API Key（本地服务可省略）
         apiKey: {
             type: 'string'
