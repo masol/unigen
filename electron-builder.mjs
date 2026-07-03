@@ -1,7 +1,7 @@
-import pkg from "./package.json" with { type: "json" };
 import mapWorkspaces from "@npmcli/map-workspaces";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import pkg from "./package.json" with { type: "json" };
 
 export default /** @type import('electron-builder').Configuration */
 ({
@@ -38,6 +38,10 @@ export default /** @type import('electron-builder').Configuration */
     {
       from: "packages/main/src/libs/utils/db/migrations",
       to: "drizzle",
+    },
+    {
+      from: "packages/main/knowledge",
+      to: "knowledge",
     },
   ],
 });

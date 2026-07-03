@@ -24,6 +24,7 @@ export class Plugin extends PluginBase {
     }
 
     async init(prj: IProjectContext, _bCreate: boolean) {
+        // @TODO: 如果项目未初始化知识库，从知识中心获取数据，并据此初始化项目。
         const lance = LanceDB.ensure(prj);
         await this.initLanceTables(lance);
 

@@ -6,7 +6,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { app } from "electron";
 import Logger from "electron-log/main.js";
 import { ensureDir, pathExists } from "fs-extra";
-import path, { join } from "path";
+import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { metaDirName, type IProjectContext } from "../../type.js";
 // import { PrjJob } from "../../helper/job.js";
@@ -26,11 +26,11 @@ export class PrjDB extends BaseProjectController {
     // #job: PrjJob | null = null;
     constructor(ctx: IProjectContext) {
         super(ctx)
-        const __dirname = path.dirname(fileURLToPath(import.meta.url));
+        const __dirname = dirname(fileURLToPath(import.meta.url));
         this.migrationsPath = app.isPackaged
-            ? path.join(process.resourcesPath, 'drizzle') // 生产环境：拷贝的物理路径
+            ? join(process.resourcesPath, 'drizzle') // 生产环境：拷贝的物理路径
             //当前路径是dist中。
-            : path.join(__dirname, '../src/libs/utils/db/migrations');
+            : join(__dirname, '../src/libs/utils/db/migrations');
 
         Logger.info(`[Project:DB] migrationsPath= ${this.migrationsPath}`)
     }

@@ -1,9 +1,9 @@
+import { app, net, protocol } from 'electron';
 import Logger from 'electron-log/main';
+import { resolve } from 'path';
+import { pathToFileURL } from 'url';
 import { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../types/ModuleContext.js';
-import { protocol, net, app } from 'electron'
-import { pathToFileURL } from 'url'
-import { resolve } from 'path';
 
 const PROTOCAL_NAME = "appfile"
 /**
@@ -74,10 +74,9 @@ function registerFileProtocol(): void {
 
 class ProtocalModule implements AppModule {
 
-    enable({ app }: ModuleContext): Promise<void> | void {
-        app.whenReady().then(() => {
-            registerFileProtocol();
-        })
+    async enable({ app }: ModuleContext): Promise<void> {
+        await app.whenReady();
+        registerFileProtocol();
     }
 }
 

@@ -1,7 +1,7 @@
-import {AppModule} from '../AppModule.js';
-import {ModuleContext} from '../types/ModuleContext.js';
-import {shell} from 'electron';
-import {URL} from 'node:url';
+import { shell } from 'electron';
+import { URL } from 'node:url';
+import { AppModule } from '../AppModule.js';
+import { ModuleContext } from '../types/ModuleContext.js';
 
 export class ExternalUrls implements AppModule {
 
@@ -11,10 +11,10 @@ export class ExternalUrls implements AppModule {
     this.#externalUrls = externalUrls;
   }
 
-  enable({app}: ModuleContext): Promise<void> | void {
+  enable({ app }: ModuleContext): Promise<void> | void {
     app.on('web-contents-created', (_, contents) => {
-      contents.setWindowOpenHandler(({url}) => {
-        const {origin} = new URL(url);
+      contents.setWindowOpenHandler(({ url }) => {
+        const { origin } = new URL(url);
 
         if (this.#externalUrls.has(origin)) {
           shell.openExternal(url).catch(console.error);
@@ -23,7 +23,7 @@ export class ExternalUrls implements AppModule {
         }
 
         // Prevent creating a new window.
-        return {action: 'deny'};
+        return { action: 'deny' };
       });
     });
   }
