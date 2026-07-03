@@ -1,14 +1,14 @@
 
-import { z } from 'zod'
-import { ORPCError, os } from "@orpc/server";
-import { WindowService } from '$libs/utils/window.js';
-import { BrowserWindow, dialog } from 'electron';
-import { RpcContext } from '../type.js';
 import { projectManager } from '$libs/project/manager.js';
+import { WindowService } from '$libs/utils/window.js';
+import { ORPCError, os } from "@orpc/server";
+import { BrowserWindow, dialog } from 'electron';
+import { z } from 'zod';
+import { RpcContext } from '../type.js';
 // import { configService } from '$libs/store/index.js';
-import { UNIGEN_ERROR_DEFS } from '$libs/utils/err.js';
-import { COMMON_ORPC_ERROR_DEFS } from "@orpc/client"
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
+import { UNIGEN_ERROR_DEFS } from '$libs/utils/err.js';
+import { COMMON_ORPC_ERROR_DEFS } from "@orpc/client";
 // import { PrjCreator } from '$libs/project/helper/create.js';
 
 const open = os
@@ -109,6 +109,14 @@ const info = os
         return result;
     });
 
+const close = os
+    .handler(async ({ context }) => {
+        const ctx = context as RpcContext;
+        return ctx.project.close();
+    });
+
+
+// 下面是kv store操作函数。
 const get = os
     .input(z.string())
     .handler(async ({ input, context }) => {
@@ -134,12 +142,6 @@ const set = os
         return PrjDB.ensure(ctx.project).set(input.key, input.value);
     });
 
-
-const close = os
-    .handler(async ({ context }) => {
-        const ctx = context as RpcContext;
-        return ctx.project.close();
-    });
 
 
 const rm = os

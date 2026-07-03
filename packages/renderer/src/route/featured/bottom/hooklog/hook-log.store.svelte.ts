@@ -1,6 +1,6 @@
-import log from 'electron-log/renderer'
-import { api } from '$lib/utils/api'
-import type { LogLevel, LogMessage } from 'electron-log'
+import { api } from '$lib/utils/api';
+import type { LogLevel, LogMessage } from 'electron-log';
+import log from 'electron-log/renderer';
 
 const ALL_LEVELS: LogLevel[] = [
     "error",
@@ -17,6 +17,8 @@ class HookLogStore {
     // ── 配置 ──
     readonly #maxBuffer: number
     private controller: AbortController | null = null;
+
+    #stopping = false;
 
     // ── 私有状态 ──
     // 高频细粒度 mutation（unshift / pop）→ $state（非 raw）
@@ -73,10 +75,14 @@ class HookLogStore {
     /**
      * 启动日志流消费。重复调用安全：已在运行则直接返回当前 run promise。
      */
-    start(): Promise<void> {
+    async start(): Promise<void> {
         if (this.#runPromise) {
-            log.debug('[HookLogStore] start() ignored, already running')
-            return this.#runPromise
+            if (this.#stopping) {
+                await this.#runPromise
+            } else {
+                log.debug('[HookLogStore] start() ignored, already running')
+                return this.#runPromise
+            }
         }
         log.debug('[HookLogStore] start() called')
         this.#runPromise = this.#run()
@@ -95,6 +101,8 @@ class HookLogStore {
         }
         log.debug('[HookLogStore] stop() called, signalling stream return')
         try {
+            this.#stopping = true;
+            this.#connected = false;
             // 通知 generator 终止：mockHookLog 内部的 await/yield 会被打断，函数正常返回
             if (this.#stream) {
                 this.abort();
@@ -105,6 +113,8 @@ class HookLogStore {
             // log.info('[HookLogStore] stopped')
         } catch (err) {
             log.error('[HookLogStore] stop() failed', err)
+        } finally {
+            this.#stopping = false;
         }
     }
 

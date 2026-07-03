@@ -1,19 +1,18 @@
 <!-- $lib/components/script-to-video/SettingsPanel.svelte -->
 <script lang="ts">
-  import { onMount } from "svelte";
-  import {
-    IconAspectRatio,
-    IconClock,
-    IconGauge,
-    IconLanguage,
-    IconPalette,
-    IconDeviceTv,
-    IconUsersGroup,
-  } from "@tabler/icons-svelte";
-  import SettingSelect from "./SettingSelect.svelte";
   import { Label } from "$lib/components/ui/label";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { cn } from "$lib/utils";
+  import {
+    IconAspectRatio,
+    IconClock,
+    IconDeviceTv,
+    IconGauge,
+    IconLanguage,
+    IconPalette,
+    IconUsersGroup,
+  } from "@tabler/icons-svelte";
+  import SettingSelect from "./SettingSelect.svelte";
   import {
     episodeDurations,
     specStore,
@@ -127,12 +126,6 @@
     },
   ] as const;
 
-  // ╭───────────────────────────────────────────────────────────────╮
-  // │ 生命周期：初始化数据
-  // ╰───────────────────────────────────────────────────────────────╯
-  onMount(() => {
-    specStore.init();
-  });
 
   // ╭───────────────────────────────────────────────────────────────╮
   // │ 响应式派生：从 store 读取当前值

@@ -3,20 +3,18 @@
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
   import {
+    IconBook2,
     IconChevronRight,
     IconCircleCheckFilled,
-    IconBook2,
     IconSparkles,
     IconVideo,
   } from "@tabler/icons-svelte";
-
-  // @TODO: 纳入插件体系。
-  import { specStore } from "../../../../plugins/video/mainsrv/leftbar/spec-setting/spec.svelte";
+// @TODO: 纳入插件体系。
   import { inputStore } from "../../../../plugins/video/mainsrv/leftbar/input-manager/input.svelte";
+  import { specStore } from "../../../../plugins/video/mainsrv/leftbar/spec-setting/spec.svelte";
 
-  import { onMount } from "svelte";
-  import { formatTokens } from "../../settings/llm/types";
   import { layoutStore } from "$lib/store/ui/layout.svelte";
+  import { formatTokens } from "../../settings/llm/types";
 
   let totalSize = $derived.by(() => {
     return inputStore.scripts.reduce((acc, item) => {
@@ -54,10 +52,6 @@
     // dashboardStore.openPanel("output");
   }
 
-  onMount(() => {
-    specStore.init();
-    inputStore.init();
-  });
 </script>
 
 <div class="grid grid-cols-1 gap-6 md:grid-cols-3 animate-fade-in">

@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Skeleton } from "$lib/components/ui/skeleton";
   import { Button } from "$lib/components/ui/button";
-  import { IconSearch } from "@tabler/icons-svelte";
-  import type { LogLevelMeta } from "./types";
-  import type { LogLevel, LogMessage } from "electron-log";
-  import autoAnimate from "@formkit/auto-animate";
-  import { hookLogStore } from "./hook-log.store.svelte";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import { i18nStore } from "$lib/store/i18n.svelte";
+  import autoAnimate from "@formkit/auto-animate";
+  import { IconSearch } from "@tabler/icons-svelte";
+  import type { LogLevel, LogMessage } from "electron-log";
+  import { hookLogStore } from "./hook-log.store.svelte";
+  import type { LogLevelMeta } from "./types";
 
   let {
     filtered = [],

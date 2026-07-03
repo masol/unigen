@@ -1,12 +1,13 @@
-import { api } from "$lib/utils/api";
+import { api, procApiError } from "$lib/utils/api";
 import evtbus from "$lib/utils/evtbus";
+import { hooks } from '$lib/utils/hook';
 import type { RunState } from "@app/main/types";
 import { COMMON_ORPC_ERROR_DEFS, ORPCError } from "@orpc/client";
 import Logger from "electron-log/renderer";
-import { toast } from "svelte-sonner";
 import { DbKeys } from "../../plugins/video/dbkeys";
 import { pluginStore } from "./plugin.svelte";
 import { confirmStore } from "./ui/confirm.svelte";
+
 
 type LoadingAction = "open" | "new" | null;
 
@@ -41,21 +42,7 @@ class ProjectStore {
     }
 
     private procError(e: unknown): boolean {
-        let msg: string;
-        if (e instanceof ORPCError) {
-            if (e.status === 601) { // 用户取消。
-                return false;
-            } else if (e.status === COMMON_ORPC_ERROR_DEFS.TOO_MANY_REQUESTS.status) {
-                toast.success(e.message)
-                return false;
-            }
-            msg = e.message || e.code;
-        } else {
-            msg = e instanceof Error ? e.message : String(e)
-        }
-        Logger.error("ProjectStore error:", msg, e);
-        toast.error(msg);
-        return false;
+        return procApiError(e);
     }
 
     async start(): Promise<void> {
@@ -94,6 +81,7 @@ class ProjectStore {
                 // 已经打开了项目。同步依赖插件。
                 this.#depPlugins = await api().project.get(DbKeys.depplugins);
                 await pluginStore.ensurePlugins(this.#depPlugins);
+                await hooks.callHook("project:loaded", { path: this.#path });
             }
         } catch (e) {
             this.procError(e);
@@ -106,6 +94,8 @@ class ProjectStore {
             this.#path = await api().project.info("path");
             this.#depPlugins = await api().project.get(DbKeys.depplugins);
             await pluginStore.ensurePlugins(this.#depPlugins);
+            await hooks.callHook("project:loaded", { path: this.#path });
+            Logger.debug("项目打开成功", this.#path)
             return true;
         } catch (e) {
             return this.procError(e);
@@ -144,7 +134,12 @@ class ProjectStore {
         }
 
         try {
-            return await this.doCreate(true, realPathname);
+            const result = await this.doCreate(true, realPathname);
+            if (result) {
+                await hooks.callHook("project:loaded", { path: this.#path });
+            }
+            Logger.debug("项目创建成功", this.#path)
+            return result;
         } catch (e) {
             return this.procError(e);
         }

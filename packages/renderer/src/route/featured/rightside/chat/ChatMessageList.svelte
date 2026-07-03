@@ -1,11 +1,11 @@
 <!-- src/lib/components/chat/ChatMessageList.svelte -->
 <script lang="ts">
   import { Skeleton } from "$lib/components/ui/skeleton";
-  import { IconSparkles } from "@tabler/icons-svelte";
   import autoAnimate from "@formkit/auto-animate";
-  import { messageStore } from "./msg.svelte";
-  import ChatMessage from "./ChatMessage.svelte";
+  import { IconSparkles } from "@tabler/icons-svelte";
   import { onMount, tick } from "svelte";
+  import ChatMessage from "./ChatMessage.svelte";
+  import { messageStore } from "./msg.svelte";
 
   let {
     emptyTitle = "开始新对话",
@@ -75,7 +75,7 @@
       </div>
       <!-- ╭─── / ChatEmptyState ───╮ -->
     {:else}
-      {#each messageStore.messages as message (message.id)}
+      {#each messageStore.messages as message, index (message.id + index)}
         <ChatMessage {message} />
       {/each}
 

@@ -1,11 +1,13 @@
-import type { RendererLogger } from 'electron-log'
-import type { Evtbus } from '$lib/utils/evtbus'
+import type { Evtbus } from '$lib/utils/evtbus';
+import type { UnigenHookType } from '$lib/utils/hook';
 import type { LeftSidebarItem } from '$lib/utils/plugin/extpoint/leftsidebar';
+import type { RendererLogger } from 'electron-log';
 import type { IPluginExtensionPoint } from './extpoint/slot';
 
 export interface IPlatformContext {
     readonly log: RendererLogger;
     readonly evtbus: Evtbus;
+    readonly hook: UnigenHookType;
     readonly extActivity: IPluginExtensionPoint<LeftSidebarItem>;
 }
 

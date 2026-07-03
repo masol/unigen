@@ -1,7 +1,8 @@
-import { z } from 'zod'
+import { throwPrecondition } from '$libs/utils/err.js';
+import { WindowService } from '$libs/utils/window.js';
 import { os } from "@orpc/server";
 import { BrowserWindow } from 'electron';
-import { WindowService } from '$libs/utils/window.js';
+import { z } from 'zod';
 import { RpcContext } from '../type.js';
 
 // ---------- 窗口状态枚举 ----------
@@ -106,6 +107,21 @@ const getState = os
         };
     })
 
+
+const toggleDevtools = os
+    .handler(async ({ context }) => {
+        const ctx = context as RpcContext;
+        const win = BrowserWindow.fromId(ctx.project.wid);
+        if (win && win.webContents) {
+            // 切换开发者工具的打开/关闭状态
+            win.webContents.toggleDevTools();
+        } else {
+            throwPrecondition("无法定位窗口对象。")
+        }
+    });
+
+
+
 export default {
     max,
     min,
@@ -114,4 +130,5 @@ export default {
     focus,
     close,
     getState,
+    toggleDevtools
 }

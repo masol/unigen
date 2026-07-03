@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { ScrollArea } from "$lib/components/ui/scroll-area";
   import PanelHeader from "$lib/components/pannel-header.svelte";
+  import { ScrollArea } from "$lib/components/ui/scroll-area";
+  import { layoutStore } from "$lib/store/ui/layout.svelte";
   import BottomPanelTabs from "./bar.header.svelte";
   import { bottomPanelStore } from "./bar.store.svelte";
-  import { layoutStore } from "$lib/store/ui/layout.svelte";
   import HookLogViewer from "./hooklog/HookLog.svelte";
 
   let isMaximized = $derived(layoutStore.maximizedPanel === "bottom");
@@ -45,7 +45,7 @@
     headerComponent={BottomPanelTabs}
   />
 
-  <ScrollArea class="flex-1">
+  <ScrollArea class="flex-1 min-h-0">
     <div class="p-3 font-mono text-xs leading-5">
       {#if bottomPanelStore.activeTab === "terminal"}
         {#each terminalLines as line (line.id)}

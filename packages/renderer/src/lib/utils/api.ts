@@ -1,9 +1,10 @@
-import { createORPCClient } from '@orpc/client'
-import { RPCLink } from '@orpc/client/message-port'
-import type { AppClient, NotifyContract } from '@app/main/types'
-import evtbus, { type Events } from './evtbus'
-import { isPlainObject } from 'radashi';
+import type { AppClient, NotifyContract } from '@app/main/types';
+import { COMMON_ORPC_ERROR_DEFS, createORPCClient, ORPCError } from '@orpc/client';
+import { RPCLink } from '@orpc/client/message-port';
 import Logger from 'electron-log/renderer';
+import { isPlainObject } from 'radashi';
+import { toast } from 'svelte-sonner';
+import evtbus, { type Events } from './evtbus';
 
 function initApi(): AppClient {
 
@@ -56,3 +57,64 @@ export const api = (): AppClient => {
     }
     return client;
 };
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createSafeProxy(target: any): any {
+    // Proxy 的 target 必须是可调用的（function），apply 陷阱才能生效。
+    // 用 function 作占位 target，get 陷阱也照常工作。
+    const proxyTarget = typeof target === 'function' ? target : function () { };
+    return new Proxy(proxyTarget, {
+        get(_t, prop) {
+            // 从真实 target 上取属性（真实 target 是 ORPC 的 Proxy）
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const original = (target as any)[prop];
+            if (original === null || original === undefined) {
+                return original;
+            }
+            // 不要 .bind()！bind 会创建一个原生 bound function，
+            // 从而丢失 ORPC Proxy 的 get 行为，导致后续 .xxx 访问全部变 undefined。
+            if (typeof original === 'function' || typeof original === 'object') {
+                return createSafeProxy(original);
+            }
+            return original;
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        apply(_t, _thisArg, args: any[]) {
+            if (typeof target !== 'function') {
+                throw new TypeError('safeApi: target is not callable');
+            }
+            return (async () => {
+                try {
+                    // 直接以 ORPC 原 Proxy 作为 this 调用，保持其内部路径追踪逻辑。
+                    return await Reflect.apply(target, target, args);
+                } catch (e) {
+                    procApiError(e);
+                    return null;
+                }
+            })();
+        },
+    });
+}
+// 不会抛异常，而是报警并返回 null(用户取消不报警)。
+export const safeApi = (): AppClient => {
+    return createSafeProxy(api());
+};
+
+
+export function procApiError(e: unknown): boolean {
+    let msg: string;
+    if (e instanceof ORPCError) {
+        if (e.status === 601) { // 用户取消。
+            return false;
+        } else if (e.status === COMMON_ORPC_ERROR_DEFS.TOO_MANY_REQUESTS.status) {
+            toast.success(e.message)
+            return false;
+        }
+        msg = e.message || e.code;
+    } else {
+        msg = e instanceof Error ? e.message : String(e)
+    }
+    Logger.error("ProjectStore error:", msg, e);
+    toast.error(msg);
+    return false;
+}

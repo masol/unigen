@@ -1,4 +1,5 @@
 import { configStore } from "$lib/store/config.svelte";
+import { safeApi } from "../api";
 import type { CommandDescriptor } from "./type";
 
 import {
@@ -10,7 +11,7 @@ export const builtins: CommandDescriptor[] = [
     // ── 导航 ──
     {
         id: 'navigation.home',
-        label: '控制台',
+        label: '回到控制台',
         category: 'Navigation',
         handler: () => push("/"),
     },
@@ -90,6 +91,13 @@ export const builtins: CommandDescriptor[] = [
             };
             console.table(info);
             return info;
+        },
+    }, {
+        id: 'dev.toogleDevTools',
+        label: '切换开发者工具',
+        category: 'Developer',
+        handler: () => {
+            return safeApi().window.toggleDevtools();
         },
     },
 

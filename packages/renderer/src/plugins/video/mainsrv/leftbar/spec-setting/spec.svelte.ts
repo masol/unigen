@@ -5,8 +5,8 @@
  * 架构：Svelte 5 Runes 类 Store 模式（纯客户端 · 模块级单例）。
  */
 
-import log from 'electron-log/renderer';
 import { api } from '$lib/utils/api';
+import log from 'electron-log/renderer';
 import { DbKeys } from '../../../dbkeys';
 
 export const episodeDurations = [
@@ -225,7 +225,7 @@ class SpecStore {
             this.#style = (styleRes ?? 'cinematic') as string;
 
             this.#lastUpdated = Date.now();
-            log.info('[SpecStore] spec data loaded');
+            log.info('[SpecStore] 视频规格数据加载完毕。');
         } catch (err) {
             this.#error = err instanceof Error ? err.message : String(err);
             log.error('[SpecStore] init() failed', err);

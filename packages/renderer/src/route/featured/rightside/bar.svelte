@@ -1,12 +1,12 @@
 <!-- featured/rightside/bar.svelte -->
 <script lang="ts">
+  import PanelHeader from "$lib/components/pannel-header.svelte";
+  import { ScrollArea } from "$lib/components/ui/scroll-area";
+  import { layoutStore } from "$lib/store/ui/layout.svelte";
   import autoAnimate from "@formkit/auto-animate";
   import { IconPointFilled } from "@tabler/icons-svelte";
-  import { ScrollArea } from "$lib/components/ui/scroll-area";
-  import PanelHeader from "$lib/components/pannel-header.svelte";
   import BarHeader from "./bar.header.svelte";
   import { rightPanelStore } from "./bar.store.svelte";
-  import { layoutStore } from "$lib/store/ui/layout.svelte";
   import ChatComponet from "./chat/Main.svelte";
 
   let isMaximized = $derived(layoutStore.maximizedPanel === "right");
@@ -51,7 +51,7 @@
   <!-- ╭─────────────────────────────────────────────────────╮ -->
   <!-- │ 内容区：响应 store.activeTab 切换显示               │ -->
   <!-- ╰─────────────────────────────────────────────────────╯ -->
-  <ScrollArea class="flex-1">
+  <ScrollArea class="flex-1 min-h-0">
     <div class="p-2">
       {#if rightPanelStore.activeTab === "outline"}
         <div class="space-y-0.5" use:autoAnimate>
