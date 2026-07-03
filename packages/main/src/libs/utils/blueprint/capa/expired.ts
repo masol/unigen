@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import { getPrjTime } from "$libs/utils/db/prjstore.js";
 import { CapaIOType } from "$libs/utils/db/schema/capatype.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import { PrjTimeStore } from "$types/prjstore.js";
 import { getIOData } from "./input.js";
-import { getPrjTime } from "./util.js";
 
 export type ExpiredChunk<IType, OType> = {
     expired: number[] | -1; // 指示哪些项无效了，需要重新计算。
@@ -73,7 +73,7 @@ function stripPrjTime<T>(data: PrjTimeStore<T> | Array<PrjTimeStore<T> | null> |
  * @param outputType 
  * @returns 
  */
-export function getExpiredChunk<IType = any, OType = any>(
+export function getInvalidatedPairs<IType = any, OType = any>(
     ctx: IRunnerContext,
     inputType: CapaIOType,
     outputType: CapaIOType

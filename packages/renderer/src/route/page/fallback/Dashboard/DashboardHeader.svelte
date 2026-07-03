@@ -1,13 +1,16 @@
 <!-- NovelToVideoDashboard/DashboardHeader.svelte -->
-<!-- 职责：顶部品牌区 + 全局任务状态徽章。仅读 store,无本地 state。 -->
+<!-- 职责：顶部品牌区 + 全局任务状态徽章 + idle 时的日志显示切换。仅读 store,无本地 state。 -->
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
   import {
+    IconAlertTriangle,
     IconBolt,
     IconCircleDashed,
-    IconLoader2,
-    IconAlertTriangle,
     IconClock,
+    IconEye,
+    IconEyeOff,
+    IconLoader2,
   } from "@tabler/icons-svelte";
   import { dashboardStore } from "./dashstore.svelte";
 
@@ -15,6 +18,10 @@
     const m = Math.floor(s / 60);
     const ss = s % 60;
     return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+  }
+
+  function toggleLog() {
+    dashboardStore.forceShowLog = !dashboardStore.forceShowLog;
   }
 </script>
 
@@ -62,6 +69,21 @@
         <IconClock size={14} stroke={1.5} class="text-muted-foreground" />
         <span class="font-mono">{fmtTime(dashboardStore.elapsedSeconds)}</span>
       </Badge>
+    {:else}
+      <Button
+        variant="outline"
+        size="sm"
+        class="gap-2 rounded-xl"
+        onclick={toggleLog}
+      >
+        {#if dashboardStore.forceShowLog}
+          <IconEyeOff size={16} stroke={1.5} />
+          <span>隐藏日志</span>
+        {:else}
+          <IconEye size={16} stroke={1.5} />
+          <span>显示日志</span>
+        {/if}
+      </Button>
     {/if}
   </div>
 </header>

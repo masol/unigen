@@ -5,8 +5,8 @@
   import { onDestroy } from "svelte";
 
   import DashboardHeader from "./DashboardHeader.svelte";
-  import RunControlCard from "./RunControlCard.svelte";
   import InfoBlocksGrid from "./InfoBlocksGrid.svelte";
+  import RunControlCard from "./RunControlCard.svelte";
   import RunLogPanel from "./RunLogPanel.svelte";
   import { dashboardStore } from "./dashstore.svelte";
 
@@ -21,10 +21,10 @@
   <RunControlCard />
 
   <section use:autoAnimate class="flex-1">
-    {#if dashboardStore.runState === "idle"}
-      <InfoBlocksGrid />
-    {:else}
+    {#if dashboardStore.showLog}
       <RunLogPanel />
+    {:else}
+      <InfoBlocksGrid />
     {/if}
   </section>
 </div>

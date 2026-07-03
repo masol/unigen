@@ -1,7 +1,7 @@
 // evtbus.ts
 // mitt + TypeScript 全局事件总线封装模板
 // 安装依赖：npm install mitt
-import type { AppConfig, WindowEventPayload } from '@app/main/types'
+import type { AppConfig, WindowEventPayload } from '@app/main/types';
 import mitt, { type Emitter } from "mitt";
 
 /**
@@ -16,10 +16,7 @@ export type Events = {
     "sys:usedark": boolean  // 更改了操作系统的深色/浅色模式。
     "lang:changed": string  // 更新了语言设置。
     "task_finished": { success: boolean, reason?: string } // 任务结束，启动时间。
-    // 用户相关事件
-    "user:login": { id: number; name: string; avatar?: string };
-    "user:logout": void;
-    "user:update": { id: number; fields: Partial<{ name: string; avatar: string }> };
+    "task_progess_report": string // 项目主任务进度报告。
 };
 
 export type EventNameType = keyof Events;

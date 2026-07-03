@@ -53,6 +53,13 @@ export interface IRunnerContext {
     // ==========================================
     // 📝 日志接口 (适配 electron-log)
     // ==========================================
+    /**
+     * 向渲染端主界面发送通知，同时记录到silly级别的日志中。
+     * @param message 
+     * @param args 
+     */
+    notify(message: string, ...args: unknown[]): void;
+
 
     /**
      * 打印普通信息日志

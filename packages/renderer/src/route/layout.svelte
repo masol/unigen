@@ -1,28 +1,28 @@
 <!-- src/route/layout.svelte -->
 <script lang="ts">
-  import HeaderBar from "./featured/header-bar.svelte";
   import * as Resizable from "$lib/components/ui/resizable";
   import * as Tooltip from "$lib/components/ui/tooltip";
-  import StatusBar from "./featured/status.svelte";
-  import RightSidebar from "./featured/rightside/bar.svelte";
-  import LeftSidebar from "./featured/leftside/bar.svelte";
-  import ActivityBar from "./featured/activity.svelte";
-  import Router from "svelte-spa-router";
-  import BottomBar from "./featured/bottom/bar.svelte";
   import { layoutStore } from "$lib/store/ui/layout.svelte";
   import { routerStore } from "$lib/store/ui/route.svelte";
+  import Router from "svelte-spa-router";
+  import ActivityBar from "./featured/activity.svelte";
+  import BottomBar from "./featured/bottom/bar.svelte";
+  import HeaderBar from "./featured/header-bar.svelte";
+  import LeftSidebar from "./featured/leftside/bar.svelte";
+  import RightSidebar from "./featured/rightside/bar.svelte";
+  import StatusBar from "./featured/status.svelte";
 </script>
 
 <!--══════════════════════════════════════════════════════════════ -->
 <!--ROOT LAYOUT                                                  -->
 <!-- ══════════════════════════════════════════════════════════════ -->
-<Tooltip.Provider  delayDuration={300}>
+<Tooltip.Provider delayDuration={300}>
   <div class="flex w-full h-full flex-col bg-background">
     <!-- HeaderBar：固定在顶部 -->
     <HeaderBar />
 
     <!-- 内容区域：Activity Bar + Panels -->
-    <div class="flex flex-1 min-h-0">
+    <div class="flex flex-1 overflow-hidden">
       <ActivityBar></ActivityBar>
       <!-- ╭─── / ActivityBar ───╮ -->
 

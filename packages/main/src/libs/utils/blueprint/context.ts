@@ -2,8 +2,9 @@ import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { IProjectContext } from '$libs/project/type.js';
 import { IRunnerContext } from '$types/blueprint/context.js';
 import log from 'electron-log/main.js';
-import { ICapaFunctor } from './functor/type.js';
+import { format } from 'node:util';
 import { loadFunctor } from './functor/index.js';
+import { ICapaFunctor } from './functor/type.js';
 
 
 export class RunnerContext implements IRunnerContext {
@@ -74,6 +75,13 @@ export class RunnerContext implements IRunnerContext {
     // 📝 日志接口 (适配 electron-log) 
     //  @TODO: 适配通知接口，以通知主进程的日志过程。(是否应该取名step?)
     // ==========================================
+    notify(message: string, ...args: unknown[]): void {
+        // 如果 args 为空，format 会直接返回 message
+        // 如果 args 有值，format 会按顺序替换 message 中的占位符，或将剩余参数追加到末尾
+        const fullMessage = format(message, ...args);
+        this.prj.notify("task_progess_report", fullMessage);
+        log.silly(fullMessage);
+    }
 
     info(message: string, ...args: unknown[]): void {
         log.info(message, ...args);

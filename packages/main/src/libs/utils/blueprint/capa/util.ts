@@ -1,7 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 import type { CapaIOType } from "$libs/utils/db/schema/capatype.js";
-import { type PrjTimeStore, isPrjtimeStore } from "$types/prjstore.js";
-import dayjs, { Dayjs } from "dayjs";
 
 
 /**
@@ -14,82 +12,4 @@ export function getFieldkey(io: CapaIOType, subId?: string): string | null {
         return subId ? `${io.fieldKey}_${subId}` : io.fieldKey;
     }
     return null
-}
-
-
-
-//递归将value转化为普通对象--剥离updatedAt信息。
-export function stripPrjTime<T>(value: Array<PrjTimeStore<T> | null> | null): Array<T | null> {
-    if (!value) {
-        return [];
-    }
-
-    const ret: Array<T | null> = [];
-
-    value.forEach((v) => {
-        if (v) {
-            if (Array.isArray(v.value)) { // 属于数组。
-                v.value.forEach(v => {
-                    if ('item' in v) {
-                        if (isPrjtimeStore(v.item)) {
-                            v.item = v.item.value;
-                        }
-                    }
-                })
-            }
-            ret.push(v.value);
-        } else {
-            ret.push(v);
-        }
-    })
-
-    return ret;
-}
-
-
-
-
-/**
- * 获取时间戳：根据 bLatest 标志返回最新或最早时间
- */
-export function getPrjTime(values: Array<PrjTimeStore<any> | null> | PrjTimeStore<any> | null, bLatest: boolean): Dayjs | null {
-    // 统一处理为数组
-    const valuesArray = Array.isArray(values) ? values : (values ? [values] : []);
-
-    // 1. 如果数组为空或没有有效数据，直接返回 null
-    if (!valuesArray || valuesArray.length === 0) return null;
-
-    let targetTime = bLatest ? dayjs(0) : dayjs().add(10, 'minute');
-    let bChanged = false;
-
-    // 2. 核心对比逻辑（保持闭包特性，支持接收 null/undefined）
-    const compareAndUpdate = (timeStr: string | Date | number | undefined | null) => {
-        if (!timeStr) return;
-        const current = dayjs(timeStr);
-        const shouldUpdate = bLatest ? current.isAfter(targetTime) : current.isBefore(targetTime);
-        if (shouldUpdate) {
-            targetTime = current;
-            bChanged = true;
-        }
-    };
-
-    // 3. 遍历外部传入的 values 数组
-    valuesArray.forEach(value => {
-        if (!value) return; // 过滤掉 null 的项
-
-        // 3.1 无论是不是数组，外层的 updatedAt 都要参与对比
-        compareAndUpdate(value.updatedAt);
-
-        // 3.2 如果内部的 value 是数组，则深层遍历对比子项
-        if (Array.isArray(value.value)) {
-            value.value.forEach((v: any) => {
-                if (v && isPrjtimeStore(v.item)) {
-                    compareAndUpdate(v.item.updatedAt);
-                }
-            });
-        }
-    });
-
-    // 4. 统一返回
-    return bChanged ? targetTime : null;
 }

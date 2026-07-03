@@ -78,11 +78,11 @@ export class SplitFunctor extends BaseFunctor {
         if (this.capa.input && this.capa.output) {
 
             const ioInfo = getIOInfo(ctx, this.capa.input, this.capa.output);
-            // ctx.debug("split ioInfo=", JSON.stringify(ioInfo, null, 2))
+            ctx.debug("split ioInfo=", JSON.stringify(ioInfo, null, 2))
 
             if (ioInfo.expired) {
 
-                const scripts: ScriptItem[] = ioInfo.input[0] as ScriptItem[];
+                const scripts: ScriptItem[] = ioInfo.inputs[0] as ScriptItem[];
 
                 // // 获取需要更新的ParaItemSchema。
                 // const expChunks = getExpiredChunk(ctx, this.capa.input[0], this.capa.output[0]);

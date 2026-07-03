@@ -1,9 +1,9 @@
 <!-- $lib/components/LeftSidebar.svelte -->
 <script lang="ts">
-  import { layoutStore } from "$lib/store/ui/layout.svelte";
   import PanelHeader from "$lib/components/pannel-header.svelte";
-  import PanelFallback from "./fallback.svelte";
   import { ScrollArea } from "$lib/components/ui/scroll-area";
+  import { layoutStore } from "$lib/store/ui/layout.svelte";
+  import PanelFallback from "./fallback.svelte";
 
   // 获取当前激活的活动项
   let currentItem = $derived(layoutStore.activeActivityItem);

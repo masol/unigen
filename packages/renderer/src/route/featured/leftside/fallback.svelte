@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { IconAlertTriangle, IconPuzzle } from "@tabler/icons-svelte";
   import { Button } from "$lib/components/ui/button";
+  import { IconAlertTriangle, IconPuzzle } from "@tabler/icons-svelte";
 
   let { activityId = "" }: { activityId?: string } = $props();
 </script>

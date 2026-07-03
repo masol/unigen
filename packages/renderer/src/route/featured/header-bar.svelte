@@ -1,16 +1,16 @@
 <!-- TitleBar.svelte -->
 <script lang="ts">
-  import { IconSun, IconMoon, IconDeviceDesktop } from "@tabler/icons-svelte";
   import { Button } from "$lib/components/ui/button";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import * as Tooltip from "$lib/components/ui/tooltip";
   import { Separator } from "$lib/components/ui/separator";
-  import { windowStore } from "$lib/store/window.svelte";
-  import LayoutGroup from "./header/layout.svelte";
-  import Brand from "./header/brand.svelte";
-  import Winctrl from "./header/winctrl.svelte";
+  import * as Tooltip from "$lib/components/ui/tooltip";
   import { configStore } from "$lib/store/config.svelte";
+  import { windowStore } from "$lib/store/window.svelte";
+  import { IconDeviceDesktop, IconMoon, IconSun } from "@tabler/icons-svelte";
+  import Brand from "./header/brand.svelte";
   import CommandPaletteBar from "./header/CommandPaletteBar.svelte";
+  import LayoutGroup from "./header/layout.svelte";
+  import Winctrl from "./header/winctrl.svelte";
 
   const menus = ["文件", "编辑", "视图", "运行", "终端", "帮助"];
   const menuItems = ["新建文件", "打开...", "保存", "另存为...", "退出"];

@@ -1,19 +1,18 @@
 // $lib/store/dashboard.svelte.ts
 // 私有 store：所有状态、衍生值、副作用、对外回调都集中在这里。
 // 子组件通过只读 getter 消费，通过调用方法修改，完全不持有本地状态。
-import log from "electron-log/renderer";
-import { confirmStore } from "$lib/store/ui/confirm.svelte";
-import { IconBook2, IconSparkles, IconVideo } from "@tabler/icons-svelte";
-import { api } from "$lib/utils/api";
 import { projectStore } from "$lib/store/project.svelte";
+import { confirmStore } from "$lib/store/ui/confirm.svelte";
+import { api } from "$lib/utils/api";
+import evtbus from "$lib/utils/evtbus";
+import { IconBook2, IconSparkles, IconVideo } from "@tabler/icons-svelte";
+import log from "electron-log/renderer";
+import { toast } from "svelte-sonner";
 
 // ─── 类型 ───────────────────────────────────────────────────────
-export type LogLevel = "info" | "success" | "warn" | "error";
-
 export interface LogEntry {
     id: string;
-    time: string;
-    level: LogLevel;
+    time: number; // 时间戳（毫秒）
     message: string;
 }
 
@@ -58,40 +57,26 @@ const infoBlocks: InfoBlock[] = [
     },
 ];
 
-// ─── 假数据：模拟运行日志流（待替换为真实 api() 事件源）────────
-const mockMessages: { level: LogLevel; msg: string }[] = [
-    { level: "info", msg: "加载小说源文件 …" },
-    { level: "success", msg: "文本解析完成 · 共识别 24 章 / 632 个场景" },
-    { level: "info", msg: "场景 #001「靖安司初遇」语义分镜中 …" },
-    { level: "success", msg: "场景 #001 分镜完成（缓存命中 0 / 8）" },
-    { level: "info", msg: "调用 SDXL 生成关键帧 #001-01" },
-    { level: "info", msg: "调用 SDXL 生成关键帧 #001-02" },
-    { level: "success", msg: "关键帧 #001 全部生成完毕 · 用时 12.4s" },
-    { level: "info", msg: "调用 CosyVoice 合成旁白 #001 …" },
-    { level: "warn", msg: "场景 #002 命中缓存，跳过重复计算" },
-    { level: "success", msg: "旁白 #001 合成完毕 · 时长 00:03:12" },
-    { level: "info", msg: "运动模糊与镜头推拉渲染中 …" },
-    { level: "success", msg: "章节 1/24 渲染完成 · 输出至 ./out/ch01.mp4" },
-];
 export type RunTarget = "segmentation" | "shot" | "entities" | "voice" | "storyboard" | "visual" | "video" | "post"
 
 
 // ─── Store ──────────────────────────────────────────────────────
 class DashboardStore {
     // ── 私有状态（精确选型）──────────────────────────────────────
-    #elapsedSeconds = $state(0); // 原始值 → $state
-    #terminatingSeconds = $state(0); // 原始值 → $state
-    #logs = $state.raw<LogEntry[]>([]); // 仅整体替换（spread 新数组）→ $state.raw
-    #target = $state<RunTarget>("post"); // 运行目标。
+    #elapsedSeconds = $state(0);
+    #terminatingSeconds = $state(0);
+    #logs = $state.raw<LogEntry[]>([]);
+    #target = $state<RunTarget>("post");
+    #preserveLogs = $state(false); // 是否保留日志（跨任务重启）
+    forceShowLog = $state(false);
 
     // ── 私有非响应式资源 ─────────────────────────────────────────
-    #logTimer: ReturnType<typeof setInterval> | null = null;
     #clockTimer: ReturnType<typeof setInterval> | null = null;
     #terminateTimer: ReturnType<typeof setInterval> | null = null;
-    #msgIndex = 0;
 
 
     // ── 派生 ─────────────────────────────────────────────────────
+    readonly showLog = $derived(this.runState !== 'idle' || this.forceShowLog)
     readonly #statusLabel = $derived(
         projectStore.runState === "idle"
             ? "空闲"
@@ -118,6 +103,35 @@ class DashboardStore {
 
     constructor() {
         log.info("[DashboardStore] initialized");
+
+        // 监听任务进度报告
+        evtbus.on("task_progess_report", (message: string) => {
+            this.#pushLog(message);
+        });
+
+        // 监听任务完成事件
+        evtbus.on("task_finished", (evt: { success: boolean; reason?: string }) => {
+            log.info(`[DashboardStore] task_finished: success=${evt.success}, reason=${evt.reason ?? ""}`);
+
+            // 清理所有计时器
+            this.#clearTimers();
+
+            // 重置计时状态
+            this.#elapsedSeconds = 0;
+            this.#terminatingSeconds = 0;
+
+            // 添加完成日志
+            if (evt.success) {
+                const msg = "✓ 任务已成功完成 · 所有步骤已保存"
+                this.#pushLog(msg);
+                toast.success(msg);
+            } else {
+                const reasonText = evt.reason ? ` · ${evt.reason}` : "";
+                const msg = `✗ 任务已终止${reasonText}`;
+                this.#pushLog(msg);
+                toast.error(msg);
+            }
+        });
     }
 
     // ── 只读门面 ─────────────────────────────────────────────────
@@ -148,6 +162,9 @@ class DashboardStore {
     get buttonLabel() {
         return this.#buttonLabel;
     }
+    get preserveLogs() {
+        return this.#preserveLogs;
+    }
 
     async setTarget(newTarget: RunTarget): Promise<void> {
         await api().project.set({
@@ -158,66 +175,62 @@ class DashboardStore {
     }
 
     // ── 工具 ─────────────────────────────────────────────────────
-    #nowStr() {
-        const d = new Date();
-        return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
-    }
-
-    #pushLog(level: LogLevel, message: string) {
-        // 整体替换，与 $state.raw 选型匹配
+    #pushLog(message: string) {
+        // 新日志插入在数组头部（最新在上）
         this.#logs = [
-            ...this.#logs,
             {
-                id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                time: this.#nowStr(),
-                level,
+                id: crypto.randomUUID(),
+                time: Date.now(),
                 message,
             },
+            ...this.#logs,
         ];
     }
 
     #clearTimers = () => {
-        if (this.#logTimer) clearInterval(this.#logTimer);
-        if (this.#clockTimer) clearInterval(this.#clockTimer);
-        if (this.#terminateTimer) clearInterval(this.#terminateTimer);
-        this.#logTimer = this.#clockTimer = this.#terminateTimer = null;
+        if (this.#clockTimer) {
+            clearInterval(this.#clockTimer);
+            this.#clockTimer = null;
+        }
+        if (this.#terminateTimer) {
+            clearInterval(this.#terminateTimer);
+            this.#terminateTimer = null;
+        }
+        log.debug("[DashboardStore] all timers cleared");
     };
 
     // ── 状态机 ───────────────────────────────────────────────────
     async #startRunning() {
+        this.forceShowLog = false;
         log.debug("[DashboardStore] startRunning() called");
         await projectStore.start();
-        // this.#runState = "running";
+
         const startime = await api().project.startTime();
         const nowTime = new Date().getTime();
 
         this.#elapsedSeconds = startime > 0 ? Math.floor((nowTime - startime) / 1000) : 0;
 
-        this.#logs = [];
-        this.#msgIndex = 0;
-        this.#pushLog("info", "任务已启动 · 节点连接正常");
+        // 如果未勾选"保留日志"，则清空历史日志
+        if (!this.#preserveLogs) {
+            this.#logs = [];
+        }
+        // this.#pushLog("任务已启动 · 节点连接正常");
         log.info("[DashboardStore] run started");
+
+        if (this.runState === 'idle') {
+            // 任务已经结束了。
+            return;
+        }
 
         this.#clockTimer = setInterval(() => {
             this.#elapsedSeconds += 1;
         }, 1000);
-
-        this.#logTimer = setInterval(() => {
-            const next = mockMessages[this.#msgIndex % mockMessages.length];
-            this.#pushLog(next.level, next.msg);
-            this.#msgIndex += 1;
-        }, 1400);
     }
 
     #enterTerminating() {
         log.debug("[DashboardStore] enterTerminating() called");
-        if (this.#logTimer) {
-            clearInterval(this.#logTimer);
-            this.#logTimer = null;
-        }
-        // this.#runState = "terminating";
         this.#terminatingSeconds = 0;
-        this.#pushLog("warn", "收到终止信号 · 等待当前节点安全收尾 …");
+        this.#pushLog("收到终止信号 · 等待当前节点安全收尾 …");
         log.info("[DashboardStore] terminating requested");
         projectStore.stop(false);
 
@@ -229,7 +242,7 @@ class DashboardStore {
     #finalizeStop(message: string) {
         projectStore.stop(true);
         this.#clearTimers();
-        this.#pushLog("success", message);
+        this.#pushLog(message);
         this.#elapsedSeconds = 0;
         this.#terminatingSeconds = 0;
         log.info(`[DashboardStore] run stopped: ${message}`);
@@ -247,12 +260,6 @@ class DashboardStore {
         }
 
         if (projectStore.runState === "running") {
-            // const ok = await confirmStore.request({
-            //     title: "终止当前任务？",
-            //     message:
-            //         "已完成的步骤会保留，不需要重新计算。当前正在进行的这一步会被安全中止。",
-            // });
-            // if (!ok) return;
             this.#enterTerminating();
             return;
         }
@@ -268,6 +275,15 @@ class DashboardStore {
         }
     };
 
+    clearLogs = (): void => {
+        log.debug("[DashboardStore] clearLogs() called");
+        this.#logs = [];
+    };
+
+    togglePreserveLogs = (): void => {
+        log.debug(`[DashboardStore] togglePreserveLogs() called, current=${this.#preserveLogs}`);
+        this.#preserveLogs = !this.#preserveLogs;
+    };
 
     destroy = (): void => {
         log.debug("[DashboardStore] destroy() called");
