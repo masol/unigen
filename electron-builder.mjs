@@ -22,10 +22,6 @@ export default /** @type import('electron-builder').Configuration */
     "LICENSE*",
     pkg.main,
     "!node_modules/@app/**",
-    // 1️⃣ 使用 **/ 匹配子 packages 下的 node_modules
-    "**/node_modules/better-sqlite3/**/*",
-    "**/node_modules/@lancedb/**/*",
-    "**/node_modules/node-llama-cpp/**/*",
     ...(await getListOfFilesFromEachWorkspace()),
   ],
   asar: true,
@@ -33,6 +29,9 @@ export default /** @type import('electron-builder').Configuration */
     "**/node_modules/better-sqlite3/**/*",
     "**/node_modules/@lancedb/**/*",
     "**/node_modules/node-llama-cpp/**/*",
+    "**/node_modules/@node-llama-cpp/**/*",
+    // 针对间接依赖(by lancedb)，多加一个 /**/ 适配深层嵌套
+    "**/node_modules/**/onnxruntime-node/**/*",
   ],
   extraResources: [
     {

@@ -5,7 +5,7 @@ export const ProjectDbKeys = {
     embedingSize: 'embdingSize',
     embedingFrom: 'embeding_from',
     depplugins: "dep", //项目依赖的插件数组
-    entry_capa: "entry_capa", // 入口的capability.(默认执行的capability)
+    entry_capa: "entry_capa", // 入口的capability.(主任务默认执行的capability)
 
     /// 下面是video插件定义的keys，先写这里了，应该移入video plugin.
     scripts: "script",

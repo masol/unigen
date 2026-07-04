@@ -12,7 +12,8 @@ export const capabilities = sqliteTable('capabilities', {
         .primaryKey()
         .$defaultFn(() => crypto.randomUUID()),
 
-    // name如果以#inter::开头，后续为名称。如果是#workflow,则process中保存的内容为workflow定义。注意：#开头的名称为内部名称。
+    // 注意：#开头的名称为内部名称。
+    // name如果以#inter::开头，后续为名称。如果是#workflow,则process中保存的内容为workflow定义。如果以#ifunc::开头，process中保存的内容为functor 的run源码。
     name: text('name').notNull().default(""),
     role: text('role').notNull().default(""),
     goal: text('goal').notNull().default(""),

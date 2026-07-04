@@ -47,7 +47,7 @@ export class Plugin extends PluginBase {
         const prjDb = PrjDB.ensure(prj);
 
         const oldEntry = prjDb.getCapaById(entryId);
-        if (!oldEntry || oldEntry.version !== version) {
+        if (!oldEntry || (oldEntry.version ?? -1) < version) {
             const newcapa = prjDb.upsertCapa({
                 id: entryId,
                 name: "#workflow",
