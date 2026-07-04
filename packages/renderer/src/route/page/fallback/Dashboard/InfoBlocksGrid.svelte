@@ -14,7 +14,7 @@
   import { specStore } from "../../../../plugins/video/mainsrv/leftbar/spec-setting/spec.svelte";
 
   import { layoutStore } from "$lib/store/ui/layout.svelte";
-  import { formatTokens } from "../../settings/llm/types";
+  import { formatTokens } from "$lib/utils/model/types";
 
   let totalSize = $derived.by(() => {
     return inputStore.scripts.reduce((acc, item) => {

@@ -1,17 +1,17 @@
 <script lang="ts">
-  import {
-    IconBrain,
-    IconLoader2,
-    IconArrowsSort,
-    IconFolderOpen,
-  } from "@tabler/icons-svelte";
   import * as Select from "$lib/components/ui/select";
   import { Separator } from "$lib/components/ui/separator";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { configStore } from "$lib/store/config.svelte";
-  import { api } from "$lib/utils/api";
-  import { allAbilities } from "../llm/types";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
+  import { api } from "$lib/utils/api";
+  import { FUNCTION_TAGS } from "$lib/utils/model/types";
+  import {
+    IconArrowsSort,
+    IconBrain,
+    IconFolderOpen,
+    IconLoader2,
+  } from "@tabler/icons-svelte";
 
   // ═══════════════════════════════════════════════════════════
   // Reactive bindings — configStore 是唯一真相，两个值都 derive
@@ -57,7 +57,7 @@
         }));
         configStore.providers.forEach((provider) => {
           provider.models.forEach((model) => {
-            if (model.abilities.includes(allAbilities.embedding)) {
+            if (model.abilities.includes(FUNCTION_TAGS.embedding)) {
               embeddingModels.push({
                 value: `::${provider.id}::${model.id}`,
                 label: model.id,
@@ -116,7 +116,7 @@
         }));
         configStore.providers.forEach((provider) => {
           provider.models.forEach((model) => {
-            if (model.abilities.includes(allAbilities.rerank)) {
+            if (model.abilities.includes(FUNCTION_TAGS.rerank)) {
               embeddingModels.push({
                 value: `::${provider.id}::${model.id}`,
                 label: model.id,

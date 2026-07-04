@@ -2,16 +2,29 @@
 /**
  * 模型核心能力枚举：用于调用方按任务场景（如代码生成、推理、轻量文本）筛选
  */
-export enum ModelAbility {
-    TextGeneration = 'text-generation',
-    // CodeGeneration = 'code-generation',
-    Reasoning = 'reasoning', // 强推理模型
+export enum ModelTags {
     Embedding = 'embedding',
     Rerank = 'rerank',
+    TextGeneration = 'text-generation',
+    ImageGeneration = 'image-generation', // 图像生成。
+    // 以上为类别。
+
+    // CodeGeneration = 'code-generation',
+    // 以上为垂直细分，暂未引入，拟定使用单独字段存储任意标签。
+    Ultra = 'ultra',  // 旗舰版
+    Plus = 'plus', // 专业版。
+    Flash = 'flash', // 轻量版。
+    Micro = 'micro', // 端侧版。
+    // 以上为版本区别。
+
+    Search = 'search', // 自带联网搜索能力。
+    Reasoning = 'reasoning', // 思考模式。
     Vision = 'vision', // 视觉理解
     Video = "video",   // 视频理解
-    Func = "func", // 函数调用
+    Tool = "tool", // 函数调用(工具)
     Audio = 'audio', // 语音理解
+
+    // 以上为输入/输出能力。
 }
 
 /**
@@ -38,7 +51,7 @@ export enum ProviderProtocol {
 
 export interface Model {
     id: string;              // 唯一标识符（例如: "gpt-4o", "deepseek-reasoner"）
-    abilities: ModelAbility[]; // 模型具备的能力列表（改用枚举数组，支持多功能模型）
+    abilities: ModelTags[]; // 模型固定标签，包括了能力，功能以及版本。
     // inputModalities: Modality[];  // 输入模态
     // outputModalities: Modality[]; // 输出模态
 

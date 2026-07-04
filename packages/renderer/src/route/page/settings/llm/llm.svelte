@@ -1,21 +1,21 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
-  import autoAnimate from "@formkit/auto-animate";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
-  import { IconSearch, IconFilterOff } from "@tabler/icons-svelte";
+  import autoAnimate from "@formkit/auto-animate";
+  import { IconFilterOff, IconSearch } from "@tabler/icons-svelte";
 
-  import { type Model, type Provider } from "@app/main/types";
-  import { searchStore } from "./searchstore.svelte";
-  import SearchFilterBar from "./SearchFilterBar.svelte";
-  import ConfigHeader from "./ConfigHeader.svelte";
-  import ProviderCard from "./ProviderCard.svelte";
-  import EmptyProvidersState from "./EmptyProvidersState.svelte";
-  import ProviderConfigDialog from "./ProviderConfigDialog.svelte";
-  import type { ProviderConfig } from "./types";
   import { configStore } from "$lib/store/config.svelte";
-  import ModelConfigDialog from "./model/ModelConfigDialog.svelte";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
+  import type { ProviderConfig } from "$lib/utils/model/types";
+  import { type Model, type Provider } from "@app/main/types";
+  import ConfigHeader from "./ConfigHeader.svelte";
+  import EmptyProvidersState from "./EmptyProvidersState.svelte";
+  import ModelConfigDialog from "./model/ModelConfigDialog.svelte";
+  import ProviderCard from "./ProviderCard.svelte";
+  import ProviderConfigDialog from "./ProviderConfigDialog.svelte";
+  import SearchFilterBar from "./SearchFilterBar.svelte";
+  import { searchStore } from "./searchstore.svelte";
 
   /* ═══════════════════════════════════════════════════════════
      UI State

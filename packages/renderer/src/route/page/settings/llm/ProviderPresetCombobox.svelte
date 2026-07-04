@@ -1,10 +1,10 @@
 <!-- ProviderPresetCombobox.svelte -->
 <script lang="ts">
-  import * as Popover from "$lib/components/ui/popover";
   import * as Command from "$lib/components/ui/command";
+  import * as Popover from "$lib/components/ui/popover";
   import { cn } from "$lib/utils";
-  import { IconSearch, IconCheck, IconPlus } from "@tabler/icons-svelte";
-  import type { ProviderPreset } from "./types";
+  import type { ProviderPreset } from "$lib/utils/model/types";
+  import { IconCheck, IconPlus, IconSearch } from "@tabler/icons-svelte";
 
   import { KNOWN_PROVIDERS, findPreset } from "./providers";
 

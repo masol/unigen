@@ -53,7 +53,7 @@ class WindowStore {
           }
           break
         default:
-          log.debug('[WindowStore] unhandled winstate event:', payload)
+          // log.debug('[WindowStore] unhandled winstate event:', payload)
       }
     })
 

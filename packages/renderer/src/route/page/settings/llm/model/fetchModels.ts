@@ -1,8 +1,8 @@
 // fetchModels.ts
 import { api } from "$lib/utils/api";
-import type { ModelOption } from "../types";
+import type { ModelOption } from "../../../../../lib/utils/model/types";
 // import memoize from 'memoize';
-import pMemoize from 'p-memoize';   // 负责所有【异步】请求/I/O
+import pMemoize from 'p-memoize'; // 负责所有【异步】请求/I/O
 
 
 async function fetchImpl(baseURL: string, apiKey: string): Promise<ModelOption[]> {

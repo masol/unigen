@@ -1,22 +1,22 @@
 <!-- $lib/components/panels/SettingsPanel.svelte -->
 <script lang="ts">
-  import autoAnimate from "@formkit/auto-animate";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Separator } from "$lib/components/ui/separator";
+  import autoAnimate from "@formkit/auto-animate";
   import {
-    IconSettings,
     IconBrain,
-    IconCode,
-    IconKeyboard,
-    IconRobot,
-    IconVideo,
-    IconPhoto,
-    IconSearch,
-    IconPlug,
     IconChevronDown,
+    IconCode,
+    IconDeviceSpeaker,
+    IconKeyboard,
+    IconPlug,
+    IconRobot,
+    IconSearch,
+    IconSettings,
     IconSettingsOff,
+    IconVideo,
   } from "@tabler/icons-svelte";
-  import { router, push } from "svelte-spa-router";
+  import { push, router } from "svelte-spa-router";
   import { settingsPanelStore } from "./settingStore.svelte";
 
   /* ------------------------------------------------------------------ */
@@ -93,11 +93,31 @@
       items: [
         {
           id: "models-llm",
-          label: "语言模型",
-          description: "LLM 配置与选择",
+          label: "图文模型",
+          description: "大语言及图像模型的配置与选择",
           icon: IconRobot,
           path: "models/llm",
-          keywords: ["LLM", "GPT", "Claude", "对话", "文本生成", "推理"],
+          keywords: [
+            "LLM",
+            "GPT",
+            "Claude",
+            "对话",
+            "文本生成",
+            "推理",
+            "thinking",
+            "DALL-E",
+            "Stable Diffusion",
+            "Midjourney",
+            "Flux",
+            "通义万相",
+            "图片",
+            "生图",
+            "绘图",
+            "识图",
+            "看图",
+            "多模态",
+            "Vision",
+          ],
         },
         {
           id: "models-video",
@@ -105,15 +125,39 @@
           description: "视频生成与处理",
           icon: IconVideo,
           path: "models/video",
-          keywords: ["video", "视频生成", "Sora", "动画"],
+          keywords: [
+            "video",
+            "视频生成",
+            "Sora",
+            "动画",
+            "文生视频",
+            "图生视频",
+            "Kling",
+            "快手可灵",
+            "Hunyuan-Video",
+            "Wan2.1",
+          ],
         },
         {
-          id: "models-image",
-          label: "图像模型",
-          description: "图片生成与编辑",
-          icon: IconPhoto,
-          path: "models/image",
-          keywords: ["DALL-E", "Stable Diffusion", "图片", "生图", "绘图"],
+          id: "models-audio",
+          label: "音频模型",
+          description: "语音、音乐及音效模型。",
+          icon: IconDeviceSpeaker,
+          path: "models/audio",
+          keywords: [
+            "audio",
+            "语音",
+            "音乐",
+            "音效",
+            "TTS",
+            "文本转语音",
+            "语音识别",
+            "ASR",
+            "声音克隆",
+            "Suno",
+            "Udio",
+            "ElevenLabs",
+          ],
         },
       ],
     },

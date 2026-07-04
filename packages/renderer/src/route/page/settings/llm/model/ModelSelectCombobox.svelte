@@ -1,16 +1,17 @@
 <!-- ModelSelectCombobox.svelte -->
 <script lang="ts">
-  import * as Popover from "$lib/components/ui/popover";
   import * as Command from "$lib/components/ui/command";
+  import * as Popover from "$lib/components/ui/popover";
   import { cn } from "$lib/utils";
+  import type { ModelOption } from "$lib/utils/model/types";
   import {
-    IconSearch,
+    IconAlertTriangle,
     IconCheck,
     IconChevronDown,
     IconLoader2,
-    IconAlertTriangle,
+    IconSearch,
+    IconX,
   } from "@tabler/icons-svelte";
-  import type { ModelOption } from "../types";
   import { SvelteMap } from "svelte/reactivity";
 
   type Props = {
@@ -127,14 +128,35 @@
       {/snippet}
     </Popover.Trigger>
 
+    <!--
+      弹层完整覆盖触发按钮：
+      · sideOffset={-40} 负偏移抵消触发器 h-10(40px) 高度，使弹层顶部与触发器顶部对齐 → 视觉上盖住触发按钮
+      · 与触发器同宽，避免错位
+      · Esc / 点击遮罩自动关闭（Popover 内建），无需回点触发按钮
+    -->
     <Popover.Content
-      class="overflow-hidden rounded-xl p-0"
+      class="overflow-hidden rounded-xl border border-border/50 p-0 shadow-xl"
       align="start"
-      sideOffset={4}
+      sideOffset={-40}
       style="width: {triggerWidth}px; z-index: 9999;"
     >
       <Command.Root>
-        <Command.Input placeholder="输入模型名称搜索…" />
+        <!-- 搜索栏 + 显式关闭按钮 -->
+        <div class="relative">
+          <Command.Input placeholder="输入模型名称搜索…" class="pr-10" />
+          <button
+            type="button"
+            onclick={() => (open = false)}
+            aria-label="关闭"
+            class={cn(
+              "absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1",
+              "text-muted-foreground transition-all duration-200 hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <IconX size={16} stroke={1.5} />
+          </button>
+        </div>
+
         <Command.List class="max-h-72">
           <Command.Empty>未找到匹配的模型</Command.Empty>
 

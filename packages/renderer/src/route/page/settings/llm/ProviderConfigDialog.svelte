@@ -13,6 +13,13 @@
   import * as Tooltip from "$lib/components/ui/tooltip";
   import type { DialogComponentProps } from "$lib/types/dialog";
   import { api } from "$lib/utils/api";
+  import {
+    allProtocols,
+    protocolLabels,
+    type ProviderConfig,
+    type ProviderPreset,
+    type ProviderProtocol,
+  } from "$lib/utils/model/types";
   import autoAnimate from "@formkit/auto-animate";
   import {
     IconAdjustments,
@@ -34,13 +41,6 @@
   import { isURL } from "validator";
   import ProviderPresetCombobox from "./ProviderPresetCombobox.svelte";
   import { findPreset } from "./providers";
-  import {
-    allProtocols,
-    protocolLabels,
-    type ProviderConfig,
-    type ProviderPreset,
-    type ProviderProtocol,
-  } from "./types";
 
   /* ─── Props ─── */
   type Props = {

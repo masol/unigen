@@ -1,4 +1,4 @@
-import { allProtocols, type KnownProvider, type ProviderPreset } from "./types";
+import { allProtocols, type KnownProvider, type ProviderPreset } from "../../../../lib/utils/model/types";
 
 
 export const KNOWN_PROVIDERS: KnownProvider = [

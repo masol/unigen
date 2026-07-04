@@ -1,4 +1,4 @@
-import { ModelAbility } from '$types/shared/model.js';
+import { ModelTags } from '$types/shared/model.js';
 
 export const modelSchema = {
     type: 'object',
@@ -14,7 +14,7 @@ export const modelSchema = {
             type: 'array',
             items: {
                 type: 'string',
-                enum: Object.values(ModelAbility)
+                enum: Object.values(ModelTags)
             },
             uniqueItems: true,
             minItems: 1

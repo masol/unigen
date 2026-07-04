@@ -1,8 +1,8 @@
 <script lang="ts">
   import { Input } from "$lib/components/ui/input";
-  import { IconSearch, IconX, IconFilterOff } from "@tabler/icons-svelte";
+  import { ALL_ABILITIES, tagIcons, tagLabels } from "$lib/utils/model/types";
+  import { IconFilterOff, IconSearch, IconX } from "@tabler/icons-svelte";
   import { searchStore } from "./searchstore.svelte";
-  import { allAbilities, abilityLabels, abilityIcons } from "./types";
 
   let {
     filteredProviderCount = 0,
@@ -12,7 +12,7 @@
     filteredModelCount?: number;
   } = $props();
 
-  const abilities = Object.values(allAbilities);
+  const abilities = ALL_ABILITIES;
 </script>
 
 <div
@@ -49,9 +49,9 @@
 
   <!-- 能力筛选芯片 -->
   <div class="flex flex-wrap items-center gap-2">
-    <span class="mr-1 text-xs text-muted-foreground">输入能力筛选(或)</span>
+    <span class="mr-1 text-xs text-muted-foreground">标签筛选(或)</span>
     {#each abilities as ability (ability)}
-      {@const AbIcon = abilityIcons[ability]}
+      {@const AbIcon = tagIcons[ability]}
       {@const active = searchStore.activeAbilityFilters.includes(ability)}
       <button
         type="button"
@@ -65,7 +65,7 @@
         onclick={() => searchStore.toggleAbilityFilter(ability)}
       >
         <AbIcon size={12} stroke={1.5} />
-        {abilityLabels[ability]}
+        {tagLabels[ability]}
       </button>
     {/each}
     {#if searchStore.isFiltering}

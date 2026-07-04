@@ -1,26 +1,31 @@
+import type { ModelTags, Provider, ProviderProtocol } from "@app/main/types";
 import {
-    IconCloud,
-    IconDeviceDesktop,
-    IconBolt,
-    IconBrandOpenai,
-    IconBrandGoogle,
-    IconSparkles,
-    IconMoodSmile,
-    IconMessage,
-    IconBrain,
-    IconDatabase,
     IconArrowsSort,
+    IconBolt,
+    IconBrain,
+    IconBrandGoogle,
+    IconBrandOpenai,
+    IconCirclePlus,
+    IconCloud,
+    IconCpu,
+    IconDatabase,
+    IconDeviceDesktop,
+    IconDiamond,
     IconEye,
+    IconMessage,
     IconMicrophone,
+    IconMoodSmile,
+    IconPhoto,
+    IconSparkles,
+    IconTool,
     IconVideo,
-    IconFunction
+    IconWorld
 } from "@tabler/icons-svelte";
 
-export type { Model, ModelOption } from "@app/main/types"
-import type { ModelAbility, ProviderProtocol, Provider } from "@app/main/types"
+export type { Model, ModelOption } from "@app/main/types";
 export type ProviderConfig = Omit<Provider, "models">
 
-export type { ProviderProtocol, ModelAbility }
+export type { ModelTags as ModelAbility, ProviderProtocol };
 /* ═══════════════════════════════════════════════════════════
    Helpers
    ═══════════════════════════════════════════════════════════ */
@@ -73,39 +78,74 @@ export function getProviderIcon(provider: Provider): typeof IconCloud {
    Label / Icon Maps
    ═══════════════════════════════════════════════════════════ */
 
-export const abilityLabels: Record<ModelAbility, string> = {
+export const tagLabels: Record<ModelTags, string> = {
+    // 功能标签。
     "text-generation": "文本",
-    // : "代码",
-    "reasoning": "推理",
+    "image-generation": "绘图",
     "embedding": "嵌入",
     "rerank": "重排",
+    //版本:
+    "ultra": "旗舰版",
+    "plus": "专业版",
+    "flash": "轻量版",
+    "micro": "端侧版",
+    // 输入/输出能力
+    "search": "联网",
+    "reasoning": "思考",
     "vision": "图像",
     "audio": "音频",
-    "func": "函数",
+    "tool": "工具",
     "video": "视频",
 };
 
-export const abilityIcons: Record<ModelAbility, typeof IconMessage> = {
+export const tagIcons: Record<ModelTags, typeof IconMessage> = {
+    // 功能标签
     "text-generation": IconMessage,
-    // [ModelAbility.CodeGeneration]: IconCode,
-    "reasoning": IconBrain,
+    "image-generation": IconPhoto,
     "embedding": IconDatabase,
     "rerank": IconArrowsSort,
+
+    // 版本 (新增补齐)
+    "ultra": IconDiamond,
+    "plus": IconCirclePlus,
+    "flash": IconBolt,
+    "micro": IconCpu,
+
+    // 输入/输出能力
+    "search": IconWorld,      // 新增补齐
+    "reasoning": IconBrain,
     "vision": IconEye,
     "audio": IconMicrophone,
-    "func": IconFunction,
+    "tool": IconTool,
     "video": IconVideo,
 };
 
-export const allAbilities: Record<string, ModelAbility> = {
-    text: 'text-generation' as ModelAbility,
-    reasoning: 'reasoning' as ModelAbility,
-    embedding: 'embedding' as ModelAbility,
-    rerank: 'rerank' as ModelAbility,
-    vision: 'vision' as ModelAbility,
-    audio: 'audio' as ModelAbility,
-    func: 'func' as ModelAbility,
-    video: 'video' as ModelAbility
+// 1. 功能与核心任务标签
+export const FUNCTION_TAGS: Record<string, ModelTags> = {
+    text: 'text-generation' as ModelTags,
+    image: 'image-generation' as ModelTags,
+    embedding: 'embedding' as ModelTags,
+    rerank: 'rerank' as ModelTags,
+};
+
+export const VERSION_TAGS: Record<string, ModelTags> = {
+    // 版本划分
+    ultra: 'ultra' as ModelTags,
+    plus: 'plus' as ModelTags,
+    flash: 'flash' as ModelTags,
+    micro: 'micro' as ModelTags,
+}
+
+// 2. 版本、输入输出及附加能力标签
+export const CAPABILITY_TAGS: Record<string, ModelTags> = {
+
+    // 输入/输出与核心能力
+    search: 'search' as ModelTags,
+    reasoning: 'reasoning' as ModelTags,
+    vision: 'vision' as ModelTags,
+    audio: 'audio' as ModelTags,
+    tool: 'tool' as ModelTags,
+    video: 'video' as ModelTags,
 };
 
 export const protocolLabels: Record<ProviderProtocol, string> = {
@@ -152,5 +192,9 @@ export type KnownProvider = Array<{
 }>
 
 
-/** 所有能力 / 模态 / 计费模式（用于渲染选择项） */
-export const ALL_ABILITIES: ModelAbility[] = Object.values(allAbilities);
+/** 所有能力 / 模态 / 计费模式（组合两个变量，用于渲染选择项） */
+export const ALL_ABILITIES: ModelTags[] = [
+    ...Object.values(FUNCTION_TAGS),
+    ...Object.values(VERSION_TAGS),
+    ...Object.values(CAPABILITY_TAGS),
+];

@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import { IconTrash, IconPencil, IconStar } from "@tabler/icons-svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { IconPencil, IconStar, IconTrash } from "@tabler/icons-svelte";
 
-  import {
-    type Model,
-    formatTokens,
-    abilityLabels,
-    abilityIcons,
-  } from "./types";
   import { DefInputToken, DefOutputToken } from "$lib/store/config.svelte";
+  import {
+    formatTokens,
+    type Model,
+    tagIcons,
+    tagLabels,
+  } from "$lib/utils/model/types";
 
   let {
     model,
@@ -72,10 +72,10 @@
   {#if model.abilities.length > 0}
     <div class="flex flex-wrap gap-1.5">
       {#each model.abilities as ability (ability)}
-        {@const AbilityIcon = abilityIcons[ability]}
+        {@const AbilityIcon = tagIcons[ability]}
         <Badge variant="secondary" class="gap-1 rounded-lg px-2 py-0.5 text-xs">
           <AbilityIcon size={12} stroke={1.5} />
-          {abilityLabels[ability]}
+          {tagLabels[ability]}
         </Badge>
       {/each}
     </div>

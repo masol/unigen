@@ -1,27 +1,27 @@
 <script lang="ts">
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
+  import * as Collapsible from "$lib/components/ui/collapsible";
   import { Separator } from "$lib/components/ui/separator";
   import { Switch } from "$lib/components/ui/switch";
   import autoAnimate from "@formkit/auto-animate";
   import {
-    IconPlus,
-    IconTrash,
     IconChevronDown,
-    IconKey,
-    IconSettings,
-    IconServer,
-    IconSearch,
-    IconDatabase,
     IconCloudOff,
+    IconDatabase,
+    IconKey,
+    IconPlus,
+    IconSearch,
+    IconServer,
+    IconSettings,
+    IconTrash,
   } from "@tabler/icons-svelte";
 
-  import { type Model, getProviderIcon } from "./types";
+  import { type Model, getProviderIcon } from "$lib/utils/model/types";
   import type { Provider } from "@app/main/types";
-  import { searchStore } from "./searchstore.svelte";
-  import ModelCard from "./ModelCard.svelte";
   import { cn } from "tailwind-variants";
+  import ModelCard from "./ModelCard.svelte";
+  import { searchStore } from "./searchstore.svelte";
 
   let {
     provider,
