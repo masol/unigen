@@ -18,8 +18,11 @@ on:
         description: Distribution channel for release. It can be `beta`, `alpha` or any string.
         type: choice
         options:
-          - beta
+          - pre-alpha
           - alpha
+          - beta
+          - RC
+          - Release
         required: true
       deploy:
         description: Deploy after compilation?

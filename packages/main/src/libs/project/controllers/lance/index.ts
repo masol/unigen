@@ -1,16 +1,17 @@
-import type { Connection } from '@lancedb/lancedb';
-import { metaDirName, type IProjectContext } from '../../type.js';
-import { join } from 'node:path';
-import Logger from 'electron-log/main.js';
-import { BaseProjectController } from '../base.js';
 import { throwNotfound, throwPrecondition } from '$libs/utils/err.js';
 import type { EmbedingOp, EmbedType } from '$libs/utils/model/factory/type.js';
+import type { Connection } from '@lancedb/lancedb';
+import Logger from 'electron-log/main.js';
+import { join } from 'node:path';
+import { metaDirName, type IProjectContext } from '../../type.js';
+import { BaseProjectController } from '../base.js';
 import { PrjDB } from '../drizzle/index.js';
-import { ILanceDB } from './type.js';
-import { getLanceDB, type LanceDBType } from './lancedb.js'
+import { LanceEmbeding } from './embed.js';
+import { getLanceDB, type LanceDBType } from './lancedb.js';
+import { SkillRegistry } from './skillreg.js';
 import { TableBase, TableConstructor } from './tablebase.js';
 import { initAllTables } from './tables/index.js';
-import { LanceEmbeding } from './embed.js';
+import { ILanceDB } from './type.js';
 
 export const lanceDirName = "lance"
 
@@ -20,11 +21,14 @@ export class LanceDB extends BaseProjectController implements ILanceDB {
     #db: Connection | null = null;
     #lanceInst: LanceDBType | null = null;
     #embedInst: LanceEmbeding = new LanceEmbeding();
+    #skills: SkillRegistry
 
+    // 这里保存的全部是单张表形式--因为从contructor为key。
     private registry = new Map<TableConstructor, TableBase>();
 
     constructor(ctx: IProjectContext) {
         super(ctx)
+        this.#skills = new SkillRegistry(this);
     }
 
     async addTable<T extends TableBase>(token: TableConstructor<T>, name: string): Promise<void> {
@@ -41,6 +45,10 @@ export class LanceDB extends BaseProjectController implements ILanceDB {
         }
         // 3. 内部唯一安全的断言，由于 register 和 resolve 泛型 T 严格绑定，此转换 100% 安全
         return instance as T;
+    }
+
+    get skills(): SkillRegistry {
+        return this.#skills;
     }
 
     get embedSize(): number {

@@ -1,13 +1,13 @@
+import { ProjectDbKeys } from "$libs/project/dbkeys.js";
 import { configService } from "$libs/store/index.js";
-import { throwPrecondition, throwUnprcessable, throwNotfound } from "$libs/utils/err.js";
+import { throwNotfound, throwPrecondition, throwUnprcessable } from "$libs/utils/err.js";
 import { createEmbeding } from "$libs/utils/model/factory/embed.js";
+import type { EmbedingOp, EmbedType } from "$libs/utils/model/factory/type.js";
+import type { Provider } from '$types/index.js';
 import Logger from "electron-log";
+import pMap from 'p-map';
 import { cluster, isNumber } from "radashi";
 import type { PrjDB } from "../drizzle/index.js";
-import type { Provider } from '$types/index.js';
-import pMap from 'p-map'
-import type { EmbedingOp, EmbedType } from "$libs/utils/model/factory/type.js";
-import { ProjectDbKeys } from "$libs/project/dbkeys.js";
 
 export class LanceEmbeding {
     #embeddingSize: number = -1;
@@ -84,7 +84,7 @@ export class LanceEmbeding {
 
     async doEmbedding(batch: string[], type: EmbedType): Promise<number[][]> {
         // 你的模型生成向量逻辑，返回 Array<Array<number>>
-        // 1. 使用 radashi 的 cluster 将数组切分为最多 9 个一组的二维数组--千问
+        // 1. 使用 radashi 的 cluster 将数组切分为最多 9 个一组的二维数组
         const chunks = cluster(batch, 9); // e.g. [['a', 'b', ...], ['x', 'y']]
 
 
