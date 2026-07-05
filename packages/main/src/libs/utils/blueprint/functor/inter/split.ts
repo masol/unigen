@@ -1,13 +1,12 @@
 import { fullInternalName } from "$libs/utils/blueprint/capa/is.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 // import { delay } from "$libs/utils/promise.js";
-import { ParaItem, ParaItemSchema, ScriptItem, ScriptItemSchema } from "$types/blueprint/blackboard/script.js";
+import { ParaItem, ScriptItem } from "$types/blueprint/blackboard/script.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import { isString } from "radashi";
-import { z } from "zod";
 import { getIOInfo } from "../../capa/ioinfo.js";
 import { saveToOutput } from "../../capa/output.js";
-import { BaseFunctor } from "../base.js";
+import { BaseFunctor, fillCapa } from "../base.js";
 
 
 function splitLines(raw: string): string[] {
@@ -61,16 +60,16 @@ function estimateTokens(text: string): number {
 // 将原文分割为shot列表。
 export class SplitFunctor extends BaseFunctor {
     constructor() {
-        super({
+        super(fillCapa({
             id: "a59566b3-5ade-4965-b4a4-cfa8287216db",
             name: fullInternalName("split"),
             input: [
-                { fieldKey: "script", intent: "最原始输入的剧本数组", schema: z.array(ScriptItemSchema), "storage": "flatten" },
+                "script",
             ],
             output: [
-                { fieldKey: "paragraph", intent: "给剧本原文按行划分，并带上总行号。", schema: z.array(ParaItemSchema) },
+                "paragraph"
             ]
-        });
+        }));
     }
 
     async run(ctx: IRunnerContext): Promise<void> {

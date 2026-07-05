@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getPrjTimeFromArray, stripPrjTimeArray } from "$libs/utils/db/prjstore.js";
-import type { CapaIOType } from "$libs/utils/db/schema/capatype.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import type { PrjTimeStore } from "$types/prjstore.js";
 import { getAllIOData } from "./input.js";
@@ -15,7 +14,7 @@ export type IOInfo<IType = unknown, OType = unknown> = {
 }
 
 
-export function getIOInfo<ITYpe = any, OType = any>(ctx: IRunnerContext, inputType: CapaIOType[], outputType: CapaIOType[]): IOInfo<ITYpe, OType> {
+export function getIOInfo<ITYpe = any, OType = any>(ctx: IRunnerContext, inputType: string[], outputType: string[]): IOInfo<ITYpe, OType> {
 
     const inputs = getAllIOData<ITYpe>(ctx, inputType);
     const outputs = getAllIOData<OType>(ctx, outputType);

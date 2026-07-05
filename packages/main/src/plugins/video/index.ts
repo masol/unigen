@@ -4,7 +4,10 @@ import { ILanceDB } from "$libs/project/controllers/lance/type.js";
 import { ProjectDbKeys } from "$libs/project/dbkeys.js";
 import { IProjectPlugin } from "$libs/project/plugin.js";
 import { IProjectContext } from "$libs/project/type.js";
+import { NewMetagRow } from "$libs/utils/blueprint/metag/is.js";
+import { ParaItemSchema, ScriptItemSchema } from "$types/blueprint/blackboard/script.js";
 import { DirectedGraph } from "graphology";
+import z from "zod";
 import { PluginBase } from "../pluginbase.js";
 import { TableFact } from "./lance/fact.js";
 
@@ -30,6 +33,21 @@ export class Plugin extends PluginBase {
 
         const version = 1;
 
+        const prjdb: PrjDB = PrjDB.ensure(prj);
+        const metags: NewMetagRow[] = [
+            {
+                fieldKey: "script", intent: "最原始输入的剧本数组",
+                schema: z.array(ScriptItemSchema), "storage": "flatten"
+            },
+            {
+                fieldKey: "paragraph", intent: "给剧本原文按行划分，并带上总行号。",
+                schema: z.array(ParaItemSchema)
+            }
+        ];
+        prjdb.upcertMetag(metags);
+
+
+
         const graph = new DirectedGraph();
         graph.addNode('a59566b3-5ade-4965-b4a4-cfa8287216db');
         // graph.addNode('B');
@@ -51,7 +69,7 @@ export class Plugin extends PluginBase {
             const newcapa = prjDb.upsertCapa({
                 id: entryId,
                 name: "#workflow",
-                process: [wfstr],
+                process: wfstr,
                 version
             })
             console.log("newcapa=", newcapa)

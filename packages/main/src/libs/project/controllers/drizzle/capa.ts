@@ -1,41 +1,31 @@
 import { intereg } from "$libs/utils/blueprint/functor/intereg.js";
 import { capabilities } from "$libs/utils/db/schema/capability.js";
 import { throwNotimplement } from "$libs/utils/err.js";
-import type { Capability } from "$types/blueprint/capability.js";
+import type { Capability, NewCapability } from "$types/blueprint/capability.js";
+import { PrjTimeStamps } from "$types/prjstore.js";
 import { eq } from 'drizzle-orm';
 import type { DrizzleDBType } from "./type.js";
 
-export function upsertCapability(db: DrizzleDBType, capability: Partial<Capability>): Capability {
+export function upsertCapability(db: DrizzleDBType, capability: NewCapability): string {
     if (intereg.hasId(capability.id ?? "")) {
         throwNotimplement(`internal capa id upcert not implemented: ${capability.id}`);
     }
-    const result = db
-        .insert(capabilities)
-        .values({
-            ...capability,
-            id: capability.id,
-        })
+    const { createdAt, updatedAt, id, ...updateData } = capability;
+    void (createdAt);
+    void (updatedAt);
+    const finalId = id ?? crypto.randomUUID();
+
+    db.insert(capabilities)
+        .values({ id, ...updateData })
         .onConflictDoUpdate({
             target: capabilities.id,
-            // ✨ Drizzle 3.0+ 官方标准写法：直接把用户传进来的对象字段塞给 set
-            // 这样 Drizzle 内部会自动处理，不需要写任何 sql`excluded.xxx`
-            set: {
-                name: capability.name,
-                role: capability.role,
-                goal: capability.goal,
-                input: capability.input,
-                output: capability.output,
-                process: capability.process,
-                negative: capability.negative,
-                criteria: capability.criteria,
-                fewshot: capability.fewshot,
-                // 故意不传 createdAt，防止它被覆盖
-            }
+            //  无需硬编码：直接把剩余字段整体塞给 set
+            //    Drizzle 内部自动处理，不用 sql`excluded.xxx`
+            set: updateData,
         })
-        .returning()
-        .get();
+        .run();
 
-    return result;
+    return finalId;
 }
 
 
@@ -55,16 +45,28 @@ export function getCapabilityById(db: DrizzleDBType, id: string): Capability | n
     return result ? result : null;
 }
 
-export function deleteCapabilityById(db: DrizzleDBType, id: string): Capability | null {
+export function deleteCapabilityById(db: DrizzleDBType, id: string): void {
     const internalCapa = intereg.capaById(id);
     if (internalCapa) {
         throwNotimplement(`internal capa id delete not implemented: ${id}`);
     }
-    const result = db
-        .delete(capabilities)
+    db.delete(capabilities)
         .where(eq(capabilities.id, id))
-        .returning() // 告诉 SQLite 必须返回被删除的行数据
-        .get();      // 同步获取被删除的对象。若没找到对应的 ID，返回 undefined
+        .run()
+}
 
-    return result ? result : null;
+export function getCapaTimestamps(
+    db: DrizzleDBType,
+    id: string
+): PrjTimeStamps | null {
+    if (!id) return null;
+    const row = db
+        .select({
+            createdAt: capabilities.createdAt,
+            updatedAt: capabilities.updatedAt,
+        })
+        .from(capabilities)
+        .where(eq(capabilities.id, id))
+        .get();
+    return row ?? null;
 }

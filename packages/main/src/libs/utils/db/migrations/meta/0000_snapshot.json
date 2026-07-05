@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e5391924-602e-40d9-9ab6-c6fa20720aea",
+  "id": "ae7f71df-47f3-4f8b-a35a-2e27fa8e08f8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "kv_store": {
@@ -100,7 +100,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'[]'"
+          "default": "''"
         },
         "negative": {
           "name": "negative",
@@ -108,7 +108,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'[]'"
+          "default": "''"
         },
         "criteria": {
           "name": "criteria",
@@ -116,7 +116,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'[]'"
+          "default": "''"
         },
         "fewshot": {
           "name": "fewshot",
@@ -125,6 +125,67 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'[]'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "metag": {
+      "name": "metag",
+      "columns": {
+        "field_key": {
+          "name": "field_key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "intent": {
+          "name": "intent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "schema": {
+          "name": "schema",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reducer": {
+          "name": "reducer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "storage": {
+          "name": "storage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",

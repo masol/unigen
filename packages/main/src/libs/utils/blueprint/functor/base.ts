@@ -1,7 +1,29 @@
 
-import { Capability } from "$types/blueprint/capability.js";
-import { IRunnerContext } from "$types/blueprint/context.js";
-import { ICapaFunctor } from "./type.js";
+import type { Capability, NewCapability } from "$types/blueprint/capability.js";
+import type { IRunnerContext } from "$types/blueprint/context.js";
+import { getInternalName, interPrefix } from "../capa/is.js";
+import type { ICapaFunctor } from "./type.js";
+
+export function fillCapa(capa: NewCapability): Capability {
+    const realName = getInternalName(capa?.name)
+    const name = realName ?? interPrefix + "a";
+    return {
+        id: capa.id ?? crypto.randomUUID(),
+        role: "",
+        goal: '',
+        version: 0,
+        input: [],
+        output: [],
+        process: '',
+        negative: '',
+        criteria: '',
+        fewshot: [],
+        createdAt: '',
+        updatedAt: '',
+        ...capa,
+        name
+    }
+}
 
 export abstract class BaseFunctor implements ICapaFunctor {
 

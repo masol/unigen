@@ -60,7 +60,7 @@ class InterReg {
         const capa = this.#idmap.get(id);
         if (capa) {
             this.#idmap.delete(id);
-            const interName = getInternalName(capa.capa);
+            const interName = getInternalName(capa.capa.name);
             if (interName) {
                 this.#namemap.delete(interName);
             }
@@ -69,7 +69,7 @@ class InterReg {
 
     // 强制全体从InterBase派生 -- inter也需要响应Input/output结构的动态变化。
     reg(functor: BaseFunctor): void {
-        const interName = getInternalName(functor.capa);
+        const interName = getInternalName(functor.capa.name);
         const id = functor.capa.id;
 
         if (!interName || !id) {

@@ -10,11 +10,13 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { metaDirName, type IProjectContext } from "../../type.js";
 // import { PrjJob } from "../../helper/job.js";
+import type { MetagRow, NewMetagRow } from '$libs/utils/blueprint/metag/is.js';
 import { throwNotfound, throwPrecondition } from "$libs/utils/err.js";
 import type { Capability } from "$types/blueprint/capability.js";
-import type { PrjTimeStore } from "$types/prjstore.js";
+import type { PrjTimeStamps, PrjTimeStore } from "$types/prjstore.js";
 import { BaseProjectController } from "../base.js";
-import { deleteCapabilityById, getCapabilityById, upsertCapability } from './capa.js';
+import { deleteCapabilityById, getCapabilityById, getCapaTimestamps, upsertCapability } from './capa.js';
+import { getMetag, getMetagTimestamps, upcertMetag } from './metag.js';
 import type { DrizzleDBType } from "./type.js";
 
 const dbName = 'db.sqlite'
@@ -43,14 +45,6 @@ export class PrjDB extends BaseProjectController {
         }
         return this.db;
     }
-
-
-    // get job(): PrjJob {
-    //     if (!this.#job) {
-    //         throwNotfound(`未初始化的项目任务队列！`)
-    //     }
-    //     return this.#job;
-    // }
 
     close() {
         // if (this.#job) {
@@ -164,7 +158,8 @@ export class PrjDB extends BaseProjectController {
         }) : null;
     }
 
-    upsertCapa(capability: Partial<Capability>): Capability {
+    // 返回id.
+    upsertCapa(capability: Partial<Capability>): string {
         return upsertCapability(this.ensureDB(), capability);
     }
 
@@ -172,11 +167,25 @@ export class PrjDB extends BaseProjectController {
         return getCapabilityById(this.ensureDB(), id);
     }
 
-
-    rmCapaById(id: string): Capability | null {
+    rmCapaById(id: string): void {
         return deleteCapabilityById(this.ensureDB(), id);
     }
 
+    getCapaTimes(id: string): PrjTimeStamps | null {
+        return getCapaTimestamps(this.ensureDB(), id);
+    }
+
+    getMetag(id: string | string[]): (MetagRow | null)[] {
+        return getMetag(this.ensureDB(), id);
+    }
+
+    upcertMetag(metags: NewMetagRow | NewMetagRow[]): void {
+        upcertMetag(this.ensureDB(), metags);
+    }
+
+    getMetagTimes(id: string | string[]): (PrjTimeStamps | null)[] {
+        return getMetagTimestamps(this.ensureDB(), id);
+    }
 
     dispose(): void {
         this.close();

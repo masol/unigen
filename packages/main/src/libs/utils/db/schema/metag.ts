@@ -1,0 +1,28 @@
+import { sql } from 'drizzle-orm';
+import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { ReducerStrategy, StorageMode, zodSchemaJsonType } from "./metagtype.js";
+
+export const metag = sqliteTable('metag', {
+    /** 主键：fieldKey (全局唯一) */
+    fieldKey: text('field_key').primaryKey(),
+
+    intent: text('intent'),
+
+    /** ✨ 关键字段：schema 通过 customType 自动 Zod<->JSON 转译 */
+    schema: zodSchemaJsonType('schema'),
+
+    reducer: text('reducer').$type<ReducerStrategy>(),
+    storage: text('storage').$type<StorageMode>(),
+
+    createdAt: text('created_at')
+        .notNull()
+        .default(sql`CURRENT_TIMESTAMP`)
+        .$defaultFn(() => new Date().toISOString()),
+
+    updatedAt: text('updated_at')
+        .notNull()
+        .default(sql`CURRENT_TIMESTAMP`)
+        .$defaultFn(() => new Date().toISOString())
+        .$onUpdate(() => new Date().toISOString()),
+});
+
