@@ -20,7 +20,7 @@ export function isWorkflow(name: CapaNameType): boolean {
 }
 
 
-export const interPrefix = "#inter::"
+const interPrefix = "#inter::"
 
 // 返回internal函数名的完整名称。
 export function fullInternalName(name: string): string {
