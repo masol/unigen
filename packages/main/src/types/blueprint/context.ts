@@ -1,5 +1,5 @@
 import type { IProjectContext } from "$libs/project/type.js";
-import { ICapaFunctor } from "$libs/utils/blueprint/functor/type.js";
+import { ICapaFunctor } from "$libs/utils/blueprint/capability/type.js";
 
 export interface IRunnerContext {
     /** 原生的 Web API AbortSignal，可透传给支持取消的异步底层操作 */

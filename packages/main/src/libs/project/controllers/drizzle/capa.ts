@@ -1,4 +1,4 @@
-import { intereg } from "$libs/utils/blueprint/functor/intereg.js";
+import { intereg } from "$libs/utils/blueprint/capability/intereg.js";
 import { capabilities } from "$libs/utils/db/schema/capability.js";
 import { throwNotimplement } from "$libs/utils/err.js";
 import type { Capability, NewCapability } from "$types/blueprint/capability.js";

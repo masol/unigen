@@ -3,8 +3,8 @@ import { IProjectContext } from '$libs/project/type.js';
 import { IRunnerContext } from '$types/blueprint/context.js';
 import log from 'electron-log/main.js';
 import { format } from 'node:util';
-import { loadFunctor } from './functor/index.js';
-import { ICapaFunctor } from './functor/type.js';
+import { loadFunctor } from './capability/index.js';
+import { ICapaFunctor } from './capability/type.js';
 
 
 export class RunnerContext implements IRunnerContext {

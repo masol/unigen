@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { CapaIOType } from '$libs/utils/db/schema/capatype.js';
 import { z } from 'zod';
-import { Capability } from './is.js';
+import { Capability } from '../capability/is.js';
 
 /**
  * 内部私有辅助：将带有 Zod 实例的运行态 IO 数组脱水为纯 JSON 树

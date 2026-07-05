@@ -1,7 +1,7 @@
 
 import type { Capability, NewCapability } from "$types/blueprint/capability.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
-import { getInternalName, interPrefix } from "../capa/is.js";
+import { getInternalName, interPrefix } from "./is.js";
 import type { ICapaFunctor } from "./type.js";
 
 export function fillCapa(capa: NewCapability): Capability {

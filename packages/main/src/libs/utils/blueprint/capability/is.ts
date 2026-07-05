@@ -1,3 +1,5 @@
+//capa是静态的functor.一旦进入内存(被加载后)，转化为functor.
+
 import { capabilities } from "$libs/utils/db/schema/capability.js";
 
 /**

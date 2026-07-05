@@ -1,11 +1,11 @@
-import { fullInternalName } from "$libs/utils/blueprint/capa/is.js";
+import { fullInternalName } from "$libs/utils/blueprint/capability/is.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 // import { delay } from "$libs/utils/promise.js";
 import { ParaItem, ScriptItem } from "$types/blueprint/blackboard/script.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import { isString } from "radashi";
-import { getIOInfo } from "../../capa/ioinfo.js";
-import { saveToOutput } from "../../capa/output.js";
+import { getIOInfo } from "../../glossary/ioinfo.js";
+import { saveToOutput } from "../../glossary/output.js";
 import { BaseFunctor, fillCapa } from "../base.js";
 
 
