@@ -277,9 +277,9 @@
           />
         </div>
         <div>
-          <p class="text-sm font-medium text-foreground">本地重排模型</p>
+          <p class="text-sm font-medium text-foreground">重排模型</p>
           <p class="text-xs text-muted-foreground mt-0.5">
-            自行下载 GGUF 模型，存放至最右侧目录
+            可自行下载 GGUF 模型，存放至右侧目录
           </p>
         </div>
       </div>
@@ -306,7 +306,7 @@
               </div>
             {:else if rerankModels.length === 0}
               <div class="py-8 text-center text-sm text-muted-foreground">
-                暂无重排模型,请将模型文件存入右侧目录
+                无有效重排模型,请设置远端或本地模型
               </div>
             {:else}
               {#each rerankModels as model (model.value)}

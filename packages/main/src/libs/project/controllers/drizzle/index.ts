@@ -14,9 +14,11 @@ import type { MetagRow, NewMetagRow } from '$libs/utils/blueprint/metag/is.js';
 import { throwNotfound, throwPrecondition } from "$libs/utils/err.js";
 import type { Capability, NewCapability } from "$types/blueprint/capability.js";
 import type { PrjTimeStamps, PrjTimeStore } from "$types/prjstore.js";
+import { BlueprintKind, GetListResponse, QueryParams } from '$types/shared/api/list.js';
 import { BaseProjectController } from "../base.js";
 import { deleteCapabilityById, getCapabilityById, getCapaTimestamps, upsertCapability } from './capa.js';
-import { getMetag, getMetagTimestamps, upcertMetag } from './metag.js';
+import { getList } from './list.js';
+import { deleteMetag, getMetag, getMetagTimestamps, upcertMetag } from './metag.js';
 import type { DrizzleDBType } from "./type.js";
 
 const dbName = 'db.sqlite'
@@ -222,12 +224,20 @@ export class PrjDB extends BaseProjectController {
         return getMetag(this.ensureDB(), id);
     }
 
+    rmMetag(id: string | string[]): void {
+        deleteMetag(this.ensureDB(), id);
+    }
+
     upcertMetag(metags: NewMetagRow | NewMetagRow[]): void {
         upcertMetag(this.ensureDB(), metags);
     }
 
     getMetagTimes(id: string | string[]): (PrjTimeStamps | null)[] {
         return getMetagTimestamps(this.ensureDB(), id);
+    }
+
+    list<K extends BlueprintKind>(input: QueryParams & { kind: K }): GetListResponse {
+        return getList(this.ensureDB(), input)
     }
 
     dispose(): void {

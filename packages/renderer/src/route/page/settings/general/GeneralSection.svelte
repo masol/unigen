@@ -1,16 +1,16 @@
 <script lang="ts">
-  import {
-    IconLanguage,
-    IconChevronDown,
-    IconCheck,
-    IconPalette,
-    IconDeviceSim,
-  } from "@tabler/icons-svelte";
-  import { Separator } from "$lib/components/ui/separator";
   import * as Popover from "$lib/components/ui/popover";
+  import { Separator } from "$lib/components/ui/separator";
+  import { Switch } from "$lib/components/ui/switch";
   import { configStore } from "$lib/store/config.svelte";
   import type { AppConfig } from "@app/main/types";
-  import { Switch } from "$lib/components/ui/switch";
+  import {
+    IconCheck,
+    IconChevronDown,
+    IconDeviceSim,
+    IconLanguage,
+    IconPalette,
+  } from "@tabler/icons-svelte";
 
   let langOpen = $state(false);
   let themeOpen = $state(false);
@@ -187,7 +187,7 @@
           <IconDeviceSim size={20} stroke={1.5} class="text-muted-foreground" />
         </div>
         <div class="min-w-0">
-          <p class="text-sm font-medium text-foreground">禁用硬件加速</p>
+          <p class="text-sm font-medium text-foreground">UI禁用硬件加速</p>
           <p class="text-xs text-muted-foreground mt-0.5">
             禁用UI界面的硬件加速(重启生效)
           </p>

@@ -2,14 +2,14 @@
 
 import { configService } from "$libs/store/index.js";
 import { throwPrecondition } from "$libs/utils/err.js";
+import { notify } from "$libs/utils/rpcevt.js";
 import { pluginManager } from "$plugins/manager.js";
+import { BrowserWindow } from "electron";
 import { join } from "node:path";
 import { closeProject, createProject, openProject } from "./helper/create.js";
 import type { IProjectPlugin } from "./plugin.js";
 import { registProjectBuildin } from "./register.js";
-import { type IProjectController, type IProjectContext, type ControllerConstructor, metaDirName } from "./type.js";
-import { notify } from "$libs/utils/rpcevt.js";
-import { BrowserWindow } from "electron";
+import { type ControllerConstructor, type IProjectContext, type IProjectController, metaDirName } from "./type.js";
 
 export class ProjectContainer implements IProjectContext {
     // 项目根目录。
@@ -79,9 +79,9 @@ export class ProjectContainer implements IProjectContext {
 
     getPath(partName: 'meta' | 'visualref'): string {
         switch (partName) {
-            case 'meta':
+            case 'meta': // 项目
                 return metaDirName;
-            case 'visualref':
+            case 'visualref': // 项目参考图。@todo: video专有，应该使用tapable(hookable)将其改为插件实现！
                 return join(this.#path, metaDirName, 'visualref');
         }
     }

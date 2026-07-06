@@ -8,6 +8,7 @@ import { RpcContext } from '../type.js';
 // import { configService } from '$libs/store/index.js';
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { UNIGEN_ERROR_DEFS } from '$libs/utils/err.js';
+import { GetListResponseSchema, QueryParamsSchema } from '$types/shared/api/list.js';
 import { COMMON_ORPC_ERROR_DEFS } from "@orpc/client";
 // import { PrjCreator } from '$libs/project/helper/create.js';
 
@@ -151,6 +152,28 @@ const rm = os
         return PrjDB.ensure(ctx.project).remove(input);
     });
 
+const rmCapa = os
+    .input(z.string())
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        return PrjDB.ensure(ctx.project).rmCapaById(input);
+    });
+
+const rmMetag = os
+    .input(z.string().or(z.array(z.string())))
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        return PrjDB.ensure(ctx.project).rmMetag(input);
+    });
+
+const list = os
+    .input(QueryParamsSchema)
+    .output(GetListResponseSchema)
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        return PrjDB.ensure(ctx.project).list(input);
+    });
+
 export default {
     open,
     create,
@@ -159,5 +182,8 @@ export default {
     getWithTime,
     set,
     rm,
-    close
+    rmMetag,
+    rmCapa,
+    close,
+    list, // 列出蓝图相关表的key,updatedat,on...
 }

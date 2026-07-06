@@ -1,15 +1,18 @@
 // src/lib/store/router.svelte.ts
 
+import log from "electron-log/renderer";
+import type { Component } from "svelte";
 import {
     wrap,
     type AsyncSvelteComponent, // 懒加载 loader 标准类型
 } from "svelte-spa-router/wrap";
-import log from "electron-log/renderer";
-import type { Component } from "svelte";
+import DevSetting from "../../../route/page/develops/DevSettingsPanel.svelte";
+import EditorPage from '../../../route/page/editor/EditorPage.svelte';
 import FallbackComponent from "../../../route/page/fallback/Main.svelte";
 import GeneralSetting from "../../../route/page/settings/general/general.svelte";
+import Keybindings from '../../../route/page/settings/Keybindings.svelte';
 import LLMSetting from "../../../route/page/settings/llm/llm.svelte";
-import Keybindings from '../../../route/page/settings/Keybindings.svelte'
+
 
 // ── 类型 ──
 
@@ -37,7 +40,11 @@ class RouterStore {
     #routes: RouteMap = $state.raw({
         "/settings/models/llm": LLMSetting,
         "/settings/general": GeneralSetting,
+        "/settings/develops": DevSetting,
         "/settings/keybindings": Keybindings,
+        // content 为可选查询/路径参数
+        '/editor/:kind/:id': EditorPage,
+        '/editor/:kind/:id/:content?': EditorPage,
         "*": FallbackComponent,
     });
 

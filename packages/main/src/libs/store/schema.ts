@@ -1,7 +1,7 @@
-import { Schema } from 'electron-store';
 import { AppConfig } from '$types/appconfig.js';
-import { providerSchema } from './provider.schema.js';
+import { Schema } from 'electron-store';
 import { keybindingsSchema } from './common.schema.js';
+import { providerSchema } from './provider.schema.js';
 
 export const configSchema: Schema<AppConfig> = {
     theme: {
@@ -12,6 +12,28 @@ export const configSchema: Schema<AppConfig> = {
     lang: {
         type: 'string',
         default: 'zh-CN',
+    },
+    itemsPerPage: {
+        type: 'integer',
+        default: 10,
+        minimum: 5,
+        maximum: 30
+    },
+    fontSize: {
+        type: 'integer',
+        default: 14,
+        minimum: 6,
+        maximum: 80
+    },
+    lineHeight: {
+        type: 'integer',
+        default: 22,
+        minimum: 3,
+        maximum: 50
+    },
+    lineNumbers: {
+        type: 'boolean',
+        default: true
     },
     maximized: {
         type: 'boolean',

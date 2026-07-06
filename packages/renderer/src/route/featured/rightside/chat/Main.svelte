@@ -1,8 +1,8 @@
 <!-- src/lib/components/chat/ChatInterface.svelte -->
 <script lang="ts">
   import ChatHeader from "./ChatHeader.svelte";
-  import ChatMessageList from "./ChatMessageList.svelte";
   import ChatInput from "./ChatInput.svelte";
+  import ChatMessageList from "./ChatMessageList.svelte";
   import { messageStore } from "./msg.svelte";
 
   let inputValue = $state("");

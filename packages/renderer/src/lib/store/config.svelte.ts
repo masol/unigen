@@ -1,11 +1,11 @@
 // src/lib/store/config.svelte.ts
-import evtbus from '$lib/utils/evtbus'
-import log from 'electron-log/renderer'
-import type { AppConfig, Model, Provider } from '@app/main/types'
-import { api } from '$lib/utils/api'
+import { api } from '$lib/utils/api';
+import { KeybindConfig } from '$lib/utils/commands/config.svelte';
+import evtbus from '$lib/utils/evtbus';
+import type { AppConfig, Model, Provider } from '@app/main/types';
+import log from 'electron-log/renderer';
 import { setMode } from "mode-watcher";
 import { toast } from 'svelte-sonner';
-import { KeybindConfig } from '$lib/utils/commands/config.svelte';
 
 export const DefInputToken = 256000;
 export const DefOutputToken = 8192;
@@ -27,6 +27,13 @@ class ConfigStore {
     #autoupdate = $state<boolean>(true)
     #disableHA = $state<boolean>(false)
 
+    #itemsPerPage = $state(10);
+    #fontSize = $state(14);
+    #lineHeight = $state(22);
+    #minimap = $state(true);
+    #wordWrap = $state(false);
+    #lineNumbers = $state(true);
+
     // ── 私有状态：init 异步状态机 ──
     #isLoading = $state(false)
     #error = $state<string | null>(null)
@@ -46,6 +53,12 @@ class ConfigStore {
     get providers() { return this.#providers }
     get autoupdate() { return this.#autoupdate }
     get disableHA() { return this.#disableHA }
+    get itemsPerPage() { return this.#itemsPerPage }
+    get fontSize() { return this.#fontSize }
+    get lineHeight() { return this.#lineHeight }
+    get minimap() { return this.#minimap }
+    get wordWrap() { return this.#wordWrap }
+    get lineNumbers() { return this.#lineNumbers }
 
     // ── 只读门面：init 异步状态 ──
     get isLoading() { return this.#isLoading }
@@ -77,6 +90,57 @@ class ConfigStore {
     /** embed_model 是否指向外部服务 */
     readonly isExternalEmbed = $derived(this.#embedModel.startsWith('external:'))
 
+    private updStoreValue(name: string, value: unknown) {
+        switch (name) {
+            case 'theme':
+                this.#theme = value as AppConfig['theme'];
+                break;
+            case 'lang':
+                {
+                    const nlang = value as AppConfig['lang'];
+                    if (this.#lang !== nlang) {
+                        evtbus.emit("lang:changed", nlang)
+                    }
+                }
+                break;
+            case 'plugin':
+                this.#projectype = value as AppConfig['plugin'];
+                break;
+            case 'embed_model':
+                this.#embedModel = value as AppConfig['embed_model'];
+                break;
+            case 'local_model':
+                this.#localModel = value as AppConfig['local_model'];
+                break;
+            case 'models':
+                this.#providers = value as AppConfig['models'];
+                break;
+            case 'autoupdate':
+                this.#autoupdate = value as AppConfig['autoupdate'];
+                break;
+            case 'disableHA':
+                this.#disableHA = value as AppConfig['disableHA'];
+                break;
+            case 'itemsPerPage':
+                this.#itemsPerPage = value as AppConfig['itemsPerPage'];
+                break;
+            case 'fontSize':
+                this.#fontSize = value as AppConfig['fontSize'];
+                break;
+            case 'lineHeight':
+                this.#lineHeight = value as AppConfig['lineHeight'];
+                break;
+            case 'lineNumbers':
+                this.#lineNumbers = value as AppConfig['lineNumbers'];
+                break;
+            case 'keybindings':
+                this.keybinding.onKeybindingUpdate(value as AppConfig['keybindings'])
+                break;
+            default:
+                log.warn(`[ConfigStore] received cfg:set but not implement:${name}`)
+        }
+    }
+
     constructor() {
         log.info('[ConfigStore] initialized')
         this.keybinding = new KeybindConfig();
@@ -92,42 +156,7 @@ class ConfigStore {
             log.debug('[ConfigStore] received cfg:setall')
         })
         evtbus.on('cfg:set', ({ name, value }) => {
-            switch (name) {
-                case 'theme':
-                    this.#theme = value as AppConfig['theme'];
-                    break;
-                case 'lang':
-                    {
-                        const nlang = value as AppConfig['lang'];
-                        if (this.#lang !== nlang) {
-                            evtbus.emit("lang:changed", nlang)
-                        }
-                    }
-                    break;
-                case 'plugin':
-                    this.#projectype = value as AppConfig['plugin'];
-                    break;
-                case 'embed_model':
-                    this.#embedModel = value as AppConfig['embed_model'];
-                    break;
-                case 'local_model':
-                    this.#localModel = value as AppConfig['local_model'];
-                    break;
-                case 'models':
-                    this.#providers = value as AppConfig['models'];
-                    break;
-                case 'autoupdate':
-                    this.#autoupdate = value as AppConfig['autoupdate'];
-                    break;
-                case 'disableHA':
-                    this.#disableHA = value as AppConfig['disableHA'];
-                    break;
-                case 'keybindings':
-                    this.keybinding.onKeybindingUpdate(value as AppConfig['keybindings'])
-                    break;
-                default:
-                    log.warn(`[ConfigStore] received cfg:set but not implement:${name}`)
-            }
+            this.updStoreValue(name, value)
         })
     }
 
@@ -143,6 +172,12 @@ class ConfigStore {
         this.#providers = config.models
         this.#autoupdate = config.autoupdate
         this.#disableHA = config.disableHA
+        this.#itemsPerPage = config.itemsPerPage
+        this.#fontSize = config.fontSize
+        this.#lineHeight = config.lineHeight
+        this.#lineNumbers = config.lineNumbers
+
+
         this.applyTheme();
         this.keybinding.onKeybindingUpdate(config.keybindings);
     }
@@ -254,6 +289,28 @@ class ConfigStore {
         } catch (err) {
             this.#saveError = err instanceof Error ? err.message : String(err)
             log.error('[ConfigStore] setLang() failed', err)
+            toast.error(this.#saveError);
+        } finally {
+            this.#savingCount--
+        }
+    }
+
+
+    async setConfig(key: string, value: unknown): Promise<void> {
+        log.debug(`[ConfigStore] setConfig() called,key=${key} value=${value}`)
+        this.#savingCount++
+        this.#saveError = null
+        try {
+            await api().config.set({
+                key,
+                value
+            })
+            this.updStoreValue(key, value)
+            this.#lastSaved = Date.now()
+            log.info(`[ConfigStore] ${key} set to "${value}"`)
+        } catch (err) {
+            this.#saveError = err instanceof Error ? err.message : String(err)
+            log.error('[ConfigStore] set ${key} failed', err)
             toast.error(this.#saveError);
         } finally {
             this.#savingCount--

@@ -1,13 +1,15 @@
 
-import { z } from 'zod'
 import { os } from "@orpc/server";
-import { RpcContext } from '../type.js';
-import { readdir, rm } from 'fs/promises';
-import pMap from 'p-map';
-import { copy, ensureDir, pathExists } from 'fs-extra';
-import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import Logger from 'electron-log/main.js';
+import { copy, ensureDir, pathExists } from 'fs-extra';
+import { readdir, rm } from 'fs/promises';
+import pMap from 'p-map';
+import { extname, join } from 'path';
+import { z } from 'zod';
+import { RpcContext } from '../type.js';
+
+// 项目参考图相关： @todo: 这属于video专有，应该使用tapable(hookable)将其改为插件实现！
 
 const visualref = os
     .output(z.array(z.string()))
