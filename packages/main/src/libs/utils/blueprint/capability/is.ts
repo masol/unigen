@@ -19,6 +19,13 @@ export function isWorkflow(name: CapaNameType): boolean {
     return name.startsWith("#workflow");
 }
 
+export function isCode(name: CapaNameType): boolean {
+    if (!name) {
+        return false;
+    }
+    return name.startsWith("#code");
+}
+
 
 const interPrefix = "#inter::"
 

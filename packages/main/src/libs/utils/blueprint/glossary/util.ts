@@ -1,5 +1,5 @@
- 
-import type { CapaIOType } from "$libs/utils/db/schema/capatype.js";
+import type { MetagRow } from "../metag/is.js";
+
 
 
 /**
@@ -7,7 +7,7 @@ import type { CapaIOType } from "$libs/utils/db/schema/capatype.js";
 
   注意：返回的fieldKey是一个mustache模板，需要实例化后才能使用--除非字符串中无变量(无数组)。
 //*/
-export function getFieldkey(io: CapaIOType, subId?: string): string | null {
+export function getFieldkey(io: MetagRow, subId?: string): string | null {
     if (io.fieldKey) {
         return subId ? `${io.fieldKey}_${subId}` : io.fieldKey;
     }

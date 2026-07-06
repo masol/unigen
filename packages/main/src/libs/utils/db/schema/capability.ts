@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type FewShotExample } from './capatype.js';
 
 /**
@@ -19,12 +19,12 @@ export const capabilities = sqliteTable('capabilities', {
 
     // 注意：#开头的名称为内部名称。
     // #inter::后续为名称。 
-    // #workflow: process 保存 workflow 定义。 
-    // #ifunc::: process 保存 functor 的 run 源码 (依赖注入，无外部引用)。
+    // #workflow: code 保存 workflow 定义。 
+    // #code::: code 保存 functor 的 run 源码 (依赖注入，无外部引用)。
     name: text('name').notNull().default(""),
     role: text('role').notNull().default(""),
     goal: text('goal').notNull().default(""),
-    version: integer('version').notNull().default(0),
+    code: text('code').notNull().default(""),
 
     // 仅存储 fieldKey 字符串数组
     // 每一项都是 metag 表中的 fieldKey (若存在，则可查到完整的 Schema/Reducer/Storage 定义)

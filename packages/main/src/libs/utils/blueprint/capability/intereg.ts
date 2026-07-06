@@ -2,7 +2,6 @@ import { getInternalName } from "$libs/utils/blueprint/capability/is.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import type { Capability } from "$types/blueprint/capability.js";
 import type { BaseFunctor } from "./base.js";
-import { getAllInternal } from "./inter/index.js";
 import { ICapaFunctor } from "./type.js";
 
 
@@ -13,10 +12,6 @@ class InterReg {
     #idmap: Map<string, BaseFunctor> = new Map();
 
     constructor() {
-        const allInternal = getAllInternal();
-        allInternal.forEach(i => {
-            this.reg(i);
-        })
     }
 
     init() { }
@@ -71,6 +66,8 @@ class InterReg {
     reg(functor: BaseFunctor): void {
         const interName = getInternalName(functor.capa.name);
         const id = functor.capa.id;
+
+        // console.log("functor.capa=", functor.capa)
 
         if (!interName || !id) {
             throwPrecondition(`capa id or name is empty, cannot register intereg: ${JSON.stringify(functor.capa)}`);

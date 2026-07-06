@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ae7f71df-47f3-4f8b-a35a-2e27fa8e08f8",
+  "id": "e43a933e-9fa0-4fcc-b6cb-ecf2c7636b30",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "kv_store": {
@@ -70,13 +70,13 @@
           "autoincrement": false,
           "default": "''"
         },
-        "version": {
-          "name": "version",
-          "type": "integer",
+        "code": {
+          "name": "code",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 0
+          "default": "''"
         },
         "input": {
           "name": "input",

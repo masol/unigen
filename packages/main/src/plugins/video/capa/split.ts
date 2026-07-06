@@ -1,12 +1,11 @@
-import { fullInternalName } from "$libs/utils/blueprint/capability/is.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 // import { delay } from "$libs/utils/promise.js";
-import { ParaItem, ScriptItem } from "$types/blueprint/blackboard/script.js";
+import { BaseFunctor, fillCapa } from "$libs/utils/blueprint/capability/base.js";
+import { getIOInfo } from "$libs/utils/blueprint/glossary/ioinfo.js";
+import { saveToOutput } from "$libs/utils/blueprint/glossary/output.js";
+import { ParaItem, ScriptItem } from "$plugins/video/metag/script.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import { isString } from "radashi";
-import { getIOInfo } from "../../glossary/ioinfo.js";
-import { saveToOutput } from "../../glossary/output.js";
-import { BaseFunctor, fillCapa } from "../base.js";
 
 
 function splitLines(raw: string): string[] {
@@ -62,7 +61,7 @@ export class SplitFunctor extends BaseFunctor {
     constructor() {
         super(fillCapa({
             id: "a59566b3-5ade-4965-b4a4-cfa8287216db",
-            name: fullInternalName("split"),
+            name: "split",
             input: [
                 "script",
             ],
@@ -76,7 +75,7 @@ export class SplitFunctor extends BaseFunctor {
         //获取输入
         if (this.capa.input && this.capa.output) {
 
-            const ioInfo = getIOInfo(ctx, this.capa.input, this.capa.output);
+            const ioInfo = getIOInfo(ctx, this.capa.input, this.capa.output, this.capa);
             ctx.debug("split ioInfo=", JSON.stringify(ioInfo, null, 2))
 
             if (ioInfo.expired) {

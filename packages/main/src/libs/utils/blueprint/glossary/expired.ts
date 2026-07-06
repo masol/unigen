@@ -1,16 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import { getPrjTime } from "$libs/utils/db/prjstore.js";
-import { CapaIOType } from "$libs/utils/db/schema/capatype.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import { PrjTimeStore } from "$types/prjstore.js";
 import { getIOData } from "./input.js";
 
-export type ExpiredChunk<IType, OType> = {
-    expired: number[] | -1; // 指示哪些项无效了，需要重新计算。
-    input: IType | null,
-    output: OType | null
-}
+// 指示哪些项无效了，需要重新计算。输入数组和输出数组长度一定一致。
+type ExpiredChunk = number[] | -1;
 
 /**
  * 获取失效的索引数组：对比 input 和 output 数组，标记哪些项需要重新计算
@@ -52,43 +49,39 @@ function getExpiredIndices(
     return expired;
 }
 
-/**
- * 剥离时间戳信息，返回纯数据
- */
-function stripPrjTime<T>(data: PrjTimeStore<T> | Array<PrjTimeStore<T> | null> | null): T {
-    if (!data) return data as T;
-
-    if (Array.isArray(data)) {
-        return data.map(item => item?.value ?? null) as T;
-    }
-
-    return data.value;
-}
-
 
 /**
  * 获取1对1关系的失效块。两个output/input假定1对1.如果是数组，则要求彼此对应。严格检查output数组对应项的时间在input时间之后。
  * @param ctx 
- * @param inputType 
+ * @param inputKey 
  * @param outputType 
  * @returns 
  */
-export function getInvalidatedPairs<IType = any, OType = any>(
+export function getInvalidatedPairs(
     ctx: IRunnerContext,
-    inputType: CapaIOType,
-    outputType: CapaIOType
-): ExpiredChunk<IType, OType> {
+    inputKey: string,
+    outputKey: string
+): ExpiredChunk {
 
-    const inputs = getIOData<IType>(ctx, inputType);
-    const outputs = getIOData<OType>(ctx, outputType);
+    const prjdb: PrjDB = PrjDB.ensure(ctx.prj);
+
+    const inputType = prjdb.getMetag(inputKey)[0];
+    const outputType = prjdb.getMetag(outputKey)[0];
+
+    if (!inputType || !outputType) {
+        return -1;
+    }
+
+    const inputs = getIOData(ctx, inputType);
+    const outputs = getIOData(ctx, outputType);
 
     let expiredIndices: number[] | -1 = [];
 
     // 判断整体是否失效
     let bGlobalExpired = true;
     if (inputs && outputs) {
-        const latestInput = getPrjTime(inputs as any, true);
-        const earliestOutput = getPrjTime(outputs as any, false);
+        const latestInput = getPrjTime(inputs, true);
+        const earliestOutput = getPrjTime(outputs, false);
 
         if (latestInput && earliestOutput) {
             bGlobalExpired = earliestOutput.isBefore(latestInput);
@@ -106,9 +99,5 @@ export function getInvalidatedPairs<IType = any, OType = any>(
         expiredIndices = -1;
     }
 
-    return {
-        expired: expiredIndices,
-        input: stripPrjTime<IType>(inputs as any),
-        output: stripPrjTime<OType>(outputs as any),
-    };
+    return expiredIndices;
 }

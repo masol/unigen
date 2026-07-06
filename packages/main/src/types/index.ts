@@ -1,5 +1,5 @@
+export type { ScriptItem } from '../plugins/video/metag/script.js'
 export type { AppConfig, RecentProject } from './appconfig.js'
-export type { ScriptItem } from './blueprint/blackboard/script.js'
 export type { RunState } from './blueprint/state.js'
 export type { AppClient, NotifyContract } from './shared/api.js'
 export type { FileFilterPreset } from './shared/api/sys.js'

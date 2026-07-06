@@ -1,11 +1,11 @@
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
-import { CapaIOType } from "$libs/utils/db/schema/capatype.js";
 import { throwNotimplement } from "$libs/utils/err.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import Logger from "electron-log";
+import { MetagRow } from "../metag/is.js";
 import { getFieldkey } from "./util.js";
 
-function upcertOutput(prjDB: PrjDB, output: CapaIOType, key: string, value: unknown) {
+function upcertOutput(prjDB: PrjDB, output: MetagRow, key: string, value: unknown) {
     // @TODO： 需要跟随CapaIOType.reducer策略，来决定是否跟随还是覆盖。现在是直接覆盖。
     if (output.reducer && output.reducer !== 'replace') {
         throwNotimplement("尚未实现除replace之外的reducer策略。");
@@ -21,8 +21,13 @@ function upcertOutput(prjDB: PrjDB, output: CapaIOType, key: string, value: unkn
  * @param opt 
  * @returns 
  */
-export function saveToOutput(ctx: IRunnerContext, output: CapaIOType, value: unknown): boolean {
+export function saveToOutput(ctx: IRunnerContext, outputKey: string, value: unknown): boolean {
     const prjDB: PrjDB = PrjDB.ensure(ctx.prj);
+
+    const output = prjDB.getMetag(outputKey)[0];
+    if (!output) {
+        return false;
+    }
     // Logger.debug("saveToOutput value=", value)
     // flatten只针对数组展开。monolith(默认值)会跳过此处--将整个数组当作单值对待。
     if (Array.isArray(value) && output.storage === "flatten") {

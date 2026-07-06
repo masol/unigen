@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import { getPrjTimeFromArray, stripPrjTimeArray } from "$libs/utils/db/prjstore.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import type { PrjTimeStore } from "$types/prjstore.js";
+import dayjs from "dayjs";
+import { Capability } from "../capability/is.js";
 import { getAllIOData } from "./input.js";
 
 
@@ -14,17 +17,47 @@ export type IOInfo<IType = unknown, OType = unknown> = {
 }
 
 
-export function getIOInfo<ITYpe = any, OType = any>(ctx: IRunnerContext, inputType: string[], outputType: string[]): IOInfo<ITYpe, OType> {
+export function getIOInfo<ITYpe = any, OType = any>(ctx: IRunnerContext, inputKeys: string[],
+    outputKeys: string[], capa: Capability, reses?: string[]): IOInfo<ITYpe, OType> {
 
-    const inputs = getAllIOData<ITYpe>(ctx, inputType);
-    const outputs = getAllIOData<OType>(ctx, outputType);
+    const prjdb: PrjDB = PrjDB.ensure(ctx.prj);
+    const inputMetag = prjdb.getMetag(inputKeys);
+    const outputMetag = prjdb.getMetag(outputKeys);
+    const inputs = getAllIOData<ITYpe>(ctx, inputMetag);
+    const outputs = getAllIOData<OType>(ctx, outputMetag);
 
     let bExpired = true;
     if (inputs && outputs) {
         const latestInput = getPrjTimeFromArray(inputs, true);
         const earliestOutput = getPrjTimeFromArray(outputs, false);
-        if (latestInput && earliestOutput) {
-            bExpired = earliestOutput.isBefore(latestInput);
+        if (earliestOutput) {
+            if (latestInput) {
+                bExpired = earliestOutput.isBefore(latestInput);
+            }
+
+            // output有效。开始检查capa是否在output之后更新了。
+            if (!bExpired && capa.updatedAt) {
+                bExpired = dayjs(capa.updatedAt).isAfter(earliestOutput);
+            }
+
+            // output有效，开始检查依赖资源是否在output之后更新了。
+            if (!bExpired && reses && reses.length > 0) {
+                const timesMap = prjdb.geUpdTime(reses);
+                if (timesMap) {
+                    let currentResTime = dayjs(0);
+                    const times = Object.values(timesMap);
+                    for (const t of times) {
+                        if (t) {
+                            const dayt = dayjs(t);
+                            if (dayt.isAfter(currentResTime)) {
+                                currentResTime = dayt;
+                            }
+                        }
+                    }
+                    // currentResTime保存了最新时间的resource(或1970.1.1)，如果比最早的output晚，说明有资源在output之后更新。标记output已过期。
+                    bExpired = currentResTime.isAfter(earliestOutput);
+                }
+            }
         }
     }
 

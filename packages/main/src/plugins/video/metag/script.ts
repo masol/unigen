@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ArrayItemSchema } from "./array.js";
+import { ArrayItemSchema } from "../../../types/blueprint/blackboard/array.js";
 
 // 基础状态：所有多 Agent 会话的始祖
 export const ScriptItemSchema = ArrayItemSchema.extend({

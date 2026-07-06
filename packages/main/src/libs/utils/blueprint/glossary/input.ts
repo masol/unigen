@@ -1,13 +1,13 @@
 
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
-import type { CapaIOType } from "$libs/utils/db/schema/capatype.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import type { PrjTimeStore } from "$types/prjstore.js";
 // import Logger from "electron-log/main.js";
 import { isPlainObject, isString } from "radashi";
+import { MetagRow } from "../metag/is.js";
 import { getFieldkey } from "./util.js";
 
-function loadIO<T>(prjDB: PrjDB, io: CapaIOType, subId?: string): PrjTimeStore<T> | null {
+function loadIO<T>(prjDB: PrjDB, io: MetagRow, subId?: string): PrjTimeStore<T> | null {
     const key = getFieldkey(io, subId);
     if (key) {
         return prjDB.getWithTime<T>(key);
@@ -25,7 +25,7 @@ function loadIO<T>(prjDB: PrjDB, io: CapaIOType, subId?: string): PrjTimeStore<T
  * @param i 
  * @returns 
  */
-export function getIOData<T = unknown>(ctx: IRunnerContext, i: CapaIOType): PrjTimeStore<T> | null {
+export function getIOData<T = unknown>(ctx: IRunnerContext, i: MetagRow): PrjTimeStore<T> | null {
     const prjDB: PrjDB = PrjDB.ensure(ctx.prj);
     const ioData = loadIO<T>(prjDB, i);
 
@@ -60,12 +60,16 @@ export function getIOData<T = unknown>(ctx: IRunnerContext, i: CapaIOType): PrjT
 /**
  * 批量获取 IO 数据
  */
-export function getAllIOData<T = unknown>(ctx: IRunnerContext, io: CapaIOType[]): Array<PrjTimeStore<T> | null> | null {
+export function getAllIOData<T = unknown>(ctx: IRunnerContext, io: (MetagRow | null)[]): Array<PrjTimeStore<T> | null> | null {
     const retio: Array<PrjTimeStore<T> | null> = [];
 
     io.forEach((i) => {
-        const ioData = getIOData<T>(ctx, i);
-        retio.push(ioData);
+        if (i) {
+            const ioData = getIOData<T>(ctx, i);
+            retio.push(ioData);
+        } else {
+            retio.push(null);
+        }
     });
 
     return retio;

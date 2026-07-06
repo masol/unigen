@@ -1,6 +1,6 @@
 import * as schema from '$libs/utils/db/schema/index.js';
 import Database from 'better-sqlite3';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { app } from "electron";
@@ -12,7 +12,7 @@ import { metaDirName, type IProjectContext } from "../../type.js";
 // import { PrjJob } from "../../helper/job.js";
 import type { MetagRow, NewMetagRow } from '$libs/utils/blueprint/metag/is.js';
 import { throwNotfound, throwPrecondition } from "$libs/utils/err.js";
-import type { Capability } from "$types/blueprint/capability.js";
+import type { Capability, NewCapability } from "$types/blueprint/capability.js";
 import type { PrjTimeStamps, PrjTimeStore } from "$types/prjstore.js";
 import { BaseProjectController } from "../base.js";
 import { deleteCapabilityById, getCapabilityById, getCapaTimestamps, upsertCapability } from './capa.js';
@@ -113,6 +113,7 @@ export class PrjDB extends BaseProjectController {
         return this.db;
     }
 
+    // 术语表中key的默认规范： #开头的为节点创建的术语，_开头的是资源表。其它为程序定义或用户输入的术语。
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set(key: string, value: any): void {
         const db = this.getInitedDB();
@@ -158,8 +159,50 @@ export class PrjDB extends BaseProjectController {
         }) : null;
     }
 
+    /**
+     * 获取keyStore中对应key的更新时间（支持单个或批量查询）。
+     * @param key 单个 key (string) 或多个 key (string[])
+     * @returns 如果传入 string，返回 string | null；如果传入 string[]，返回 Record<string, string> (key-value 映射表)
+     */
+    geUpdTime(key: string): string | null;
+    geUpdTime(key: string[]): Record<string, string>;
+    geUpdTime(key: string | string[]): string | null | Record<string, string> {
+        const db = this.getInitedDB();
+
+        // 1. 处理数组参数（批量查询）
+        if (Array.isArray(key)) {
+            if (key.length === 0) return {};
+
+            const results = db
+                .select({
+                    key: schema.kvStore.key,
+                    updatedAt: schema.kvStore.updatedAt
+                })
+                .from(schema.kvStore)
+                .where(inArray(schema.kvStore.key, key))
+                .all(); // 使用 all() 获取所有匹配行
+
+            // 将结果转换为对象映射，方便外部 O(1) 复杂度查询
+            return results.reduce((acc, row) => {
+                if (row.updatedAt) {
+                    acc[row.key] = row.updatedAt;
+                }
+                return acc;
+            }, {} as Record<string, string>);
+        }
+
+        // 2. 处理单个字符串参数（保持原逻辑，使用 eq 和 get）
+        const result = db
+            .select({ updatedAt: schema.kvStore.updatedAt })
+            .from(schema.kvStore)
+            .where(eq(schema.kvStore.key, key))
+            .get();
+
+        return result?.updatedAt || null;
+    }
+
     // 返回id.
-    upsertCapa(capability: Partial<Capability>): string {
+    upsertCapa(capability: NewCapability): string {
         return upsertCapability(this.ensureDB(), capability);
     }
 

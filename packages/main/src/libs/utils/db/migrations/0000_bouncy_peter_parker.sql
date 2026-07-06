@@ -9,7 +9,7 @@ CREATE TABLE `capabilities` (
 	`name` text DEFAULT '' NOT NULL,
 	`role` text DEFAULT '' NOT NULL,
 	`goal` text DEFAULT '' NOT NULL,
-	`version` integer DEFAULT 0 NOT NULL,
+	`code` text DEFAULT '' NOT NULL,
 	`input` text DEFAULT '[]' NOT NULL,
 	`output` text DEFAULT '[]' NOT NULL,
 	`process` text DEFAULT '' NOT NULL,

@@ -2,19 +2,20 @@
 import { throwPrecondition } from "$libs/utils/err.js";
 import type { Capability, NewCapability } from "$types/blueprint/capability.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
-import { getInternalName } from "./is.js";
+import { fullInternalName, getInternalName } from "./is.js";
 import type { ICapaFunctor } from "./type.js";
 
 export function fillCapa(capa: NewCapability): Capability {
-    const name = getInternalName(capa?.name)
-    if(!name){
+    const name = getInternalName(capa?.name) ?? capa?.name
+    if (!name) {
         throwPrecondition("fillCapa只支持内存填充internal functor。")
     }
+    const realName = fullInternalName(name);
     return {
         id: capa.id ?? crypto.randomUUID(),
         role: "",
         goal: '',
-        version: 0,
+        code: "",
         input: [],
         output: [],
         process: '',
@@ -24,7 +25,7 @@ export function fillCapa(capa: NewCapability): Capability {
         createdAt: '',
         updatedAt: '',
         ...capa,
-        name
+        name: realName
     }
 }
 
