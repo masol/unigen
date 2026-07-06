@@ -30,9 +30,8 @@ class ConfigStore {
     #itemsPerPage = $state(10);
     #fontSize = $state(14);
     #lineHeight = $state(22);
-    #minimap = $state(true);
-    #wordWrap = $state(false);
     #lineNumbers = $state(true);
+    #rmblueprint = $state(false);
 
     // ── 私有状态：init 异步状态机 ──
     #isLoading = $state(false)
@@ -56,9 +55,8 @@ class ConfigStore {
     get itemsPerPage() { return this.#itemsPerPage }
     get fontSize() { return this.#fontSize }
     get lineHeight() { return this.#lineHeight }
-    get minimap() { return this.#minimap }
-    get wordWrap() { return this.#wordWrap }
     get lineNumbers() { return this.#lineNumbers }
+    get rmblueprint() { return this.#rmblueprint }
 
     // ── 只读门面：init 异步状态 ──
     get isLoading() { return this.#isLoading }
@@ -133,6 +131,9 @@ class ConfigStore {
             case 'lineNumbers':
                 this.#lineNumbers = value as AppConfig['lineNumbers'];
                 break;
+            case 'rmblueprint':
+                this.#rmblueprint = value as AppConfig['rmblueprint'];
+                break;
             case 'keybindings':
                 this.keybinding.onKeybindingUpdate(value as AppConfig['keybindings'])
                 break;
@@ -176,7 +177,7 @@ class ConfigStore {
         this.#fontSize = config.fontSize
         this.#lineHeight = config.lineHeight
         this.#lineNumbers = config.lineNumbers
-
+        this.#rmblueprint = config.rmblueprint
 
         this.applyTheme();
         this.keybinding.onKeybindingUpdate(config.keybindings);

@@ -11,10 +11,10 @@ import { fileURLToPath } from "url";
 import { metaDirName, type IProjectContext } from "../../type.js";
 // import { PrjJob } from "../../helper/job.js";
 import type { MetagRow, NewMetagRow } from '$libs/utils/blueprint/metag/is.js';
-import { throwNotfound, throwPrecondition } from "$libs/utils/err.js";
+import { throwNotfound, throwNotimplement, throwPrecondition } from "$libs/utils/err.js";
 import type { Capability, NewCapability } from "$types/blueprint/capability.js";
 import type { PrjTimeStamps, PrjTimeStore } from "$types/prjstore.js";
-import { BlueprintKind, GetListResponse, QueryParams } from '$types/shared/api/list.js';
+import { BlueprintKind, GetItemInput, GetListResponse, QueryParams } from '$types/shared/api/list.js';
 import { BaseProjectController } from "../base.js";
 import { deleteCapabilityById, getCapabilityById, getCapaTimestamps, upsertCapability } from './capa.js';
 import { getList } from './list.js';
@@ -238,6 +238,36 @@ export class PrjDB extends BaseProjectController {
 
     list<K extends BlueprintKind>(input: QueryParams & { kind: K }): GetListResponse {
         return getList(this.ensureDB(), input)
+    }
+
+    getContent({ kind, id, content }: GetItemInput): string {
+        switch (kind) {
+            case 'capa': {
+                const capa = this.getCapaById(id);
+                if (!capa) {
+                    throwNotfound(`没有id为${id}的能力。`)
+                }
+                return content ? capa.code : JSON.stringify(capa)
+            }
+            case 'glossary':
+                {
+                    const value = this.get(id);
+                    if (value === null) {
+                        throwNotfound(`没有key为${id}的术语。`)
+                    }
+                    return JSON.stringify(value)
+                }
+            case 'metag':
+                {
+                    const value = this.getMetag(id)[0];
+                    if (value === null) {
+                        throwNotfound(`没有fieldKey为${id}的元术语。`)
+                    }
+                    return JSON.stringify(value)
+                }
+            default:
+                throwNotimplement(`试图获取未支持的kind:${kind}`)
+        }
     }
 
     dispose(): void {

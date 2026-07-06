@@ -8,7 +8,8 @@
   import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
   import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
   import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
-  import { JS_COMPLETIONS, editorStore as store } from "./store.svelte";
+  import { JS_COMPLETIONS } from "./completes";
+  import { editorStore as store } from "./store.svelte";
 
   let container = $state<HTMLDivElement | null>(null);
   let editor: monaco.editor.IStandaloneCodeEditor | null = null;

@@ -1,13 +1,31 @@
 <!-- $lib/components/glossary/glossary-toolbar.svelte -->
 <script lang="ts">
+  import PromptDialog from "$lib/components/dialog/Prompt.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
+  import { dialogStore } from "$lib/store/ui/dialog.svelte";
   import { IconPlus, IconSearch } from "@tabler/icons-svelte";
+  import { push } from "svelte-spa-router";
   import BlueprintSwitcher from "./blueprint-switcher.svelte";
   import { blueprintStore } from "./store.svelte.js";
 
-  function handleCreate() {
-    // 新建操作 —— 由你实现
+  async function handleCreate() {
+    const name = await dialogStore.safeShow(
+      PromptDialog,
+      {
+        title: `新建${blueprintStore.kindLabel}元素`,
+        label: "新名称",
+        placeholder: "请输入新的名称(不能与当前值冲突)",
+        initialValue: "",
+        required: true,
+      },
+      { size: "sm" },
+    );
+
+    if (!name) return;
+
+    //使用空id来跳转。
+    push(`/editor/${blueprintStore.kind}/${encodeURIComponent(name)}/new`);
   }
 </script>
 

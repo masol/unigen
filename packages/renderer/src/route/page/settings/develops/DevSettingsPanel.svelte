@@ -1,4 +1,3 @@
-<!-- DevSettingsPanel.svelte -->
 <script lang="ts">
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import { IconAdjustments } from "@tabler/icons-svelte";

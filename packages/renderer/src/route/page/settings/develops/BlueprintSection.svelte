@@ -1,6 +1,7 @@
 <!-- BlueprintSection.svelte -->
 <script lang="ts">
   import * as Scrubbable from "$lib/components/ui/scrubbable";
+  import { Switch } from "$lib/components/ui/switch";
   import { configStore } from "$lib/store/config.svelte";
   import { IconTable } from "@tabler/icons-svelte";
   import SettingRow from "./SettingRow.svelte";
@@ -26,6 +27,19 @@
       >
         <Scrubbable.Value />
       </Scrubbable.Root>
+    {/snippet}
+  </SettingRow>
+  <SettingRow
+    title="可删除蓝图元素"
+    description="允许删除术语表、元术语表以及能力表中成员"
+  >
+    {#snippet control()}
+      <Switch
+        bind:checked={
+          () => configStore.rmblueprint,
+          (v) => configStore.setConfig("rmblueprint", v)
+        }
+      />
     {/snippet}
   </SettingRow>
 </SettingsSection>

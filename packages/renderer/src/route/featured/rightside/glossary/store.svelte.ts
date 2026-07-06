@@ -1,11 +1,12 @@
 // $lib/components/glossary/glossary-store.svelte.ts
 import { configStore } from '$lib/store/config.svelte';
 import { safeApi } from '$lib/utils/api';
+import type { BlueprintKind } from '@app/main/types';
 import log from 'electron-log/renderer';
 import { debounce } from 'radashi';
 
 /* ── 蓝图类型（三张同构表）──────────────────────────────────── */
-export type BlueprintKind = 'glossary' | 'metag' | 'capa'
+export type { BlueprintKind };
 
 export const BLUEPRINT_OPTIONS: { value: BlueprintKind; label: string }[] = [
     { value: 'glossary', label: '术语表' },
@@ -26,8 +27,13 @@ export type BlueprintPage = {
     pageSize: number
 }
 
-function capaCanEdit(name: string | undefined): boolean {
-    return !!name && (name.startsWith('#code') || name.startsWith('#workflow'))
+function capaCanEdit(name: string | undefined): string {
+    if (name?.startsWith('#code')) {
+        return 'js'
+    } else if (name?.startsWith('#workflow')) {
+        return 'json'
+    }
+    return ''
 }
 
 export const BLUEPRINT_KINDS: readonly BlueprintKind[] = ['glossary', 'metag', 'capa'] as const
@@ -76,12 +82,12 @@ class BlueprintStore {
         log.info('[BlueprintStore] initialized')
     }
 
-    canEditContent(term: BlueprintTerm): boolean {
+    canEditContent(term: BlueprintTerm): string {
         if (this.kind === 'capa') {
             const capaItem = this.#items.find(i => i.name === term.name)
             return capaCanEdit(capaItem?.on)
         }
-        return false
+        return ""
     }
 
     // ── 真实的加载逻辑（仅内部调用）──

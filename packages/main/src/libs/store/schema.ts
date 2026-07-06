@@ -59,6 +59,10 @@ export const configSchema: Schema<AppConfig> = {
         type: "boolean",
         default: true,
     },
+    rmblueprint: {
+        type: "boolean",
+        default: false,
+    },
     models: {
         type: 'array',
         default: [],

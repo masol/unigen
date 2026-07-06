@@ -6,9 +6,9 @@ import {
     wrap,
     type AsyncSvelteComponent, // 懒加载 loader 标准类型
 } from "svelte-spa-router/wrap";
-import DevSetting from "../../../route/page/develops/DevSettingsPanel.svelte";
 import EditorPage from '../../../route/page/editor/EditorPage.svelte';
 import FallbackComponent from "../../../route/page/fallback/Main.svelte";
+import DevSetting from "../../../route/page/settings/develops/DevSettingsPanel.svelte";
 import GeneralSetting from "../../../route/page/settings/general/general.svelte";
 import Keybindings from '../../../route/page/settings/Keybindings.svelte';
 import LLMSetting from "../../../route/page/settings/llm/llm.svelte";

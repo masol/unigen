@@ -35,3 +35,13 @@ export const GetListResponseSchema = z.object({
     items: z.array(ListItemSchema),
 });
 export type GetListResponse = z.infer<typeof GetListResponseSchema>;
+
+
+
+export const GetItemInputSchema = z.object({
+    kind: BlueprintKindSchema,
+    id: z.string(),
+    content: z.boolean(),
+});
+// 从 Zod 推衍类型
+export type GetItemInput = z.infer<typeof GetItemInputSchema>;

@@ -2,6 +2,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+  import { configStore } from "$lib/store/config.svelte.js";
   import { confirmStore } from "$lib/store/ui/confirm.svelte.js";
   import {
     IconDotsVertical,
@@ -15,20 +16,22 @@
   let { term }: { term: BlueprintTerm } = $props();
 
   // 是否允许「编辑内容」——由 store 决定（当前固定 true，逻辑由你实现）
-  const canEditContent = $derived(blueprintStore.canEditContent(term));
+  const editContentFmt = $derived(blueprintStore.canEditContent(term));
 
   function handleEdit() {
+    // console.log("blueprintStore.kind=", blueprintStore.kind);
     push(`/editor/${blueprintStore.kind}/${term.name}/`);
   }
 
   function handleEditContent() {
-    push(`/editor/${blueprintStore.kind}/${term.name}/true`);
+    push(`/editor/${blueprintStore.kind}/${term.name}/${editContentFmt}`);
   }
 
   async function handleDelete() {
     const confirmed = await confirmStore.request({
       title: "删除条目？",
-      message: `“${term.name}” 将被永久移除，此操作不可撤销。`,
+      message: `“${term.name}” 将被永久移除，并可能导致本项目无法执行。`,
+      destructive: true,
       confirmLabel: "删除",
     });
     if (confirmed === null) return;
@@ -57,19 +60,21 @@
       <IconEdit size={20} stroke={1.5} />
       编辑
     </DropdownMenu.Item>
-    {#if canEditContent}
+    {#if editContentFmt.trim().length > 0}
       <DropdownMenu.Item class="rounded-lg" onclick={handleEditContent}>
         <IconFileText size={20} stroke={1.5} />
         编辑内容
       </DropdownMenu.Item>
     {/if}
-    <DropdownMenu.Separator />
-    <DropdownMenu.Item
-      class="rounded-lg text-destructive focus:text-destructive"
-      onclick={handleDelete}
-    >
-      <IconTrash size={20} stroke={1.5} />
-      删除
-    </DropdownMenu.Item>
+    {#if configStore.rmblueprint}
+      <DropdownMenu.Separator />
+      <DropdownMenu.Item
+        class="rounded-lg text-destructive focus:text-destructive"
+        onclick={handleDelete}
+      >
+        <IconTrash size={20} stroke={1.5} />
+        删除
+      </DropdownMenu.Item>
+    {/if}
   </DropdownMenu.Content>
 </DropdownMenu.Root>

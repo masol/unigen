@@ -17,6 +17,7 @@ export interface AppConfig {
     fontSize: number;
     lineHeight: number;
     lineNumbers: boolean;
+    rmblueprint: boolean; // 是否允许删除blueprint三表中的成员，默认false.
     keybindings: Record<string, string[]>;
     // 其他配置...
 }

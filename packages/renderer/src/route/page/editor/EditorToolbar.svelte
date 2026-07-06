@@ -24,10 +24,10 @@
   } from "@tabler/icons-svelte";
   import { editorStore as store } from "./store.svelte";
 
-  const kindIcon = $derived(
-    store.kind === "json"
+  const langIcon = $derived(
+    store.editorLang === "json"
       ? IconJson
-      : store.kind === "js"
+      : store.editorLang === "js"
         ? IconBrandJavascript
         : IconMarkdown,
   );
@@ -72,7 +72,7 @@
         {@const Icon = IconFileDescription}
         <Icon size={24} stroke={1.5} class="shrink-0 text-muted-foreground" />
       {:else}
-        {@const Icon = kindIcon}
+        {@const Icon = langIcon}
         <Icon size={24} stroke={1.5} class="shrink-0 text-primary" />
       {/if}
 
@@ -98,19 +98,26 @@
 
     <div class="ml-auto flex items-center gap-1.5">
       <!-- ── 三个异步主操作 ── -->
-      {@render toolBtn("保存 (Ctrl+S)", IconDeviceFloppy, () => store.save(), {
-        loading: store.busyAction === "save",
-        disabled: store.busy && store.busyAction !== "save",
-      })}
-      {@render toolBtn("重新加载", IconReload, () => store.reload(), {
-        loading: store.busyAction === "reload",
-        disabled: store.busy && store.busyAction !== "reload",
-      })}
+      {#if store.dirty}
+        {@render toolBtn(
+          "保存 (Ctrl+S)",
+          IconDeviceFloppy,
+          () => store.save(),
+          {
+            loading: store.busyAction === "save",
+            disabled: store.busy && store.busyAction !== "save",
+          },
+        )}
+      {/if}
       {@render toolBtn("验证内容", IconCircleCheck, () => store.validate(), {
         loading: store.busyAction === "validate",
         disabled: store.busy && store.busyAction !== "validate",
       })}
 
+      {@render toolBtn("重新加载", IconReload, () => store.reload(), {
+        loading: store.busyAction === "reload",
+        disabled: store.busy && store.busyAction !== "reload",
+      })}
       <Separator orientation="vertical" class="mx-1 h-6" />
 
       <!-- ── 常用编辑功能（由组件自身实现）── -->
