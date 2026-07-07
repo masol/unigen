@@ -252,10 +252,8 @@ export class PrjDB extends BaseProjectController {
                     return capa.code;
                 }
                 // 使用解构剔除不需要的字段，保留其余属性
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { updatedAt, createdAt, code, ...safeCapa } = capa;
-                void (updatedAt)
-                void (createdAt)
-                void (code)
 
                 return JSON.stringify(safeCapa, null, 2);
             }
