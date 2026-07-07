@@ -1,3 +1,5 @@
+import { configStore } from '$lib/store/config.svelte';
+import { confirmStore } from '$lib/store/ui/confirm.svelte';
 import { safeApi } from '$lib/utils/api';
 import * as monaco from 'monaco-editor';
 import type { BlueprintKind } from '../../featured/rightside/glossary/store.svelte';
@@ -5,6 +7,7 @@ import type { BlueprintKind } from '../../featured/rightside/glossary/store.svel
 export type { BlueprintKind };
 /** Monaco 语言类型 —— 由 kind + id + content 派生得出 */
 export type EditorLang = 'markdown' | 'json' | 'js';
+export type CntParam = EditorLang | 'new' | ''
 
 interface LoadResult {
     content: string;
@@ -13,7 +16,7 @@ interface LoadResult {
 export interface RouteParams {
     kind: BlueprintKind;
     id: string;
-    contentFmt: string; // 只有具有有效值(length>0)，说明编辑内容。
+    contentFmt: CntParam; // 只有具有有效值(length>0)，说明编辑内容。
 }
 
 /** 校验结果条目 */
@@ -57,7 +60,7 @@ export class EditorStore {
     kind = $state<BlueprintKind>('glossary');
     id = $state<string>('');
     /** 路由传入的 content 参数（是否随路由预置内容）-- 如果有值(length>0)，来指示编辑内容还是编辑Row. */
-    contentFmt = $state<string>('');
+    contentFmt = $state<CntParam>('');
 
     // ── 内容与状态 ──
     content = $state<string>('');
@@ -135,19 +138,27 @@ export class EditorStore {
      * 仅同步参数字段（保持派生正确），内容与 loadedContent 原样保留。
      */
     async init(params: RouteParams) {
+        if (this.id === params.id && this.kind === params.kind) {
+            if ((params.contentFmt === 'new') && this.bCreateNew) {
+                return;
+            }
+            if (params.contentFmt === this.contentFmt) {
+                return;
+            }
+        }
         if (params.contentFmt === 'new') {
             this.bCreateNew = true;
-            this.kind = params.kind;
-            this.id = params.id;
             this.contentFmt = "";
-            return;
+            this.loadedKey = null;
+        } else {
+            this.bCreateNew = false;
+            // 参数字段始终对齐（即便复用也要保证 kind/language 等派生正确）
+            this.contentFmt = params.contentFmt;
         }
 
-        const key = this.fingerprint(params);
-        // 参数字段始终对齐（即便复用也要保证 kind/language 等派生正确）
         this.kind = params.kind;
         this.id = params.id;
-        this.contentFmt = params.contentFmt;
+        const key = this.fingerprint(params);
 
         if (this.loadedKey === key && !this.loading) {
             // 指纹一致：复用内存内容，跳过加载
@@ -164,7 +175,7 @@ export class EditorStore {
         this.loading = true;
         this.lastError = null;
         try {
-            const result = await this.loadFromSource();
+            const result = this.bCreateNew ? { content: "" } : (await this.loadFromSource());
             this.content = result.content;
             this.loadedContent = result.content;
             this.issues = [];
@@ -187,11 +198,26 @@ export class EditorStore {
     /** 保存（异步）—— 执行期间 readonly=true，内容区不可操作 */
     async save() {
         if (this.busy) return;
+        if (!configStore.silentSave) {
+            const confirm = confirmStore.request({
+                title: "项目可能无法运行",
+                message: `${this.kindLabel}条目“${this.id}”的变动，可能导致本项目无法执行，确定要继续保存吗？。`,
+                confirmLabel: "保存",
+                destructive: true
+            })
+            if (!confirm) {
+                return;
+            }
+        }
         this.busy = true;
         this.busyAction = 'save';
         try {
-            // TODO: 真实保存逻辑
-            await this.mockAsync();
+            safeApi().project.setContent({
+                id: this.id,
+                kind: this.kind,
+                content: this.content,
+                code: this.contentFmt.length > 0
+            })
             this.loadedContent = this.content; // 保存成功后基线对齐
         } finally {
             this.busy = false;
@@ -205,8 +231,6 @@ export class EditorStore {
         this.busy = true;
         this.busyAction = 'reload';
         try {
-            // TODO: 真实重载逻辑
-            await this.mockAsync();
             const result = await this.loadFromSource();
             this.content = result.content;
             this.loadedContent = result.content;
@@ -228,8 +252,12 @@ export class EditorStore {
         this.busy = true;
         this.busyAction = 'validate';
         try {
-            // TODO: 真实校验逻辑（可结合 monaco marker）
-            await this.mockAsync();
+            safeApi().project.verifyContent({
+                id: this.id,
+                kind: this.kind,
+                content: this.content,
+                code: this.contentFmt.length > 0
+            })
             this.issues = [];
         } finally {
             this.busy = false;
@@ -283,10 +311,6 @@ export class EditorStore {
         this.cursorLine = line;
         this.cursorColumn = column;
         this.selectionLength = selLen;
-    }
-
-    private mockAsync(ms = 900) {
-        return new Promise((r) => setTimeout(r, ms));
     }
 
     /** mock 数据源 —— 按派生语言生成示例，脱离外部依赖也能完整渲染 */

@@ -26,6 +26,7 @@ class ConfigStore {
     #providers = $state<Provider[]>([])           // 复合对象整体替换 → $state.raw
     #autoupdate = $state<boolean>(true)
     #disableHA = $state<boolean>(false)
+    #silentSave = $state<boolean>(false)
 
     #itemsPerPage = $state(10);
     #fontSize = $state(14);
@@ -57,6 +58,7 @@ class ConfigStore {
     get lineHeight() { return this.#lineHeight }
     get lineNumbers() { return this.#lineNumbers }
     get rmblueprint() { return this.#rmblueprint }
+    get silentSave() { return this.#silentSave }
 
     // ── 只读门面：init 异步状态 ──
     get isLoading() { return this.#isLoading }
@@ -134,6 +136,9 @@ class ConfigStore {
             case 'rmblueprint':
                 this.#rmblueprint = value as AppConfig['rmblueprint'];
                 break;
+            case 'silentSave':
+                this.#silentSave = value as AppConfig['silentSave'];
+                break;
             case 'keybindings':
                 this.keybinding.onKeybindingUpdate(value as AppConfig['keybindings'])
                 break;
@@ -178,6 +183,7 @@ class ConfigStore {
         this.#lineHeight = config.lineHeight
         this.#lineNumbers = config.lineNumbers
         this.#rmblueprint = config.rmblueprint
+        this.#silentSave = config.silentSave
 
         this.applyTheme();
         this.keybinding.onKeybindingUpdate(config.keybindings);

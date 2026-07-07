@@ -63,6 +63,10 @@ export const configSchema: Schema<AppConfig> = {
         type: "boolean",
         default: false,
     },
+    silentSave: {
+        type: "boolean",
+        default: false,
+    },
     models: {
         type: 'array',
         default: [],

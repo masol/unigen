@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as schema from '$libs/utils/db/schema/index.js';
 import { BlueprintKind, GetListResponse, ListItem, QueryParams } from '$types/shared/api/list.js';
-import { like, sql } from 'drizzle-orm';
+import { asc, like, sql } from 'drizzle-orm';
 import { DrizzleDBType } from './type.js';
 
 // 1. 定义每个 Kind 返回的 Items 差异化类型
@@ -43,7 +43,8 @@ const KIND_CONFIG = {
 
 // 4. 泛型动态查询函数
 export function getList<K extends BlueprintKind>(db: DrizzleDBType, { name, pageIndex, pageSize, kind }: QueryParams & { kind: K }): GetListResponse {
-    const offset = (pageIndex - 1) * pageSize;
+
+    const offset = (pageIndex) * pageSize;
 
     // 从映射表中取出当前 kind 对应的 Drizzle 配置
     const config = KIND_CONFIG[kind];
@@ -67,18 +68,12 @@ export function getList<K extends BlueprintKind>(db: DrizzleDBType, { name, page
         .select(selectFields as any)
         .from(table)
         .where(filterCondition)
+        .orderBy(asc(filterColumn))
         .limit(pageSize)
         .offset(offset)
         .all() as ListItem[];
 
     const total = totalResult[0]?.count ?? 0;
-
-    // console.log("ret=", {
-    //     total,
-    //     items, // 这里的 items 会根据传入的 kind 自动推导为对应的结构
-    //     pageIndex,
-    //     pageSize,
-    // })
 
     return {
         total,

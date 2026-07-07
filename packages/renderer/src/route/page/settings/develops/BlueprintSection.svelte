@@ -42,4 +42,17 @@
       />
     {/snippet}
   </SettingRow>
+  <SettingRow
+    title="变动确认"
+    description="在数据变动(如保存)之前，提醒用户可能的风险。"
+  >
+    {#snippet control()}
+      <Switch
+        bind:checked={
+          () => !configStore.silentSave,
+          (v) => configStore.setConfig("silentSave", !v)
+        }
+      />
+    {/snippet}
+  </SettingRow>
 </SettingsSection>

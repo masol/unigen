@@ -174,6 +174,9 @@
           onAddModel={async (model?: Model) => {
             await upsertModel(provider.id, model);
           }}
+          onToggleEnabled={async () => {
+            await configStore.upsertProvider(provider);
+          }}
           onRemoveModel={(modelId) => handleRemoveModel(provider.id, modelId)}
           onRemoveProvider={() => handleRemoveProvider(provider.id)}
         />

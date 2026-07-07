@@ -2,12 +2,16 @@
 <script lang="ts">
   import EditorToolbar from "./EditorToolbar.svelte";
   import MonacoEditor from "./MonacoEditor.svelte";
-  import { editorStore, type BlueprintKind } from "./store.svelte";
+  import {
+    editorStore,
+    type BlueprintKind,
+    type CntParam,
+  } from "./store.svelte";
 
   let {
     params = {},
   }: {
-    params?: { kind?: string; id?: string; content?: string };
+    params?: { kind?: string; id?: string; content?: CntParam };
   } = $props();
 
   // main 不判断语言，只把 kind 原样透传（仅做合法性兜底）

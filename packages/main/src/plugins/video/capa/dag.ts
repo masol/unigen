@@ -22,7 +22,7 @@ function imporMainDag(prjDb: PrjDB) {
     const wfstr = JSON.stringify(serializedObject);
 
 
-    const newcapa = prjDb.upsertCapa({
+    const newcapa = prjDb.upcertCapa({
         id: entryId,
         name: "#workflow",
         code: wfstr,

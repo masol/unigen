@@ -10,13 +10,13 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { metaDirName, type IProjectContext } from "../../type.js";
 // import { PrjJob } from "../../helper/job.js";
-import type { MetagRow, NewMetagRow } from '$libs/utils/blueprint/metag/is.js';
+import { metagToJson, type MetagRow, type NewMetagRow } from '$libs/utils/blueprint/metag/is.js';
 import { throwNotfound, throwNotimplement, throwPrecondition } from "$libs/utils/err.js";
 import type { Capability, NewCapability } from "$types/blueprint/capability.js";
 import type { PrjTimeStamps, PrjTimeStore } from "$types/prjstore.js";
-import { BlueprintKind, GetItemInput, GetListResponse, QueryParams } from '$types/shared/api/list.js';
+import { BlueprintKind, GetItemInput, GetListResponse, QueryParams, SetItem } from '$types/shared/api/list.js';
 import { BaseProjectController } from "../base.js";
-import { deleteCapabilityById, getCapabilityById, getCapaTimestamps, upsertCapability } from './capa.js';
+import { deleteCapabilityById, getCapabilityById, getCapaTimestamps, upsertCapability as upcertCapability } from './capa.js';
 import { getList } from './list.js';
 import { deleteMetag, getMetag, getMetagTimestamps, upcertMetag } from './metag.js';
 import type { DrizzleDBType } from "./type.js";
@@ -204,8 +204,8 @@ export class PrjDB extends BaseProjectController {
     }
 
     // 返回id.
-    upsertCapa(capability: NewCapability): string {
-        return upsertCapability(this.ensureDB(), capability);
+    upcertCapa(capability: NewCapability): string {
+        return upcertCapability(this.ensureDB(), capability);
     }
 
     getCapaById(id: string): Capability | null {
@@ -247,13 +247,26 @@ export class PrjDB extends BaseProjectController {
                 if (!capa) {
                     throwNotfound(`没有id为${id}的能力。`)
                 }
-                return content ? capa.code : JSON.stringify(capa)
+                // 如果 content 为 true，返回完整的 code
+                if (content) {
+                    return capa.code;
+                }
+                // 使用解构剔除不需要的字段，保留其余属性
+                const { updatedAt, createdAt, code, ...safeCapa } = capa;
+                void (updatedAt)
+                void (createdAt)
+                void (code)
+
+                return JSON.stringify(safeCapa);
             }
             case 'glossary':
                 {
                     const value = this.get(id);
                     if (value === null) {
                         throwNotfound(`没有key为${id}的术语。`)
+                    }
+                    if (id.startsWith('_')) { // 资源类的不做JSON化，直接默认其是字符串。
+                        return value as string;
                     }
                     return JSON.stringify(value)
                 }
@@ -263,11 +276,55 @@ export class PrjDB extends BaseProjectController {
                     if (value === null) {
                         throwNotfound(`没有fieldKey为${id}的元术语。`)
                     }
-                    return JSON.stringify(value)
+                    // 使用解构剔除不需要的字段，保留其余属性
+                    const { updatedAt, createdAt, ...jsonValue } = metagToJson(value)!
+                    void (updatedAt)
+                    void (createdAt)
+                    return JSON.stringify(jsonValue);
                 }
             default:
                 throwNotimplement(`试图获取未支持的kind:${kind}`)
         }
+    }
+
+    // 返回id.
+    setContent({ kind, id, content, code }: SetItem): string {
+        switch (kind) {
+            case 'capa': {
+                const cntJson = JSON.parse(content);
+                const newCapa = code ? {
+                    id,
+                    code: content
+                } : { ...cntJson, id }
+                return this.upcertCapa(newCapa)
+            }
+            case 'glossary':
+                {
+                    if (id.startsWith('_')) {
+                        this.set(id, content);
+                    } else {
+                        const cntJson = JSON.parse(content);
+                        this.set(id, cntJson);
+                    }
+                    return id
+                }
+            case 'metag':
+                {
+                    const cntJson = JSON.parse(content);
+                    this.upcertMetag({
+                        ...cntJson,
+                        fieldKey: id
+                    })
+                    return id
+                }
+            default:
+                throwNotimplement(`试图写入未支持的kind:${kind}`)
+        }
+    }
+
+    // 返回验证错误字符串。
+    verifyContent(_setInfo: SetItem): string[] {
+        throwNotimplement("尚未实现内容验证，自行小心。")
     }
 
     dispose(): void {
