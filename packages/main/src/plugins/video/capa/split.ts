@@ -78,6 +78,36 @@ export class SplitFunctor extends BaseFunctor {
             const ioInfo = getIOInfo(ctx, this.capa.input, this.capa.output, this.capa);
             ctx.debug("split ioInfo=", JSON.stringify(ioInfo, null, 2))
 
+            // 测试模型筛选功能。
+            // const model = getSmartModel({ sort: SortStrategy.VersionAsc }, ctx)
+            // generateText({
+            //     model: model,
+            //     prompt: "输出一个1"
+            // }).then(result => {
+            //     ctx.debug("result=", result.content, model.modelId)
+            // })
+
+            // await delay(10);
+            // const model2 = getSmartModel({ sort: SortStrategy.VersionAsc }, ctx)
+
+            // generateText({
+            //     model: model2,
+            //     prompt: "输出一个2"
+            // }).then(result => {
+            //     ctx.debug("result=", result.content, model2.modelId)
+            // })
+
+            // await delay(10);
+            // const model3 = getSmartModel({ sort: SortStrategy.VersionAsc }, ctx)
+            // generateText({
+            //     model: model3,
+            //     prompt: "输出一个3"
+            // }).then(result => {
+            //     ctx.debug("result=", result.content, model3.modelId)
+            // })
+            // ctx.debug("model=", model.modelId, model2.modelId, model3.modelId)
+
+
             if (ioInfo.expired) {
 
                 const scripts: ScriptItem[] = ioInfo.inputs[0] as ScriptItem[];

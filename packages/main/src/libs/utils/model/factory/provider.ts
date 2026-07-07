@@ -1,10 +1,13 @@
+import { throwPrecondition } from '$libs/utils/err.js';
+import type { Provider } from '$types/index.js';
+import { ProviderProtocol } from '$types/shared/model.js';
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
-import { createXai } from '@ai-sdk/xai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { ProviderV4 } from '@ai-sdk/provider';
-import type { Provider } from '$types/index.js';
-import { ProviderProtocol } from '$types/shared/model.js'
+import { createXai } from '@ai-sdk/xai';
 import Logger from 'electron-log/main.js';
 
 
@@ -14,24 +17,23 @@ import Logger from 'electron-log/main.js';
    */
 function createOpenAIModel(
     apiKey: string,
-    baseURL?: string,
-    strict: boolean = true,
+    baseURL?: string
 ): ProviderV4 {
     return createOpenAI({
         apiKey,
         baseURL,
-        // 移除 compatibility 属性，使用 fetch 选项来处理兼容性
-        fetch: strict
-            ? undefined
-            : async (url, init) => {
-                // 兼容模式：更宽松的错误处理
-                try {
-                    return await fetch(url, init);
-                } catch (error) {
-                    Logger.warn('OpenAI compatible fetch error:', error);
-                    throw error;
-                }
-            }
+        // // 移除 compatibility 属性，使用 fetch 选项来处理兼容性
+        // fetch: strict
+        //     ? undefined
+        //     : async (url, init) => {
+        //         // 兼容模式：更宽松的错误处理
+        //         try {
+        //             return await fetch(url, init);
+        //         } catch (error) {
+        //             Logger.warn('OpenAI compatible fetch error:', error);
+        //             throw error;
+        //         }
+        //     }
     });
 }
 
@@ -102,13 +104,14 @@ function createOllamaModel(baseURL?: string): ProviderV4 {
     * 根据协议类型创建模型
     */
 function createProviderByProtocol(
+    providerId: string,
     protocol: ProviderProtocol,
     apiKey: string,
     baseURL?: string
 ): ProviderV4 {
     switch (protocol) {
         case 'openai':
-            return createOpenAIModel(apiKey, baseURL, true);
+            return createOpenAIModel(apiKey, baseURL);
 
         case 'anthropic':
             return createAnthropicModel(apiKey, baseURL);
@@ -124,10 +127,22 @@ function createProviderByProtocol(
 
         case 'ollama':
             return createOllamaModel(baseURL);
-
+        case 'deepseek':
+            return createDeepSeek({
+                apiKey,
+                baseURL
+            })
+        case 'openai-compatible':
         default:
+            if (!baseURL) {
+                throwPrecondition("openai兼容协议必须提供URL地址。")
+            }
             // 默认使用 OpenAI 兼容协议（宽松模式）
-            return createOpenAIModel(apiKey, baseURL, false);
+            return createOpenAICompatible({
+                name: providerId,
+                baseURL,
+                apiKey
+            });
     }
 }
 
@@ -138,7 +153,7 @@ export function createProvider(provider: Provider): ProviderV4 {
     const protocol = provider.protocol || ProviderProtocol.OpenAI;
 
     try {
-        return createProviderByProtocol(protocol, apiKey, baseURL);
+        return createProviderByProtocol(provider.id, protocol, apiKey, baseURL);
     } catch (error) {
         Logger.error(`创建ProviderV3失败 (${provider.id}:`, error);
         throw error;
