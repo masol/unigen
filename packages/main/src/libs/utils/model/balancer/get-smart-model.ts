@@ -1,3 +1,4 @@
+import { throwNotfound } from '$libs/utils/err.js';
 import { IRunnerContext } from '$types/blueprint/context.js';
 import { ModelTags } from '$types/shared/model.js';
 import {
@@ -32,6 +33,8 @@ export interface GetSmartModelOptions {
      * 默认 VersionDesc:最强模型优先。
      */
     sort?: SortStrategy;
+    /** 最小输入上下文窗口(Tokens),排除 inctx 不足(或未声明)的模型 */
+    minInctx?: number;
 }
 
 // // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -225,19 +228,19 @@ export function getSmartModel(
         const providers = syncAndGetProviders();
         const pv = providers.find((p) => p.id === providerId);
         if (!pv) {
-            throw new Error(
+            throwNotfound(
                 `[getSmartModel] 精确指定失败:找不到 provider "${providerId}"(可能已禁用或移除)`,
             );
         }
         const model = pv.models.find((m) => m.id === modelId);
         if (!model) {
-            throw new Error(
+            throwNotfound(
                 `[getSmartModel] 精确指定失败:provider "${providerId}" 下无模型 "${modelId}"`,
             );
         }
         const limiter = getLimiter(providerId);
         if (!limiter) {
-            throw new Error(
+            throwNotfound(
                 `[getSmartModel] 精确指定失败:provider "${providerId}" 无并发通道`,
             );
         }
@@ -251,6 +254,7 @@ export function getSmartModel(
         preferVersion: opts.preferVersion,
         minScore: opts.minScore,
         sort: opts.sort,
+        minInctx: opts.minInctx,
     });
 
     if (opts.modelPattern) {
@@ -259,11 +263,12 @@ export function getSmartModel(
     }
 
     if (candidates.length === 0) {
-        throw new Error(
+        throwNotfound(
             `[getSmartModel] 无满足要求的 chat 模型 abilities=[${(
                 opts.requiredAbilities ?? []
             ).join(', ')}] preferVersion=${opts.preferVersion ?? '任意'} minScore=${opts.minScore ?? 0
-            }${opts.modelPattern ? ` pattern=${opts.modelPattern}` : ''}`,
+            } minInctx=${opts.minInctx ?? '不限'}${opts.modelPattern ? ` pattern=${opts.modelPattern}` : ''
+            }`,
         );
     }
 

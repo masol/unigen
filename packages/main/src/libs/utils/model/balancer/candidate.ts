@@ -29,6 +29,11 @@ export interface SelectOptions {
     preferVersion?: ModelTags;
     minScore?: number;
     sort?: SortStrategy;
+    /**
+     * 最小输入上下文窗口(Tokens)。排除 inctx 不足的模型。
+     * ⚠️ 未声明 inctx 的模型也会被排除(无法保证够用,稳定优先)。
+     */
+    minInctx?: number;
 }
 
 const DEFAULT_SCORE = 50;
@@ -65,6 +70,7 @@ export function selectCandidates(opts: SelectOptions): Candidate[] {
         preferVersion,
         minScore = 0,
         sort = DEFAULT_SORT,
+        minInctx,
     } = opts;
 
     const providers = syncAndGetProviders();
@@ -77,22 +83,34 @@ export function selectCandidates(opts: SelectOptions): Candidate[] {
 
         for (const model of pv.models) {
             const abilities = model.abilities ?? [];
+
+            // 1. 类别匹配
             if (!abilities.includes(category)) continue;
+
+            // 2. 能力标签全满足
             const hasAll = requiredAbilities.every((a) => abilities.includes(a));
             if (!hasAll) continue;
+
+            // 3. 版本向上兼容
             if (versionRank(abilities) < minVer) continue;
+
+            // 4. 评分门槛
             if ((model.score ?? DEFAULT_SCORE) < minScore) continue;
+
+            // 5. 输入上下文窗口门槛:
+            //    未声明 inctx 视为不满足(无法保证够用,稳定优先,排除)
+            if (minInctx != null) {
+                if (model.inctx == null || model.inctx < minInctx) continue;
+            }
+
             candidates.push({ provider: pv, model, limiter });
         }
     }
 
-    // 1) 先按 SortStrategy 排出完整强弱链(Array.sort 在现代 V8 中稳定)
+    // 1) 先按 SortStrategy 排出完整强弱链
     candidates.sort((a, b) => compareBySort(a, b, sort));
 
-    // 2) 稳定分区:有空位者整体提前,已满者整体靠后;
-    //    两分区内部都保持强弱链顺序不变。
-    //    → 首选 = 链中第一个"有空位"的模型(遵守 sort 语义);
-    //    → 已满者退居 fallback 末段,靠 fastq 排队兜底。
+    // 2) 稳定分区:有空位者整体提前,已满者整体靠后;分区内部保持强弱链顺序。
     const free: Candidate[] = [];
     const busy: Candidate[] = [];
     for (const c of candidates) {

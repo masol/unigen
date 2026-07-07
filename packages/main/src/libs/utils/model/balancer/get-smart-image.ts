@@ -1,3 +1,4 @@
+import { throwNotfound } from '$libs/utils/err.js';
 import { IRunnerContext } from '$types/blueprint/context.js';
 import { ModelTags } from '$types/shared/model.js';
 import {
@@ -108,19 +109,19 @@ export function getSmartImage(
         const providers = syncAndGetProviders();
         const pv = providers.find((p) => p.id === providerId);
         if (!pv) {
-            throw new Error(
+            throwNotfound(
                 `[getSmartImage] 精确指定失败:找不到 provider "${providerId}"`,
             );
         }
         const model = pv.models.find((m) => m.id === modelId);
         if (!model) {
-            throw new Error(
+            throwNotfound(
                 `[getSmartImage] 精确指定失败:provider "${providerId}" 下无模型 "${modelId}"`,
             );
         }
         const limiter = getLimiter(providerId);
         if (!limiter) {
-            throw new Error(
+            throwNotfound(
                 `[getSmartImage] 精确指定失败:provider "${providerId}" 无并发通道`,
             );
         }
@@ -142,7 +143,7 @@ export function getSmartImage(
     }
 
     if (candidates.length === 0) {
-        throw new Error(
+        throwNotfound(
             `[getSmartImage] 无满足要求的 image 模型 abilities=[${(
                 opts.requiredAbilities ?? []
             ).join(', ')}] preferVersion=${opts.preferVersion ?? '任意'} minScore=${opts.minScore ?? 0
