@@ -30,9 +30,6 @@ export function getIOData<T = unknown>(ctx: IRunnerContext, i: MetagRow): PrjTim
     const ioData = loadIO<T>(prjDB, i);
 
     if (i.schema && ioData && ioData.value) {
-        // console.log("ioData.value=", ioData.value)
-        // console.log("i.schema=", i.schema)
-
         const parseResult = i.schema.safeParse(ioData.value);
         if (!parseResult.success) {
             ctx.error(`Failed to parse IOdata for ${getFieldkey(i)}. Error: ${parseResult.error}`);
@@ -42,10 +39,6 @@ export function getIOData<T = unknown>(ctx: IRunnerContext, i: MetagRow): PrjTim
 
     // flatten只针对数组展开。monolith(默认值)会跳过此处--将整个数组当作单值对待。
     if (Array.isArray(ioData?.value) && i.storage === "flatten") {
-        // if (i.storage && i.storage !== "flatten") {
-        //     throwNotimplement(`${i.storage}存储模式的数组尚未被支持。`);
-        // }
-
         ioData.value.forEach((v) => {
             const value: Record<string, unknown> | null = isPlainObject(v) ? v as Record<string, unknown> : null;
             if (value?.id && isString(value.id)) { // 如果id有值。
