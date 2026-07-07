@@ -1,8 +1,8 @@
 <script lang="ts">
+  import { stickToBottom } from "$lib/components/action/stick-to-bottom";
   import { Button } from "$lib/components/ui/button";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { i18nStore } from "$lib/store/i18n.svelte";
-  import autoAnimate from "@formkit/auto-animate";
   import { IconSearch } from "@tabler/icons-svelte";
   import type { LogLevel, LogMessage } from "electron-log";
   import { hookLogStore } from "./hook-log.store.svelte";
@@ -39,7 +39,11 @@
   }
 </script>
 
-<div class="flex-1 overflow-y-auto px-3 py-2 font-mono text-xs">
+<!-- 滚动容器：挂载 stickToBottom，暂停接收时不强制跟随 -->
+<div
+  class="flex-1 overflow-y-auto px-3 py-2 font-mono text-xs"
+  use:stickToBottom={{ threshold: 48, enabled: !hookLogStore.paused }}
+>
   {#if !hookLogStore.connected}
     <div class="space-y-1.5">
       {#each Array.from({ length: 12 }, (_, idx) => idx) as index (index)}
@@ -78,7 +82,8 @@
       {/if}
     </div>
   {:else}
-    <div class="space-y-0.5" use:autoAnimate>
+    <!-- 自然顺序：从上往下阅读，最新在底部；autoAnimate 负责逐条增删补间 -->
+    <div class="space-y-0.5">
       {#each filtered as entry, index (entryKey(entry, index))}
         {@const meta = levelMeta[entry.level]}
         <div

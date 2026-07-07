@@ -36,7 +36,7 @@
   ];
 </script>
 
-<div class="flex h-full flex-col border-t border-border/50 bg-muted/20">
+<div class="flex h-full min-h-0 flex-col border-t border-border/50 bg-muted/20">
   <PanelHeader
     {isMaximized}
     onToggleMaximize={() => layoutStore.toggleMaximizePanel("bottom")}
@@ -45,32 +45,46 @@
     headerComponent={BottomPanelTabs}
   />
 
-  <ScrollArea class="flex-1 min-h-0">
-    <div class="p-3 font-mono text-xs leading-5">
-      {#if bottomPanelStore.activeTab === "terminal"}
-        {#each terminalLines as line (line.id)}
-          <div
-            class={[
-              line.type === "command" && "text-foreground font-medium",
-              line.type === "info" && "text-primary",
-              line.type === "success" && "text-green-500 dark:text-green-400",
-              line.type === "muted" && "text-muted-foreground",
-              line.type === "blank" && "h-4",
-            ]}
-          >
-            {line.text}
-          </div>
-        {/each}
-        <div class="flex items-center gap-1 pt-1">
-          <span class="text-primary">$</span>
-          <span class="inline-block h-3.5 w-1.5 animate-pulse bg-foreground/70"
-          ></span>
+  <!-- 用一个 flex-1 min-h-0 的容器包裹分支，而非统一套 ScrollArea ▼▼▼ -->
+  <div class="flex-1 min-h-0">
+    {#if bottomPanelStore.activeTab === "logger"}
+      <!--
+        logger：HookLogViewer 自带 header/滚动区/footer 三段式布局与内部滚动，
+        直接铺满，不要外层 ScrollArea，也不要 p-3 padding。
+        这样 header 的 sticky/固定 就相对组件自己内部的滚动区生效。
+      -->
+      <HookLogViewer />
+    {:else}
+      <!-- terminal / output：纯文本流，仍走 ScrollArea -->
+      <ScrollArea class="h-full">
+        <div class="p-3 font-mono text-xs leading-5">
+          {#if bottomPanelStore.activeTab === "terminal"}
+            {#each terminalLines as line (line.id)}
+              <div
+                class={[
+                  line.type === "command" && "text-foreground font-medium",
+                  line.type === "info" && "text-primary",
+                  line.type === "success" &&
+                    "text-green-500 dark:text-green-400",
+                  line.type === "muted" && "text-muted-foreground",
+                  line.type === "blank" && "h-4",
+                ]}
+              >
+                {line.text}
+              </div>
+            {/each}
+            <div class="flex items-center gap-1 pt-1">
+              <span class="text-primary">$</span>
+              <span
+                class="inline-block h-3.5 w-1.5 animate-pulse bg-foreground/70"
+              ></span>
+            </div>
+          {:else if bottomPanelStore.activeTab === "output"}
+            <p class="text-muted-foreground p-2">暂无输出内容。</p>
+          {/if}
         </div>
-      {:else if bottomPanelStore.activeTab === "logger"}
-        <HookLogViewer></HookLogViewer>
-      {:else if bottomPanelStore.activeTab === "output"}
-        <p class="text-muted-foreground p-2">暂无输出内容。</p>
-      {/if}
-    </div>
-  </ScrollArea>
+      </ScrollArea>
+    {/if}
+  </div>
+  <!-- ▲▲▲ -->
 </div>

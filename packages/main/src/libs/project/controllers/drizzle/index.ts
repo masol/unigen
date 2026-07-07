@@ -257,7 +257,7 @@ export class PrjDB extends BaseProjectController {
                 void (createdAt)
                 void (code)
 
-                return JSON.stringify(safeCapa);
+                return JSON.stringify(safeCapa, null, 2);
             }
             case 'glossary':
                 {
@@ -268,7 +268,7 @@ export class PrjDB extends BaseProjectController {
                     if (id.startsWith('_')) { // 资源类的不做JSON化，直接默认其是字符串。
                         return value as string;
                     }
-                    return JSON.stringify(value)
+                    return JSON.stringify(value, null, 2)
                 }
             case 'metag':
                 {
@@ -280,7 +280,7 @@ export class PrjDB extends BaseProjectController {
                     const { updatedAt, createdAt, ...jsonValue } = metagToJson(value)!
                     void (updatedAt)
                     void (createdAt)
-                    return JSON.stringify(jsonValue);
+                    return JSON.stringify(jsonValue, null, 2);
                 }
             default:
                 throwNotimplement(`试图获取未支持的kind:${kind}`)
