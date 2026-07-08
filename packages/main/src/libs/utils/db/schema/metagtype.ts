@@ -1,5 +1,5 @@
 import { customType } from 'drizzle-orm/sqlite-core';
-import Logger from 'electron-log/renderer';
+import Logger from 'electron-log/main.js';
 import { z } from 'zod';
 
 
