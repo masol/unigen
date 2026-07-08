@@ -4,6 +4,8 @@ import { ModuleContext } from '../types/ModuleContext.js';
 // import Logger from 'electron-log/main';
 import { intereg } from '$libs/utils/blueprint/index.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
+import { themeFile } from '$libs/utils/sys/dir.js';
+import { ensureDir } from 'fs-extra';
 
 // unigen的应用级初始化。
 class UnigenModule implements AppModule {
@@ -23,6 +25,9 @@ class UnigenModule implements AppModule {
                 payload: nativeTheme.shouldUseDarkColorsForSystemIntegratedUI
             })
         })
+
+        // 确保主题目录存在.
+        await ensureDir(themeFile());
 
         // await knowledgeCenter.init();
     }

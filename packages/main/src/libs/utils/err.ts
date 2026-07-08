@@ -1,5 +1,5 @@
-import { ORPCError } from "@orpc/server";
 import { COMMON_ORPC_ERROR_DEFS } from "@orpc/client";
+import { ORPCError } from "@orpc/server";
 
 export const UNIGEN_ERROR_DEFS = {
     USER_CANCEL: {
@@ -49,3 +49,6 @@ export function throwNotimplement(message: string): never {
     })
 }
 
+export function errString(e: unknown): string {
+    return e instanceof Error ? e.message : String(e);
+}

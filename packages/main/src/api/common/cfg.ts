@@ -1,13 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { z } from 'zod'
-import { os } from '@orpc/server'
 import { configService } from '$libs/store/index.js'
+import { secondConfig } from '$libs/store/second.js'
+import { getTheme, resetTheme, setTheme } from '$libs/store/theme.js'
+import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
+import { GetThemeSchema } from '$types/shared/api/theme.js'
+import { os } from '@orpc/server'
 import { nativeTheme } from 'electron'
-import { basename } from 'path'
 import FastGlob from 'fast-glob'
 import { ensureDir } from 'fs-extra'
-import { secondConfig } from '$libs/store/second.js'
-import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
+import { basename } from 'path'
+import { z } from 'zod'
 
 /**
  * 获取整个配置对象
@@ -109,6 +111,26 @@ const getReranks = os
         return getModels(rerankPath());
     })
 
+const setheme = os
+    .input(z.string())
+    .output(z.string())
+    .handler(async ({ input }) => {
+        return setTheme(input);
+    })
+
+
+const resetheme = os
+    .handler(async () => {
+        resetTheme();
+    })
+
+const getheme = os
+    .output(GetThemeSchema)
+    .handler(async () => {
+        return getTheme();
+    })
+
+
 export default {
     getAll,
     setAll,
@@ -117,5 +139,8 @@ export default {
     useDark,
     getEmbedings,
     getReranks,
-    recents
+    recents,
+    setTheme: setheme,
+    resetTheme: resetheme,
+    getTheme: getheme
 }

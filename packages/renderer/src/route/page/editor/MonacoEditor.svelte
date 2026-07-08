@@ -2,12 +2,15 @@
 <!-- Monaco 挂载点：容器常驻 DOM，Skeleton/遮罩为覆盖层，避免重建时创建时序错乱。 -->
 <!-- 全部语言（js/json/markdown）使用 @shikijs/monaco 提供 TextMate 级高亮； -->
 <!-- 主题走 Shiki（亮/暗两套），跟随 <html> 的 dark class 响应 tailwind 主题。 -->
+<!-- 用户自定义配色（VS Code/TextMate 主题 JSON）作为 Shiki 主题加载，替换内置亮/暗主题。 -->
 <!-- 注意：Shiki 只接管“语法高亮”，校验/格式化/补全等语言服务仍由 Monaco worker 提供。 -->
 <script lang="ts">
   /* eslint-disable @typescript-eslint/no-explicit-any */
 
   import { Skeleton } from "$lib/components/ui/skeleton";
+  import { safeApi } from "$lib/utils/api";
   import { shikiToMonaco } from "@shikijs/monaco";
+  import Logger from "electron-log/renderer.js";
   import * as monaco from "monaco-editor";
   import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
   import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
@@ -17,19 +20,26 @@
   import NODE_AND_CUSTOM_DTS from "./global.d.txt?raw";
   import { editorStore as store } from "./store.svelte";
 
-  // 亮/暗两套 Shiki 主题（可替换为任意 Shiki 内置主题）
+  // 内置亮/暗 Shiki 主题（无自定义时使用）
   const THEME_DARK = "vitesse-dark";
   const THEME_LIGHT = "vitesse-light";
+  // 自定义主题在 Shiki 中注册用的固定名（覆盖原 JSON 的 name，保证 setTheme 有稳定 id）
+  const CUSTOM_DARK_NAME = "user-dark";
+  const CUSTOM_LIGHT_NAME = "user-light";
   // Shiki 接管这些语言的语法高亮（token 上色）
   const SHIKI_LANGS = ["javascript", "json", "markdown"] as const;
   // Shiki 初始化失败时的内置回退主题
   const FALLBACK_DARK = "vs-dark";
   const FALLBACK_LIGHT = "vs";
 
+  // Shiki 实际解析出的亮/暗主题名（快照一次；有自定义则为 user-*，否则为 vitesse-*）
+  let darkThemeName = THEME_DARK;
+  let lightThemeName = THEME_LIGHT;
+
   let container = $state<HTMLDivElement | null>(null);
   let editor = $state.raw<monaco.editor.IStandaloneCodeEditor | null>(null);
   /** Shiki 是否初始化成功；失败则用内置主题回退，保证编辑器仍可用 */
-  let shikiOk = false;
+  // let shikiOk = false;
   /** 防止内部 setValue 与外部同步互相触发 */
   let syncingFromStore = false;
   /** tailwind 主题（dark class）监听器，卸载时断开 */
@@ -55,23 +65,83 @@
     );
   }
 
-  // 当前应使用的主题：Shiki 就绪用 Shiki 主题，否则回退内置主题
+  // 当前主题：名字在 ensureShiki 解析时已含回退，这里只按亮/暗选
   function themeName() {
-    if (shikiOk) return isDark() ? THEME_DARK : THEME_LIGHT;
-    return isDark() ? FALLBACK_DARK : FALLBACK_LIGHT;
+    return isDark() ? darkThemeName : lightThemeName;
+  }
+
+  // 把用户自定义主题（响应式 state）解包为纯 JSON，并强制固定 name；无则返回 null
+  function toShikiTheme(raw: unknown, name: string): any | null {
+    if (!raw) return null;
+    // $state.snapshot：把响应式代理转为纯对象，避免把 proxy 交给 Shiki
+    const src = $state.snapshot(raw) as any;
+    return { ...src, name };
+  }
+
+  function getheme(content: string | null) {
+    if (!content) {
+      return null;
+    }
+    try {
+      return JSON.parse(content);
+    } catch (e) {
+      Logger.warn(
+        "加载配置的编辑器主题出错:",
+        e instanceof Error ? e.message : String(e),
+      );
+    }
   }
 
   // ── Shiki → Monaco：全局单例，重挂载时复用同一高亮器；返回是否成功 ──
-  function ensureShiki(): Promise<boolean> {
+  // ── Shiki → Monaco：全局单例；解析结果随 promise 返回，避免竞态旁路 ──
+  function ensureShiki(): Promise<{
+    ok: boolean;
+    dark: string;
+    light: string;
+  }> {
     const g = self as any;
-    if (g.__shikiSetup) return g.__shikiSetup as Promise<boolean>;
+    if (g.__shikiSetup) return g.__shikiSetup;
 
     g.__shikiSetup = (async () => {
+      const nameOf = (s: any) => (typeof s === "string" ? s : s.name);
       try {
-        const highlighter = await createHighlighter({
-          themes: [THEME_DARK, THEME_LIGHT],
-          langs: [...SHIKI_LANGS],
-        });
+        const themeInfo = await safeApi().config.getTheme();
+        // console.log("themeInfo", JSON.stringify(themeInfo, null, 2));
+        // 自定义优先：有则用自定义主题对象，否则用内置串名
+        const darkCustom = toShikiTheme(
+          getheme(themeInfo.dark),
+          CUSTOM_DARK_NAME,
+        );
+        const lightCustom = toShikiTheme(
+          getheme(themeInfo.light),
+          CUSTOM_LIGHT_NAME,
+        );
+        const darkSrc = darkCustom ?? THEME_DARK;
+        const lightSrc = lightCustom ?? THEME_LIGHT;
+
+        let highlighter: Awaited<ReturnType<typeof createHighlighter>>;
+        let dark: string;
+        let light: string;
+        try {
+          highlighter = await createHighlighter({
+            themes: [darkSrc, lightSrc],
+            langs: [...SHIKI_LANGS],
+          });
+          dark = nameOf(darkSrc);
+          light = nameOf(lightSrc);
+        } catch (e) {
+          // 稳定优先：自定义主题非法会连累整体高亮 —— 退回纯内置主题重建
+          Logger.error(
+            "[MonacoEditor] custom theme load failed, fallback to builtin Shiki themes:",
+            e,
+          );
+          highlighter = await createHighlighter({
+            themes: [THEME_DARK, THEME_LIGHT],
+            langs: [...SHIKI_LANGS],
+          });
+          dark = THEME_DARK;
+          light = THEME_LIGHT;
+        }
 
         // 只有已注册的 languageId 才会被 Shiki 高亮（monaco 通常已内置，这里兜底）
         const registered = new Set(
@@ -83,18 +153,18 @@
 
         // 接管语法高亮，并注册 Shiki 主题（此后 setTheme 只能用已注册主题名）
         shikiToMonaco(highlighter, monaco);
-        return true;
+        return { ok: true, dark, light };
       } catch (e) {
-        // 稳定优先：Shiki 失败不阻断编辑器，回退内置主题
-        console.error(
+        // 稳定优先：Shiki 整体失败也不阻断编辑器，回退 Monaco 内置主题
+        Logger.error(
           "[MonacoEditor] Shiki init failed, fallback to builtin theme:",
           e,
         );
-        return false;
+        return { ok: false, dark: FALLBACK_DARK, light: FALLBACK_LIGHT };
       }
     })();
 
-    return g.__shikiSetup as Promise<boolean>;
+    return g.__shikiSetup;
   }
 
   function setupJsLanguageOnce() {
@@ -175,7 +245,10 @@
       setupJsLanguageOnce();
 
       // 先等 Shiki 就绪（失败也会 resolve(false)，回退内置主题）
-      shikiOk = await ensureShiki();
+      const shiki = await ensureShiki();
+      // shikiOk = shiki.ok;
+      darkThemeName = shiki.dark;
+      lightThemeName = shiki.light;
 
       // await 期间可能已卸载或已被其它路径创建
       if (disposed || !container || editor) return;

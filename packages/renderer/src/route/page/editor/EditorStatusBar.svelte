@@ -12,7 +12,7 @@
     IconMapPin,
     IconTextWrap,
   } from "@tabler/icons-svelte";
-  import Brand from "../../featured/header/brand.svelte";
+  import RunState from "../../RunState.svelte";
   import { editorStore as store } from "./store.svelte";
 </script>
 
@@ -79,6 +79,6 @@
     {/if}
 
     <span class="text-muted-foreground/70">{store.kindLabel}</span>
-    <Brand></Brand>
+    <RunState></RunState>
   </div>
 {/if}
