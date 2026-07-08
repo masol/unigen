@@ -1,13 +1,12 @@
 declare global {
     // ── Node.js 常用全局 ──
-    function require(id: string): any;
+    // function require(id: string): any;
     const module: { exports: any };
     const process: {
         env: Record<string, string | undefined>;
         argv: string[];
         cwd(): string;
         platform: string;
-        exit(code?: number): never;
     };
     function setTimeout(cb: (...args: any[]) => void, ms?: number, ...args: any[]): number;
     function setInterval(cb: (...args: any[]) => void, ms?: number, ...args: any[]): number;

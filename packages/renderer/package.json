@@ -47,6 +47,7 @@
     "@floating-ui/dom": "^1.7.6",
     "@formkit/auto-animate": "^0.9.0",
     "@orpc/client": "^1.14.6",
+    "@shikijs/monaco": "^4.3.1",
     "@tanstack/table-core": "^8.21.3",
     "awilix": "^13.0.5",
     "class-variance-authority": "^0.7.1",
@@ -62,6 +63,7 @@
     "p-memoize": "^8.0.0",
     "p-timeout": "^7.0.1",
     "radashi": "^12.9.1",
+    "shiki": "^4.3.1",
     "svelte-motion": "^0.12.2",
     "svelte-spa-router": "^5.1.1",
     "validator": "^13.15.35"

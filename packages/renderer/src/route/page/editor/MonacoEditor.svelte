@@ -1,23 +1,39 @@
 <!-- src/lib/editor/MonacoEditor.svelte -->
 <!-- Monaco 挂载点：容器常驻 DOM，Skeleton/遮罩为覆盖层，避免重建时创建时序错乱。 -->
+<!-- 全部语言（js/json/markdown）使用 @shikijs/monaco 提供 TextMate 级高亮； -->
+<!-- 主题走 Shiki（亮/暗两套），跟随 <html> 的 dark class 响应 tailwind 主题。 -->
+<!-- 注意：Shiki 只接管“语法高亮”，校验/格式化/补全等语言服务仍由 Monaco worker 提供。 -->
 <script lang="ts">
   /* eslint-disable @typescript-eslint/no-explicit-any */
 
   import { Skeleton } from "$lib/components/ui/skeleton";
+  import { shikiToMonaco } from "@shikijs/monaco";
   import * as monaco from "monaco-editor";
   import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
   import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
   import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
-  import "monaco-editor/min/vs/editor/editor.main.css";
+  import { createHighlighter } from "shiki";
   import { JS_COMPLETIONS } from "./completes";
   import NODE_AND_CUSTOM_DTS from "./global.d.txt?raw";
   import { editorStore as store } from "./store.svelte";
 
+  // 亮/暗两套 Shiki 主题（可替换为任意 Shiki 内置主题）
+  const THEME_DARK = "vitesse-dark";
+  const THEME_LIGHT = "vitesse-light";
+  // Shiki 接管这些语言的语法高亮（token 上色）
+  const SHIKI_LANGS = ["javascript", "json", "markdown"] as const;
+  // Shiki 初始化失败时的内置回退主题
+  const FALLBACK_DARK = "vs-dark";
+  const FALLBACK_LIGHT = "vs";
+
   let container = $state<HTMLDivElement | null>(null);
-  let editor: monaco.editor.IStandaloneCodeEditor | null = null;
-  let mounted = $state(false);
+  let editor = $state.raw<monaco.editor.IStandaloneCodeEditor | null>(null);
+  /** Shiki 是否初始化成功；失败则用内置主题回退，保证编辑器仍可用 */
+  let shikiOk = false;
   /** 防止内部 setValue 与外部同步互相触发 */
   let syncingFromStore = false;
+  /** tailwind 主题（dark class）监听器，卸载时断开 */
+  let themeObserver: MutationObserver | null = null;
 
   function setupWorkerEnv() {
     if ((self as any).__monacoEnvReady) return;
@@ -32,39 +48,53 @@
     (self as any).__monacoEnvReady = true;
   }
 
-  function defineTheme() {
-    monaco.editor.defineTheme("shadcn-dark", {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        // —— 词法着色（Monarch tokens）——
-        { token: "comment", foreground: "6A9955", fontStyle: "italic" },
-        { token: "keyword", foreground: "569CD6" },
-        { token: "number", foreground: "B5CEA8" },
-        { token: "string", foreground: "CE9178" },
-        { token: "regexp", foreground: "D16969" },
-        { token: "operator", foreground: "D4D4D4" },
-        { token: "delimiter", foreground: "D4D4D4" },
-        { token: "type.identifier", foreground: "4EC9B0" },
-        { token: "identifier", foreground: "9CDCFE" },
+  function isDark() {
+    return (
+      typeof document !== "undefined" &&
+      document.documentElement.classList.contains("dark")
+    );
+  }
 
-        // —— 语义着色（TS worker 提供的 semantic tokens）——
-        { token: "variable", foreground: "9CDCFE" },
-        { token: "variable.predefined", foreground: "4FC1FF" },
-        { token: "parameter", foreground: "9CDCFE" },
-        { token: "property", foreground: "9CDCFE" },
-        { token: "function", foreground: "DCDCAA" },
-        { token: "member", foreground: "DCDCAA" },
-        { token: "class", foreground: "4EC9B0" },
-        { token: "interface", foreground: "4EC9B0" },
-        { token: "enum", foreground: "4EC9B0" },
-        { token: "type", foreground: "4EC9B0" },
-        { token: "namespace", foreground: "4EC9B0" },
-      ],
-      colors: {
-        "editor.background": "#00000000",
-      },
-    });
+  // 当前应使用的主题：Shiki 就绪用 Shiki 主题，否则回退内置主题
+  function themeName() {
+    if (shikiOk) return isDark() ? THEME_DARK : THEME_LIGHT;
+    return isDark() ? FALLBACK_DARK : FALLBACK_LIGHT;
+  }
+
+  // ── Shiki → Monaco：全局单例，重挂载时复用同一高亮器；返回是否成功 ──
+  function ensureShiki(): Promise<boolean> {
+    const g = self as any;
+    if (g.__shikiSetup) return g.__shikiSetup as Promise<boolean>;
+
+    g.__shikiSetup = (async () => {
+      try {
+        const highlighter = await createHighlighter({
+          themes: [THEME_DARK, THEME_LIGHT],
+          langs: [...SHIKI_LANGS],
+        });
+
+        // 只有已注册的 languageId 才会被 Shiki 高亮（monaco 通常已内置，这里兜底）
+        const registered = new Set(
+          monaco.languages.getLanguages().map((l) => l.id),
+        );
+        for (const id of SHIKI_LANGS) {
+          if (!registered.has(id)) monaco.languages.register({ id });
+        }
+
+        // 接管语法高亮，并注册 Shiki 主题（此后 setTheme 只能用已注册主题名）
+        shikiToMonaco(highlighter, monaco);
+        return true;
+      } catch (e) {
+        // 稳定优先：Shiki 失败不阻断编辑器，回退内置主题
+        console.error(
+          "[MonacoEditor] Shiki init failed, fallback to builtin theme:",
+          e,
+        );
+        return false;
+      }
+    })();
+
+    return g.__shikiSetup as Promise<boolean>;
   }
 
   function setupJsLanguageOnce() {
@@ -132,74 +162,100 @@
   }
 
   // ── 创建编辑器：只依赖 container，与 store.loading 解耦 ──
-  // 容器常驻 DOM，因此重建时 container 一挂载即创建，不再受 loading 时序影响。
+  // 容器常驻 DOM；因 Shiki 高亮器为异步，创建流程改为 await 就绪后再建 editor，
+  // 保证设置 Shiki 主题时主题已注册。Shiki 失败则用内置主题回退，不阻断创建。
   $effect(() => {
     if (!container || editor) return;
 
-    setupWorkerEnv();
-    defineTheme();
-    setupJsLanguageOnce();
+    // 组件在异步就绪前被卸载时，用该标志阻止“迟到”的创建
+    let disposed = false;
 
-    editor = monaco.editor.create(container, {
-      value: store.content,
-      language: store.language,
-      theme: "shadcn-dark",
-      "semanticHighlighting.enabled": true,
-      automaticLayout: true,
-      fontSize: 14,
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace",
-      lineHeight: 22,
-      padding: { top: 12, bottom: 12 },
-      minimap: { enabled: store.minimap },
-      wordWrap: store.wordWrap ? "on" : "off",
-      lineNumbers: "on",
-      renderLineHighlight: "all",
-      smoothScrolling: true,
-      cursorSmoothCaretAnimation: "on",
-      scrollBeyondLastLine: false,
-      fixedOverflowWidgets: true,
-      scrollbar: { vertical: "auto", horizontal: "auto", useShadows: false },
-      readOnly: store.readonly,
-    });
+    (async () => {
+      setupWorkerEnv();
+      setupJsLanguageOnce();
 
-    const ed = editor;
-    store.attachEditor(ed);
-    mounted = true;
+      // 先等 Shiki 就绪（失败也会 resolve(false)，回退内置主题）
+      shikiOk = await ensureShiki();
 
-    ed.onDidChangeModelContent(() => {
-      if (syncingFromStore) return;
-      store.content = ed.getValue();
-    });
+      // await 期间可能已卸载或已被其它路径创建
+      if (disposed || !container || editor) return;
 
-    ed.onDidChangeCursorSelection((e) => {
-      const model = ed.getModel();
-      const selLen = model ? model.getValueInRange(e.selection).length : 0;
-      store.setCursor(
-        e.selection.positionLineNumber,
-        e.selection.positionColumn,
-        selLen,
-      );
-    });
+      const ed = monaco.editor.create(container, {
+        value: store.content,
+        language: store.language,
+        theme: themeName(),
+        "semanticHighlighting.enabled": true,
+        automaticLayout: true,
+        fontSize: 14,
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace",
+        lineHeight: 22,
+        padding: { top: 12, bottom: 12 },
+        minimap: { enabled: store.minimap },
+        wordWrap: store.wordWrap ? "on" : "off",
+        lineNumbers: "on",
+        renderLineHighlight: "all",
+        smoothScrolling: true,
+        cursorSmoothCaretAnimation: "on",
+        scrollBeyondLastLine: false,
+        fixedOverflowWidgets: true,
+        scrollbar: { vertical: "auto", horizontal: "auto", useShadows: false },
+        readOnly: store.readonly,
+      });
 
-    ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      store.save();
-    });
+      store.attachEditor(ed);
+
+      // 跟随 tailwind 的 dark class 切换主题（响应式主题）
+      themeObserver = new MutationObserver(() => {
+        monaco.editor.setTheme(themeName());
+      });
+      themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+
+      ed.onDidChangeModelContent(() => {
+        if (syncingFromStore) return;
+        store.content = ed.getValue();
+      });
+
+      ed.onDidChangeCursorSelection((e) => {
+        const model = ed.getModel();
+        const selLen = model ? model.getValueInRange(e.selection).length : 0;
+        store.setCursor(
+          e.selection.positionLineNumber,
+          e.selection.positionColumn,
+          selLen,
+        );
+      });
+
+      ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+        store.save();
+      });
+
+      // 赋值放最后：editor 一旦响应式就绪，各同步 effect 立即以 store 当前值收敛
+      editor = ed;
+    })();
+
+    return () => {
+      disposed = true;
+    };
   });
 
   // ── store → 编辑器 单向同步（load/reload 完成后覆盖内容）──
   $effect(() => {
     const next = store.content;
-    if (!editor || !mounted) return;
+    if (!editor) return;
     if (editor.getValue() === next) return;
     syncingFromStore = true;
     editor.setValue(next);
     syncingFromStore = false;
   });
 
-  // ── 语言切换同步 ──
+  // ── 语言切换同步：只切 model 语言；主题由亮/暗决定，不随语言变 ──
   $effect(() => {
     const lang = store.language;
-    const model = editor?.getModel();
+    if (!editor) return;
+    const model = editor.getModel();
     if (model) monaco.editor.setModelLanguage(model, lang);
   });
 
@@ -221,7 +277,8 @@
     return () => {
       const ed = editor;
       editor = null;
-      mounted = false;
+      themeObserver?.disconnect();
+      themeObserver = null;
       if (ed) {
         store.detachEditor(ed);
         ed.dispose();
