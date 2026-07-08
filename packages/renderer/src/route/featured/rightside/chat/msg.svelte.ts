@@ -1,5 +1,3 @@
-// import { api } from "$lib/utils/api";
-
 // src/lib/stores/msg.svelte.ts
 export type Message = {
     id: string;
@@ -8,64 +6,33 @@ export type Message = {
     timestamp: Date;
 };
 
+/** AI 工作阶段：null 表示空闲；有值时用于界面顶部/占位区展示当前进度 */
+export type ReflectPhase = {
+    /** 阶段标题，如「正在反思工作流」 */
+    title: string;
+    /** 辅助说明，如「工作细节可通过日志查看…」 */
+    detail: string;
+} | null;
+
 class MessageStore {
     messages = $state<Message[]>([
-        {
-            id: "1",
-            role: "assistant",
-            content:
-                "你好！我是 AI 助手，可以帮你解答代码问题、生成代码片段、解释技术概念等。有什么我可以帮助你的吗？",
-            timestamp: new Date(Date.now() - 600000),
-        },
-        {
-            id: "2",
-            role: "user",
-            content: "如何在 Svelte 5 中使用 $state rune？",
-            timestamp: new Date(Date.now() - 300000),
-        },
-        {
-            id: "3",
-            role: "assistant",
-            content: `在 Svelte 5 中，\`$state\` rune 用于声明响应式状态。以下是基本用法：
-
-\`\`\`typescript
-let count = $state(0);
-let user = $state({ name: 'Alice', age: 25 });
-\`\`\`
-
-当你修改这些变量时，所有依赖它们的地方都会自动更新：
-
-\`\`\`svelte
-<script lang="ts">
-  let count = $state(0);
-</script>
-
-<button onclick={() => count++}>
-  点击次数: {count}
-</button>
-\`\`\`
-
-对于对象和数组，\`$state\` 会创建深度响应式代理，所以你可以直接修改嵌套属性。`,
-            timestamp: new Date(Date.now() - 120000),
-        },
     ]);
 
     isLoading = $state(false);
 
-    // 派生状态：是否有消息
+    /** 当前 AI 工作阶段（反思中/生成中），null 表示无 */
+    phase = $state<ReflectPhase>(null);
+
     hasMessages = $derived(this.messages.length > 0);
 
-    // 派生状态：最后一条消息
     lastMessage = $derived(
-        this.messages.length > 0
-            ? this.messages[this.messages.length - 1]
-            : null
+        this.messages.length > 0 ? this.messages[this.messages.length - 1] : null,
     );
 
     addMessage(message: Omit<Message, "id" | "timestamp">) {
         const newMessage: Message = {
             ...message,
-            id: Date.now().toString(),
+            id: crypto?.randomUUID?.() ?? Date.now().toString(),
             timestamp: new Date(),
         };
         this.messages = [...this.messages, newMessage];
@@ -84,19 +51,43 @@ let user = $state({ name: 'Alice', age: 25 });
         this.isLoading = loading;
     }
 
-    // 模拟 AI 回复
+    /**
+     * 处理用户请求：
+     * 1) 反思阶段 —— 界面提示「AI 正在反思工作流…」；
+     * 2) 生成阶段 —— 提示「正在生成改进方案…」；
+     * 结束后清空 phase，追加正常回复。
+     */
     async AIResponse(userMessage: string): Promise<void> {
         this.setLoading(true);
 
         try {
-            const text = `resp to ${userMessage}`; // await api().system.genText(userMessage);
-            this.addMessage({
-                role: "assistant",
-                content: text,
-            });
+            // ── 阶段一：反思 ──
+            this.phase = {
+                title: "AI 正在反思当前工作流",
+                detail: "正在分析薄弱环节，工作细节可通过日志查看…",
+            };
+            await this.#delay(1200);
+
+            // ── 阶段二：生成改进方案 ──
+            this.phase = {
+                title: "正在生成改进方案",
+                detail: "将反思结论转化为可执行的工作流调整…",
+            };
+            await this.#delay(1000);
+
+            // 实际调用：const text = await api().system.genText(userMessage);
+            const text = `已根据你的要求「${userMessage}」完成一轮反思，并对工作流进行了针对性调整。你可以追问我具体的改动理由，或让我继续迭代优化。`;
+
+            this.addMessage({ role: "assistant", content: text });
         } finally {
+            // 阶段结束：移除进度提示，恢复正常内容
+            this.phase = null;
             this.setLoading(false);
         }
+    }
+
+    #delay(ms: number) {
+        return new Promise((r) => setTimeout(r, ms));
     }
 }
 

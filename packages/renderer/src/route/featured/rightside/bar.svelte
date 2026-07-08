@@ -27,19 +27,19 @@
   />
 
   <!-- ╭─────────────────────────────────────────────────────╮ -->
-  <!-- │ 内容区：响应 store.activeTab 切换显示               │ -->
+  <!-- │ 内容区：assistant 铺满自管滚动；blueprint 走 ScrollArea │ -->
+  <!-- │    assistant 不可包 ScrollArea / padding，否则输入框 │ -->
+  <!-- │    会被一起滚动，无法固定在底部                       │ -->
   <!-- ╰─────────────────────────────────────────────────────╯ -->
-  <ScrollArea class="flex-1 min-h-0">
-    <div class="p-2">
-      {#if rightPanelStore.activeTab === "assistant"}
-        <div class="space-y-0.5" use:autoAnimate>
-          <ChatComponet />
+  <div class="min-h-0 flex-1 overflow-hidden">
+    {#if rightPanelStore.activeTab === "assistant"}
+      <ChatComponet />
+    {:else if rightPanelStore.activeTab === "blueprint"}
+      <ScrollArea class="h-full">
+        <div class="space-y-1 p-2 pt-1" use:autoAnimate>
+          <Glossary />
         </div>
-      {:else if rightPanelStore.activeTab === "blueprint"}
-        <div class="space-y-1 pt-1" use:autoAnimate>
-          <Glossary></Glossary>
-        </div>
-      {/if}
-    </div>
-  </ScrollArea>
+      </ScrollArea>
+    {/if}
+  </div>
 </div>

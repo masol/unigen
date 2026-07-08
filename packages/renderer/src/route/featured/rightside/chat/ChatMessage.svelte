@@ -1,21 +1,17 @@
 <!-- src/lib/components/chat/ChatMessage.svelte -->
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
   import * as Avatar from "$lib/components/ui/avatar";
+  import { Button } from "$lib/components/ui/button";
   import { Markdown } from "$lib/components/ui/markdown";
   import {
-    IconCopy,
     IconCheck,
-    IconUser,
+    IconCopy,
     IconRobot,
+    IconUser,
   } from "@tabler/icons-svelte";
   import type { Message } from "./msg.svelte";
 
-  let {
-    message,
-  }: {
-    message: Message;
-  } = $props();
+  let { message }: { message: Message } = $props();
 
   let copied = $state(false);
 
@@ -32,7 +28,6 @@
     const diff = now.getTime() - date.getTime();
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
-
     if (minutes < 1) return "刚刚";
     if (minutes < 60) return `${minutes} 分钟前`;
     if (hours < 24) return `${hours} 小时前`;

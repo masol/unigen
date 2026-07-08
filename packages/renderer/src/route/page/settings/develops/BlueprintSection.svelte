@@ -44,7 +44,7 @@
   </SettingRow>
   <SettingRow
     title="变动确认"
-    description="在数据变动(如保存)之前，提醒用户可能的风险。"
+    description="在工作流变动(编辑、反思)之前，提醒用户可能的风险。"
   >
     {#snippet control()}
       <Switch
