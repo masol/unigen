@@ -8,6 +8,7 @@
   import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
   import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
   import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
+  import "monaco-editor/min/vs/editor/editor.main.css";
   import { JS_COMPLETIONS } from "./completes";
   import NODE_AND_CUSTOM_DTS from "./global.d.txt?raw";
   import { editorStore as store } from "./store.svelte";
