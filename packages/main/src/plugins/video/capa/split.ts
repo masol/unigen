@@ -75,7 +75,7 @@ export class SplitFunctor extends BaseFunctor {
         //获取输入
         if (this.capa.input && this.capa.output) {
 
-            const ioInfo = getIOInfo(ctx, this.capa.input, this.capa.output, this.capa);
+            const ioInfo = getIOInfo(ctx, this.capa);
             ctx.debug("split ioInfo=", JSON.stringify(ioInfo, null, 2))
 
             // 测试模型筛选功能。

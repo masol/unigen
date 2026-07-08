@@ -101,6 +101,10 @@ export function metagListFromJson(list: MetagJson[]): MetagRow[] {
  *  - 运行时：检查非空、对象类型以及核心主键 `fieldKey` 是否存在。
  *  - 编译期：使用 `value is MetagRow` 实现 TypeScript 类型收敛（Type Narrowing）。
  */
+export function isMetagJson(value: unknown): value is MetagJson {
+    return isMetagRow(value);
+}
+
 export function isMetagRow(value: unknown): value is MetagRow {
     if (!value || typeof value !== 'object') {
         return false;

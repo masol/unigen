@@ -5,6 +5,7 @@ import { type Capability, getInternalName, isCode, isWorkflow } from "$libs/util
 import { throwNotimplement } from "$libs/utils/err.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { DirectedGraph } from "graphology";
+import { VmCapaFunctor } from "./code.js";
 import { DagFunctor } from "./dag.js";
 import { intereg } from "./intereg.js";
 import { ICapaFunctor } from "./type.js";
@@ -22,8 +23,12 @@ function loadDag(capa: Capability): ICapaFunctor | null {
     return null;
 }
 
-function loadCode(_capa: Capability): ICapaFunctor | null {
-    throwNotimplement("尚未支持代码节点。")
+function loadCode(capa: Capability): ICapaFunctor | null {
+    const code = capa.code;
+    if (!code) {
+        throwNotimplement(`代码节点${capa.id}(${capa.name})没有提供任意代码。`)
+    }
+    return new VmCapaFunctor(capa);
 }
 
 function loadLLMNode(capa: Capability): ICapaFunctor | null {

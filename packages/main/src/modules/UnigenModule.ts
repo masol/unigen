@@ -3,7 +3,6 @@ import type { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../types/ModuleContext.js';
 // import Logger from 'electron-log/main';
 import { intereg } from '$libs/utils/blueprint/index.js';
-import { knowledgeCenter } from '$libs/utils/kc.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
 
 // unigen的应用级初始化。
@@ -25,7 +24,7 @@ class UnigenModule implements AppModule {
             })
         })
 
-        await knowledgeCenter.init();
+        // await knowledgeCenter.init();
     }
 }
 

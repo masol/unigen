@@ -1,6 +1,9 @@
 //capa是静态的functor.一旦进入内存(被加载后)，转化为functor.
 
 import { capabilities } from "$libs/utils/db/schema/capability.js";
+import { isString } from "radashi";
+// 全局导入，validator做为全局对象，会传递给code型capability.因此这里全局引入，以规避commonjs解析问题。
+import validator from 'validator';
 
 /**
  * 3. 导出ts类型。
@@ -24,6 +27,17 @@ export function isCode(name: CapaNameType): boolean {
         return false;
     }
     return name.startsWith("#code");
+}
+
+export function isCapability(value: unknown): value is NewCapability {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+    const record = value as Record<string, unknown>;
+    if (isString(record.id)) {
+        return validator.isUUID(record.id);
+    }
+    return false;
 }
 
 

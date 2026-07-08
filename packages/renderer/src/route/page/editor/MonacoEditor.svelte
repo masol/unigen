@@ -9,6 +9,7 @@
   import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
   import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
   import { JS_COMPLETIONS } from "./completes";
+  import NODE_AND_CUSTOM_DTS from "./global.d.txt?raw";
   import { editorStore as store } from "./store.svelte";
 
   let container = $state<HTMLDivElement | null>(null);
@@ -34,13 +35,74 @@
     monaco.editor.defineTheme("shadcn-dark", {
       base: "vs-dark",
       inherit: true,
-      rules: [],
-      colors: { "editor.background": "#00000000" },
+      rules: [
+        // —— 词法着色（Monarch tokens）——
+        { token: "comment", foreground: "6A9955", fontStyle: "italic" },
+        { token: "keyword", foreground: "569CD6" },
+        { token: "number", foreground: "B5CEA8" },
+        { token: "string", foreground: "CE9178" },
+        { token: "regexp", foreground: "D16969" },
+        { token: "operator", foreground: "D4D4D4" },
+        { token: "delimiter", foreground: "D4D4D4" },
+        { token: "type.identifier", foreground: "4EC9B0" },
+        { token: "identifier", foreground: "9CDCFE" },
+
+        // —— 语义着色（TS worker 提供的 semantic tokens）——
+        { token: "variable", foreground: "9CDCFE" },
+        { token: "variable.predefined", foreground: "4FC1FF" },
+        { token: "parameter", foreground: "9CDCFE" },
+        { token: "property", foreground: "9CDCFE" },
+        { token: "function", foreground: "DCDCAA" },
+        { token: "member", foreground: "DCDCAA" },
+        { token: "class", foreground: "4EC9B0" },
+        { token: "interface", foreground: "4EC9B0" },
+        { token: "enum", foreground: "4EC9B0" },
+        { token: "type", foreground: "4EC9B0" },
+        { token: "namespace", foreground: "4EC9B0" },
+      ],
+      colors: {
+        "editor.background": "#00000000",
+      },
     });
   }
 
-  function registerJsCompletionsOnce() {
-    if ((self as any).__jsCompletionsReady) return;
+  function setupJsLanguageOnce() {
+    if ((self as any).__jsLangReady) return;
+
+    // ✅ 新版顶层命名空间，替代已废弃的 monaco.languages.typescript
+    const ts = monaco.typescript;
+    const js = ts.javascriptDefaults;
+
+    // 编译/环境选项：面向 Node，不引入 DOM
+    js.setCompilerOptions({
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Classic,
+      // ModuleDetectionKind.Force === 3；类型未暴露则用数值兜底
+      moduleDetection: (ts as any).ModuleDetectionKind?.Force ?? 3,
+      allowJs: true,
+      checkJs: true,
+      lib: ["esnext"],
+      allowNonTsExtensions: true,
+      noEmit: true,
+    });
+
+    js.setDiagnosticsOptions({
+      noSemanticValidation: false,
+      noSyntaxValidation: false,
+      diagnosticCodesToIgnore: [
+        // 1375, // 'await' expressions are only allowed at the top level of a module...
+        // 1378, // Top-level 'await' expressions ... module/target 限制
+        // 1431, // 'for await' loops ... 顶层限制
+        // 1432, // Top-level 'for await' ...
+        // 1108, // 'return' can only be used within a function body（with 包裹场景）
+        // 2304, // Cannot find name 'await'（await 被当标识符时的残留误报，见下）
+      ],
+    });
+
+    js.addExtraLib(NODE_AND_CUSTOM_DTS, "ts:filename/globals.d.ts");
+
+    // 手写 "." 触发补全（如已改用 .d.ts 方案可整块删除）
     monaco.languages.registerCompletionItemProvider("javascript", {
       triggerCharacters: ["."],
       provideCompletionItems(model, position) {
@@ -64,7 +126,8 @@
         return { suggestions };
       },
     });
-    (self as any).__jsCompletionsReady = true;
+
+    (self as any).__jsLangReady = true;
   }
 
   // ── 创建编辑器：只依赖 container，与 store.loading 解耦 ──
@@ -74,12 +137,13 @@
 
     setupWorkerEnv();
     defineTheme();
-    registerJsCompletionsOnce();
+    setupJsLanguageOnce();
 
     editor = monaco.editor.create(container, {
       value: store.content,
       language: store.language,
       theme: "shadcn-dark",
+      "semanticHighlighting.enabled": true,
       automaticLayout: true,
       fontSize: 14,
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace",

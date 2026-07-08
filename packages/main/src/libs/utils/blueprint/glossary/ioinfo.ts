@@ -17,8 +17,12 @@ export type IOInfo<IType = unknown, OType = unknown> = {
 }
 
 
-export function getIOInfo<ITYpe = any, OType = any>(ctx: IRunnerContext, inputKeys: string[],
-    outputKeys: string[], capa: Capability, reses?: string[]): IOInfo<ITYpe, OType> {
+export function getIOInfo<ITYpe = any, OType = any>(ctx: IRunnerContext, capa: Capability,
+    reses?: string[], inputKeys?: string[],
+    outputKeys?: string[]): IOInfo<ITYpe, OType> {
+
+    inputKeys = inputKeys ?? capa.input;
+    outputKeys = outputKeys ?? capa.output;
 
     const prjdb: PrjDB = PrjDB.ensure(ctx.prj);
     const inputMetag = prjdb.getMetag(inputKeys);

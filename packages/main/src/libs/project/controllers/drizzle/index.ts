@@ -289,12 +289,20 @@ export class PrjDB extends BaseProjectController {
     setContent({ kind, id, content, code }: SetItem): string {
         switch (kind) {
             case 'capa': {
+                if (code) {
+                    const newCapa = {
+                        id,
+                        code: content
+                    }
+                    return this.upcertCapa(newCapa);
+                }
                 const cntJson = JSON.parse(content);
-                const newCapa = code ? {
-                    id,
-                    code: content
-                } : { ...cntJson, id }
-                return this.upcertCapa(newCapa)
+                const newCapa = { ...cntJson, id }
+                {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { code, ...rest } = newCapa;
+                    return this.upcertCapa(rest)
+                }
             }
             case 'glossary':
                 {

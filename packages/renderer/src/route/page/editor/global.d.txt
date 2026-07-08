@@ -1,0 +1,149 @@
+declare global {
+    // ── Node.js 常用全局 ──
+    function require(id: string): any;
+    const module: { exports: any };
+    const process: {
+        env: Record<string, string | undefined>;
+        argv: string[];
+        cwd(): string;
+        platform: string;
+        exit(code?: number): never;
+    };
+    function setTimeout(cb: (...args: any[]) => void, ms?: number, ...args: any[]): number;
+    function setInterval(cb: (...args: any[]) => void, ms?: number, ...args: any[]): number;
+    function clearTimeout(id: number): void;
+    function clearInterval(id: number): void;
+    function setImmediate(cb: (...args: any[]) => void, ...args: any[]): number;
+    const Buffer: {
+        from(data: string | ArrayBuffer | number[], encoding?: string): any;
+        alloc(size: number): any;
+        isBuffer(obj: any): boolean;
+    };
+
+    // ────────────────────────────────────────────
+    //  ↓↓↓ 自定义全局 ↓↓↓
+    // ────────────────────────────────────────────
+    /** 应用上下文接口定义 */
+    interface IProjectContext {
+        readonly path: string;
+        readonly wid: number;
+        getPath(partName: 'meta' | 'visualref'): string;
+        notify(evtName: string, payload: unknown, srcId?: number): boolean;
+    }
+
+    type Capability = {
+        name: string;
+        updatedAt: string;
+        id: string;
+        role: string;
+        goal: string;
+        code: string;
+        input: string[];
+        output: string[];
+        process: string;
+        negative: string;
+        criteria: string;
+        fewshot: {
+            input: string[];
+            output: string[];
+            scenario?: string | undefined;
+            thoughtProcess?: string | undefined;
+            kind?: "pass" | "fail" | undefined;
+        }[];
+        createdAt: string;
+    }
+
+    interface IRunnerContext {
+        readonly signal: AbortSignal;
+        readonly isAborted: boolean;
+        readonly isForceKilled: boolean;
+        readonly prj: IProjectContext;
+
+        set(key: string, value: unknown): void;
+        get<T>(key: string): T | null;
+        remove(key: string): void;
+        triggerAbort(force?: boolean): void;
+        loadFunctor(capaId: string): ICapaFunctor | null
+        notify(message: string, ...args: unknown[]): void;
+        info(message: string, ...args: unknown[]): void;
+        warn(message: string, ...args: unknown[]): void;
+        error(message: string, ...args: unknown[]): void;
+        debug(message: string, ...args: unknown[]): void;
+    }
+
+
+    export interface ICapaFunctor {
+        run(ctx: IRunnerContext): Promise<void>;
+    }
+
+
+    interface PrjTimeStore<T> { value: T, updatedAt: string | null }
+
+    /** 数据库访问层，全局可用 */
+    const db: {
+        getWithTime<T>(key: string): PrjTimeStore<T> | null;
+        geUpdTime(key: string): string | null;
+        geUpdTime(key: string[]): Record<string, string>;
+        geUpdTime(key: string | string[]): string | null | Record<string, string>;
+        getCapaById(id: string): Capability;
+        upcertCapa(capability: Partial<Capability>): string;
+    };
+
+    const cap: Capability;
+
+    /** 直接暴露的全局变量示例 */
+    /** 应用上下文对象，全局可用 */
+    const ctx: IRunnerContext;
+
+    interface IValidator {
+        isEmail(str: string): boolean;
+        isMobilePhone(str: string, locale?: string): boolean;
+        isURL(str: string): boolean;
+        isStrongPassword(str: string): boolean;
+        isPostalCode(str: string, locale: string): boolean;
+        escape(str: string): string;
+        sanitizeHTML(str: string): string;
+    }
+    const validator: IValidator;
+
+    type IOInfo<IType = unknown, OType = unknown> = {
+        expired: boolean; // 指示是否已过时，如果目标key不存在，或者目标key的更新时间小于input的时间，则设置为true.否则false.这个值指示是否需要重新计算output.
+        inputs: Array<IType | null>;
+        outputs: Array<OType | null>;
+        inputsWithTime: Array<PrjTimeStore<IType> | null> | null;
+        outputsWithTime: Array<PrjTimeStore<OType> | null> | null;
+    }
+
+    interface IGlossary {
+        getIO<ITYpe = any, OType = any>(capa: Capability, reses?: string[], inputKeys?: string[],
+            outputKeys?: string[]): IOInfo<ITYpe, OType>;
+        save(outputKey: string, value: unknown): boolean;
+    }
+    const glossary: IGlossary;
+
+    const err: {
+        throwPrecondition(msg: string): never;
+        throwNotfound(msg: string): never;
+        throwNotimplement(msg: string): never;
+        throwUnprcessable(msg: string): never;
+        throwCancel(msg: string): never;
+    }
+
+    interface IRadashi {
+        // 对象操作
+        omit<T extends Record<string, any>>(obj: T, keys: string[]): Partial<T>;
+        pick<T extends Record<string, any>>(obj: T, keys: string[]): Partial<T>;
+
+        // 数组操作
+        group<T>(array: T[], getKey: (item: T) => string): Record<string, T[]>;
+        unique<T>(array: T[]): T[];
+
+        // 函数式工具
+        debounce<T extends (...args: any[]) => any>(fn: T, wait: number): (...args: Parameters<T>) => void;
+        isString(str: unknown): string;
+    }
+    const util: IRadashi;
+}
+
+export { };
+

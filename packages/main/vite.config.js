@@ -1,8 +1,8 @@
 import { getNodeMajorVersion } from "@app/electron-versions";
 import { spawn } from "child_process";
 import electronPath from "electron";
-import pkg from "./package.json" assert { type: "json" }; // 引入 package.json
 import rootPkg from "../../package.json" assert { type: "json" };
+import pkg from "./package.json" assert { type: "json" }; // 引入 package.json
 
 export default /**
  * @type {import('vite').UserConfig}
@@ -37,12 +37,28 @@ export default /**
     emptyOutDir: true,
     reportCompressedSize: false,
   },
-  plugins: [handleHotReload()],
+  plugins: [rawTextPlugin(), handleHotReload()],
   define: {
     // 注入为全局常量，确保加上 JSON.stringify
     __APP_VERSION__: JSON.stringify(rootPkg.version),
   },
 });
+
+// 自定义插件：将 .tpl 和 .txt 文件作为字符串导入
+function rawTextPlugin() {
+  return {
+    name: "vite-plugin-raw-text",
+    transform(_code, id) {
+      if (id.endsWith(".tpl") || id.endsWith(".txt")) {
+        const content = readFileSync(id, "utf-8");
+        return {
+          code: `export default ${JSON.stringify(content)}`,
+          map: null,
+        };
+      }
+    },
+  };
+}
 
 /**
  * Implement Electron app reload when some file was changed

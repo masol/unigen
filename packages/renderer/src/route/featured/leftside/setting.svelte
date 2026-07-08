@@ -88,7 +88,7 @@
         {
           id: "develops",
           label: "开发",
-          description: "调整AI细节的工具集设置(右侧面板)",
+          description: "AI工作流改进工具的设置(右侧面板)",
           icon: IconCodePlus,
           path: "develops",
           keywords: ["开发", "监督", "审查", "AI协同"],
