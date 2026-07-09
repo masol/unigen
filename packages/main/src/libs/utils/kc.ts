@@ -50,7 +50,7 @@ class KnowledgeCenter {
             // 开发环境：直接指向源码目录，二者一致，方便动态更新
             // 当前文件位于 dist，向上一级到项目根目录
             const __dirname = dirname(fileURLToPath(import.meta.url));
-            this.resourcePath = join(__dirname, '../knowledge');
+            this.resourcePath = join(__dirname, '..', KnowlegeDirName);
         }
     }
 

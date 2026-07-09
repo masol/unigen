@@ -5,6 +5,7 @@
     IconLoader2,
     IconMicrophone,
     IconPaperclip,
+    IconPlayerStopFilled,
     IconSend,
     IconSlash,
     IconTrash,
@@ -43,7 +44,24 @@
 
   let filtered = $derived(showCommands ? filterCommands(value, commands) : []);
   let sending = $derived(messageStore.isLoading);
+  let aborting = $derived(messageStore.isAborting);
   let canSend = $derived(value.trim().length > 0 && !sending);
+
+  // 加载中强制收起命令面板（兜底，修复面板复现 bug）
+  $effect(() => {
+    if (sending) showCommands = false;
+  });
+  function send() {
+    if (!canSend) return;
+    showCommands = false; // 关键：发送即关面板
+    onSend();
+    value = ""; // 清空输入，避免 "/xxx" 残留导致 filtered 复活
+    selectedIndex = 0;
+    tick().then(adjustHeight);
+  }
+  async function stop() {
+    await messageStore.abort(); // 期间 isAborting 为 true，结束后自动复位
+  }
 
   $effect(() => {
     void value;
@@ -72,9 +90,8 @@
     onCommand(cmd);
     tick().then(() => {
       textarea?.focus();
-      if (textarea) {
+      if (textarea)
         textarea.selectionStart = textarea.selectionEnd = value.length;
-      }
       adjustHeight();
     });
   }
@@ -127,7 +144,7 @@
     // Shift+Enter 发送；单独 Enter 交给浏览器默认行为（换行）
     if (event.key === "Enter" && (event.shiftKey || event.ctrlKey)) {
       event.preventDefault();
-      onSend();
+      send();
     }
   }
 </script>
@@ -209,12 +226,15 @@
       <Button
         size="sm"
         class="size-9 shrink-0 rounded-xl p-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl disabled:hover:translate-y-0"
-        onclick={onSend}
-        disabled={!canSend}
-        aria-label={sending ? "发送中" : "发送消息"}
+        onclick={sending ? stop : send}
+        disabled={sending ? aborting : !canSend}
+        aria-label={aborting ? "终止中" : sending ? "停止生成" : "发送消息"}
+        title={aborting ? "终止中…" : sending ? "停止生成" : "发送"}
       >
-        {#if sending}
+        {#if aborting}
           <IconLoader2 size={18} stroke={1.5} class="animate-spin" />
+        {:else if sending}
+          <IconPlayerStopFilled size={16} stroke={1.5} />
         {:else}
           <IconSend size={18} stroke={1.5} />
         {/if}

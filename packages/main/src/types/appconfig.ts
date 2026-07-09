@@ -11,6 +11,7 @@ export interface AppConfig {
     local_model: string; // 废弃使用本地LLM模型(可以通过llama-cpp或LM Studio等本地桥接)，本字段改为rerank配置。
     plugin: string; // 新项目类型。
     autoupdate: boolean;
+    parallelRun: boolean;
     models: Provider[];
     disableHA: boolean; // 禁用硬件加速。 disableHardwareAcceleration 
     itemsPerPage: number;

@@ -30,6 +30,16 @@ export const capabilities = sqliteTable('capabilities', {
     // 根据name,保存不同的内容，如果有值，通常意味着可跳过组装提示词。
     code: text('code').notNull().default(""),
 
+    // chunk: text('chunk').$type<ChunkProcessingMode>()
+    //     .notNull()
+    //     .default('bulk'),
+
+    // // dimesion信息(order)--当前版本只维护直接的dims拆分，无限递归的dims，需要使用SLD Resolution来合一(比如使用swi-prolog).
+    // dims: text('dims', { mode: 'json' })
+    //     .$type<string[]>()
+    //     .notNull()
+    //     .default(sql`'[]'`),
+
     // 仅存储 fieldKey 字符串数组
     // 每一项都是 metag 表中的 fieldKey (若存在，则可查到完整的 Schema/Reducer/Storage 定义)
     input: text('input', { mode: 'json' })

@@ -18,12 +18,14 @@ export function fillCapa(capa: NewCapability): Capability {
         code: "",
         input: [],
         output: [],
+        dims: [],
         process: '',
         negative: '',
         criteria: '',
         fewshot: [],
         createdAt: '',
         updatedAt: '',
+        chunk: 'bulk',
         ...capa,
         name: realName
     }
@@ -33,5 +35,16 @@ export abstract class BaseFunctor implements ICapaFunctor {
 
     constructor(readonly capa: Capability) { }
     // 由run实现方主动调用基类的getInput/saveOutput方法来获取输入和保存输出。
-    abstract run(ctx: IRunnerContext): Promise<void>;
+    protected abstract doTask(ctx: IRunnerContext): Promise<void>;
+    async run(ctx: IRunnerContext): Promise<void> {
+        try {
+            if (ctx.isAborted) {
+                return;
+            }
+            ctx.push(this.capa)
+            await this.doTask(ctx);
+        } finally {
+            ctx.pop();
+        }
+    }
 }

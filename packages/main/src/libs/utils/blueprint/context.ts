@@ -1,9 +1,9 @@
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { IProjectContext } from '$libs/project/type.js';
-import { IRunnerContext } from '$types/blueprint/context.js';
+import { CommandInfo, IRunnerContext } from '$types/blueprint/context.js';
 import log from 'electron-log/main.js';
-import { format } from 'node:util';
 import { loadFunctor } from './capability/index.js';
+import type { Capability } from './capability/is.js';
 import { ICapaFunctor } from './capability/type.js';
 
 
@@ -11,21 +11,39 @@ export class RunnerContext implements IRunnerContext {
     readonly signal: AbortSignal;
     readonly prj: IProjectContext;
     readonly prjdb: PrjDB;
+    cmd: CommandInfo = { isCommand: false, body: "" };
+    fnNotify: ((title: string, detail: string) => void) | null = null;
+    #stack: Capability[] = [];
 
-    private readonly abortController: AbortController;
+    private readonly abortController: AbortController | null = null;
     #isForceKilled: boolean = false;
 
-    constructor(prj: IProjectContext) {
+    constructor(prj: IProjectContext, signal?: AbortSignal | null) {
         this.prj = prj;
         this.prjdb = PrjDB.ensure(prj);
 
         // 初始化原生的 AbortController
-        this.abortController = new AbortController();
-        this.signal = this.abortController.signal;
+        if (signal) {
+            this.signal = signal;
+        } else {
+            this.abortController = new AbortController();
+            this.signal = this.abortController.signal;
+        }
 
         // 配置 electron-log 的作用域 (Scope)
         // 这样该工作流实例的所有日志都会自动带上 [workflow-id] 前缀，方便排查问题
         log.scope(`workflow-${this.prj.path}`);
+    }
+
+    push(cap: Capability): void {
+        this.#stack.push(cap);
+    }
+
+    pop(): Capability | null {
+        if (this.#stack.length === 0) {
+            return null;
+        }
+        return this.#stack.pop() ?? null;
     }
 
     // ==========================================
@@ -35,6 +53,10 @@ export class RunnerContext implements IRunnerContext {
     /** 快照检查点：判断当前工作流是否已经被终止 */
     get isAborted(): boolean {
         return this.signal.aborted;
+    }
+
+    get stack(): Capability[] {
+        return this.#stack;
     }
 
     /** 快照检查点：判断是否属于“强制杀死”状态 */
@@ -50,8 +72,12 @@ export class RunnerContext implements IRunnerContext {
         if (force) {
             this.#isForceKilled = true;
         }
-        this.abortController.abort();
-        this.warn(`Workflow execution was aborted. ForceKilled: ${force}`);
+        if (this.abortController) {
+            this.abortController.abort();
+            this.warn(`Workflow execution was aborted. ForceKilled: ${force}`);
+        } else {
+            this.warn(`Workflow execution want abort. but this runner controlled by outer.`);
+        }
     }
 
     set(key: string, value: unknown): void {
@@ -75,12 +101,16 @@ export class RunnerContext implements IRunnerContext {
     // 📝 日志接口 (适配 electron-log) 
     //  @TODO: 适配通知接口，以通知主进程的日志过程。(是否应该取名step?)
     // ==========================================
-    notify(message: string, ...args: unknown[]): void {
-        // 如果 args 为空，format 会直接返回 message
-        // 如果 args 有值，format 会按顺序替换 message 中的占位符，或将剩余参数追加到末尾
-        const fullMessage = format(message, ...args);
-        this.prj.notify("task_progess_report", fullMessage);
-        log.silly(fullMessage);
+    notify(title: string, detail: string): void {
+        if (this.fnNotify) {
+            this.fnNotify(title, detail);
+        } else {
+            this.prj.notify("task_progess_report", {
+                title,
+                detail
+            });
+            // log.silly(arg);
+        }
     }
 
     info(message: string, ...args: unknown[]): void {

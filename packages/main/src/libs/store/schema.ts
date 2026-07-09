@@ -59,6 +59,10 @@ export const configSchema: Schema<AppConfig> = {
         type: "boolean",
         default: true,
     },
+    parallelRun: {
+        type: "boolean",
+        default: false,
+    },
     rmblueprint: {
         type: "boolean",
         default: false,

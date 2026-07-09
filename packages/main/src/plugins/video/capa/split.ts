@@ -71,7 +71,7 @@ export class SplitFunctor extends BaseFunctor {
         }));
     }
 
-    async run(ctx: IRunnerContext): Promise<void> {
+    async doTask(ctx: IRunnerContext): Promise<void> {
         //获取输入
         if (this.capa.input && this.capa.output) {
 

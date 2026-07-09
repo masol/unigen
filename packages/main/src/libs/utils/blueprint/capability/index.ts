@@ -5,7 +5,7 @@ import { type Capability, getInternalName, isCode, isWorkflow } from "$libs/util
 import { throwNotimplement } from "$libs/utils/err.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { DirectedGraph } from "graphology";
-import { VmCapaFunctor } from "./code.js";
+import { VmCapaFunctor } from "./code/index.js";
 import { DagFunctor } from "./dag.js";
 import { intereg } from "./intereg.js";
 import { ICapaFunctor } from "./type.js";

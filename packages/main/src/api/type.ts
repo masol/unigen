@@ -1,5 +1,5 @@
-import { ProjectContainer } from "$libs/project/project.js"
+import { ProjectContainer } from "$libs/project/project.js";
 
 export type RpcContext = {
     project: ProjectContainer
-}
+} & Record<string, unknown>;

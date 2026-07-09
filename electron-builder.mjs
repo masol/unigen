@@ -42,6 +42,10 @@ export default /** @type import('electron-builder').Configuration */
       from: "packages/main/knowledge",
       to: "knowledge",
     },
+    {
+      from: "packages/main/data",
+      to: "data",
+    },
   ],
 });
 

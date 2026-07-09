@@ -20,7 +20,7 @@
     copied = true;
     setTimeout(() => {
       copied = false;
-    }, 2000);
+    }, 1000);
   }
 
   function formatTime(date: Date): string {

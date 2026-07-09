@@ -15,9 +15,8 @@
   import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
   import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
   import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
+  import { getErrorMessage } from "radashi";
   import { createHighlighter } from "shiki";
-  import { JS_COMPLETIONS } from "./completes";
-  import NODE_AND_CUSTOM_DTS from "./global.d.txt?raw";
   import { editorStore as store } from "./store.svelte";
 
   // 内置亮/暗 Shiki 主题（无自定义时使用）
@@ -167,7 +166,17 @@
     return g.__shikiSetup;
   }
 
-  function setupJsLanguageOnce() {
+  type CompleteInfo = {
+    JS_COMPLETIONS: {
+      label: string;
+      insertText: string;
+      detail: string;
+      documentation: string;
+    }[];
+    NODE_AND_CUSTOM_DTS: string | null;
+  };
+
+  function setupJsLanguageOnce(comfiles: CompleteInfo) {
     if ((self as any).__jsLangReady) return;
 
     // ✅ 新版顶层命名空间，替代已废弃的 monaco.languages.typescript
@@ -201,7 +210,9 @@
       ],
     });
 
-    js.addExtraLib(NODE_AND_CUSTOM_DTS, "ts:filename/globals.d.ts");
+    if (comfiles.NODE_AND_CUSTOM_DTS) {
+      js.addExtraLib(comfiles.NODE_AND_CUSTOM_DTS, "ts:filename/globals.d.ts");
+    }
 
     // 手写 "." 触发补全（如已改用 .d.ts 方案可整块删除）
     monaco.languages.registerCompletionItemProvider("javascript", {
@@ -214,7 +225,7 @@
           position.lineNumber,
           word.endColumn,
         );
-        const suggestions = JS_COMPLETIONS.map((c) => ({
+        const suggestions = comfiles.JS_COMPLETIONS.map((c) => ({
           label: c.label,
           kind: monaco.languages.CompletionItemKind.Method,
           insertText: c.insertText,
@@ -231,6 +242,34 @@
     (self as any).__jsLangReady = true;
   }
 
+  async function loadCompleteFiles(): Promise<CompleteInfo> {
+    const [completeStr, NODE_AND_CUSTOM_DTS] = await Promise.all([
+      safeApi().config.readData("completes.json"),
+      safeApi().config.readData("global.d.ts.txt"),
+    ]);
+
+    let JS_COMPLETIONS: {
+      label: string;
+      insertText: string;
+      detail: string;
+      documentation: string;
+    }[] = [];
+    try {
+      if (completeStr) {
+        JS_COMPLETIONS = JSON.parse(completeStr);
+      }
+    } catch (e) {
+      Logger.warn(
+        `读取monaco编辑器的自动提示文件时发生错误:${getErrorMessage(e)}`,
+      );
+    }
+
+    return {
+      JS_COMPLETIONS,
+      NODE_AND_CUSTOM_DTS,
+    };
+  }
+
   // ── 创建编辑器：只依赖 container，与 store.loading 解耦 ──
   // 容器常驻 DOM；因 Shiki 高亮器为异步，创建流程改为 await 就绪后再建 editor，
   // 保证设置 Shiki 主题时主题已注册。Shiki 失败则用内置主题回退，不阻断创建。
@@ -242,7 +281,8 @@
 
     (async () => {
       setupWorkerEnv();
-      setupJsLanguageOnce();
+      const comfiles = await loadCompleteFiles();
+      setupJsLanguageOnce(comfiles);
 
       // 先等 Shiki 就绪（失败也会 resolve(false)，回退内置主题）
       const shiki = await ensureShiki();

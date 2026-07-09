@@ -1,15 +1,15 @@
-import { z } from 'zod'
+import { listModels } from '$libs/utils/model/list.js'
+import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
+import { WindowService } from '$libs/utils/window.js'
+import { FileFilterPreset } from '$types/shared/api/sys.js'
 import { os } from '@orpc/server'
 import { app, dialog, shell } from 'electron'
+import { Hook, LogMessage, Transport } from 'electron-log'
+import Logger from 'electron-log/main'
 import { ensureDir } from 'fs-extra'
 import { writeFile } from 'fs/promises'
 import { join } from 'path'
-import { listModels } from '$libs/utils/model/list.js'
-import Logger from 'electron-log/main'
-import { Hook, LogMessage, Transport } from 'electron-log'
-import { WindowService } from '$libs/utils/window.js'
-import { FileFilterPreset } from '$types/shared/api/sys.js'
-import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
+import { z } from 'zod'
 // import { genText } from '$libs/utils/model/factory/node-llama-cpp/local.js'
 import { throwCancel } from '$libs/utils/err.js'
 
@@ -288,79 +288,62 @@ const getPath = os
         return basePath;
     })
 
-
-
-// 日志流 handler，在renderer/src/route/featured/bottom/hooklog/hoo-log.store.svelte.ts中使用。
 const streamLogs = os
     .input(z.object({}).optional())
     .handler(async function* ({ context }) {
-        // @ts-expect-error 不写类型定义了。
+        // @ts-expect-error 不改进类型了。
         const signal: AbortSignal | undefined = context?.signal;
+        Logger.debug('signal on streamLogs:', signal);
 
         const queue: LogMessage[] = [];
-        let resolveNext: (() => void) | null = null;
+        // 改为存储触发器数组，支持更安全的通知机制
+        let notifyWaiting: (() => void) | null = null;
 
-        // 日志拦截钩子
         const logHook: Hook = (message: LogMessage, transport?: Transport, transportName?: string) => {
             if (transportName === 'file') {
-                // console.log("enter loghook:", message)
                 queue.push(message);
-                if (resolveNext) {
-                    resolveNext();
-                    resolveNext = null;
+                if (notifyWaiting) {
+                    notifyWaiting();
+                    notifyWaiting = null; // 消费后立即置空
                 }
             }
             return message;
         };
         Logger.hooks.push(logHook);
 
-        // 清理钩子
         const cleanup = () => {
             const idx = Logger.hooks.indexOf(logHook);
             if (idx !== -1) Logger.hooks.splice(idx, 1);
+            if (notifyWaiting) {
+                notifyWaiting(); // 唤醒悬空的 Promise 让其安全结束
+                notifyWaiting = null;
+            }
         };
 
-        // 提前取消直接退出
-        if (signal?.aborted) {
-            cleanup();
-            return;
-        }
-
-        // 统一全局abort回调，只注册一次，不用循环内重复注册
-        const onGlobalAbort = () => {
-            cleanup();
-        };
-        signal?.addEventListener('abort', onGlobalAbort);
+        // 统一处理 Abort 信号
+        const onAbort = () => cleanup();
+        if (signal?.aborted) return cleanup();
+        signal?.addEventListener('abort', onAbort);
 
         try {
+            // 只要没有被终止，或者队列里还有没发完的日志，就继续消费
             while (!signal?.aborted) {
                 if (queue.length > 0) {
                     yield queue.shift()!;
                 } else {
-                    // 等待新日志
+                    // 完美的等待机制：纯粹作为条件变量使用
                     await new Promise<void>((resolve) => {
-                        resolveNext = resolve;
-                        // 统一复用同一个handler，保证能remove
-                        const onWaitAbort = () => resolve();
-                        signal?.addEventListener('abort', onWaitAbort);
-
-                        // Promise结束自动移除监听，无需外层判断
-                        resolveNext = () => {
-                            signal?.removeEventListener('abort', onWaitAbort);
-                            resolve();
-                        };
+                        notifyWaiting = resolve;
                     });
                 }
             }
         } finally {
-            // 兜底全部清理
+            // 无论是 signal 触发、客户端断开、还是代码异常，必走这里
             cleanup();
-            signal?.removeEventListener('abort', onGlobalAbort);
-            // console.log("quit logstream...")
+            signal?.removeEventListener('abort', onAbort);
+            Logger.debug("quit logstream successfully.", signal);
         }
     });
-
-
 
 // const genTextApi = os
 //     .input(z.string())

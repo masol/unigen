@@ -1,27 +1,13 @@
-import type { IRunnerContext } from "$types/blueprint/context.js";
-import vm from "node:vm";
-
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import { LanceDB } from "$libs/project/controllers/lance/index.js";
-import { throwCancel, throwNotfound, throwNotimplement, throwPrecondition, throwUnprcessable } from "$libs/utils/err.js";
-import * as radashi from 'radashi';
-import validator from 'validator';
-import { getIOInfo } from "../glossary/ioinfo.js";
-import { saveToOutput } from "../glossary/output.js";
-import { BaseFunctor } from "./base.js";
-import { Capability } from "./is.js";
+import type { IRunnerContext } from "$types/blueprint/context.js";
+import vm from "node:vm";
+import { getGlossary } from "../../glossary/index.js";
+import { BaseFunctor } from "../base.js";
+import { Capability } from "../is.js";
+import { FIXED_PACKAGES } from "./fixedpkgs.js";
+import { getLLMPkgs } from "./llm.js";
 
-const FIXED_PACKAGES = {
-    validator,
-    util: radashi,
-    err: {
-        throwPrecondition: throwPrecondition,
-        throwNotfound: throwNotfound,
-        throwNotimplement: throwNotimplement,
-        throwUnprcessable: throwUnprcessable,
-        throwCancel: throwCancel,
-    }
-} as const;
 /**
  * 基于 vm 的可信代码运行环境。
  *
@@ -58,17 +44,15 @@ ${capa.code}
         this.script = new vm.Script(wrappedCode, { filename });
     }
 
-    async run(ctx: IRunnerContext): Promise<void> {
+    async doTask(ctx: IRunnerContext): Promise<void> {
         // 1. 构造注入给源码的 ioc 对象（作为源码的“全局”作用域）
         const ioc: Record<string, unknown> = {
             ctx,
             db: PrjDB.ensure(ctx.prj),
             lance: LanceDB.ensure(ctx.prj),
             cap: this.capa,
-            glossary: {
-                getIO: getIOInfo.bind(null, ctx),
-                save: saveToOutput.bind(null, ctx),
-            },
+            glossary: getGlossary(ctx),
+            llm: getLLMPkgs(ctx),
             ...FIXED_PACKAGES
         };
 

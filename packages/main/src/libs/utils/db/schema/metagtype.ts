@@ -5,8 +5,8 @@ import { z } from 'zod';
 
 // 控制数据在 KV 中的更新模式
 export const ReducerStrategySchema = z.enum([
-    'replace', // 覆盖：直接用新值替换旧值
-    'merge',   // 合并：Shallow/Deep Merge（默认）
+    'replace', // 覆盖：直接用新值替换旧值（默认）
+    'merge',   // 合并：Shallow/Deep Merge
     'append',  // 后补：向数组末尾追加
     'prepend', // 前插：向数组开头插入
 ]);

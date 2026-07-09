@@ -46,7 +46,7 @@ export class DagFunctor extends BaseFunctor {
     }
 
     // 3. 核心运行函数：按“代”并行
-    async run(ctx: IRunnerContext): Promise<void> {
+    async doTask(ctx: IRunnerContext): Promise<void> {
         // 收集计算出的“代”队列
         const generations: string[][] = [];
 

@@ -29,6 +29,18 @@
 <div
   class="absolute bottom-full left-0 mb-2 w-full overflow-hidden rounded-xl border border-border/50 bg-popover shadow-xl animate-slide-up"
 >
+  {#if commands[selectedIndex]}
+    <div class="border-t border-border/50 bg-muted/30 px-3 py-2">
+      <p class="text-xs font-medium text-foreground">
+        {commands[selectedIndex].label}
+      </p>
+      <p
+        class="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground"
+      >
+        {commands[selectedIndex].desc}
+      </p>
+    </div>
+  {/if}
   <div
     bind:this={listContainer}
     class="max-h-60 overflow-y-auto scroll-smooth p-2"
@@ -39,6 +51,7 @@
         type="button"
         data-command-index={i}
         onclick={() => onSelect(cmd)}
+        title={`${cmd.label} — ${cmd.desc}`}
         class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-200 {i ===
         selectedIndex
           ? 'bg-primary/10'

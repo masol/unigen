@@ -2,6 +2,7 @@
 import { configService } from '$libs/store/index.js'
 import { secondConfig } from '$libs/store/second.js'
 import { getTheme, resetTheme, setTheme } from '$libs/store/theme.js'
+import { dataCenter } from '$libs/utils/sys/data.js'
 import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
 import { GetThemeSchema } from '$types/shared/api/theme.js'
 import { os } from '@orpc/server'
@@ -130,6 +131,12 @@ const getheme = os
         return getTheme();
     })
 
+const readData = os
+    .input(z.string())
+    .output(z.string().nullable())
+    .handler(async ({ input }) => {
+        return dataCenter.readFile(input);
+    })
 
 export default {
     getAll,
@@ -142,5 +149,6 @@ export default {
     recents,
     setTheme: setheme,
     resetTheme: resetheme,
-    getTheme: getheme
+    getTheme: getheme,
+    readData
 }

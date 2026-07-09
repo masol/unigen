@@ -1,5 +1,15 @@
 import type { IProjectContext } from "$libs/project/type.js";
 import { ICapaFunctor } from "$libs/utils/blueprint/capability/type.js";
+import type { Capability } from "./capability.js";
+
+
+export interface CommandInfo {
+    isCommand: boolean;
+    command?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    args?: Record<string, any>;
+    body: string;
+}
 
 export interface IRunnerContext {
     /** 原生的 Web API AbortSignal，可透传给支持取消的异步底层操作 */
@@ -11,31 +21,11 @@ export interface IRunnerContext {
     /** 快照检查点：判断是否属于“强制杀死”状态 */
     readonly isForceKilled: boolean;
     readonly prj: IProjectContext;
+    cmd: CommandInfo;
+    readonly stack: Capability[]; // 指示当前调用栈--主要服务于目标跟踪及拆解。
 
-    // ==========================================
-    // 💾 全局变量存储接口 (同步持久化 KV)
-    // ==========================================
-
-    /**
-     * 设置全局变量，同步写入数据库
-     * @param key 键名
-     * @param value 任意可序列化的值
-     */
-    set(key: string, value: unknown): void;
-
-    /**
-     * 获取全局变量，同步从数据库读取
-     * @param key 键名
-     * @returns 泛型 T 或 null
-     */
-    get<T>(key: string): T | null;
-
-    /**
-     * 删除指定的全局变量，同步从数据库移除
-     * @param key 键名
-     */
-    remove(key: string): void;
-
+    push(cap: Capability): void;
+    pop(): Capability | null;
     /**
      * 内部或外部触发取消的方法（配合宿主环境使用）
      * @param force 是否属于强制杀死
@@ -54,11 +44,11 @@ export interface IRunnerContext {
     // 📝 日志接口 (适配 electron-log)
     // ==========================================
     /**
-     * 向渲染端主界面发送通知，同时记录到silly级别的日志中。
+     * 向渲染端主界面发送通知，以报告关键进度和细节--只显示一个，不会树状显示。
      * @param message 
      * @param args 
      */
-    notify(message: string, ...args: unknown[]): void;
+    notify(title: string, detail: string): void
 
 
     /**

@@ -8,7 +8,8 @@ export const metag = sqliteTable('metag', {
 
     intent: text('intent'),
 
-    /** ✨ 关键字段：schema 通过 customType 自动 Zod<->JSON 转译 */
+    // dims(order)还是放到capability了，概念上，应该放在这里。
+    /** schema 通过 customType 自动 Zod<->JSON 转译 */
     schema: zodSchemaJsonType('schema'),
 
     reducer: text('reducer').$type<ReducerStrategy>(),

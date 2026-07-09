@@ -1,0 +1,31 @@
+name: Sync docs to GitHub Wiki
+on:
+  push:
+    branches: [main] # 仅主分支发布Wiki
+    paths:
+      - "docs/**"
+      - ".github/workflows/sync-wiki.yml"
+  workflow_dispatch: # 支持手动一键同步
+
+concurrency:
+  group: wiki-sync
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出主仓库代码
+        uses: actions/checkout@v4
+
+      - name: 同步docs到Wiki
+        uses: Andrew-Chen-Wang/github-wiki-action@v5
+        with:
+          path: docs/ # 源目录
+          disable-empty-commits: true # 无变更不提交（v5已完美支持此参数）
+          preprocess: false
+          # 必须使用 PAT (Personal Access Token)，内置 GITHUB_TOKEN 无法写入 Wiki 仓库
+          token: ${{ secrets.WIKI_SYNC_TOKEN }}
