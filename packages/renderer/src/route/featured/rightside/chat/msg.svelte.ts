@@ -1,5 +1,8 @@
 // src/lib/stores/msg.svelte.ts
 import { safeApi } from "$lib/utils/api";
+import evtbus from "$lib/utils/evtbus";
+import Logger from "electron-log/renderer.js";
+import pTimeout, { TimeoutError } from "p-timeout";
 import { toast } from "svelte-sonner"; // 按你的项目实际 toast 库调整
 
 export type Message = {
@@ -19,7 +22,37 @@ type StreamEvent =
     | { type: "phase"; phase: NonNullable<ReflectPhase> }
     | { type: "text"; text: string };
 
+/** 等待主进程侧确认 seq 对应任务彻底结束的超时时长 */
+const RUNCOMMAND_END_TIMEOUT_MS = 15 * 60 * 1000;
+
+/** 单个 seq 调用的完成态，由 runcommand-end 事件 resolve */
+type SeqDeferred = {
+    promise: Promise<boolean>;
+    resolve: (suc: boolean) => void;
+};
+
+function createDeferred(): SeqDeferred {
+    let resolve!: (suc: boolean) => void;
+    const promise = new Promise<boolean>((res) => {
+        resolve = res;
+    });
+    return { promise, resolve };
+}
+
 class MessageStore {
+    constructor() {
+        evtbus.on("runcommand-end", ({ suc, seq }) => {
+            const pending = this.#pendingSeqs.get(seq);
+            if (pending) {
+                this.#pendingSeqs.delete(seq);
+                pending.resolve(suc);
+            } else {
+                // 没有等待者：可能是超时清理后迟到的事件，或异常来源，忽略即可
+                Logger.debug("runcommand-end received with no pending waiter", { suc, seq });
+            }
+        });
+    }
+
     messages = $state<Message[]>([]);
     isLoading = $state(false);
 
@@ -37,6 +70,11 @@ class MessageStore {
     #controller: AbortController | null = null;
     /** 当前运行中的流消费 promise；null 表示空闲 */
     #runPromise: Promise<void> | null = null;
+
+    /** 下一个可用调用序号，单调递增，用于与主进程 runcommand-end 对齐 */
+    #nextSeq = 1;
+    /** 等待主进程确认结束的 seq -> deferred 映射 */
+    #pendingSeqs = new Map<number, SeqDeferred>();
 
     addMessage(message: Omit<Message, "id" | "timestamp">) {
         const newMessage: Message = {
@@ -65,7 +103,7 @@ class MessageStore {
      * 期间可调用 abort() 提前终止。
      */
     AIResponse(userMessage: string): Promise<void> {
-        // 已有任务在跑 —— 直接报错退出，不打断当前任务
+        // 已有任务在跑 — 直接报错退出，不打断当前任务
         if (this.#runPromise) {
             toast.error("已有任务正在进行，请等待完成或先终止当前任务");
             return Promise.resolve();
@@ -84,21 +122,26 @@ class MessageStore {
 
     /** 内部：真正的流消费主循环 */
     async #run(userMessage: string, signal: AbortSignal): Promise<void> {
+        // 将 stream 提至上层作用域，确保 finally 块可以访问
+        let stream: AsyncGenerator<StreamEvent> | null = null;
+
+        // 分配本次调用的 seq，并在发起请求前注册等待者，避免和 runcommand-end 竞态
+        const seq = this.#nextSeq++;
+        const deferred = createDeferred();
+        this.#pendingSeqs.set(seq, deferred);
+
         try {
             let finalText = "";
 
-            // 真实实现替换为：
-            // const stream = api().system.genTextStream(userMessage, { signal });
-            const stream: AsyncGenerator<StreamEvent> = await safeApi().project.runCommand(userMessage, { signal });
+            stream = await safeApi().project.runCommand({
+                msg: userMessage,
+                seq,
+            }, { signal });
 
             for await (const evt of stream) {
                 if (signal.aborted) break;
                 if (evt.type === "phase") this.phase = evt.phase;
                 else finalText = evt.text;
-            }
-
-            if (signal.aborted) {
-                this.addMessage({ role: "assistant", content: "您终止了当前任务，查看日志了解执行细节。" });
             }
 
             // 只有未被中断且拿到文本才落地
@@ -107,13 +150,37 @@ class MessageStore {
             }
         } catch (err) {
             // abort 引发的异常静默吞掉，其余才提示
-            if (!signal.aborted) {
+            if (signal.aborted) {
+                this.phase = {
+                    title: "终止命令",
+                    detail: "向命令中心请求终止，等待其终止确认中...",
+                }
+            } else {
                 this.addMessage({
                     role: "assistant",
                     content: `处理失败：${err instanceof Error ? err.message : String(err)}`,
                 });
             }
         } finally {
+            if (stream && typeof stream.return === "function") {
+                try {
+                    Logger.debug("waiting for stream.return()...", { seq });
+                    await stream.return(undefined);
+                } catch (returnErr) {
+                    // 静默吞掉生成器关闭时的异常
+                    Logger.error("Failed to close run command stream safely:", returnErr);
+                }
+            }
+
+            // 客户端迭代器已关闭，但主进程侧任务是否真正收尾，
+            // 必须等 runcommand-end(seq) 确认，否则可能是「假终止」
+            await this.#waitForRunEnd(seq, deferred);
+            if (signal.aborted) {
+                this.addMessage({
+                    role: "assistant",
+                    content: `您终止了当前任务，查看日志了解执行细节。`,
+                });
+            }
             this.phase = null;
             this.isAborting = false;
             this.setLoading(false);
@@ -123,80 +190,43 @@ class MessageStore {
     }
 
     /**
+     * 等待主进程通过 runcommand-end 确认 seq 对应任务已彻底结束。
+     * 5 分钟内未收到确认视为「悬置」：清理本地等待者并强提示用户重启，
+     * 因为此时无法确认主进程侧能力组件/术语库是否仍在运行或已产生副作用。
+     */
+    async #waitForRunEnd(seq: number, deferred: SeqDeferred): Promise<void> {
+        try {
+            const suc = await pTimeout(deferred.promise, {
+                milliseconds: RUNCOMMAND_END_TIMEOUT_MS,
+            });
+            Logger.debug("runcommand-end confirmed", { seq, suc });
+        } catch (err) {
+            if (err instanceof TimeoutError) {
+                this.#pendingSeqs.delete(seq);
+                Logger.error("Timed out waiting for runcommand-end confirmation", { seq });
+                const msg = "终止任务超时：未能确认主进程的任务已完全结束。为安全起见，请关闭全部窗口并重启应用，避免悬置的能力组件意外更新术语库。"
+                this.addMessage({
+                    role: "assistant",
+                    content: msg,
+                });
+                toast.error(msg);
+            } else {
+                Logger.error("Unexpected error while waiting for runcommand-end", err);
+            }
+        }
+    }
+
+    /**
      * 请求终止：发信号 + 切「终止中」状态，
-     * 然后等待 #mockStream 真正收尾结束后才 resolve（状态已在 #run.finally 归位）。
+     * 然后等待 #run 真正收尾结束后才 resolve（包括等到 runcommand-end 确认）。
      */
     async abort(): Promise<void> {
         if (!this.#controller || !this.#runPromise) return;
         this.isAborting = true;
         this.#controller.abort();
-        // 等待流（含 generator 的 finally 收尾）彻底结束
+        // 等待流（含 generator 的 finally 收尾，以及主进程结束确认）彻底结束
         await this.#runPromise;
     }
-
-    /**
-     * 模拟流式后端：分阶段 yield phase，最后 yield 文本。
-     * finally 段模拟「收到终止信号后的后端清理」——for await 在 break 时
-     * 会调用本 generator 的 .return() 并 await 此 finally，从而保证
-     * 状态变更发生在流真正结束之后。
-     */
-    // async *#mockStream(
-    //     userMessage: string,
-    //     signal: AbortSignal,
-    // ): AsyncGenerator<StreamEvent> {
-    //     try {
-    //         yield {
-    //             type: "phase",
-    //             phase: {
-    //                 title: "AI 正在反思当前工作流",
-    //                 detail: "正在分析薄弱环节，工作细节可通过日志查看…",
-    //             },
-    //         };
-    //         await this.#delay(1800000, signal);
-
-    //         yield {
-    //             type: "phase",
-    //             phase: {
-    //                 title: "正在生成改进方案",
-    //                 detail: "将反思结论转化为可执行的工作流调整…",
-    //             },
-    //         };
-    //         await this.#delay(3000, signal);
-
-    //         await this.#delay(15000);
-
-    //         yield {
-    //             type: "text",
-    //             text: `已根据你的要求「${userMessage}」完成一轮反思，并对工作流进行了针对性调整。你可以追问我具体的改动理由，或让我继续迭代优化。`,
-    //         };
-    //     } finally {
-    //         // 被中断时的收尾（模拟后端确认终止）；此处的 await 会被
-    //         // for await 的 .return() 等待，因此状态不会提前变化。
-    //         if (signal.aborted) {
-    //             this.phase = {
-    //                 title: "正在终止…",
-    //                 detail: "等待后端确认终止并清理…",
-    //             };
-    //             await this.#delay(400); // 收尾不再可被中断
-    //         }
-    //     }
-    // }
-
-    // /** 可被 abort 提前唤醒的 delay（不再傻等） */
-    // #delay(ms: number, signal?: AbortSignal) {
-    //     return new Promise<void>((resolve) => {
-    //         if (signal?.aborted) return resolve();
-    //         const t = setTimeout(resolve, ms);
-    //         signal?.addEventListener(
-    //             "abort",
-    //             () => {
-    //                 clearTimeout(t);
-    //                 resolve();
-    //             },
-    //             { once: true },
-    //         );
-    //     });
-    // }
 }
 
 export const messageStore = new MessageStore();

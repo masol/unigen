@@ -8,11 +8,7 @@
   import SettingsSection from "./SettingsSection.svelte";
 </script>
 
-<SettingsSection
-  icon={IconTable}
-  title="蓝图表"
-  description="表格分页与展示行为"
->
+<SettingsSection icon={IconTable} title="蓝图" description="表格分页与展示行为">
   <SettingRow title="每页显示条目数" description="单页渲染的记录数量（6 - 20）">
     {#snippet control()}
       <Scrubbable.Root
@@ -51,6 +47,19 @@
         bind:checked={
           () => !configStore.silentSave,
           (v) => configStore.setConfig("silentSave", !v)
+        }
+      />
+    {/snippet}
+  </SettingRow>
+  <SettingRow
+    title="并行执行"
+    description="在助手调整工作流时，是否允许工作流执行。"
+  >
+    {#snippet control()}
+      <Switch
+        bind:checked={
+          () => configStore.parallelRun,
+          (v) => configStore.setConfig("parallelRun", v)
         }
       />
     {/snippet}

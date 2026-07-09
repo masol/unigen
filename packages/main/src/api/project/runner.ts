@@ -58,13 +58,16 @@ type StreamEvent =
     | { type: "text"; text: string };
 
 const runCommand = os
-    .input(z.string())
-    .handler(async function* ({ input, context }) {
+    .input(z.object({
+        msg: z.string(),
+        seq: z.number()
+    }))
+    .handler(async function* ({ input, context, signal }) {
         // @ts-expect-error 不写类型定义了。
-        const externalSignal: AbortSignal | undefined = context?.signal;
+        const externalSignal: AbortSignal | undefined = signal ?? context?.signal;
         const ctx = context as RpcContext;
 
-        Logger.debug('signal on runCommand:', externalSignal);
+        // Logger.debug('signal on runCommand:', externalSignal);
 
         // 无论外部有没有 signal，都用一个内部 controller 兜底：
         // 1) 内层总能拿到可用 signal；2) client 断开时我们能主动触发它。
@@ -119,7 +122,7 @@ const runCommand = os
             if (endNotified) return;
             endNotified = true;
             try {
-                ctx.project.notify('runcommand-end', { suc });
+                ctx.project.notify('runcommand-end', { suc, seq: input.seq });
             } catch (e) {
                 Logger.debug('notify runcommand-end failed:', e);
             }
@@ -140,7 +143,7 @@ const runCommand = os
             error: undefined as unknown,
         };
 
-        const runPromise = Promise.resolve(runner.runCommand(input, onPhase, innerSignal))
+        const runPromise = Promise.resolve(runner.runCommand(input.msg, onPhase, innerSignal))
             .then(() => {
                 state.settled = 'fulfilled';
             })
@@ -180,9 +183,12 @@ const runCommand = os
                 throw state.error;
             }
         } finally {
-            // 关键：若退出并非 abort 触发（例如 orpc client 断开导致 return），
+
+            // 成功判定：未aborted并且 runPromise 是否成功落定
+            const suc = !innerSignal.aborted && state.settled === 'fulfilled';
+            // 若退出并非 abort 触发（例如 orpc client 断开导致 return），
             // 主动触发 innerSignal，给内层一个退出机会。
-            if (!innerSignal.aborted) {
+            if (state.settled === "pending" && !innerSignal.aborted) {
                 controller.abort();
             }
 
@@ -196,8 +202,6 @@ const runCommand = os
             // 等内层真正结束——await 之后 state.settled 一定是终态
             await runPromise.catch(() => { });
 
-            // 成功判定：只看 runPromise 是否成功落定
-            const suc = state.settled === 'fulfilled';
             notifyEnd(suc);
 
             Logger.debug('quit runCommand successfully.', suc);

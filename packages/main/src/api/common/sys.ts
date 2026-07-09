@@ -290,10 +290,10 @@ const getPath = os
 
 const streamLogs = os
     .input(z.object({}).optional())
-    .handler(async function* ({ context }) {
+    .handler(async function* ({ context, signal }) {
         // @ts-expect-error 不改进类型了。
-        const signal: AbortSignal | undefined = context?.signal;
-        Logger.debug('signal on streamLogs:', signal);
+        const externalSignal: AbortSignal | undefined = signal ?? context?.signal;
+        // Logger.debug('signal on streamLogs:', externalSignal);
 
         const queue: LogMessage[] = [];
         // 改为存储触发器数组，支持更安全的通知机制
@@ -322,12 +322,12 @@ const streamLogs = os
 
         // 统一处理 Abort 信号
         const onAbort = () => cleanup();
-        if (signal?.aborted) return cleanup();
-        signal?.addEventListener('abort', onAbort);
+        if (externalSignal?.aborted) return cleanup();
+        externalSignal?.addEventListener('abort', onAbort);
 
         try {
             // 只要没有被终止，或者队列里还有没发完的日志，就继续消费
-            while (!signal?.aborted) {
+            while (!externalSignal?.aborted) {
                 if (queue.length > 0) {
                     yield queue.shift()!;
                 } else {
@@ -340,8 +340,8 @@ const streamLogs = os
         } finally {
             // 无论是 signal 触发、客户端断开、还是代码异常，必走这里
             cleanup();
-            signal?.removeEventListener('abort', onAbort);
-            Logger.debug("quit logstream successfully.", signal);
+            externalSignal?.removeEventListener('abort', onAbort);
+            Logger.debug("logstream terminate successfully.", externalSignal);
         }
     });
 

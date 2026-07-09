@@ -13,7 +13,7 @@ export type PanelTab = {
 };
 
 function createRightPanelStore() {
-    let activeTab = $state<string>("blueprint");
+    let activeTab = $state<string>("assistant");
 
     const tabs: PanelTab[] = [
         { id: "assistant", label: "助手", Icon: IconAiAgent as unknown as Component<any> },

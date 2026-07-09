@@ -17,6 +17,14 @@ export type Events = {
     "lang:changed": string  // 更新了语言设置。
     "task_finished": { success: boolean, reason?: string } // 任务结束，启动时间。
     "task_progess_report": string // 项目主任务进度报告。
+    "runcommand-end": { suc: boolean, seq: number }
+    "before-input-evt": {
+        key: string;
+        ctrlKey: boolean;
+        metaKey: boolean;
+        shiftKey: boolean;
+        altKey: boolean;
+    }
 };
 
 export type EventNameType = keyof Events;

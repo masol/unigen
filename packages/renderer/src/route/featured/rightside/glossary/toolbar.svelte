@@ -14,7 +14,7 @@
   const DEBOUNCE_MS = 400;
 
   // 本地即时回显值，与真正提交给 store 的值解耦，避免输入时屏幕重渲染闪烁。
-  let localValue = $state(blueprintStore.name);
+  let localValue = $derived(blueprintStore.name);
 
   // radashi 的 debounce 返回带 flush()/cancel()/isPending() 的可控函数。
   const debouncedSet = debounce({ delay: DEBOUNCE_MS }, (value: string) => {
@@ -22,9 +22,7 @@
   });
 
   // 外部 store 变化（如程序化清空过滤）时，同步回本地值。
-  $effect(() => {
-    localValue = blueprintStore.name;
-  });
+  ;
 
   // 组件卸载时取消任何挂起的防抖调用，避免脏更新。
   $effect(() => {

@@ -1,10 +1,10 @@
 import type { AppConfig } from "@app/main/types";
-import { commandCenter } from "./center";
+import Logger from "electron-log/renderer";
 import hotkeys from "hotkeys-js";
+import { debounce } from "radashi";
 import { toast } from "svelte-sonner";
 import { api } from "../api";
-import Logger from "electron-log/renderer";
-import { debounce } from "radashi";
+import { commandCenter } from "./center";
 
 
 export class KeybindConfig {
@@ -75,6 +75,11 @@ export class KeybindConfig {
             Logger.error('[ConfigStore] setTheme() failed', err)
             toast.error(saveRrror);
         }
+    }
+
+    trigger(combo: string) {
+        void (combo)
+        // hotkeys.trigger(combo);
     }
 
     addBinding(cmdId: string, combo: string) {

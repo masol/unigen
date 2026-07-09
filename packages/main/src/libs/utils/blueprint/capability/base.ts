@@ -18,14 +18,14 @@ export function fillCapa(capa: NewCapability): Capability {
         code: "",
         input: [],
         output: [],
-        dims: [],
+        // dims: [],
+        // chunk: 'bulk',
         process: '',
         negative: '',
         criteria: '',
         fewshot: [],
         createdAt: '',
         updatedAt: '',
-        chunk: 'bulk',
         ...capa,
         name: realName
     }

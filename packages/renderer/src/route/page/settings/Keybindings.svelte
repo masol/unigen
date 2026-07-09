@@ -1,26 +1,29 @@
 <script lang="ts">
+  import { configStore } from "$lib/store/config.svelte";
   import { commandCenter } from "$lib/utils/commands/center";
-  import { configStore } from "$lib/store/config.svelte"; // ← 全局 configStore，含 .keybinding (KeybindConfig 实例，内部已 $state)
-  import type { CommandDescriptor } from "$lib/utils/commands/type";
-  import autoAnimate from "@formkit/auto-animate";
+// ← 全局 configStore，含 .keybinding (KeybindConfig 实例，内部已 $state)
+  import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
   import * as Tabs from "$lib/components/ui/tabs";
-  import {
-    IconKeyboard,
-    IconSearch,
-    IconX,
-    IconPlus,
-    IconAlertTriangle,
-    IconTrash,
-    IconCommand,
-    IconCheck,
-    IconMinus,
-    IconFolder,
-  } from "@tabler/icons-svelte";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
+  import type { CommandDescriptor } from "$lib/utils/commands/type";
+  import evtbus from "$lib/utils/evtbus";
+  import autoAnimate from "@formkit/auto-animate";
+  import {
+    IconAlertTriangle,
+    IconCheck,
+    IconCommand,
+    IconFolder,
+    IconKeyboard,
+    IconMinus,
+    IconPlus,
+    IconSearch,
+    IconTrash,
+    IconX,
+  } from "@tabler/icons-svelte";
+  import { onMount } from "svelte";
 
   // ── Types ──────────────────────────────────────────────────
   type CommandInfo = Omit<CommandDescriptor, "handler">;
@@ -272,6 +275,34 @@
     addBinding(recordingCommandId, combo);
     stopRecording();
   }
+
+  onMount(() => {
+    const handler = (evt: {
+      key: string;
+      ctrlKey: boolean;
+      metaKey: boolean;
+      shiftKey: boolean;
+      altKey: boolean;
+    }) => {
+      console.error("enter handleKeydown")
+      handleKeydown({
+        ...evt,
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        code: "KeyW",
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        type: "keydown",
+        target: null,
+        currentTarget: null,
+      } as unknown as KeyboardEvent);
+    };
+    evtbus.on("before-input-evt", handler);
+    return () => {
+      evtbus.off("before-input-evt", handler);
+    };
+  });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
