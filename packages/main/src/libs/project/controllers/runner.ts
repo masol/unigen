@@ -46,7 +46,12 @@ export class PrjRunner extends BaseProjectController {
             this.#cmdrunner = new CmdRunner();
             await this.#cmdrunner.run(command, ctx)
         } catch (e) {
-            Logger.error(`执行命令${command}时发生错误：`, getErrorMessage(e))
+            const msg = `## 执行命令${command}时发生错误： 
+            ${getErrorMessage(e)}`;
+            if (fnNotify) {
+                fnNotify("", msg);
+            }
+            Logger.error(msg)
         } finally {
             this.#cmdrunner = null;
             ctx.fnNotify = null;

@@ -129,9 +129,9 @@ class MessageStore {
         const seq = this.#nextSeq++;
         const deferred = createDeferred();
         this.#pendingSeqs.set(seq, deferred);
+        let finalText = "";
 
         try {
-            let finalText = "";
 
             stream = await safeApi().project.runCommand({
                 msg: userMessage,
@@ -144,10 +144,10 @@ class MessageStore {
                 else finalText = evt.text;
             }
 
-            // 只有未被中断且拿到文本才落地
-            if (!signal.aborted && finalText) {
-                this.addMessage({ role: "assistant", content: finalText });
-            }
+            // // 只有未被中断且拿到文本才落地
+            // if (!signal.aborted && finalText) {
+            //     this.addMessage({ role: "assistant", content: finalText });
+            // }
         } catch (err) {
             // abort 引发的异常静默吞掉，其余才提示
             if (signal.aborted) {
@@ -175,11 +175,15 @@ class MessageStore {
             // 客户端迭代器已关闭，但主进程侧任务是否真正收尾，
             // 必须等 runcommand-end(seq) 确认，否则可能是「假终止」
             await this.#waitForRunEnd(seq, deferred);
-            if (signal.aborted) {
+            if (finalText) {
+                this.addMessage({ role: "assistant", content: finalText });
+            } else if (signal.aborted) {
                 this.addMessage({
                     role: "assistant",
                     content: `您终止了当前任务，查看日志了解执行细节。`,
                 });
+            } else {
+                this.addMessage({ role: "assistant", content: "任务正常结束，但是AI没有返回任意最终文本，请查阅日志了解细节。" });
             }
             this.phase = null;
             this.isAborting = false;

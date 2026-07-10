@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Root } from '$lib/components/ui/avatar';
 	import { cn } from '$lib/utils/index';
 	import { Avatar as AvatarPrimitive } from 'bits-ui';
 
@@ -6,12 +7,11 @@
 		ref = $bindable(null),
 		class: className,
 		...restProps
-	}: AvatarPrimitive.ImageProps = $props();
+	}: AvatarPrimitive.RootProps = $props();
 </script>
 
-<AvatarPrimitive.Image
+<Root
 	bind:ref
-	data-slot="avatar-image"
-	class={cn('aspect-square size-full rounded-full object-cover', className)}
+	class={cn("order-1 group-data-[variant='sent']/chat-bubble:order-2", className)}
 	{...restProps}
 />

@@ -67,7 +67,7 @@
       // 在捕获阶段（第三个参数传 true）监听，这比 hotkeys-js 的绑定更早执行
       window.addEventListener("keydown", handleKeydown, true);
 
-      // 给加载动画一个最小展示时间，避免闪烁（不需要可删除）
+      // 给加载动画一个最小展示时间，避免闪烁
       // await new Promise((r) => setTimeout(r, 600));
 
       // 全部就绪，切换到正式界面
