@@ -21,13 +21,13 @@ export const configSchema: Schema<AppConfig> = {
     },
     fontSize: {
         type: 'integer',
-        default: 14,
+        default: 16,
         minimum: 6,
         maximum: 80
     },
     lineHeight: {
         type: 'integer',
-        default: 22,
+        default: 26,
         minimum: 3,
         maximum: 50
     },

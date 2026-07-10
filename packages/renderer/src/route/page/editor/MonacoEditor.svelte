@@ -8,6 +8,7 @@
   /* eslint-disable @typescript-eslint/no-explicit-any */
 
   import { Skeleton } from "$lib/components/ui/skeleton";
+  import { configStore } from "$lib/store/config.svelte";
   import { safeApi } from "$lib/utils/api";
   import { shikiToMonaco } from "@shikijs/monaco";
   import Logger from "electron-log/renderer.js";
@@ -299,13 +300,13 @@
         theme: themeName(),
         "semanticHighlighting.enabled": true,
         automaticLayout: true,
-        fontSize: 14,
+        fontSize: configStore.fontSize,
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace",
-        lineHeight: 22,
+        lineHeight: configStore.lineHeight,
         padding: { top: 12, bottom: 12 },
         minimap: { enabled: store.minimap },
         wordWrap: store.wordWrap ? "on" : "off",
-        lineNumbers: "on",
+        lineNumbers: configStore.lineNumbers ? "on" : "off",
         renderLineHighlight: "all",
         smoothScrolling: true,
         cursorSmoothCaretAnimation: "on",
