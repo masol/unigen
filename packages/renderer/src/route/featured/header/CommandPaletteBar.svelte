@@ -1,19 +1,21 @@
 <!-- CommandPaletteBar.svelte -->
 <script lang="ts">
-  import { onMount, onDestroy, tick } from "svelte";
-  import { fly, fade } from "svelte/transition";
-  import { quintOut } from "svelte/easing";
-  import hotkeys from "hotkeys-js";
-  import {
-    IconSearch,
-    IconChevronRight,
-    IconCornerDownLeft,
-    IconArrowUp,
-    IconArrowDown,
-  } from "@tabler/icons-svelte";
-  import { commandCenter } from "$lib/utils/commands/center";
   import { configStore } from "$lib/store/config.svelte";
   import { projectStore } from "$lib/store/project.svelte";
+  import { commandCenter } from "$lib/utils/commands/center";
+  import { PinyinFuseSearch } from "$lib/utils/fuse";
+  import {
+    IconArrowDown,
+    IconArrowUp,
+    IconChevronRight,
+    IconCornerDownLeft,
+    IconSearch,
+  } from "@tabler/icons-svelte";
+  import hotkeys from "hotkeys-js";
+  import { debounce } from "radashi";
+  import { onDestroy, onMount, tick } from "svelte";
+  import { quintOut } from "svelte/easing";
+  import { fade, fly } from "svelte/transition";
 
   // ─── Types ───
   interface CommandEntry {
@@ -34,14 +36,44 @@
     commandCenter.getAllDescriptors() as CommandEntry[],
   );
 
+  // ─── 拼音模糊搜索：命令集变化时重建索引 ───
+  // 把可搜索字段汇总进 text，让 label / description / category
+  // 都能被拼音、首字母或原文命中；id 用于映射回原始命令。
+  const fuseSearch = $derived.by(() => {
+    const items = allCommands.map((c) => ({
+      id: c.id,
+      text: [c.label, c.description, c.category, c.id]
+        .filter(Boolean)
+        .join(" "),
+    }));
+    return new PinyinFuseSearch(items, {
+      keys: [
+        { name: "text", weight: 1.0 },
+        { name: "_fullPinyin", weight: 0.5 },
+        { name: "_firstLetters", weight: 0.3 },
+      ],
+      threshold: 0.3,
+    });
+  });
+
+  // ─── 防抖查询 ───
+  // 输入变化后延迟 150ms 写入 debouncedQuery，真正驱动过滤。
+  let debouncedQuery = $state("");
+  const applyDebouncedQuery = debounce({ delay: 150 }, (q: string) => {
+    debouncedQuery = q;
+  });
+
+  $effect(() => {
+    applyDebouncedQuery(query);
+    return () => applyDebouncedQuery.cancel();
+  });
+
   const filtered = $derived.by(() => {
-    const lower = query.toLowerCase().trim();
-    if (!lower) return allCommands;
-    return allCommands.filter((c) =>
-      `${c.id} ${c.label} ${c.description} ${c.category}`
-        .toLowerCase()
-        .includes(lower),
-    );
+    const q = debouncedQuery.trim();
+    if (!q) return allCommands;
+    const ids = new Set(fuseSearch.search(q));
+    // 保持 allCommands 原始顺序，按命中集合过滤
+    return allCommands.filter((c) => ids.has(c.id));
   });
 
   const grouped = $derived.by(() => {
@@ -83,13 +115,14 @@
       if (document.activeElement === inputEl) return;
       await new Promise((r) => requestAnimationFrame(r));
     }
-    console.error("not focus!!!")
+    console.error("not focus!!!");
   }
 
   // ─── Actions ───
   async function open() {
     isOpen = true;
     query = "";
+    debouncedQuery = "";
     selectedIndex = 0;
     await focusInputRobustly();
   }
@@ -97,6 +130,7 @@
   function close() {
     isOpen = false;
     query = "";
+    debouncedQuery = "";
     selectedIndex = 0;
   }
 
@@ -147,9 +181,9 @@
     }
   }
 
-  // 查询变化时，重置选中项 + 如果焦点丢失则补救一次
+  // 查询变化时，重置选中项（依赖防抖后的结果，避免过滤未更新时索引错位）
   $effect(() => {
-    void query;
+    void debouncedQuery;
     selectedIndex = 0;
   });
 
