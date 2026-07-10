@@ -1,26 +1,52 @@
 <!-- src/App.svelte -->
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { ModeWatcher } from "mode-watcher";
-  import { api, setupEvt } from "./lib/utils/api";
-  import Layout from "./route/layout.svelte";
-  import LoadingScreen from "$lib/components/loading-screen.svelte";
-  import ErrorScreen from "$lib/components/error-screen.svelte";
-  import { Motion, AnimatePresence } from "svelte-motion";
-  import { windowStore } from "$lib/store/window.svelte";
+  import Confirm from "$lib/components/Confirm.svelte";
   import DialogHost from "$lib/components/dialog/DialogHost.svelte";
+  import ErrorScreen from "$lib/components/error-screen.svelte";
+  import LoadingScreen from "$lib/components/loading-screen.svelte";
+  import Tour from "$lib/components/Tour.svelte";
   import { Toaster } from "$lib/components/ui/sonner";
-  import { pluginStore } from "$lib/store/plugin.svelte";
   import { configStore } from "$lib/store/config.svelte";
   import { i18nStore } from "$lib/store/i18n.svelte";
-  import Tour from "$lib/components/Tour.svelte";
-  import Confirm from "$lib/components/Confirm.svelte";
+  import { pluginStore } from "$lib/store/plugin.svelte";
   import { projectStore } from "$lib/store/project.svelte";
+  import { windowStore } from "$lib/store/window.svelte";
+  import { ModeWatcher } from "mode-watcher";
+  import { onDestroy, onMount } from "svelte";
+  import { AnimatePresence, Motion } from "svelte-motion";
+  import { api, safeApi, setupEvt } from "./lib/utils/api";
+  import Layout from "./route/layout.svelte";
 
   // 初始化完成标记：未完成时显示加载页
   let ready = $state(false);
   // 初始化异常：非空时显示错误页
   let initError = $state<unknown>(null);
+
+  // 定义键盘事件处理函数
+  const handleKeydown = (event: KeyboardEvent) => {
+    const key = event.key.toLowerCase();
+    const ctrlDown = event.ctrlKey || event.metaKey; // 兼容 macOS 的 Command 键
+
+    // 1. 拦截 Ctrl + W (关闭标签/窗口)
+    if (ctrlDown && key === "w") {
+      event.preventDefault();
+    }
+
+    // 2. 拦截 Ctrl + R 或 F5 (刷新页面)
+    if ((ctrlDown && key === "r") || key === "f5") {
+      event.preventDefault();
+    }
+
+    // 3. 拦截 Ctrl + +/- 或 Ctrl + 0 (页面缩放)
+    if (ctrlDown && ["+", "-", "=", "0"].includes(key)) {
+      event.preventDefault();
+    }
+
+    // 4. 拦截开发者工具 (Ctrl+Shift+I / F12)
+    if ((ctrlDown && event.shiftKey && key === "i") || key === "f12") {
+      event.preventDefault();
+    }
+  };
 
   onMount(async () => {
     try {
@@ -34,12 +60,18 @@
       //初始化pluginSystem.
       await Promise.all([pluginStore.init(), i18nStore.init()]);
 
-      await windowStore.maximize();
-
       await projectStore.init();
 
-      // 给加载动画一个最小展示时间，避免闪烁（不需要可删除）
+      // 在捕获阶段（第三个参数传 true）监听，这比 hotkeys-js 的绑定更早执行
+      window.addEventListener("keydown", handleKeydown, true);
+
+      // 给加载动画一个最小展示时间，避免闪烁
       // await new Promise((r) => setTimeout(r, 600));
+
+      // 等待系统自举完成。
+      await safeApi().system.bootstrapped();
+
+      await windowStore.maximize();
 
       // 全部就绪，切换到正式界面
       ready = true;
@@ -48,6 +80,10 @@
       console.error("initialization failed", e);
       initError = e;
     }
+  });
+
+  onDestroy(() => {
+    window.removeEventListener("keydown", handleKeydown, true);
   });
 
   // 当前应该渲染的视图 key，用于 AnimatePresence 切换

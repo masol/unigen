@@ -1,0 +1,319 @@
+declare global {
+  // ── Node.js 常用全局 ──
+  // function require(id: string): any;
+  const module: { exports: any };
+  const process: {
+    env: Record<string, string | undefined>;
+    argv: string[];
+    cwd(): string;
+    platform: string;
+  };
+  function setTimeout(
+    cb: (...args: any[]) => void,
+    ms?: number,
+    ...args: any[]
+  ): number;
+  function setInterval(
+    cb: (...args: any[]) => void,
+    ms?: number,
+    ...args: any[]
+  ): number;
+  function clearTimeout(id: number): void;
+  function clearInterval(id: number): void;
+  function setImmediate(cb: (...args: any[]) => void, ...args: any[]): number;
+
+
+  // ────────────────────────────────────────────
+  //  ↓↓↓ 自定义全局 ↓↓↓
+  // ────────────────────────────────────────────
+  /** 应用上下文接口定义 */
+  interface IProjectContext {
+    readonly path: string;
+    readonly wid: number;
+    getPath(partName: "meta" | "visualref"): string;
+    notify(evtName: string, payload: unknown, srcId?: number): boolean;
+  }
+
+  type Capability = {
+    name: string;
+    updatedAt: string;
+    id: string;
+    role: string;
+    goal: string;
+    code: string;
+    input: string[];
+    output: string[];
+    process: string;
+    negative: string;
+    criteria: string;
+    fewshot: {
+      input: string[];
+      output: string[];
+      scenario?: string | undefined;
+      thoughtProcess?: string | undefined;
+      kind?: "pass" | "fail" | undefined;
+    }[];
+    createdAt: string;
+  };
+
+  /**维护本次工作流的状态，可以终止或向渲染进程发出消息。 */
+  interface IRunnerContext {
+    readonly signal: AbortSignal;
+    readonly isAborted: boolean;
+    readonly isForceKilled: boolean;
+    readonly prj: IProjectContext;
+    readonly cmd: {
+      isCommand: boolean;
+      command?: string;
+      args?: Record<string, any>;
+      body: string;
+    };
+
+    push(cap: Capability): void;
+    pop(): Capability | null;
+    triggerAbort(force?: boolean): void;
+    loadFunctor(capaId: string): ICapaFunctor | null;
+    notify(message: string, ...args: unknown[]): void;
+    info(message: string, ...args: unknown[]): void;
+    warn(message: string, ...args: unknown[]): void;
+    error(message: string, ...args: unknown[]): void;
+    debug(message: string, ...args: unknown[]): void;
+  }
+  /**
+ * 排序策略:决定候选的"强弱链"顺序(fallback 依此链依次上溯)。
+ * ⚠️ 空闲优先不属于此策略——它只决定"从链的哪个位置切入",
+ *    绝不打乱本链的相对强弱顺序。
+ */
+  export enum SortStrategy {
+    VersionDesc = 'version-desc',
+    VersionAsc = 'version-asc',
+    ScoreDesc = 'score-desc',
+    ScoreAsc = 'score-asc',
+  }
+
+  /**
+   * 模型能力或版本标签（可根据实际业务扩展字符串字面量）
+   */
+  export type ModelTags = string;
+
+  /**
+   * 智能模型筛选与兜底路由配置项
+   */
+  export interface GetSmartModelOptions {
+    requiredAbilities?: ModelTags[];
+    preferVersion?: ModelTags;
+    minScore?: number;
+
+    /** 用正则匹配 modelId(能力筛选之后再过滤) */
+    modelPattern?: RegExp;
+
+    /** 精确指定 providerId + modelId,不 fallback,只占用并发通道 */
+    exact?: { providerId: string; modelId: string };
+
+    /**
+     * 流式/长任务 slot 兜底超时(毫秒)。默认 30 分钟。
+     * 未来视频等长任务可调大。
+     */
+    streamHoldTimeoutMs?: number;
+    /**
+     * 候选排序策略,决定 fallback 尝试顺序(第 0 个为首选)。
+     * 默认 VersionDesc:最强模型优先。
+     */
+    sort?: SortStrategy;
+    /** 最小输入上下文窗口(Tokens),排除 inctx 不足(或未声明)的模型 */
+    minInctx?: number;
+  }
+
+  /**
+   * 语言模型流式/核心配置项
+   */
+  interface CoreModelOptions {
+    /** 
+     * 指定要使用的模型或其路由策略。
+     * 可以是代表特定模型 ID 的字符串，也可以是复杂的智能路由筛选配置 `GetSmartModelOptions`。
+     */
+    model?: string | GetSmartModelOptions;
+    /** 采样温度，介于 0 和 2 之间。值越大越随机，值越小越集中。 */
+    temperature?: number;
+    /** 核采样（Top-p），用于控制模型生成的确定性。 */
+    topP?: number;
+    /** 惩罚在生成文本中重复出现的词。 */
+    presencePenalty?: number;
+    /** 惩罚在生成文本中频繁出现的词。 */
+    frequencyPenalty?: number;
+    /** 限制模型生成的最大 Token 数量。 */
+    maxTokens?: number;
+    /** 生成文本的停止序列，模型遇到该字符会停止输出。 */
+    stopSequences?: string[];
+    /** 额外的提供商特有参数。 */
+    providerOptions?: Record<string, any>;
+    /** 系统提示词，用于设定 AI 的角色或全局行为规则。 */
+    system?: string;
+    /** 传递给模型的工具集。 */
+    tools?: Record<string, {
+      description?: string;
+      parameters: Record<string, any>;
+    }>;
+  }
+
+  /**
+   * 消息历史记录节点结构
+   */
+  interface ModelMessage {
+    /** 消息角色：'user' 用户, 'assistant' 助手, 'system' 系统, 'tool' 工具响应 */
+    role: 'user' | 'assistant' | 'system' | 'tool';
+    /** 消息文本内容或多模态内容块 */
+    content: string | any[];
+    /** 伴随的工具调用结果（如果角色是 tool） */
+    toolResults?: any[];
+  }
+
+  /**
+   * 模式 A：单一提示词（不能包含 messages）
+   */
+  type PromptArgs = CoreModelOptions & {
+    /** 想要发送给模型的输入提示词 */
+    prompt: string;
+    /** 在 Prompt 模式下，messages 必须为 undefined */
+    messages?: never;
+  };
+
+  /**
+   * 模式 B：对话上下文数组（不能包含 prompt）
+   */
+  type MessagesArgs = CoreModelOptions & {
+    /** 多轮对话的结构化消息历史记录 */
+    messages: ModelMessage[];
+    /** 在 Messages 模式下，prompt 必须为 undefined */
+    prompt?: never;
+  };
+
+  /**
+   * generate 函数的合法参数组合（互斥联合类型）
+   */
+  type GenerateArgs = PromptArgs | MessagesArgs;
+
+  /**
+   * 文本生成执行结果
+   */
+  interface GenerateResult {
+    /** 模型生成的最终文本结果 */
+    text: string;
+    /** 模型停止生成的直接原因 */
+    finishReason: 'stop' | 'length' | 'tool-calls' | 'content-filter' | 'other';
+    /** 本次交互的位置/路由和消耗统计 */
+    usage: {
+      /** 输入提示词消耗的 Token 数 */
+      promptTokens: number;
+      /** 模型输出回复消耗的 Token 数 */
+      completionTokens: number;
+      /** 总消耗 Token 数 */
+      totalTokens: number;
+    };
+    /** 模型在执行过程中触发的工具调用列表 */
+    toolCalls?: any[];
+    /** 工具调用执行后返回的结果列表 */
+    toolResults?: any[];
+  }
+
+  /**
+   * 封装了全局大语言模型能力的通用服务对象
+   */
+  const llm: {
+    /**
+     * 调用大语言模型，直接返回完整的执行结果。
+     * 支持通过单个 `prompt` 或多轮 `messages` 进行文本和工具的生成。
+     * 
+     * @param args 配置项，必须提供 `prompt` 或 `messages` 其中之一。
+     */
+    generate(args: GenerateArgs): Promise<GenerateResult>;
+  };
+
+
+  export interface ICapaFunctor {
+    run(ctx: IRunnerContext): Promise<void>;
+  }
+
+  interface PrjTimeStore<T> {
+    value: T;
+    updatedAt: string | null;
+  }
+
+  /** 数据库访问层，全局可用 */
+  const db: {
+    get<T>(key: string): T | null;
+    set(key: string, value: any): void;
+    remove(key: string): void;
+    getWithTime<T>(key: string): PrjTimeStore<T> | null;
+    geUpdTime(key: string): string | null;
+    geUpdTime(key: string[]): Record<string, string>;
+    geUpdTime(key: string | string[]): string | null | Record<string, string>;
+    getCapaById(id: string): Capability;
+    upcertCapa(capability: Partial<Capability>): string;
+  };
+
+  const cap: Capability;
+
+  /** 维护本次工作流的执行状态，通过这个接口终止工作流，
+   * 记录日志，发出消息以及获取算子(可执行的能力)。 */
+  const ctx: IRunnerContext;
+
+  interface IValidator {
+    isEmail(str: string): boolean;
+    isMobilePhone(str: string, locale?: string): boolean;
+    isURL(str: string): boolean;
+    isStrongPassword(str: string): boolean;
+    isPostalCode(str: string, locale: string): boolean;
+    escape(str: string): string;
+    sanitizeHTML(str: string): string;
+  }
+  const validator: IValidator;
+
+  type IOInfo<IType = unknown, OType = unknown> = {
+    expired: boolean; // 指示是否已过时，如果目标key不存在，或者目标key的更新时间小于input的时间，则设置为true.否则false.这个值指示是否需要重新计算output.
+    inputs: Array<IType | null>;
+    outputs: Array<OType | null>;
+    inputsWithTime: Array<PrjTimeStore<IType> | null> | null;
+    outputsWithTime: Array<PrjTimeStore<OType> | null> | null;
+  };
+
+  interface IGlossary {
+    getIO<ITYpe = any, OType = any>(
+      capa: Capability,
+      reses?: string[],
+      inputKeys?: string[],
+      outputKeys?: string[],
+    ): IOInfo<ITYpe, OType>;
+    save(outputKey: string, value: unknown): boolean;
+  }
+  const glossary: IGlossary;
+
+  const err: {
+    throwPrecondition(msg: string): never;
+    throwNotfound(msg: string): never;
+    throwNotimplement(msg: string): never;
+    throwUnprcessable(msg: string): never;
+    throwCancel(msg: string): never;
+  };
+
+  interface IRadashi {
+    // 对象操作
+    omit<T extends Record<string, any>>(obj: T, keys: string[]): Partial<T>;
+    pick<T extends Record<string, any>>(obj: T, keys: string[]): Partial<T>;
+
+    // 数组操作
+    group<T>(array: T[], getKey: (item: T) => string): Record<string, T[]>;
+    unique<T>(array: T[]): T[];
+
+    // 函数式工具
+    debounce<T extends (...args: any[]) => any>(
+      fn: T,
+      wait: number,
+    ): (...args: Parameters<T>) => void;
+    isString(str: unknown): string;
+  }
+  const util: IRadashi;
+}
+
+export { };
+

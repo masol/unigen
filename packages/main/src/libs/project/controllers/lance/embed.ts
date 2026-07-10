@@ -1,8 +1,8 @@
+import { createEmbeding } from "$libs/model/factory/embed.js";
+import type { EmbedingOp, EmbedType } from "$libs/model/factory/type.js";
 import { ProjectDbKeys } from "$libs/project/dbkeys.js";
 import { configService } from "$libs/store/index.js";
 import { throwNotfound, throwPrecondition, throwUnprcessable } from "$libs/utils/err.js";
-import { createEmbeding } from "$libs/utils/model/factory/embed.js";
-import type { EmbedingOp, EmbedType } from "$libs/utils/model/factory/type.js";
 import type { Provider } from '$types/index.js';
 import Logger from "electron-log";
 import pMap from 'p-map';

@@ -8,11 +8,11 @@ export const KNOWN_PROVIDERS: KnownProvider = [
             {
                 id: "deepseek",
                 label: "DeepSeek (深度求索)",
-                protocol: allProtocols.openai,
+                protocol: allProtocols.deepseek,
                 baseUrl: "https://api.deepseek.com",
                 website: "https://platform.deepseek.com/api_keys",
                 note: "探索人工通用智能（AGI）",
-                maxconn: 3
+                maxconn: 500
             },
             {
                 id: "qwen",
@@ -21,7 +21,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
                 website: "https://bailian.console.aliyun.com/?apiKey=1#/api-key",
                 note: "全栈企业级大模型服务平台",
-                maxconn: 3
+                maxconn: 60
             },
             {
                 id: "siliconflow",
@@ -30,7 +30,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://api.siliconflow.cn/v1",
                 website: "https://cloud.siliconflow.cn/account/ak",
                 note: "提供更便宜、更快速的大模型平台",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "zhipu",
@@ -39,7 +39,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://open.bigmodel.cn/api/paas/v4",
                 website: "https://open.bigmodel.cn/usercenter/apikeys",
                 note: "让机器像人一样思考",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "moonshot",
@@ -48,7 +48,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://api.moonshot.cn/v1",
                 website: "https://platform.moonshot.cn/console/api-keys",
                 note: "寻求陪伴、探索世界的 AI 助手",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "doubao",
@@ -57,7 +57,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
                 website: "https://volcengine.com",
                 note: "你的全能 AI 伙伴",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "wenxin",
@@ -66,7 +66,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://qianfan.baidubce.com/v2",
                 website: "https://baidu.com",
                 note: "知识增强的大语言模型",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "hunyuan",
@@ -75,7 +75,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
                 website: "https://tencent.com",
                 note: "懂思维、擅创作、会编程的 AI 助手",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "baichuan",
@@ -84,7 +84,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://api.baichuan-ai.com/v1",
                 website: "https://baichuan-ai.com",
                 note: "致力于用中国智慧赋能世界",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "minimax",
@@ -93,7 +93,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://api.minimaxi.com/anthropic",
                 website: "https://minimaxi.com",
                 note: "与用户共同陪伴、共同创造世界",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "spark",
@@ -102,7 +102,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://spark-api-open.xf-yun.com/v1/",
                 website: "https://xfyun.cn",
                 note: "解放生产力，释放想象力",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "sensenova",
@@ -111,7 +111,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://sensenova.cn",
                 website: "https://www.sensetime.com",
                 note: "大模型，新范式",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "stepfun",
@@ -120,7 +120,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://api.stepfun.com/v1",
                 website: "https://stepfun.com",
                 note: "迈向通用人工智能的新阶跃",
-                maxconn: 3
+                maxconn: 30
             }
         ]
     },
@@ -134,7 +134,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://api.openai.com/v1",
                 website: "https://platform.openai.com/api-keys",
                 note: "构建安全、受益于全人类的通用人工智能（AGI）",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "anthropic",
@@ -143,7 +143,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://api.anthropic.com",
                 website: "https://console.anthropic.com/settings/keys",
                 note: "构建以人类利益为核心、可靠、可解释的可控 AI 系统",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "google-gemini",
@@ -152,7 +152,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
                 website: "https://aistudio.google.com/apikey",
                 note: "汇聚谷歌前沿技术、最具通用性的原生多模态大模型",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "mistral",
@@ -161,7 +161,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://api.mistral.ai/v1",
                 website: "https://console.mistral.ai/api-keys/",
                 note: "将前沿人工智能技术带向全行业，让大模型触手可及",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "groq",
@@ -170,7 +170,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://api.groq.com/openai/v1",
                 website: "https://console.groq.com/keys",
                 note: "基于 LPU 技术，专为超低延迟、极速推理而生的算力平台",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "together",
@@ -179,7 +179,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://api.together.xyz/v1",
                 website: "https://api.together.ai/settings/api-keys",
                 note: "为全球开发者打造，性能更优、更高效的开源大模型云平台",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "openrouter",
@@ -188,7 +188,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://openrouter.ai/api/v1",
                 website: "https://openrouter.ai/keys",
                 note: "支持跨模型横向对比、自由切换的智能多模型聚合路由服务",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "xai",
@@ -197,7 +197,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://api.x.ai/v1",
                 website: "https://console.x.ai/",
                 note: "打造能回答复杂宇宙问题的智能科技，深入探索世界本质",
-                maxconn: 3
+                maxconn: 30
             },
             {
                 id: "huggingface",
@@ -206,7 +206,7 @@ export const KNOWN_PROVIDERS: KnownProvider = [
                 baseUrl: "https://huggingface.co",
                 website: "https://huggingface.co/",
                 note: "汇聚全球开发者打造的 AI 开源社区",
-                maxconn: 3
+                maxconn: 30
             }
         ]
     }, {

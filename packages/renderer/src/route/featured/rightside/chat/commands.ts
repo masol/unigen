@@ -1,0 +1,35 @@
+// src/lib/components/chat/commands.ts
+export type ChatCommand = {
+    id: string;
+    /** 插入到输入框的文本前缀，例如 "/translate" */
+    label: string;
+    desc: string;
+};
+
+export const chatCommands: ChatCommand[] = [
+    {
+        id: "导出知识库", label: "/export", desc: `将项目知识库导出，支持如下参数:
+--kc 导出到知识库项目类型目录下。
+--noentry: 不导出入口设置信息。
+--nores:\t 不导出资源。
+--nocap:\t 不导出能力。
+--nometag: 不导出元术语。
+` },
+    { id: "summarize", label: "/summarize", desc: "总结当前对话或长文本\n总结当前对话或长文本总结当前对话或长文本总结当前对话或长文本总结当前对话或长文本" },
+    { id: "explain", label: "/explain", desc: "解释术语、概念或代码" },
+    { id: "polish", label: "/polish", desc: "润色 / 改写文字表达" },
+    { id: "clear", label: "/clear", desc: "清空当前对话记录" },
+];
+
+/** 根据输入的查询词过滤命令（去掉开头的 "/"） */
+export function filterCommands(
+    query: string,
+    source: ChatCommand[] = chatCommands,
+): ChatCommand[] {
+    const q = query.replace(/^\//, "").toLowerCase().trim();
+    if (!q) return source;
+    return source.filter(
+        (c) =>
+            c.label.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q),
+    );
+}

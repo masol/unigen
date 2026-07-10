@@ -15,6 +15,7 @@
   import { safeApi } from "$lib/utils/api";
   import { onMount } from "svelte";
   import EditorStatusBar from "../page/editor/EditorStatusBar.svelte";
+  import RunState from "../RunState.svelte";
   import Brand from "./header/brand.svelte";
 
   // ═══════════════════════════════════════════════════════════
@@ -130,7 +131,7 @@
         {/if}
         <span>{currentTypeLabel}</span>
       </button>
-      <Brand />
+      <RunState />
     </div>
 
     <!-- ╭─── / StatusBarProject ───╮ -->

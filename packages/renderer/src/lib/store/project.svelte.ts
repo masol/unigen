@@ -4,6 +4,7 @@ import { hooks } from '$lib/utils/hook';
 import type { RunState } from "@app/main/types";
 import { COMMON_ORPC_ERROR_DEFS, ORPCError } from "@orpc/client";
 import Logger from "electron-log/renderer";
+import { toast } from "svelte-sonner";
 import { DbKeys } from "../../plugins/video/dbkeys";
 import { pluginStore } from "./plugin.svelte";
 import { confirmStore } from "./ui/confirm.svelte";
@@ -47,6 +48,10 @@ class ProjectStore {
 
     async start(): Promise<void> {
         try {
+            if (this.#path.trim().length === 0) {
+                toast.error("尚未打开项目")
+                return
+            }
             await api().project.start();
             this.#runState = await api().project.runState(); // "running";
             console.log("this.#runState=", this.#runState)

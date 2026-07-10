@@ -39,7 +39,7 @@ export async function setupEvt(): Promise<number> {
         }
         if (notyObj.srcId === windowsId) {
             // 过滤自己发出的事件，不再通知回自己。
-            Logger.debug(`过滤自己发出的事件，不再通知回自己。${JSON.stringify(notyObj)}`)
+            // Logger.debug(`过滤自己发出的事件，不再通知回自己。${JSON.stringify(notyObj)}`)
             return;
         }
         evtbus.emit(notyObj.name as keyof Events, notyObj.payload as never);

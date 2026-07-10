@@ -265,15 +265,42 @@ class DashboardStore {
         }
 
         if (projectStore.runState === "terminating") {
-            const ok = await confirmStore.request({
-                title: "强制立即停止？",
-                message:
-                    "当前正在进行的步骤将不会被保存，下次运行需要重新计算这一步。",
-            });
-            if (!ok) return;
-            this.#finalizeStop("已被强制停止 · 最后一步未保存");
+            await this.forceStop();
         }
     };
+
+    private async forceStop() {
+        const ok = await confirmStore.request({
+            title: "强制立即停止？",
+            message:
+                "当前正在进行的步骤将不会被保存，下次运行需要重新计算这一步。",
+        });
+        if (!ok) return;
+        this.#finalizeStop("已被强制停止 · 最后一步未保存");
+    }
+
+    async start(): Promise<boolean> {
+        if (projectStore.runState === "idle") {
+            await this.#startRunning();
+            return true;
+        }
+        return false;
+    }
+
+    async stop(bForce = false): Promise<boolean> {
+        if (projectStore.runState === "idle") {
+            return false;
+        }
+        if (bForce) {
+            await this.forceStop();
+            return true;
+        }
+        if (projectStore.runState === "running") {
+            this.#enterTerminating();
+            return true;
+        }
+        return false;
+    }
 
     clearLogs = (): void => {
         log.debug("[DashboardStore] clearLogs() called");

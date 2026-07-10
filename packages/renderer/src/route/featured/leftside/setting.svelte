@@ -2,6 +2,7 @@
 <script lang="ts">
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Separator } from "$lib/components/ui/separator";
+  import { PinyinFuseSearch } from "$lib/utils/fuse";
   import autoAnimate from "@formkit/auto-animate";
   import {
     IconBrain,
@@ -17,6 +18,7 @@
     IconSettingsOff,
     IconVideo,
   } from "@tabler/icons-svelte";
+  import { debounce } from "radashi";
   import { push, router } from "svelte-spa-router";
   import { settingsPanelStore } from "./settingStore.svelte";
 
@@ -88,7 +90,7 @@
         {
           id: "develops",
           label: "开发",
-          description: "调整AI细节的工具集设置(右侧面板)",
+          description: "AI工作流改进工具的设置(右侧面板)",
           icon: IconCodePlus,
           path: "develops",
           keywords: ["开发", "监督", "审查", "AI协同"],
@@ -195,8 +197,32 @@
     },
   ];
 
-  /** Flat lookup: path → full route for quick matching */
-  // const allItems = builtinGroups.flatMap((g) => g.items);
+  /* ------------------------------------------------------------------ */
+  /*  Search — PinyinFuseSearch                                          */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * 将每个导航条目压平为可搜索的对象数组。
+   * text 汇总了标签、描述、所属分组名与关键词，供拼音/模糊匹配使用；
+   * id 用于把命中结果映射回原始条目。
+   */
+  const searchItems = builtinGroups.flatMap((g) =>
+    g.items.map((item) => ({
+      id: item.id,
+      text: [item.label, item.description, g.label, ...(item.keywords ?? [])]
+        .filter(Boolean)
+        .join(" "),
+    })),
+  );
+
+  const fuseSearch = new PinyinFuseSearch(searchItems, {
+    keys: [
+      { name: "text", weight: 1.0 },
+      { name: "_fullPinyin", weight: 0.5 },
+      { name: "_firstLetters", weight: 0.3 },
+    ],
+    threshold: 0.3,
+  });
 
   /* ------------------------------------------------------------------ */
   /*  State                                                              */
@@ -206,6 +232,20 @@
     general: true,
     models: true,
     api: true,
+  });
+
+  /** 防抖后的查询词，真正驱动过滤逻辑 */
+  let debouncedQuery = $state("");
+
+  /** 输入变化后延迟 200ms 更新 debouncedQuery，减少高频搜索计算 */
+  const applyDebouncedQuery = debounce({ delay: 200 }, (q: string) => {
+    debouncedQuery = q;
+  });
+
+  $effect(() => {
+    // 依赖原始查询词，输入即触发（去抖内部处理节流）
+    applyDebouncedQuery(settingsPanelStore.searchQuery);
+    return () => applyDebouncedQuery.cancel();
   });
 
   /* ------------------------------------------------------------------ */
@@ -232,22 +272,21 @@
       "",
   );
 
-  let hasSearch = $derived(settingsPanelStore.searchQuery.trim().length > 0);
+  let hasSearch = $derived(debouncedQuery.trim().length > 0);
+
+  /** 命中的条目 id 集合；无查询词时为 null 表示不过滤 */
+  let matchedIds = $derived.by((): Set<string | number> | null => {
+    const q = debouncedQuery.trim();
+    if (!q) return null;
+    return new Set(fuseSearch.search(q));
+  });
 
   let filteredGroups = $derived.by((): SettingsGroup[] => {
-    const q = settingsPanelStore.searchQuery.trim().toLowerCase();
-    if (!q) return builtinGroups;
+    if (!matchedIds) return builtinGroups;
     return builtinGroups
       .map((g) => ({
         ...g,
-        items: g.items.filter(
-          (item) =>
-            item.label.toLowerCase().includes(q) ||
-            item.id.toLowerCase().includes(q) ||
-            item.description.toLowerCase().includes(q) ||
-            g.label.toLowerCase().includes(q) ||
-            (item.keywords ?? []).some((k) => k.toLowerCase().includes(q)),
-        ),
+        items: g.items.filter((item) => matchedIds!.has(item.id)),
       }))
       .filter((g) => g.items.length > 0);
   });

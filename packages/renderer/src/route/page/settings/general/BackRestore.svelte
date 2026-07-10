@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { IconDatabaseExport, IconDatabaseImport } from "@tabler/icons-svelte";
   import { Button } from "$lib/components/ui/button";
-  import { toast } from "svelte-sonner";
-  import { api } from "$lib/utils/api";
   import { configStore } from "$lib/store/config.svelte";
+  import { api } from "$lib/utils/api";
+  import { IconDatabaseExport, IconDatabaseImport } from "@tabler/icons-svelte";
   import dayjs from "dayjs";
+  import { toast } from "svelte-sonner";
 
   let fileInput: HTMLInputElement;
 
@@ -58,7 +58,7 @@
 </script>
 
 <section class="space-y-4">
-  <h2 class="text-lg font-medium text-foreground px-1">数据管理</h2>
+  <h2 class="text-lg font-medium text-foreground px-1">配置管理</h2>
   <div
     class="rounded-2xl border border-border/50 bg-card shadow-sm overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-border"
   >
@@ -89,7 +89,7 @@
           onclick={handleBackup}
         >
           <IconDatabaseExport size={16} stroke={1.5} />
-          备份数据
+          备份配置
         </Button>
         <Button
           variant="outline"
@@ -97,7 +97,7 @@
           onclick={handleRestoreClick}
         >
           <IconDatabaseImport size={16} stroke={1.5} />
-          恢复数据
+          恢复配置
         </Button>
       </div>
     </div>

@@ -39,7 +39,7 @@
 </script>
 
 <div
-  class="flex h-full w-full flex-col gap-6 rounded-3xl border border-border/50 bg-background p-8 shadow-sm"
+  class="flex h-full w-full flex-col gap-6"
 >
   {#if !hasProject}
     <!--╭─────────────────────────────────────────────────────╮ -->

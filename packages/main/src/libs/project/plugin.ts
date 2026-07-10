@@ -1,6 +1,7 @@
 import type { IProjectContext } from "./type.js";
 
 export interface IProjectPlugin {
+    readonly type: string;
     dispose(): Promise<void>;
     // 在项目打开后调用，以初始化必要知识库。bCreate指示是打开还是新建--此时，数据库等基础设施已经就绪。
     // 需要插入默认capability的id(entry_capablitiy)以及插入必要的capability，并注册必要的runtime(internal capability).

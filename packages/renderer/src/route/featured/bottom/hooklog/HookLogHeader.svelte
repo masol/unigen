@@ -1,25 +1,25 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
   import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
   import * as Tooltip from "$lib/components/ui/tooltip";
-  // import * as Select from "$lib/components/ui/select";
+// import * as Select from "$lib/components/ui/select";
+  import { api } from "$lib/utils/api";
   import {
     IconAlertTriangle,
-    IconSearch,
-    IconTrash,
-    IconPlayerPause,
-    IconPlayerPlay,
-    IconX,
     IconCircleFilled,
     IconFolder,
+    IconPlayerPause,
+    IconPlayerPlay,
+    IconSearch,
+    IconTrash,
+    IconX,
   } from "@tabler/icons-svelte";
-  import type { LogLevelMeta } from "./types";
-  import { hookLogStore } from "./hook-log.store.svelte";
-  import { api } from "$lib/utils/api";
   import type { LogLevel } from "electron-log";
+  import { hookLogStore } from "./hook-log.store.svelte";
+  import type { LogLevelMeta } from "./types";
 
   let {
     title = "Logs",
@@ -49,7 +49,7 @@
 </script>
 
 <header
-  class="border-border/50 bg-card flex shrink-0 flex-wrap items-center gap-3 border-b px-6 py-3"
+  class="border-border/50 bg-card sticky top-0 z-10 flex shrink-0 flex-wrap items-center gap-3 rounded-t-3xl border-b px-6 py-3 backdrop-blur-sm"
 >
   <div class="flex items-center gap-2">
     <div

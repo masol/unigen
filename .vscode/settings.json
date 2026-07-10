@@ -23,7 +23,7 @@
     "titleBar.inactiveForeground": "#e7e7e799",
     "folderPathColor.custom1": "#FF4488",
     "folderPathColor.custom2": "#c8e9b5",
-    "folderPathColor.custom3": "#4488FF"
+    "folderPathColor.custom3": "#c798d4"
   },
   "peacock.remoteColor": "#ff3d00",
   "workbench.iconTheme": "material-icon-theme",
@@ -54,7 +54,7 @@
     },
     {
       "path": "packages/renderer",
-      "color": "blue",
+      "color": "custom3",
       "symbol": "⚛",
       "tooltip": "Svelte Renderer"
     },

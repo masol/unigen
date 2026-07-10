@@ -27,6 +27,7 @@ class ConfigStore {
     #autoupdate = $state<boolean>(true)
     #disableHA = $state<boolean>(false)
     #silentSave = $state<boolean>(false)
+    #parallelRun = $state<boolean>(false)
 
     #itemsPerPage = $state(10);
     #fontSize = $state(14);
@@ -59,6 +60,7 @@ class ConfigStore {
     get lineNumbers() { return this.#lineNumbers }
     get rmblueprint() { return this.#rmblueprint }
     get silentSave() { return this.#silentSave }
+    get parallelRun() { return this.#parallelRun }
 
     // ── 只读门面：init 异步状态 ──
     get isLoading() { return this.#isLoading }
@@ -139,6 +141,9 @@ class ConfigStore {
             case 'silentSave':
                 this.#silentSave = value as AppConfig['silentSave'];
                 break;
+            case 'parallelRun':
+                this.#parallelRun = value as AppConfig['parallelRun'];
+                break;
             case 'keybindings':
                 this.keybinding.onKeybindingUpdate(value as AppConfig['keybindings'])
                 break;
@@ -154,6 +159,17 @@ class ConfigStore {
         evtbus.on("sys:usedark", (bDark) => {
             if (this.#theme === 'system') {
                 setMode(bDark ? "dark" : "light");
+            }
+        })
+
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        const that = this;
+        evtbus.on("before-input-evt", (evt) => {
+            if ((evt.ctrlKey || evt.metaKey) && evt.key === 'w') {
+                // console.log("keybinding=", that.keybinding)
+                setTimeout(() => {
+                    that.keybinding.trigger('ctrl+w')
+                }, 10);
             }
         })
 
@@ -184,6 +200,7 @@ class ConfigStore {
         this.#lineNumbers = config.lineNumbers
         this.#rmblueprint = config.rmblueprint
         this.#silentSave = config.silentSave
+        this.#parallelRun = config.parallelRun
 
         this.applyTheme();
         this.keybinding.onKeybindingUpdate(config.keybindings);

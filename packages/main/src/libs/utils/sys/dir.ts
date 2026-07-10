@@ -14,3 +14,20 @@ export function embedingPath(): string {
     const dataPath = app.getPath("userData");
     return join(dataPath, "models", "embeding")
 }
+
+
+export function themeFile(fname?: string): string {
+    const dataPath = app.getPath("userData");
+    if (fname && fname.length > 0) {
+        return join(dataPath, "theme", fname)
+    }
+    return join(dataPath, "theme");
+}
+
+export function dataFile(fname?: string): string {
+    const dataPath = app.getPath("userData");
+    if (fname && fname.length > 0) {
+        return join(dataPath, "theme", fname)
+    }
+    return join(dataPath, "theme");
+}

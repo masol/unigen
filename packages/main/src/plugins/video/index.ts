@@ -1,19 +1,20 @@
+import { intereg } from "$libs/blueprint/index.js";
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import { LanceDB } from "$libs/project/controllers/lance/index.js";
 import { ILanceDB } from "$libs/project/controllers/lance/type.js";
 import { ProjectDbKeys } from "$libs/project/dbkeys.js";
 import { IProjectPlugin } from "$libs/project/plugin.js";
 import { IProjectContext } from "$libs/project/type.js";
-import { intereg } from "$libs/utils/blueprint/index.js";
+import { knowledgeCenter } from "$libs/utils/kc.js";
 import { PluginBase } from "../pluginbase.js";
-import { loadDags } from "./capa/dag.js";
 import { getAllExtendInters } from "./capa/index.js";
 import { TableFact } from "./lance/fact.js";
-import { videoMetags } from "./metag/index.js";
 
+//dag: loaded from kc.
+const entryId = "40f832db-9735-4de0-91b1-df17311aa27d";
 
 export class Plugin extends PluginBase {
-    static type: string = "video";
+    readonly type: string = "video";
     static async create(prj: IProjectContext): Promise<IProjectPlugin> {
         const inst = new Plugin(prj);
         return inst;
@@ -36,12 +37,12 @@ export class Plugin extends PluginBase {
         })
 
         const prjdb: PrjDB = PrjDB.ensure(prj);
-
         const imported = prjdb.get<boolean>(ProjectDbKeys.imported);
         if (!imported) {
             // 尚未导入知识库。开始导入。
-            prjdb.upcertMetag(videoMetags);
-            await loadDags(prj, prjdb);
+            await knowledgeCenter.initProject(prj, "video");
+
+            prjdb.set(ProjectDbKeys.entry_capa, entryId);
             prjdb.set(ProjectDbKeys.imported, true);
         }
     }

@@ -10,7 +10,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { metaDirName, type IProjectContext } from "../../type.js";
 // import { PrjJob } from "../../helper/job.js";
-import { metagToJson, type MetagRow, type NewMetagRow } from '$libs/utils/blueprint/metag/is.js';
+import { metagToJson, type MetagRow, type NewMetagRow } from '$libs/blueprint/metag/is.js';
 import { throwNotfound, throwNotimplement, throwPrecondition } from "$libs/utils/err.js";
 import type { Capability, NewCapability } from "$types/blueprint/capability.js";
 import type { PrjTimeStamps, PrjTimeStore } from "$types/prjstore.js";
@@ -252,12 +252,10 @@ export class PrjDB extends BaseProjectController {
                     return capa.code;
                 }
                 // 使用解构剔除不需要的字段，保留其余属性
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { updatedAt, createdAt, code, ...safeCapa } = capa;
-                void (updatedAt)
-                void (createdAt)
-                void (code)
 
-                return JSON.stringify(safeCapa);
+                return JSON.stringify(safeCapa, null, 2);
             }
             case 'glossary':
                 {
@@ -268,7 +266,7 @@ export class PrjDB extends BaseProjectController {
                     if (id.startsWith('_')) { // 资源类的不做JSON化，直接默认其是字符串。
                         return value as string;
                     }
-                    return JSON.stringify(value)
+                    return JSON.stringify(value, null, 2)
                 }
             case 'metag':
                 {
@@ -280,7 +278,7 @@ export class PrjDB extends BaseProjectController {
                     const { updatedAt, createdAt, ...jsonValue } = metagToJson(value)!
                     void (updatedAt)
                     void (createdAt)
-                    return JSON.stringify(jsonValue);
+                    return JSON.stringify(jsonValue, null, 2);
                 }
             default:
                 throwNotimplement(`试图获取未支持的kind:${kind}`)
@@ -291,12 +289,20 @@ export class PrjDB extends BaseProjectController {
     setContent({ kind, id, content, code }: SetItem): string {
         switch (kind) {
             case 'capa': {
+                if (code) {
+                    const newCapa = {
+                        id,
+                        code: content
+                    }
+                    return this.upcertCapa(newCapa);
+                }
                 const cntJson = JSON.parse(content);
-                const newCapa = code ? {
-                    id,
-                    code: content
-                } : { ...cntJson, id }
-                return this.upcertCapa(newCapa)
+                const newCapa = { ...cntJson, id }
+                {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { code, ...rest } = newCapa;
+                    return this.upcertCapa(rest)
+                }
             }
             case 'glossary':
                 {

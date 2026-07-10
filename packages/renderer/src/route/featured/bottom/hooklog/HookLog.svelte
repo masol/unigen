@@ -1,21 +1,21 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { i18nStore } from "$lib/store/i18n.svelte";
   import {
     IconAlertTriangle,
-    IconInfoCircle,
-    IconBug,
     IconBolt,
+    IconBug,
+    IconInfoCircle,
     IconMessage,
     IconSparkles,
   } from "@tabler/icons-svelte";
+  import type { Dayjs } from "dayjs";
+  import type { LogLevel, LogMessage } from "electron-log";
+  import { onDestroy, onMount } from "svelte";
   import { hookLogStore } from "./hook-log.store.svelte";
+  import HookLogFooter from "./HookLogFooter.svelte";
   import HookLogHeader from "./HookLogHeader.svelte";
   import HookLogStream from "./HookLogStream.svelte";
-  import HookLogFooter from "./HookLogFooter.svelte";
   import type { LogLevelMeta } from "./types";
-  import type { LogLevel, LogMessage } from "electron-log";
-  import { i18nStore } from "$lib/store/i18n.svelte";
-  import type { Dayjs } from "dayjs";
 
   type Props = {
     title?: string;
@@ -159,20 +159,11 @@
 </script>
 
 <div
-  class="bg-background text-foreground flex h-full w-full flex-col rounded-3xl"
+  class="bg-background text-foreground flex h-full w-full flex-col overflow-hidden rounded-3xl border border-border/50 shadow-sm"
 >
   <HookLogHeader {title} {stats} levelMeta={LEVEL_META} />
-
   <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-    <HookLogStream
-      {filtered}
-      // {activeScope}
-      levelMeta={LEVEL_META}
-      {formatData}
-    />
-
+    <HookLogStream {filtered} levelMeta={LEVEL_META} {formatData} />
     <HookLogFooter filteredCount={filtered.length} />
   </div>
 </div>
-
-<!-- 需要的组件：Button, Input, Badge, Skeleton, Separator, Tooltip, Select -->

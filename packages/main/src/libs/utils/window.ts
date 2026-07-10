@@ -1,8 +1,8 @@
-import { BrowserWindow, screen, Rectangle } from "electron";
 import { AppInitConfig } from "$types/AppInitConfig.js";
 import { WindowEventPayload, WindowEventType } from "$types/shared/rpcevt.js";
-import { notify } from "./rpcevt.js";
+import { BrowserWindow, Rectangle, screen } from "electron";
 import { RpcContext } from "../../api/type.js";
+import { notify } from "./rpcevt.js";
 
 // ─── 工具函数 ───────────────────────────────────────────────────
 
@@ -136,6 +136,24 @@ export class WindowService {
     } else {
       await browserWindow.loadFile(this.#renderer.path);
     }
+
+    browserWindow.webContents.on('before-input-event', (event, input) => {
+      const key = input.key.toLowerCase()
+
+      const ctrlDown = input.control || input.meta;
+
+      // 1. 拦截 Ctrl + W (关闭标签/窗口)
+      if (ctrlDown && (key === 'w')) {
+        event?.preventDefault()
+        notify(browserWindow, "before-input-evt", {
+          key,
+          ctrlKey: input.control,
+          metaKey: input.meta,
+          shiftKey: input.shift,
+          altKey: input.alt
+        })
+      }
+    })
 
     return browserWindow;
   }

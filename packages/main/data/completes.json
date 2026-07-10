@@ -1,0 +1,8 @@
+[
+    {
+        "label": "util.uuid",
+        "insertText": "util.uuid()",
+        "detail": "(method) util.uuid(): string",
+        "documentation": "生成一个随机 UUID。"
+    }
+]

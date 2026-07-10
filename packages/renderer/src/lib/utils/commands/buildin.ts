@@ -1,4 +1,5 @@
 import { configStore } from "$lib/store/config.svelte";
+import { dashboardStore } from "../../../route/page/fallback/Dashboard/dashstore.svelte";
 import { safeApi } from "../api";
 import type { CommandDescriptor } from "./type";
 
@@ -69,8 +70,48 @@ export const builtins: CommandDescriptor[] = [
         handler: () =>
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }),
     },
+    // ---任务执行---
+    {
+        id: 'project.start',
+        label: '运行项目任务',
+        category: 'Project',
+        handler: () =>
+            dashboardStore.start(),
+    },
+    {
+        id: 'project.stop',
+        label: '终止项目任务',
+        category: 'Project',
+        handler: () =>
+            dashboardStore.stop(),
+    },
+    {
+        id: 'project.forceStop',
+        label: '强制杀死项目任务',
+        category: 'Project',
+        handler: () =>
+            dashboardStore.stop(true),
+    },
 
     // ── 开发者工具 ──
+    {
+        id: 'dev.icon-playground',
+        label: '查看图标试验台',
+        category: 'Developer',
+        handler: () => push('/dev/icon-playground')
+    },
+    {
+        id: 'dev.icons',
+        label: '查看Tabler图标库',
+        category: 'Developer',
+        handler: () => push('/dev/icons')
+    },
+    {
+        id: 'dev.emojis',
+        label: '查看Emoji库',
+        category: 'Developer',
+        handler: () => push('/dev/emojis')
+    },
     {
         id: 'dev.clearConsole',
         label: '清空控制台',

@@ -149,22 +149,26 @@ export const CAPABILITY_TAGS: Record<string, ModelTags> = {
 };
 
 export const protocolLabels: Record<ProviderProtocol, string> = {
+    "openai-compatible": "OpenAI兼容",
     "openai": "OpenAI",
     "anthropic": "Anthropic",
     "google-vertex": "Google AI",
     "xai": "xai",
     "ollama": "Ollama",
     "huggingface": "HusggingFace",
+    "deepseek": "Deepseek",
 };
 
 
 export const allProtocols: Record<string, ProviderProtocol> = {
+    openaiCompatible: "openai-compatible" as ProviderProtocol,
     openai: "openai" as ProviderProtocol,
     anthropic: "anthropic" as ProviderProtocol,
     vertex: "google-vertex" as ProviderProtocol,
     xai: "xai" as ProviderProtocol,
     ollama: "ollama" as ProviderProtocol,
-    huggingface: "huggingface" as ProviderProtocol
+    huggingface: "huggingface" as ProviderProtocol,
+    deepseek: "deepseek" as ProviderProtocol
 };
 
 export function formatTokens(n: number): string {

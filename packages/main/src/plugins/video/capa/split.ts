@@ -1,8 +1,8 @@
 import { throwPrecondition } from "$libs/utils/err.js";
 // import { delay } from "$libs/utils/promise.js";
-import { BaseFunctor, fillCapa } from "$libs/utils/blueprint/capability/base.js";
-import { getIOInfo } from "$libs/utils/blueprint/glossary/ioinfo.js";
-import { saveToOutput } from "$libs/utils/blueprint/glossary/output.js";
+import { BaseFunctor, fillCapa } from "$libs/blueprint/capability/base.js";
+import { getIOInfo } from "$libs/blueprint/glossary/ioinfo.js";
+import { saveToOutput } from "$libs/blueprint/glossary/output.js";
 import { ParaItem, ScriptItem } from "$plugins/video/metag/script.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import { isString } from "radashi";
@@ -71,12 +71,42 @@ export class SplitFunctor extends BaseFunctor {
         }));
     }
 
-    async run(ctx: IRunnerContext): Promise<void> {
+    async doTask(ctx: IRunnerContext): Promise<void> {
         //获取输入
         if (this.capa.input && this.capa.output) {
 
-            const ioInfo = getIOInfo(ctx, this.capa.input, this.capa.output, this.capa);
+            const ioInfo = getIOInfo(ctx, this.capa);
             ctx.debug("split ioInfo=", JSON.stringify(ioInfo, null, 2))
+
+            // 测试模型筛选功能。
+            // const model = getSmartModel({ sort: SortStrategy.VersionAsc }, ctx)
+            // generateText({
+            //     model: model,
+            //     prompt: "输出一个1"
+            // }).then(result => {
+            //     ctx.debug("result=", result.content, model.modelId)
+            // })
+
+            // await delay(10);
+            // const model2 = getSmartModel({ sort: SortStrategy.VersionAsc }, ctx)
+
+            // generateText({
+            //     model: model2,
+            //     prompt: "输出一个2"
+            // }).then(result => {
+            //     ctx.debug("result=", result.content, model2.modelId)
+            // })
+
+            // await delay(10);
+            // const model3 = getSmartModel({ sort: SortStrategy.VersionAsc }, ctx)
+            // generateText({
+            //     model: model3,
+            //     prompt: "输出一个3"
+            // }).then(result => {
+            //     ctx.debug("result=", result.content, model3.modelId)
+            // })
+            // ctx.debug("model=", model.modelId, model2.modelId, model3.modelId)
+
 
             if (ioInfo.expired) {
 

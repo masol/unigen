@@ -2,9 +2,10 @@ import { nativeTheme } from 'electron';
 import type { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../types/ModuleContext.js';
 // import Logger from 'electron-log/main';
-import { intereg } from '$libs/utils/blueprint/index.js';
-import { knowledgeCenter } from '$libs/utils/kc.js';
+import { intereg } from '$libs/blueprint/index.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
+import { themeFile } from '$libs/utils/sys/dir.js';
+import { ensureDir } from 'fs-extra';
 
 // unigen的应用级初始化。
 class UnigenModule implements AppModule {
@@ -25,7 +26,10 @@ class UnigenModule implements AppModule {
             })
         })
 
-        await knowledgeCenter.init();
+        // 确保主题目录存在.
+        await ensureDir(themeFile());
+
+        // await knowledgeCenter.init();
     }
 }
 

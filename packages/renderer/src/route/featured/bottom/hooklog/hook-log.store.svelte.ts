@@ -21,7 +21,7 @@ class HookLogStore {
     #stopping = false;
 
     // ── 私有状态 ──
-    // 高频细粒度 mutation（unshift / pop）→ $state（非 raw）
+    // 高频细粒度 mutation（push / shift）→ $state（非 raw）
     #logs = $state<LogMessage[]>([])
     #connected = $state(false) //流是否在消费中
     #paused = $state(false)
@@ -156,9 +156,9 @@ class HookLogStore {
         try {
             for await (const entry of this.#stream) {
                 if (this.#paused) continue
-                this.#logs.unshift(entry)
+                this.#logs.push(entry)
                 if (this.#logs.length > this.#maxBuffer) {
-                    this.#logs.pop()
+                    this.#logs.shift()
                 }
                 this.#lastUpdated = Date.now()
             }
