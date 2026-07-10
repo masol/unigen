@@ -1,13 +1,14 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { configStore } from "$lib/store/config.svelte";
-  import { pluginStore } from "$lib/store/plugin.svelte";
   import { projectStore } from "$lib/store/project.svelte";
   import {
     IconFolderOpen,
     IconFolderPlus,
     IconLoader2,
   } from "@tabler/icons-svelte";
+
+  import { dialogStore } from "$lib/store/ui/dialog.svelte";
+  import SelectProjectTypeDialog from "./project-type/SelectProjectTypeDialog.svelte";
 
   async function handleOpenProject() {
     if (projectStore.isBusy) return;
@@ -23,6 +24,15 @@
     if (projectStore.isBusy) return;
     projectStore.loading = "new";
     try {
+      const typeId = await dialogStore.safeShow(
+        SelectProjectTypeDialog,
+        {
+          // onManage 留给你实现内部路由跳转（非新窗口）
+          onManage: () => alert("/settings/project-types"),
+        },
+        { size: "xl" }, // 宽屏网格，选用 xl
+      );
+      if (typeId === null) return; // 用户取消
       await projectStore.create();
     } finally {
       projectStore.loading = null;
@@ -55,6 +65,6 @@
     {:else}
       <IconFolderPlus class="size-4" stroke={1.5} />
     {/if}
-    新建项目({pluginStore.getPluginName(configStore.projectype)})
+    新建项目
   </Button>
 </div>

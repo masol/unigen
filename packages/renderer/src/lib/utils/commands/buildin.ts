@@ -95,6 +95,24 @@ export const builtins: CommandDescriptor[] = [
 
     // ── 开发者工具 ──
     {
+        id: 'dev.icon-playground',
+        label: '查看图标试验台',
+        category: 'Developer',
+        handler: () => push('/dev/icon-playground')
+    },
+    {
+        id: 'dev.icons',
+        label: '查看Tabler图标库',
+        category: 'Developer',
+        handler: () => push('/dev/icons')
+    },
+    {
+        id: 'dev.emojis',
+        label: '查看Emoji库',
+        category: 'Developer',
+        handler: () => push('/dev/emojis')
+    },
+    {
         id: 'dev.clearConsole',
         label: '清空控制台',
         category: 'Developer',

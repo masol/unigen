@@ -1,4 +1,4 @@
-import Logger from 'electron-log/main.js';
+import { appLife } from '$libs/utils/tapable/applife.js';
 import { createModuleRunner } from './ModuleRunner.js';
 import { terminateAppOnLastWindowClose } from './modules/ApplicationTerminatorOnLastWindowClose.js';
 import { autoUpdater } from './modules/AutoUpdater.js';
@@ -48,5 +48,6 @@ export async function initApp(initConfig: AppInitConfig) {
   await moduleRunner;
 
   // @TODO: system inited,notify browser here!!
-  Logger.debug("todo: system inited,notify browser here!!")
+  // Logger.debug("todo: system inited,notify browser here!!")
+  appLife.bootstrapped.resolve();
 }

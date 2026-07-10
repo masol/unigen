@@ -12,6 +12,7 @@ import { join } from 'path'
 import { z } from 'zod'
 // import { genText } from '$libs/utils/model/factory/node-llama-cpp/local.js'
 import { throwCancel } from '$libs/utils/err.js'
+import { appLife } from '$libs/utils/tapable/applife.js'
 
 // ─── Zod Schemas ─────────────────────────────────────────────
 const fileFilterPresetSchema = z.enum(FileFilterPreset)
@@ -345,12 +346,10 @@ const streamLogs = os
         }
     });
 
-// const genTextApi = os
-//     .input(z.string())
-//     .output(z.string())
-//     .handler(async ({ input }) => {
-//         return await genText(input)
-//     })
+const bootstrapped = os
+    .handler(async () => {
+        await appLife.bootstrapped.promise;
+    })
 
 
 export default {
@@ -363,5 +362,6 @@ export default {
     listmodel,
     getPath,
     streamLogs,
-    version
+    version,
+    bootstrapped
 }

@@ -1,12 +1,16 @@
-import { AsyncParallelHook } from 'tapable';
-import pTimeout from 'p-timeout';
 import type { App } from 'electron';
 import Logger from 'electron-log/main.js';
+import pTimeout from 'p-timeout';
+import { AsyncParallelHook } from 'tapable';
+import { TrackableDeferred } from '../promise.js';
 
 class AppLife {
     public hooks = {
         beforeQuit: new AsyncParallelHook<[]>()
     };
+
+    //指示是否初始化完毕了。
+    public bootstrapped: TrackableDeferred<void> = new TrackableDeferred<void>();
 
     private isCleanedUp = false;
 

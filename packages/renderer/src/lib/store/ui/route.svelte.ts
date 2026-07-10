@@ -6,6 +6,9 @@ import {
     wrap,
     type AsyncSvelteComponent, // 懒加载 loader 标准类型
 } from "svelte-spa-router/wrap";
+import EmojiGallery from '../../../route/page/dev/emoji-gallery.svelte';
+import IconGallery from '../../../route/page/dev/icon-gallery.svelte';
+import IconPlayground from "../../../route/page/dev/icon-playground.svelte";
 import EditorPage from '../../../route/page/editor/EditorPage.svelte';
 import FallbackComponent from "../../../route/page/fallback/Main.svelte";
 import DevSetting from "../../../route/page/settings/develops/DevSettingsPanel.svelte";
@@ -45,6 +48,9 @@ class RouterStore {
         // content 为可选查询/路径参数
         '/editor/:kind/:id': EditorPage,
         '/editor/:kind/:id/:content?': EditorPage,
+        '/dev/icons': IconGallery,
+        '/dev/emojis': EmojiGallery,
+        '/dev/icon-playground': IconPlayground,
         "*": FallbackComponent,
     });
 

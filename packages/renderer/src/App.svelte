@@ -14,7 +14,7 @@
   import { ModeWatcher } from "mode-watcher";
   import { onDestroy, onMount } from "svelte";
   import { AnimatePresence, Motion } from "svelte-motion";
-  import { api, setupEvt } from "./lib/utils/api";
+  import { api, safeApi, setupEvt } from "./lib/utils/api";
   import Layout from "./route/layout.svelte";
 
   // 初始化完成标记：未完成时显示加载页
@@ -60,8 +60,6 @@
       //初始化pluginSystem.
       await Promise.all([pluginStore.init(), i18nStore.init()]);
 
-      await windowStore.maximize();
-
       await projectStore.init();
 
       // 在捕获阶段（第三个参数传 true）监听，这比 hotkeys-js 的绑定更早执行
@@ -69,6 +67,11 @@
 
       // 给加载动画一个最小展示时间，避免闪烁
       // await new Promise((r) => setTimeout(r, 600));
+
+      // 等待系统自举完成。
+      await safeApi().system.bootstrapped();
+
+      await windowStore.maximize();
 
       // 全部就绪，切换到正式界面
       ready = true;
