@@ -108,7 +108,7 @@ export class CmdRunner extends BaseRunner {
         if (!cmdInfo.isCommand) {
             const capId = prjdb.get<string>(ProjectDbKeys.entry_common);
             if (!capId) {
-                throwPrecondition(`请求执行命令"${cmdInfo.command ?? ""}"，但是未能发现对应${ProjectDbKeys.entry_common}的入口定义，请自行编辑术语表，添加此入口。`)
+                throwPrecondition(`在执行命令路由时，未能发现${ProjectDbKeys.entry_common}入口定义，请自行编辑术语表，添加此入口到一个能力上。`)
             }
             return await this.runCap(capId, ctx);
         }

@@ -1,6 +1,7 @@
 <!-- src/lib/components/chat/ChatMessageList.svelte -->
 <script lang="ts">
   import { stickToBottom } from "$lib/components/action/stick-to-bottom";
+  import ChatMessage from "$lib/components/markdown/Message.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as Chat from "$lib/components/ui/chat";
   import { Skeleton } from "$lib/components/ui/skeleton";
@@ -128,8 +129,8 @@
           <!-- │ [可抽取子组件 → ChatMessageBlock.svelte]            │ -->
           <!-- │ 职责：单条消息 — 元信息栏(头像/角色/拷贝) + 全宽内容 │ -->
           <!-- ╰─────────────────────────────────────────────────────╯ -->
-          <div class="group/msg flex flex-col gap-1.5">
-            <!-- 元信息栏：头像 + 角色名 + 拷贝按钮，同占一行；用户靠右、AI 靠左 -->
+          <div class="group/msg flex min-w-0 flex-col gap-1.5">
+            <!-- 元信息栏：用户靠右、AI 靠左 -->
             <div
               class={[
                 "flex items-center gap-2",
@@ -169,16 +170,18 @@
               </Button>
             </div>
 
-            <!-- 内容气泡：占满整行宽度，仅用底色区分角色 -->
+            <!-- 内容气泡：错误 → destructive 底；用户 → 淡主色底；助手 → 淡 muted 底 -->
             <div
               class={[
-                "w-full rounded-2xl p-3 text-sm leading-relaxed whitespace-pre-wrap wrap-break-word",
-                isUser(message.role)
-                  ? "bg-primary text-primary-foreground"
-                  : "border border-border/50 bg-muted/60 text-foreground",
+                "w-full min-w-0 rounded-2xl p-3 text-sm leading-relaxed wrap-break-word",
+                message.isError
+                  ? "border border-destructive/30 bg-destructive/5 text-destructive"
+                  : isUser(message.role)
+                    ? "border border-primary/15 bg-primary/8 text-foreground"
+                    : "border border-border/50 bg-muted/40 text-foreground",
               ]}
             >
-              {message.content}
+              <ChatMessage {message} />
             </div>
           </div>
           <!-- ╭─── / ChatMessageBlock ───╮ -->

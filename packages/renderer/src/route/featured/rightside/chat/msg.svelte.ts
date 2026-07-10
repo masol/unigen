@@ -1,16 +1,10 @@
 // src/lib/stores/msg.svelte.ts
+import type { Message } from "$lib/components/markdown/type";
 import { safeApi } from "$lib/utils/api";
 import evtbus from "$lib/utils/evtbus";
 import Logger from "electron-log/renderer.js";
 import pTimeout, { TimeoutError } from "p-timeout";
 import { toast } from "svelte-sonner"; // 按你的项目实际 toast 库调整
-
-export type Message = {
-    id: string;
-    role: "user" | "assistant";
-    content: string;
-    timestamp: Date;
-};
 
 export type ReflectPhase = {
     title: string;
@@ -130,6 +124,7 @@ class MessageStore {
         const deferred = createDeferred();
         this.#pendingSeqs.set(seq, deferred);
         let finalText = "";
+        let responsed = false;
 
         try {
 
@@ -140,7 +135,18 @@ class MessageStore {
 
             for await (const evt of stream) {
                 if (signal.aborted) break;
-                if (evt.type === "phase") this.phase = evt.phase;
+                if (evt.type === "phase") {
+                    if (evt.phase.title === 'error') {
+                        this.addMessage({
+                            role: "assistant",
+                            isError: true,
+                            content: evt.phase.detail,
+                        });
+                        responsed = true;
+                    } else {
+                        this.phase = evt.phase;
+                    }
+                }
                 else finalText = evt.text;
             }
 
@@ -158,8 +164,10 @@ class MessageStore {
             } else {
                 this.addMessage({
                     role: "assistant",
+                    isError: true,
                     content: `处理失败：${err instanceof Error ? err.message : String(err)}`,
                 });
+                responsed = true;
             }
         } finally {
             if (stream && typeof stream.return === "function") {
@@ -182,8 +190,8 @@ class MessageStore {
                     role: "assistant",
                     content: `您终止了当前任务，查看日志了解执行细节。`,
                 });
-            } else {
-                this.addMessage({ role: "assistant", content: "任务正常结束，但是AI没有返回任意最终文本，请查阅日志了解细节。" });
+            } else if (!responsed) {
+                this.addMessage({ role: "assistant", isError: true, content: "任务正常结束，但是AI没有返回任意最终文本，请查阅日志了解细节。" });
             }
             this.phase = null;
             this.isAborting = false;
@@ -211,6 +219,7 @@ class MessageStore {
                 const msg = "终止任务超时：未能确认主进程的任务已完全结束。为安全起见，请关闭全部窗口并重启应用，避免悬置的能力组件意外更新术语库。"
                 this.addMessage({
                     role: "assistant",
+                    isError: true,
                     content: msg,
                 });
                 toast.error(msg);

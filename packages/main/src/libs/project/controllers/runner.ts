@@ -3,7 +3,6 @@ import { RunnerContext } from "$libs/utils/blueprint/context.js";
 import { CapaRunner, CmdRunner } from "$libs/utils/blueprint/runner/index.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import type { RunState } from "$types/index.js";
-import Logger from "electron-log";
 import { getErrorMessage } from "radashi";
 import { ProjectDbKeys } from "../dbkeys.js";
 import type { IProjectContext } from "../type.js";
@@ -46,12 +45,12 @@ export class PrjRunner extends BaseProjectController {
             this.#cmdrunner = new CmdRunner();
             await this.#cmdrunner.run(command, ctx)
         } catch (e) {
-            const msg = `## 执行命令${command}时发生错误： 
-            ${getErrorMessage(e)}`;
+            const msg = `## 命令执行错误： 
+${getErrorMessage(e)}`;
             if (fnNotify) {
-                fnNotify("", msg);
+                fnNotify("error", msg);
             }
-            Logger.error(msg)
+            // Logger.error(msg)
         } finally {
             this.#cmdrunner = null;
             ctx.fnNotify = null;

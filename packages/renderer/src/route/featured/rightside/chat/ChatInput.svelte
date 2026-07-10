@@ -68,6 +68,10 @@
     tick().then(adjustHeight);
   });
 
+  $effect(() => {
+    if (!sending) textarea?.focus();
+  });
+
   function adjustHeight() {
     if (!textarea) return;
     textarea.style.height = "auto";
