@@ -7,7 +7,14 @@ export type ChatCommand = {
 };
 
 export const chatCommands: ChatCommand[] = [
-    { id: "translate", label: "/translate", desc: "翻译选中或输入的内容" },
+    {
+        id: "导出知识库", label: "/export", desc: `将项目知识库导出，支持如下参数:
+--kc 导出到知识库项目类型目录下。
+--noentry: 不导出入口设置信息。
+--nores:\t 不导出资源。
+--nocap:\t 不导出能力。
+--nometag: 不导出元术语。
+` },
     { id: "summarize", label: "/summarize", desc: "总结当前对话或长文本\n总结当前对话或长文本总结当前对话或长文本总结当前对话或长文本总结当前对话或长文本" },
     { id: "explain", label: "/explain", desc: "解释术语、概念或代码" },
     { id: "polish", label: "/polish", desc: "润色 / 改写文字表达" },

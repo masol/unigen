@@ -1,4 +1,4 @@
-import type { MetagRow, NewMetagRow } from "$libs/utils/blueprint/metag/is.js";
+import type { MetagRow, NewMetagRow } from "$libs/blueprint/metag/is.js";
 import { metag } from "$libs/utils/db/schema/metag.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import { PrjTimeStamps } from "$types/prjstore.js";

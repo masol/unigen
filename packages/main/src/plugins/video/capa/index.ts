@@ -1,4 +1,4 @@
-import type { BaseFunctor } from "$libs/utils/blueprint/capability/base.js";
+import type { BaseFunctor } from "$libs/blueprint/capability/base.js";
 import { SplitFunctor } from "./split.js";
 
 

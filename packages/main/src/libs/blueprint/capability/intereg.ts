@@ -1,4 +1,4 @@
-import { getInternalName } from "$libs/utils/blueprint/capability/is.js";
+import { getInternalName } from "$libs/blueprint/capability/is.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import type { Capability } from "$types/blueprint/capability.js";
 import type { BaseFunctor } from "./base.js";

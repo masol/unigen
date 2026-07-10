@@ -1,10 +1,10 @@
+import { intereg } from "$libs/blueprint/index.js";
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import { LanceDB } from "$libs/project/controllers/lance/index.js";
 import { ILanceDB } from "$libs/project/controllers/lance/type.js";
 import { ProjectDbKeys } from "$libs/project/dbkeys.js";
 import { IProjectPlugin } from "$libs/project/plugin.js";
 import { IProjectContext } from "$libs/project/type.js";
-import { intereg } from "$libs/utils/blueprint/index.js";
 import { knowledgeCenter } from "$libs/utils/kc.js";
 import { PluginBase } from "../pluginbase.js";
 import { getAllExtendInters } from "./capa/index.js";
@@ -14,7 +14,7 @@ import { TableFact } from "./lance/fact.js";
 const entryId = "40f832db-9735-4de0-91b1-df17311aa27d";
 
 export class Plugin extends PluginBase {
-    static type: string = "video";
+    readonly type: string = "video";
     static async create(prj: IProjectContext): Promise<IProjectPlugin> {
         const inst = new Plugin(prj);
         return inst;

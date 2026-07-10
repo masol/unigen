@@ -1,4 +1,4 @@
-import { listModels } from '$libs/utils/model/list.js'
+import { listModels } from '$libs/model/list.js'
 import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
 import { WindowService } from '$libs/utils/window.js'
 import { FileFilterPreset } from '$types/shared/api/sys.js'

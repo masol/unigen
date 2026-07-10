@@ -10,7 +10,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { metaDirName, type IProjectContext } from "../../type.js";
 // import { PrjJob } from "../../helper/job.js";
-import { metagToJson, type MetagRow, type NewMetagRow } from '$libs/utils/blueprint/metag/is.js';
+import { metagToJson, type MetagRow, type NewMetagRow } from '$libs/blueprint/metag/is.js';
 import { throwNotfound, throwNotimplement, throwPrecondition } from "$libs/utils/err.js";
 import type { Capability, NewCapability } from "$types/blueprint/capability.js";
 import type { PrjTimeStamps, PrjTimeStore } from "$types/prjstore.js";

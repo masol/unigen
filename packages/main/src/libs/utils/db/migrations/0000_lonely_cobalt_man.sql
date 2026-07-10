@@ -10,6 +10,8 @@ CREATE TABLE `capabilities` (
 	`role` text DEFAULT '' NOT NULL,
 	`goal` text DEFAULT '' NOT NULL,
 	`code` text DEFAULT '' NOT NULL,
+	`chunk` text,
+	`dims` text DEFAULT '[]' NOT NULL,
 	`input` text DEFAULT '[]' NOT NULL,
 	`output` text DEFAULT '[]' NOT NULL,
 	`process` text DEFAULT '' NOT NULL,

@@ -1,7 +1,7 @@
+import type { EmbedType } from "$libs/model/factory/type.js";
 import type { Connection } from "@lancedb/lancedb";
 import type { LanceDBType } from "./lancedb.js";
 import type { TableBase, TableConstructor } from "./tablebase.js";
-import type { EmbedType } from "$libs/utils/model/factory/type.js";
 
 
 export interface ILanceDB {

@@ -1,5 +1,5 @@
+import { ICapaFunctor } from "$libs/blueprint/capability/type.js";
 import type { IProjectContext } from "$libs/project/type.js";
-import { ICapaFunctor } from "$libs/utils/blueprint/capability/type.js";
 import type { Capability } from "./capability.js";
 
 

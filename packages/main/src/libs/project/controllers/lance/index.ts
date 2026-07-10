@@ -1,5 +1,5 @@
+import type { EmbedingOp, EmbedType } from '$libs/model/factory/type.js';
 import { throwNotfound, throwPrecondition } from '$libs/utils/err.js';
-import type { EmbedingOp, EmbedType } from '$libs/utils/model/factory/type.js';
 import type { Connection } from '@lancedb/lancedb';
 import Logger from 'electron-log/main.js';
 import { join } from 'node:path';

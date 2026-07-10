@@ -1,7 +1,7 @@
 // 处理capability的内存态--一旦capability加载进入内容，相当于传统的functor.
 
+import { type Capability, getInternalName, isCode, isWorkflow } from "$libs/blueprint/capability/is.js";
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
-import { type Capability, getInternalName, isCode, isWorkflow } from "$libs/utils/blueprint/capability/is.js";
 import { throwNotimplement } from "$libs/utils/err.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { DirectedGraph } from "graphology";

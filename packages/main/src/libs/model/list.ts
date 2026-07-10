@@ -1,5 +1,5 @@
 import type { ModelOption } from "$types/shared/model.js";
-import { throwUnprcessable } from "../err.js";
+import { throwUnprcessable } from "../utils/err.js";
 
 export async function listModels(baseURL: string, apiKey: string): Promise<ModelOption[]> {
 

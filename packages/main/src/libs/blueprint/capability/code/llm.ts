@@ -1,4 +1,4 @@
-import { getSmartModel } from "$libs/utils/model/index.js";
+import { getSmartModel } from "$libs/model/index.js";
 import { LlmParamArgs } from "$types/ai/gentext.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import { generateText } from "ai";

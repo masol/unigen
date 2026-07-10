@@ -23,7 +23,7 @@ export type QueryParams = z.infer<typeof QueryParamsSchema>;
 export const ListItemSchema = z.object({
     name: z.string(),
     updatedAt: z.string(),
-    on: z.string().nullish().optional(), // 使用optional，兼容所有种类
+    on: z.string().nullish().optional(), // object name-- 也就是capa的name字段。其它表不返回。用于renderer判断是否可编辑内容的。
 });
 export type ListItem = z.infer<typeof ListItemSchema>;
 

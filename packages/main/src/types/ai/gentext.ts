@@ -1,4 +1,4 @@
-import { GetSmartModelOptions } from "$libs/utils/model/index.js";
+import { GetSmartModelOptions } from "$libs/model/index.js";
 import { generateText, type ModelMessage } from "ai";
 
 export type GenTextArgs = Parameters<typeof generateText>[0];

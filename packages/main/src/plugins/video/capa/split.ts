@@ -1,8 +1,8 @@
 import { throwPrecondition } from "$libs/utils/err.js";
 // import { delay } from "$libs/utils/promise.js";
-import { BaseFunctor, fillCapa } from "$libs/utils/blueprint/capability/base.js";
-import { getIOInfo } from "$libs/utils/blueprint/glossary/ioinfo.js";
-import { saveToOutput } from "$libs/utils/blueprint/glossary/output.js";
+import { BaseFunctor, fillCapa } from "$libs/blueprint/capability/base.js";
+import { getIOInfo } from "$libs/blueprint/glossary/ioinfo.js";
+import { saveToOutput } from "$libs/blueprint/glossary/output.js";
 import { ParaItem, ScriptItem } from "$plugins/video/metag/script.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import { isString } from "radashi";

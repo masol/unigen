@@ -1,3 +1,5 @@
+import { isCapability } from '$libs/blueprint/capability/is.js';
+import { isMetagJson, metagFromJson } from '$libs/blueprint/metag/is.js';
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { IProjectContext } from '$libs/project/type.js';
 import { app } from 'electron';
@@ -8,8 +10,6 @@ import { mkdir, readFile, writeFile } from 'fs/promises';
 import pMap from 'p-map';
 import { basename, dirname, extname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { isCapability } from './blueprint/capability/is.js';
-import { isMetagJson, metagFromJson } from './blueprint/metag/is.js';
 import { throwUnprcessable } from './err.js';
 
 /** 收集到的单个文件 */

@@ -6,6 +6,7 @@ import type { CommandInfo, IRunnerContext } from '$types/blueprint/context.js';
 import { parse, ParseEntry } from 'shell-quote';
 import yargsParser from 'yargs-parser';
 import { BaseRunner } from './base.js';
+import { runCmd as doExport } from './commands/export/runCmd.js';
 
 
 /**
@@ -80,24 +81,26 @@ export function parseCommandWithBody(userInput: string): CommandInfo {
 
 // 命令执行器。解析命令字符串并加以执行。
 export class CmdRunner extends BaseRunner {
-    private async runCmdEntry(prjdb: PrjDB, cmd: CommandInfo, ctx: IRunnerContext) {
-
-        const kvKey4cap = `entry_${cmd.command}`;
+    private async runCmdEntry(ctx: IRunnerContext) {
+        const kvKey4cap = `entry_${ctx.cmd.command}`;
+        const prjdb: PrjDB = PrjDB.ensure(ctx.prj);
         const capId = prjdb.get<string>(kvKey4cap);
         if (!capId) {
-            throwPrecondition(`请求执行命令"${cmd.command ?? ""}"，但是未能发现对应${kvKey4cap}的入口定义，请自行编辑术语表，添加此入口。`)
+            throwPrecondition(`请求执行命令"${ctx.cmd.command ?? ""}"，但是未能发现对应${kvKey4cap}的入口定义，请自行编辑术语表，添加此入口。`)
         }
-
         return await this.runCap(capId, ctx);
     }
 
-    private async dispatch(prjdb: PrjDB, cmd: CommandInfo, ctx: IRunnerContext): Promise<void> {
-        switch (cmd.command) {
+    private async dispatch(ctx: IRunnerContext): Promise<void> {
+        switch (ctx.cmd.command) {
+            case 'export':
+                await doExport(ctx);
+                break;
             case 'test':
                 await delay(10000, ctx.signal);
                 break;
             default:
-                return await this.runCmdEntry(prjdb, cmd, ctx);
+                return await this.runCmdEntry(ctx);
         }
     }
 
@@ -112,6 +115,6 @@ export class CmdRunner extends BaseRunner {
             }
             return await this.runCap(capId, ctx);
         }
-        return await this.dispatch(prjdb, cmdInfo, ctx);
+        return await this.dispatch(ctx);
     }
 }

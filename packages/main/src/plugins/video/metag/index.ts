@@ -1,4 +1,4 @@
-import { NewMetagRow } from "$libs/utils/blueprint/metag/is.js";
+import { NewMetagRow } from "$libs/blueprint/metag/is.js";
 import { z } from "zod";
 import { ParaItemSchema, ScriptItemSchema } from "./script.js";
 
