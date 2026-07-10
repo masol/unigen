@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 检出主仓库代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 同步docs到Wiki
         uses: Andrew-Chen-Wang/github-wiki-action@v5
