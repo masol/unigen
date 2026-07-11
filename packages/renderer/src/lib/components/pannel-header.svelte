@@ -1,15 +1,16 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
 
   import {
     IconArrowsMaximize,
     IconArrowsMinimize,
     IconEyeOff,
   } from "@tabler/icons-svelte";
-  import type { Component, Snippet } from "svelte";
+  import type { Snippet } from "svelte";
 
   import type { PanelHeaderComponent } from "$lib/store/ui/layout.svelte";
+  import { RuntimeIcon } from "./runtimeicon";
 
   let {
     title = "面板",
@@ -28,14 +29,13 @@
     onClose?: () => void;
     showMaximize?: boolean;
     showClose?: boolean;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    icon?: Component<any>;
+    icon?: string;
     actions?: Snippet;
     headerComponent?: PanelHeaderComponent;
   } = $props();
 
   let HeaderContent = $derived(headerComponent);
-  let HeaderIcon = $derived(icon);
+  let iconName = $derived(icon);
 
   let headerClasses = $derived(
     isMaximized
@@ -68,7 +68,7 @@
       <!-- 图标在左侧 -->
       {#if icon && isMaximized}
         <div class="flex h-full shrink-0 items-center">
-          <HeaderIcon class={iconClasses}></HeaderIcon>
+          <RuntimeIcon name={iconName} class={iconClasses}></RuntimeIcon>
         </div>
       {/if}
       <!-- 动态组件：h-full + items-center 强制垂直居中 -->
@@ -89,7 +89,7 @@
       {/if}
 
       {#if icon}
-        <HeaderIcon class={iconClasses}></HeaderIcon>
+        <RuntimeIcon name={iconName} class={iconClasses}></RuntimeIcon>
       {/if}
 
       <span

@@ -37,7 +37,7 @@
   <ScrollArea class="flex-1 min-h-0">
     <div class="p-2">
       {#if currentItem?.component}
-        <currentItem.component />
+        <currentItem.component {...layoutStore.activeProps} />
       {:else}
         <PanelFallback activityId={layoutStore.activeActivity ?? ""} />
       {/if}

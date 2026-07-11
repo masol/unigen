@@ -6,6 +6,7 @@ import { COMMON_ORPC_ERROR_DEFS, ORPCError } from "@orpc/client";
 import Logger from "electron-log/renderer";
 import { toast } from "svelte-sonner";
 import { DbKeys } from "../../plugins/video/dbkeys";
+import { activityStore } from "./dyn/activity.svelte";
 import { pluginStore } from "./plugin.svelte";
 import { confirmStore } from "./ui/confirm.svelte";
 
@@ -108,7 +109,7 @@ class ProjectStore {
     }
 
     async close(): Promise<void> {
-
+        activityStore.setupActivities();
     }
 
     private async doCreate(bForce: boolean, pathName?: string): Promise<boolean> {

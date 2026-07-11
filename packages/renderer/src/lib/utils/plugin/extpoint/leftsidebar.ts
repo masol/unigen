@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // $lib/utils/plugin/extpoint/leftsidebar.ts
-import type { Component } from 'svelte';
-import type { PluginBaseItem, IPluginExtensionPoint } from '$lib/types/plugin/extpoint/slot';
 import { layoutStore } from '$lib/store/ui/layout.svelte';
+import type { IPluginExtensionPoint, PluginBaseItem } from '$lib/types/plugin/extpoint/slot';
 import Logger from 'electron-log/renderer';
+import type { Component } from 'svelte';
 
 /**
  * 左侧边栏扩展项定义
@@ -12,11 +12,13 @@ export interface LeftSidebarItem extends PluginBaseItem {
     /** 显示标签 */
     label: string;
     /** 图标组件（Tabler Icons） */
-    icon: Component<any>;
+    icon: string;
     /** 面板内容组件 */
     component: Component<any>;
     /** 面板header组件 */
-    header: Component<any> | null;
+    header?: Component<any> | null;
+    // 添加属性信息。
+    props?: Record<string, unknown>;
 }
 
 /**

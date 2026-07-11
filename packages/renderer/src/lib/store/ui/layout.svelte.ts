@@ -6,11 +6,11 @@
 // 所有操作均为同步状态切换，无异步 I/O，故不设 isLoading/error/lastUpdated
 // ═══════════════════════════════════════════════════════════════
 
+import type { LeftSidebarItem } from '$lib/utils/plugin/extpoint/leftsidebar'
 import log from 'electron-log/renderer'
 import type { Component } from 'svelte'
-import type { LeftSidebarItem } from '$lib/utils/plugin/extpoint/leftsidebar'
-import bottomActivities from '../../../route/featured/leftside/bottom'
 import { SvelteMap } from 'svelte/reactivity'
+import bottomActivities from '../../../route/featured/leftside/bottom'
 // ─── 类型 ────────────────────────────────────────────────────
 
 /** 三个可控面板位置 */
@@ -89,6 +89,9 @@ class LayoutStore {
     #activeActivity = $state<string | null>(null)
 
     get activeActivity(): string | null { return this.#activeActivity }
+    get activeProps(): Record<string, unknown> {
+        return this.activeActivityItem?.props ?? {}
+    }
 
     readonly activeActivityItem = $derived.by(() => {
         if (!this.#activeActivity) {
@@ -234,7 +237,7 @@ class LayoutStore {
         } else {
             // 切换到新项
             this.#activeActivity = id
-            this.#leftHeaderComponent = item.header
+            this.#leftHeaderComponent = item.header ?? null
             this.#leftContentComponent = item.component
             this.#isLeftOpen = true
             // 左侧栏展开时，若其他面板处于最大化，退出最大化
@@ -259,7 +262,7 @@ class LayoutStore {
         }
 
         this.#activeActivity = id
-        this.#leftHeaderComponent = item.header
+        this.#leftHeaderComponent = item.header ?? null
         this.#leftContentComponent = item.component
     }
 
@@ -386,7 +389,7 @@ class LayoutStore {
         const sorted = this.topActivities
         if (sorted.length > 0) {
             this.#activeActivity = sorted[0].id
-            this.#leftHeaderComponent = sorted[0].header
+            this.#leftHeaderComponent = sorted[0].header ?? null
             this.#leftContentComponent = sorted[0].component
         }
 

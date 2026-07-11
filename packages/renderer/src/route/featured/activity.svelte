@@ -1,14 +1,15 @@
 <script lang="ts">
   // ── Tabler Icons ──
-  import {
-    IconLayoutSidebarRightCollapseFilled,
-    IconLayoutSidebarRightExpand,
-    IconLayoutBottombarExpand,
-    IconLayoutBottombarCollapseFilled,
-  } from "@tabler/icons-svelte";
+  import { RuntimeIcon } from "$lib/components/runtimeicon";
+  import { Separator } from "$lib/components/ui/separator";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { layoutStore } from "$lib/store/ui/layout.svelte";
-  import { Separator } from "$lib/components/ui/separator";
+  import {
+    IconLayoutBottombarCollapseFilled,
+    IconLayoutBottombarExpand,
+    IconLayoutSidebarRightCollapseFilled,
+    IconLayoutSidebarRightExpand,
+  } from "@tabler/icons-svelte";
 </script>
 
 <div
@@ -32,7 +33,7 @@
               ]}
               onclick={() => layoutStore.handleActivityClick(activity.id)}
             >
-              <activity.icon class="size-5" />
+              <RuntimeIcon name={activity.icon} class="size-5" />
             </button>
           {/snippet}
         </Tooltip.Trigger>
@@ -114,7 +115,7 @@
               ]}
               onclick={() => layoutStore.handleActivityClick(activity.id)}
             >
-              <activity.icon class="size-5" />
+              <RuntimeIcon name={activity.icon} class="size-5" />
             </button>
           {/snippet}
         </Tooltip.Trigger>

@@ -36,6 +36,10 @@ function toTablerName(raw: string): string {
 }
 
 export function resolveIcon(name: string): ResolvedIcon {
+    if (typeof name === 'function') {
+        // 默认是一个Componet.将其视为tabler组件处理。
+        return { kind: 'tabler', value: name as unknown as Component }
+    }
     const raw = (name ?? '').trim();
     if (!raw) return { kind: 'empty', value: null };
 
