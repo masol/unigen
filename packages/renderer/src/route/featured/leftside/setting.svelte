@@ -10,6 +10,7 @@
     IconCode,
     IconCodePlus,
     IconDeviceSpeaker,
+    IconFolders,
     IconKeyboard,
     IconPlug,
     IconRobot,
@@ -86,6 +87,14 @@
           icon: IconKeyboard,
           path: "keybindings",
           keywords: ["shortcut", "热键", "绑定", "快捷方式"],
+        },
+        {
+          id: "project-types",
+          label: "项目类型",
+          description: "管理可用项目类型",
+          icon: IconFolders,
+          path: "projectype",
+          keywords: ["project-type", "项目类型", "项目模板"],
         },
         {
           id: "develops",

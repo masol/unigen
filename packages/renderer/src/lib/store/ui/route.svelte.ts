@@ -15,7 +15,7 @@ import DevSetting from "../../../route/page/settings/develops/DevSettingsPanel.s
 import GeneralSetting from "../../../route/page/settings/general/general.svelte";
 import Keybindings from '../../../route/page/settings/Keybindings.svelte';
 import LLMSetting from "../../../route/page/settings/llm/llm.svelte";
-
+import ProjectTypeManager from '../../../route/page/settings/project-type/ProjectTypeManager.svelte';
 
 // ── 类型 ──
 
@@ -45,6 +45,7 @@ class RouterStore {
         "/settings/general": GeneralSetting,
         "/settings/develops": DevSetting,
         "/settings/keybindings": Keybindings,
+        "/settings/projectype": ProjectTypeManager,
         // content 为可选查询/路径参数
         '/editor/:kind/:id': EditorPage,
         '/editor/:kind/:id/:content?': EditorPage,

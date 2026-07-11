@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { Button } from "$lib/components/ui/button";
   import {
     DialogFooter,
@@ -75,6 +76,8 @@
   // key 同时随「搜索内容」与「页码」变化 → 搜索/翻页都触发交叉淡变
   const viewKey = $derived(`${query}#${safePage}`);
   const canConfirm = $derived(selectedId.length > 0);
+  // 当前选中的类型对象，用于标题栏展示；始终可见，不受翻页/搜索影响
+  const selectedType = $derived(allTypes.find((t) => t.id === selectedId));
 
   async function load() {
     isLoading = true;
@@ -99,7 +102,28 @@
 </script>
 
 <DialogHeader>
-  <DialogTitle>{title}</DialogTitle>
+  <div class="flex items-center gap-3">
+    <DialogTitle class="shrink-0">{title}</DialogTitle>
+    {#if selectedType}
+      {#key selectedType.id}
+        <span
+          in:fade={{ duration: 150 }}
+          class="flex min-w-0 items-center gap-1.5 rounded-lg border border-primary/20
+                           bg-primary/5 py-1 pl-1.5 pr-2.5 text-sm"
+        >
+          <span
+            class="flex size-5 shrink-0 items-center justify-center rounded-md
+                               bg-primary text-primary-foreground"
+          >
+            <RuntimeIcon name={selectedType.icon} size={14} />
+          </span>
+          <span class="truncate font-medium text-foreground"
+            >{selectedType.name}</span
+          >
+        </span>
+      {/key}
+    {/if}
+  </div>
 </DialogHeader>
 
 <div class="space-y-4 py-4">

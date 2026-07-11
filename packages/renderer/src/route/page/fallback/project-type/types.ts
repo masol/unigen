@@ -18,7 +18,7 @@ export const BLANK_PROJECT_TYPE_ID = 'blank';
 export const BLANK_PROJECT_TYPE: ProjectType = {
     id: BLANK_PROJECT_TYPE_ID,
     name: '空白项目',
-    description: '从零开始，所有功能由你自定义。日后可发布为新的项目类型。',
+    description: '从零开始，所有功能由你自定义。未来可发布为新的项目类型。',
     icon: 'IconSquarePlus',
     category: '通用',
 };
