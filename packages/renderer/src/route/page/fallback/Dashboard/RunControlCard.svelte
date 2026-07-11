@@ -1,30 +1,30 @@
 <!-- 职责：核心运行按钮 + 动态提示文案 + 运行终止点设置。点击调用 store 方法。 -->
 <script lang="ts">
+  import * as Select from "$lib/components/ui/select";
+  import type { Step } from "$lib/components/ui/walkthrough/ctx";
+  import { dashboardStore, type RunTarget } from "$lib/store/dashboard.svelte";
+  import { tourStore } from "$lib/store/ui/tour.svelte";
   import autoAnimate from "@formkit/auto-animate";
   import {
-    IconPlayerPlayFilled,
-    IconPlayerStopFilled,
-    IconLoader2,
-    IconInfoCircle,
-    IconDatabase,
     IconAlertTriangle,
-    IconClock,
-    IconFlag,
+    IconCamera,
     IconCheck,
     IconChevronDown,
-    IconScissors,
-    IconCamera,
-    IconUsers,
-    IconMicrophone,
+    IconClock,
+    IconDatabase,
+    IconFlag,
+    IconInfoCircle,
     IconLayoutGrid,
+    IconLoader2,
+    IconMicrophone,
     IconPalette,
+    IconPlayerPlayFilled,
+    IconPlayerStopFilled,
+    IconScissors,
+    IconUsers,
     IconVideo,
     IconWand,
   } from "@tabler/icons-svelte";
-  import * as Select from "$lib/components/ui/select";
-  import { dashboardStore, type RunTarget } from "./dashstore.svelte";
-  import { tourStore } from "$lib/store/ui/tour.svelte";
-  import type { Step } from "$lib/components/ui/walkthrough/ctx";
   import { inputStore } from "../../../../plugins/video/mainsrv/leftbar/input-manager";
 
   function fmtTime(s: number) {

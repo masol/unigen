@@ -107,6 +107,10 @@ class ProjectStore {
         }
     }
 
+    async close(): Promise<void> {
+
+    }
+
     private async doCreate(bForce: boolean, pathName?: string): Promise<boolean> {
         await api().project.create({ path: pathName, force: bForce });
         this.#path = await api().project.info("path");

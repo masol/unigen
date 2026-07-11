@@ -1,6 +1,6 @@
-import type { RouterClient } from '@orpc/server'
-import type { AppRouter } from '../../api/index.js'
 import { ProjectContainer } from '$libs/project/project.js';
+import type { RouterClient } from '@orpc/server';
+import type { AppRouter } from '../../../api/index.js';
 
 // 自动推导出普通调用接口：client.test('world') => Promise<string>
 export type AppClient = RouterClient<AppRouter>

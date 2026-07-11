@@ -1,7 +1,7 @@
 import { api } from '$lib/utils/api'
 // import evtbus from '$lib/utils/evtbus'
-import log from 'electron-log/renderer'
 import type { RecentProject } from '@app/main/types'
+import log from 'electron-log/renderer'
 
 class RecentProjectsStore {
     // ── 私有状态 ──
@@ -21,7 +21,7 @@ class RecentProjectsStore {
 
     constructor() {
         log.info('[RecentProjectsStore] initialized')
-        this.load()
+        // this.load()
 
         // 外部如有"最近项目变更"通知，被动刷新；只听不发
         // evtbus.on('recent:projects', () => {
@@ -31,6 +31,7 @@ class RecentProjectsStore {
     }
 
     // ── Action ──
+    // 系统初始时调用，后续通过事件自动同步。
     async load(): Promise<void> {
         log.debug('[RecentProjectsStore] load() called')
         this.#isLoading = true

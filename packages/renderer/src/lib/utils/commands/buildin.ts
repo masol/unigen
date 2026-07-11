@@ -1,5 +1,6 @@
 import { configStore } from "$lib/store/config.svelte";
-import { dashboardStore } from "../../../route/page/fallback/Dashboard/dashstore.svelte";
+import { dashboardStore } from "$lib/store/dashboard.svelte";
+import { projectStore } from "$lib/store/project.svelte";
 import { safeApi } from "../api";
 import type { CommandDescriptor } from "./type";
 
@@ -37,9 +38,9 @@ export const builtins: CommandDescriptor[] = [
     // ── 外观 ──
     {
         id: 'appearance.toggleDarkMode',
-        label: '下一界面颜色',
+        label: '下一主题',
         category: 'Appearance',
-        description: '循环设置界面颜色',
+        description: '循环设置主题',
         handler: () => {
             configStore.cycleTheme();
         },
@@ -71,6 +72,27 @@ export const builtins: CommandDescriptor[] = [
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }),
     },
     // ---任务执行---
+    {
+        id: 'project.open',
+        label: '打开项目',
+        category: 'Project',
+        handler: () =>
+            projectStore.open(),
+    },
+    {
+        id: 'project.create',
+        label: '新建项目',
+        category: 'Project',
+        handler: () =>
+            projectStore.create(),
+    },
+    {
+        id: 'project.close',
+        label: '关闭项目',
+        category: 'Project',
+        handler: () =>
+            projectStore.close(),
+    },
     {
         id: 'project.start',
         label: '运行项目任务',

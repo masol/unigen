@@ -4,6 +4,7 @@ import { secondConfig } from '$libs/store/second.js'
 import { getTheme, resetTheme, setTheme } from '$libs/store/theme.js'
 import { dataCenter } from '$libs/utils/sys/data.js'
 import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
+import { recentProjectSchema } from '$types/shared/api/recents.js'
 import { GetThemeSchema } from '$types/shared/api/theme.js'
 import { os } from '@orpc/server'
 import { nativeTheme } from 'electron'
@@ -64,10 +65,7 @@ const set = os
  * schema 校验失败时异常直接上抛，由调用者处理
  */
 const recents = os
-    .output(z.array(z.object({
-        path: z.string(),
-        time: z.number()
-    })))
+    .output(z.array(recentProjectSchema))
     .handler(async () => {
         return secondConfig().recents;
     })

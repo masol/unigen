@@ -1,11 +1,12 @@
 // 第二存储持久化池，无需备份/恢复的放在这里。
 
-import Store from 'electron-store';
-import { RecentProject, SecondConfig } from '$types/appconfig.js';
-import { secondSchema } from './second.schema.js';
-import { broadcast } from '$libs/utils/rpcevt.js';
 import { getCurrentProject } from '$libs/utils/api.js';
+import { broadcast } from '$libs/utils/rpcevt.js';
+import { SecondConfig } from '$types/appconfig.js';
+import type { RecentProject } from '$types/index.js';
+import Store from 'electron-store';
 import QuickLRU from 'quick-lru';
+import { secondSchema } from './second.schema.js';
 
 type QuickLRUType = QuickLRU<string, RecentProject>;
 class ConfigService {
@@ -47,11 +48,11 @@ class ConfigService {
         })
     }
 
-    newProject(path: string, time: number, type: string) {
+    newProject(path: string, time: number, icon: string) {
         this.lru.set(path, {
             path,
             time,
-            type
+            icon
         });
         this.onUpdate();
     }

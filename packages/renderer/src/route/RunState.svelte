@@ -1,11 +1,11 @@
 <script lang="ts">
   import * as Tooltip from "$lib/components/ui/tooltip";
+  import { dashboardStore } from "$lib/store/dashboard.svelte";
   import {
     IconLoader2,
     IconPlayerPlayFilled,
     IconPlayerStopFilled,
   } from "@tabler/icons-svelte";
-  import { dashboardStore } from "./page/fallback/Dashboard/dashstore.svelte";
 
   // ═══════════════════════════════════════════════════════════
   // 三态执行器 — idle(可运行) / running(停止中) / terminating(强制终止)

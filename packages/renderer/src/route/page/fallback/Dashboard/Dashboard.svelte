@@ -4,11 +4,11 @@
   import autoAnimate from "@formkit/auto-animate";
   import { onDestroy } from "svelte";
 
+  import { dashboardStore } from "$lib/store/dashboard.svelte";
   import DashboardHeader from "./DashboardHeader.svelte";
   import InfoBlocksGrid from "./InfoBlocksGrid.svelte";
   import RunControlCard from "./RunControlCard.svelte";
   import RunLogPanel from "./RunLogPanel.svelte";
-  import { dashboardStore } from "./dashstore.svelte";
 
   onDestroy(() => dashboardStore.destroy());
 </script>

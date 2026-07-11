@@ -3,6 +3,7 @@
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
+  import { dashboardStore } from "$lib/store/dashboard.svelte";
   import {
     IconAlertTriangle,
     IconBolt,
@@ -12,7 +13,6 @@
     IconEyeOff,
     IconLoader2,
   } from "@tabler/icons-svelte";
-  import { dashboardStore } from "./dashstore.svelte";
 
   function fmtTime(s: number) {
     const m = Math.floor(s / 60);

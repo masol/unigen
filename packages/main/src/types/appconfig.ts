@@ -1,3 +1,4 @@
+import type { RecentProject } from "./shared/api/recents.js";
 import { Provider } from "./shared/model.js";
 
 
@@ -24,12 +25,6 @@ export interface AppConfig {
     // 其他配置...
 }
 
-
-export type RecentProject = {
-    path: string;
-    time: number;
-    type: string;
-}
 
 // 无需备份与恢复的第二配置。
 export interface SecondConfig {

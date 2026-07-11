@@ -6,6 +6,7 @@
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import { Separator } from "$lib/components/ui/separator";
   import { Switch } from "$lib/components/ui/switch";
+  import { dashboardStore } from "$lib/store/dashboard.svelte";
   import { i18nStore } from "$lib/store/i18n.svelte";
   import autoAnimate from "@formkit/auto-animate";
   import {
@@ -16,7 +17,6 @@
     IconLockOpen,
     IconTrash,
   } from "@tabler/icons-svelte";
-  import { dashboardStore } from "./dashstore.svelte";
 
   function fmtTime(s: number) {
     const m = Math.floor(s / 60);

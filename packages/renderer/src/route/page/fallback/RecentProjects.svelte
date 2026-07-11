@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { IconClock, IconFolder } from "@tabler/icons-svelte";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { i18nStore } from "$lib/store/i18n.svelte";
-  import { recentProjectsStore } from "./recent-projects.svelte";
+  import { recentProjectsStore } from "$lib/store/recent-projects.svelte";
   import type { RecentProject } from "@app/main/types";
+  import { IconClock, IconFolder } from "@tabler/icons-svelte";
 
   function formatDate(ts: number) {
     return i18nStore.dayjs(ts).fromNow();
