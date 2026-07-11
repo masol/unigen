@@ -1,11 +1,14 @@
+import { type ProjectType, projectTypeSchema } from '$types/shared/template/prjtype.js';
 import { app } from 'electron';
 import Logger from 'electron-log/main.js';
+import fg from 'fast-glob';
 import { pathExists } from 'fs-extra';
 import { readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const DataDirName = 'data';
+const TplMetasDirName = 'plugins';
 
 /**
  * 全局数据中心。优先读取 userData/data 下的可写文件，
@@ -16,6 +19,9 @@ class DataCenter {
     public readonly dataPath: string;
     /** 发行包自带的只读资源根目录，优先级低 */
     public readonly resourcePath: string;
+
+    /** 模板元信息缓存，null 表示尚未加载 */
+    private tplMetas: ProjectType[] | null = null;
 
     constructor() {
         this.dataPath = join(app.getPath('userData'), DataDirName);
@@ -59,6 +65,78 @@ class DataCenter {
         }
 
         return null;
+    }
+
+    /**
+     * 加载 data/plugins 目录下的全部 .json 模板元信息（ProjectType）。
+     *
+     * 流程：
+     * 1. 扫描 resourcePath/plugins 与 dataPath/plugins 下的 .json 文件；
+     * 2. 解析为 JSON，并用 zod 校验为 ProjectType，不合法则报警废弃；
+     * 3. 以 id 去重，dataPath 覆盖 resourcePath（后者优先级低）；
+     *    同一目录内 id 重复则报警并随机（后扫描到的）覆盖。
+     *
+     * @param bForce 为 false 且缓存有效时直接返回缓存；为 true 强制重新加载
+     * @returns 去重后的 ProjectType 数组
+     */
+    public async loadTplMetas(bForce: boolean = false): Promise<ProjectType[]> {
+        if (!bForce && this.tplMetas !== null) {
+            return this.tplMetas;
+        }
+
+        // id -> { meta, root }；后写入的覆盖先写入的
+        const merged = new Map<string, { meta: ProjectType; root: string }>();
+
+        // 顺序即优先级：resource 低，dataPath 高（后者覆盖前者）
+        const roots: string[] = [
+            join(this.resourcePath, TplMetasDirName),
+            join(this.dataPath, TplMetasDirName),
+        ];
+
+        for (const root of roots) {
+            if (!(await pathExists(root))) {
+                Logger.warn('[DataCenter] 模板目录不存在，跳过', root);
+                continue;
+            }
+
+            const relatives: string[] = await fg('**/*.json', {
+                cwd: root,
+                onlyFiles: true,
+                dot: true,
+            });
+
+            for (const relativePath of relatives) {
+                const fullPath = join(root, relativePath);
+                let raw: unknown;
+                try {
+                    raw = JSON.parse(await readFile(fullPath, 'utf-8'));
+                } catch (error) {
+                    Logger.warn('[DataCenter] 模板读取或解析失败，废弃', fullPath, error);
+                    continue;
+                }
+
+                const parsed = projectTypeSchema.safeParse(raw);
+                if (!parsed.success) {
+                    Logger.warn('[DataCenter] 模板格式非法，废弃', fullPath, parsed.error.issues);
+                    continue;
+                }
+                const meta = parsed.data;
+
+                // 同一 root 内 id 重复：报警并随机（后扫描到的）覆盖
+                const existing = merged.get(meta.id);
+                if (existing && existing.root === root) {
+                    Logger.warn(`[DataCenter] 同目录下模板 id 重复，随机覆盖: id=${meta.id}`, fullPath);
+                }
+
+                merged.set(meta.id, { meta, root });
+            }
+        }
+
+        this.tplMetas = [...merged.values()].map(({ meta }) => meta);
+
+        Logger.log(`[DataCenter] loadTplMetas：共加载 ${this.tplMetas.length} 个模板`);
+
+        return this.tplMetas;
     }
 }
 

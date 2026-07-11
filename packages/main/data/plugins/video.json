@@ -1,4 +1,6 @@
 {
-    "name": "视频创建",
-    "id": "video"
+    "name": "剧本转视频",
+    "id": "video",
+    "icon": "IconVideoPlus",
+    "description": "输入剧本 · 输出视频 · 全流程自动编排"
 }

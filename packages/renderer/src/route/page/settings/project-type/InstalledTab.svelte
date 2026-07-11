@@ -35,10 +35,10 @@
     return installed.filter((t) => ids.has(t.id));
   });
 
-  async function load() {
+  async function load(bForce?: boolean) {
     isLoading = true;
     try {
-      installed = await fetchInstalledProjectTypes();
+      installed = await fetchInstalledProjectTypes(bForce);
     } catch {
       installed = [];
     } finally {
@@ -95,7 +95,7 @@
         variant="ghost"
         size="sm"
         class="gap-1.5 rounded-lg text-muted-foreground"
-        onclick={load}
+        onclick={() => load(true)}
         disabled={isLoading}
       >
         <IconRefresh class="size-4 {isLoading ? 'animate-spin' : ''}" /> 刷新

@@ -1,9 +1,9 @@
 import { z } from 'zod'
 import {
-    PluginScopeSchema,
-    PluginStatusSchema,
     ModuleSourceSchema,
-    PluginInfoSchema
+    PluginInfoSchema,
+    PluginScopeSchema,
+    PluginStatusSchema
 } from './plugin.schema.js'
 
 export type PluginScope = z.infer<typeof PluginScopeSchema>

@@ -12,7 +12,10 @@ import { join } from 'path'
 import { z } from 'zod'
 // import { genText } from '$libs/utils/model/factory/node-llama-cpp/local.js'
 import { throwCancel } from '$libs/utils/err.js'
+import { knowledgeCenter } from '$libs/utils/kc.js'
+import { dataCenter } from '$libs/utils/sys/data.js'
 import { appLife } from '$libs/utils/tapable/applife.js'
+import { projectTypeSchema } from '$types/shared/template/prjtype.js'
 
 // ─── Zod Schemas ─────────────────────────────────────────────
 const fileFilterPresetSchema = z.enum(FileFilterPreset)
@@ -271,6 +274,9 @@ const getPath = os
             case 'embeding':
                 basePath = join(embedingPath(), ...input.sub ?? [])
                 break;
+            case 'kc':
+                basePath = knowledgeCenter.kcPath;
+                break;
             case 'logs':
                 return Logger.transports.file.getFile().path
             default:
@@ -351,6 +357,12 @@ const bootstrapped = os
         await appLife.bootstrapped.promise;
     })
 
+const prjTypes = os
+    .input(z.boolean().optional())
+    .output(z.array(projectTypeSchema))
+    .handler(async ({ input }) => {
+        return dataCenter.loadTplMetas(input);
+    });
 
 export default {
     openFile,
@@ -363,5 +375,6 @@ export default {
     getPath,
     streamLogs,
     version,
-    bootstrapped
+    bootstrapped,
+    prjTypes
 }
