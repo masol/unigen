@@ -28,7 +28,6 @@ export async function setupEvt(): Promise<number> {
             Logger.error("收到无效的事件通知:", msg);
             return;
         }
-        void (evt)
         const notyObj: NotifyContract = msg as unknown as NotifyContract;
         if (!notyObj.name) {
             Logger.error("收到无效的事件通知(不包含名称):", msg);
@@ -36,6 +35,11 @@ export async function setupEvt(): Promise<number> {
         }
         if (windowsId === -1) {
             return; // 尚未初始化。
+        }
+        // 部分消息跳过回传检查。
+        switch (notyObj.name) {
+            case 'recent:projects':
+                return evtbus.emit(notyObj.name as keyof Events, notyObj.payload as never);
         }
         if (notyObj.srcId === windowsId) {
             // 过滤自己发出的事件，不再通知回自己。

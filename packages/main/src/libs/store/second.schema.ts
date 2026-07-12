@@ -15,6 +15,7 @@ export const secondSchema: Schema<SecondConfig> = {
                 },
                 "icon": {
                     "type": "string",
+                    "default": "IconQuestionMark"
                 },
                 "time": {
                     "type": "number",

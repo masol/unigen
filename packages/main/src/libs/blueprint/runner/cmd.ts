@@ -1,5 +1,5 @@
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
-import { ProjectDbKeys } from '$libs/project/dbkeys.js';
+import { ProjectDbKeys } from '$libs/utils/db/dbkeys.js';
 import { throwPrecondition } from '$libs/utils/err.js';
 import { delay } from '$libs/utils/promise.js';
 import type { CommandInfo, IRunnerContext } from '$types/blueprint/context.js';

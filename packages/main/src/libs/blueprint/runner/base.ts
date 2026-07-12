@@ -20,7 +20,7 @@ export abstract class BaseRunner implements ICapaRunner {
 
                 if (!capafunctor) {
                     const reason = `无法创建${capaId}对应的Runner`;
-                    ctx.prj.notify("task_finished", { success: false, reason });
+                    ctx.prj.notify("task_finished", { success: false, reason, seq: ctx.seq });
 
                     span.setStatus({
                         code: SpanStatusCode.ERROR,
@@ -34,14 +34,14 @@ export abstract class BaseRunner implements ICapaRunner {
                 await capafunctor.run(ctx);
                 span.addEvent("functor_run_success");
 
-                ctx.prj.notify("task_finished", { success: true });
+                ctx.prj.notify("task_finished", { success: true, seq: ctx.seq });
 
                 // 成功状态下不需要带 message（即使带了也会被 OTel 忽略）
                 span.setStatus({ code: SpanStatusCode.OK });
 
             } catch (e) {
                 const errorMsg = e instanceof Error ? e.message : String(e);
-                ctx.prj.notify("task_finished", { success: false, reason: `能力${capaId}执行错误:${errorMsg}` });
+                ctx.prj.notify("task_finished", { success: false, reason: `能力${capaId}执行错误:${errorMsg}`, seq: ctx.seq });
                 Logger.error(`执行能力${capaId}时发生错误：`, e);
 
                 span.recordException(e instanceof Error ? e : new Error(errorMsg));

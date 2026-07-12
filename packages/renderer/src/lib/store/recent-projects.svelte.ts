@@ -1,4 +1,5 @@
-import { api } from '$lib/utils/api'
+import { safeApi } from '$lib/utils/api'
+import evtbus from '$lib/utils/evtbus'
 // import evtbus from '$lib/utils/evtbus'
 import type { RecentProject } from '@app/main/types'
 import log from 'electron-log/renderer'
@@ -21,23 +22,23 @@ class RecentProjectsStore {
 
     constructor() {
         log.info('[RecentProjectsStore] initialized')
-        // this.load()
 
         // 外部如有"最近项目变更"通知，被动刷新；只听不发
-        // evtbus.on('recent:projects', () => {
-        //     log.debug('[RecentProjectsStore] received recent-projects:changed')
-        //     void this.load()
-        // })
+        evtbus.on('recent:projects', (recents: RecentProject[]) => {
+            this.#projects = recents;
+            // void this.load()
+        })
     }
 
     // ── Action ──
     // 系统初始时调用，后续通过事件自动同步。
     async load(): Promise<void> {
+        if (this.#isLoading) return
         log.debug('[RecentProjectsStore] load() called')
         this.#isLoading = true
         this.#error = null
         try {
-            const result = await api().config.recents()
+            const result = await safeApi().config.recents()
             this.#projects = result
             log.info(`[RecentProjectsStore] data loaded, ${result.length} items`)
         } catch (err) {
@@ -48,12 +49,10 @@ class RecentProjectsStore {
         }
     }
 
-    async open(project: RecentProject): Promise<void> {
-        log.debug(`[RecentProjectsStore] open() called, path=${project.path}`)
+    async clear(): Promise<void> {
+        log.debug(`[RecentProjectsStore] clear() called`)
         try {
-            // TODO: 替换为 await api().project.open(project.path)
-            await new Promise((r) => setTimeout(r, 200))
-            log.info(`[RecentProjectsStore] project opened, path=${project.path}`)
+            await safeApi().config.recents(true);
         } catch (err) {
             log.error('[RecentProjectsStore] open() failed', err)
         }

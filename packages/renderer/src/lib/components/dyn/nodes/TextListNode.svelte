@@ -1,6 +1,6 @@
 <!-- src/lib/components/dyn/nodes/TextListNode.svelte -->
 <script lang="ts">
-  // @todo: 未来通过schema来拓展任意数据类型，可引入[svelte-jsonschema-form](https://github.com/x0k/svelte-jsonschema-form)来全自动化。
+  // @todo: 未来通过 schema 拓展任意数据类型，可引入 svelte-jsonschema-form 全自动化。
   import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
@@ -19,8 +19,7 @@
     IconTrash,
   } from "@tabler/icons-svelte";
   import type { TextListNode } from "../ast";
-// 【修正】coerceList / writeKeyOf / useBinding 全部从 binding 模块引入，统一来源
-  import { coerceList, useBinding, writeKeyOf } from "../binding.svelte";
+  import { coerceList, useBinding } from "../binding.svelte";
   import ScriptSegmentDialog from "../dialog/TextInputDialog.svelte";
 
   let { node, service }: { node: TextListNode; service: IValueService } =
@@ -32,20 +31,20 @@
     updatedAt?: number | string;
   }
 
-  // 【修正】原为顶层 const，固化了 node.binding 的 key；一旦 node 变更会与
-  // useBinding 重订阅的新 key 错位。改为 $derived，随 node 响应式更新。
-  let readKey = $derived(node.binding.readKey);
-  let writeKey = $derived(writeKeyOf(node.binding));
-  const itemKey = (id: string) => `${readKey}_${id}`;
+  // 随 node 响应式更新；每条正文的存储 key = `${key}_${条目id}`
+  let key = $derived(node.binding.key);
+  const itemKey = (id: string) => `${key}_${id}`;
 
   const b = useBinding<ListItem[]>(service, () => node.binding);
   let items = $derived(coerceList<ListItem>(b.value));
-  let loading = $derived(b.loading || service.isLoading);
+  let loading = $derived(b.loading);
   let error = $derived(b.error);
 
   async function readItemContent(id: string): Promise<string> {
-    return service.get<string>(itemKey(id)) ?? "";
+    // service 无缓冲：直接向 main 读最新正文。缺失返回空串。
+    return (await service.get<string>(itemKey(id))) ?? "";
   }
+
   async function handleAppend() {
     if (loading) return;
     const content = await dialogStore.safeShow(
@@ -56,12 +55,13 @@
     if (content === null || !content) return;
     const id = crypto.randomUUID();
     const item: ListItem = { id, size: content.length, updatedAt: Date.now() };
+    // 先写正文（原始 key，无 hook 绑定），成功后再写索引（经 b.set 更新本地）。
     await service.set(itemKey(id), content);
-    await service.set(writeKey, [...items, item]);
+    await b.set([...items, item]);
   }
+
   async function handleEdit(item: ListItem) {
     if (loading) return;
-    // 优先读缓存，缺失则同步一次（也可加 service.fetch，但 get 已够）
     const orig = await readItemContent(item.id);
     const content = await dialogStore.safeShow(
       ScriptSegmentDialog,
@@ -80,8 +80,9 @@
         : s,
     );
     await service.set(itemKey(item.id), content);
-    await service.set(writeKey, next);
+    await b.set(next);
   }
+
   async function handleDelete(item: ListItem, index: number) {
     if (loading) return;
     const ok = await confirmStore.request({
@@ -93,7 +94,7 @@
     if (!ok) return;
     const next = items.filter((s) => s.id !== item.id);
     await service.rm(itemKey(item.id));
-    await service.set(writeKey, next);
+    await b.set(next);
   }
 </script>
 

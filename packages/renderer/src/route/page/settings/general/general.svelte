@@ -2,11 +2,10 @@
 <script lang="ts">
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import { IconSettings } from "@tabler/icons-svelte";
-  import GeneralSection from "./GeneralSection.svelte";
-  import LocalModel from "./LocalModel.svelte";
   import AutoUpdator from "./AutoUpdator.svelte";
   import BackRestore from "./BackRestore.svelte";
-  import ProjectType from "./ProjectType.svelte";
+  import GeneralSection from "./GeneralSection.svelte";
+  import LocalModel from "./LocalModel.svelte";
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
@@ -42,11 +41,6 @@
         <GeneralSection></GeneralSection>
         <!-- ╭─── / GeneralSection ───╮ -->
 
-        <!-- ╭─────────────────────────────────────────────────────╮ -->
-        <!-- │ [可抽取子组件 → DataSection.svelte]                 │ -->
-        <!-- │ 职责：数据备份与恢复操作入口                        │ -->
-        <!-- ╰─────────────────────────────────────────────────────╯ -->
-        <ProjectType></ProjectType>
         <!-- ╭─── / DataSection ───╮ -->
 
         <AutoUpdator></AutoUpdator>

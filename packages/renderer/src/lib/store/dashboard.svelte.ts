@@ -26,10 +26,18 @@ class DashboardStore {
     #preserveLogs = $state(false); // 是否保留日志（跨任务重启）
     forceShowLog = $state(false);
 
+    // ── 运行标识（非响应式，仅用于控制流 / 状态守卫）─────────────
+    // #seqCounter：单调递增的 call sequence 生成器。
+    // #activeSeq：当前我们“拥有”的这次运行的 seq；空闲时为 null。
+    //   task_finished 只会被 seq 匹配的那一次运行处理，杜绝旧任务的迟到事件。
+    // #terminationRequested：本次运行是否已发出过终止信号（保证只响应一次终止）。
+    #seqCounter = 0;
+    #activeSeq: number | null = null;
+    #terminationRequested = false;
+
     // ── 私有非响应式资源 ─────────────────────────────────────────
     #clockTimer: ReturnType<typeof setInterval> | null = null;
     #terminateTimer: ReturnType<typeof setInterval> | null = null;
-
 
     // ── 派生 ─────────────────────────────────────────────────────
     readonly showLog = $derived(this.runState !== 'idle' || this.forceShowLog)
@@ -72,20 +80,27 @@ class DashboardStore {
             this.#pushLog(message);
         });
 
-        // 监听任务完成事件
-        evtbus.on("task_finished", (evt: { success: boolean; reason?: string }) => {
-            log.info(`[DashboardStore] task_finished: success=${evt.success}, reason=${evt.reason ?? ""}`);
+        // 监听任务完成事件。
+        // seq 由启动时传入并原样回传；只处理与 #activeSeq 匹配的那一次运行，
+        // 其余（迟到的旧任务事件、未由本 store 发起的运行）一律忽略。
+        evtbus.on("task_finished", (evt: { success: boolean; reason?: string; seq?: number }) => {
+            if (!this.#isOwnedEvent(evt.seq)) {
+                log.debug(
+                    `[DashboardStore] ignore stale task_finished: evtSeq=${evt.seq ?? "undefined"}, activeSeq=${this.#activeSeq ?? "null"}`,
+                );
+                return;
+            }
 
-            // 清理所有计时器
-            this.#clearTimers();
+            log.info(
+                `[DashboardStore] task_finished: seq=${evt.seq}, success=${evt.success}, reason=${evt.reason ?? ""}`,
+            );
 
-            // 重置计时状态
-            this.#elapsedSeconds = 0;
-            this.#terminatingSeconds = 0;
+            // 该次运行到此结束：先让出所有权，任何后续同 seq 事件都将被忽略。
+            this.#releaseRun();
 
             // 添加完成日志
             if (evt.success) {
-                const msg = "✓ 任务已成功完成 · 所有步骤已保存"
+                const msg = "✓ 任务已成功完成 · 所有步骤已保存";
                 this.#pushLog(msg);
                 toast.success(msg);
             } else {
@@ -137,6 +152,22 @@ class DashboardStore {
         this.#target = newTarget;
     }
 
+    // ── 运行标识工具 ─────────────────────────────────────────────
+    // 事件是否属于当前活跃运行：seq 必须存在且严格等于 #activeSeq。
+    // 未携带 seq（undefined）的事件不被认领——避免误吞非本 store 发起的运行结果。
+    #isOwnedEvent(seq: number | undefined): boolean {
+        return seq !== undefined && seq === this.#activeSeq;
+    }
+
+    // 让出当前运行所有权并停表；幂等，重复调用安全。
+    #releaseRun() {
+        this.#activeSeq = null;
+        this.#terminationRequested = false;
+        this.#clearTimers();
+        this.#elapsedSeconds = 0;
+        this.#terminatingSeconds = 0;
+    }
+
     // ── 工具 ─────────────────────────────────────────────────────
     #pushLog(message: string) {
         // 新日志插入在数组头部（最新在上）
@@ -163,34 +194,80 @@ class DashboardStore {
     };
 
     // ── 状态机 ───────────────────────────────────────────────────
-    async #startRunning() {
+    async #startRunning(): Promise<boolean> {
+        // 严格守卫：必须真正空闲，且当前没有被认领的运行。
+        // 双重条件杜绝“已开始的项目再次开始”，也防止并发点击重入。
+        if (projectStore.runState !== "idle" || this.#activeSeq !== null) {
+            log.debug(
+                `[DashboardStore] startRunning() rejected: runState=${projectStore.runState}, activeSeq=${this.#activeSeq ?? "null"}`,
+            );
+            return false;
+        }
+
+        // 立即认领本次运行，占住 seq，防止 await 期间的重入。
+        const seq = ++this.#seqCounter;
+        this.#activeSeq = seq;
+        this.#terminationRequested = false;
         this.forceShowLog = false;
-        log.debug("[DashboardStore] startRunning() called");
-        await projectStore.start();
+        log.debug(`[DashboardStore] startRunning() called, seq=${seq}`);
 
-        const startime = await api().project.startTime();
-        const nowTime = new Date().getTime();
-
-        this.#elapsedSeconds = startime > 0 ? Math.floor((nowTime - startime) / 1000) : 0;
-
-        // 如果未勾选"保留日志"，则清空历史日志
+        // 如果未勾选“保留日志”，则清空历史日志（在真正启动前）。
         if (!this.#preserveLogs) {
             this.#logs = [];
         }
-        // this.#pushLog("任务已启动 · 节点连接正常");
-        log.info("[DashboardStore] run started");
 
-        if (this.runState === 'idle') {
-            // 任务已经结束了。
-            return;
+        try {
+            await projectStore.start(seq);
+        } catch (err) {
+            // 启动失败：回滚所有权，避免 store 卡在“已认领但未运行”的悬空态。
+            log.error("[DashboardStore] projectStore.start() failed", err);
+            if (this.#activeSeq === seq) {
+                this.#releaseRun();
+            }
+            return false;
         }
+
+        // await 期间可能已被更新的运行取代，或本次已经完成/终止。
+        // 只有仍持有本 seq 时才继续布置计时器。
+        if (this.#activeSeq !== seq) {
+            log.debug(`[DashboardStore] startRunning() superseded, seq=${seq}`);
+            return false;
+        }
+
+        // 任务可能瞬时结束：以真实 runState 为准，避免给已结束的任务开表。
+        if (projectStore.runState === "idle") {
+            log.debug(`[DashboardStore] run already idle after start, seq=${seq}`);
+            this.#releaseRun();
+            return false;
+        }
+
+        const startime = await api().project.startTime();
+        const nowTime = new Date().getTime();
+        this.#elapsedSeconds = startime > 0 ? Math.floor((nowTime - startime) / 1000) : 0;
+
+        log.info(`[DashboardStore] run started, seq=${seq}`);
 
         this.#clockTimer = setInterval(() => {
             this.#elapsedSeconds += 1;
         }, 1000);
+        return true;
     }
 
-    #enterTerminating() {
+    #enterTerminating(): boolean {
+        // 只响应一次终止：本次运行已请求过终止则直接返回。
+        if (this.#terminationRequested) {
+            log.debug("[DashboardStore] enterTerminating() ignored: already requested");
+            return false;
+        }
+        // 必须处于“运行中”且由本 store 拥有，才允许发出终止。
+        if (projectStore.runState !== "running" || this.#activeSeq === null) {
+            log.debug(
+                `[DashboardStore] enterTerminating() rejected: runState=${projectStore.runState}, activeSeq=${this.#activeSeq ?? "null"}`,
+            );
+            return false;
+        }
+
+        this.#terminationRequested = true;
         log.debug("[DashboardStore] enterTerminating() called");
         this.#terminatingSeconds = 0;
         this.#pushLog("收到终止信号 · 等待当前节点安全收尾 …");
@@ -200,14 +277,13 @@ class DashboardStore {
         this.#terminateTimer = setInterval(() => {
             this.#terminatingSeconds += 1;
         }, 1000);
+        return true;
     }
 
     #finalizeStop(message: string) {
         projectStore.stop(true);
-        this.#clearTimers();
+        this.#releaseRun();
         this.#pushLog(message);
-        this.#elapsedSeconds = 0;
-        this.#terminatingSeconds = 0;
         log.info(`[DashboardStore] run stopped: ${message}`);
     }
 
@@ -233,21 +309,30 @@ class DashboardStore {
     };
 
     private async forceStop() {
+        // 仅在仍持有一次运行时才允许强停，防止对已结束任务的重复终止。
+        if (this.#activeSeq === null) {
+            log.debug("[DashboardStore] forceStop() ignored: no active run");
+            return;
+        }
+        const seq = this.#activeSeq;
+
         const ok = await confirmStore.request({
             title: "强制立即停止？",
             message:
                 "当前正在进行的步骤将不会被保存，下次运行需要重新计算这一步。",
         });
         if (!ok) return;
+
+        // 确认期间该运行可能已自然结束或被更替，重新校验所有权。
+        if (this.#activeSeq !== seq) {
+            log.debug(`[DashboardStore] forceStop() superseded, seq=${seq}`);
+            return;
+        }
         this.#finalizeStop("已被强制停止 · 最后一步未保存");
     }
 
     async start(): Promise<boolean> {
-        if (projectStore.runState === "idle") {
-            await this.#startRunning();
-            return true;
-        }
-        return false;
+        return await this.#startRunning();
     }
 
     async stop(bForce = false): Promise<boolean> {
@@ -259,8 +344,7 @@ class DashboardStore {
             return true;
         }
         if (projectStore.runState === "running") {
-            this.#enterTerminating();
-            return true;
+            return this.#enterTerminating();
         }
         return false;
     }

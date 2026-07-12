@@ -1,4 +1,6 @@
 {
+    "icon": "IconVideoPlus",
+    "statusText": "生成视频",
     "header": {
         "title": "小说视频化工作台",
         "detail": "输入小说 · 输出视频 · 全流程自动编排"
@@ -6,7 +8,7 @@
     "hints": {
         "idle": "点击下方按钮，让AI根据剧本集，制作完整视频。"
     },
-    "needInput": {
+    "checkInput": {
         "title": "没有剧本",
         "description": "点击这里打开剧本集管理，添加剧本后，开始运行"
     },
@@ -86,7 +88,7 @@
                             {
                                 "type": "text-list",
                                 "binding": {
-                                    "readKey": "scripts"
+                                    "key": "script"
                                 },
                                 "addLabel": "添加剧本",
                                 "emptyTitle": "还没有剧本",
@@ -108,7 +110,7 @@
                             {
                                 "type": "field",
                                 "binding": {
-                                    "readKey": "book_name"
+                                    "key": "book_name"
                                 },
                                 "label": "项目名称",
                                 "editor": "inline",
@@ -118,7 +120,7 @@
                             {
                                 "type": "field",
                                 "binding": {
-                                    "readKey": "synopsis"
+                                    "key": "synopsis"
                                 },
                                 "label": "简介",
                                 "editor": "dialog",
@@ -129,7 +131,7 @@
                             {
                                 "type": "field",
                                 "binding": {
-                                    "readKey": "character_specifications"
+                                    "key": "character_specifications"
                                 },
                                 "label": "人物要求",
                                 "editor": "dialog",
@@ -141,7 +143,7 @@
                             {
                                 "type": "field",
                                 "binding": {
-                                    "readKey": "requirements"
+                                    "key": "requirements"
                                 },
                                 "label": "其它要求",
                                 "editor": "dialog",
@@ -163,7 +165,7 @@
                                 "dir": "visualref",
                                 "type": "image-grid",
                                 "binding": {
-                                    "readKey": "visualStyle"
+                                    "key": "visualStyle"
                                 },
                                 "addLabel": "选择参考图",
                                 "emptyTitle": "还没有参考图",
@@ -193,7 +195,7 @@
                             {
                                 "type": "select",
                                 "binding": {
-                                    "readKey": "aspectRatio"
+                                    "key": "aspectRatio"
                                 },
                                 "label": "目标视频横纵比",
                                 "icon": "IconAspectRatio",
@@ -268,7 +270,7 @@
                             {
                                 "type": "select",
                                 "binding": {
-                                    "readKey": "resolution"
+                                    "key": "resolution"
                                 },
                                 "label": "分辨率",
                                 "icon": "IconDeviceTv",
@@ -315,7 +317,7 @@
                             {
                                 "type": "select",
                                 "binding": {
-                                    "readKey": "frameRate"
+                                    "key": "frameRate"
                                 },
                                 "label": "帧率",
                                 "icon": "IconGauge",
@@ -380,7 +382,7 @@
                             {
                                 "type": "select",
                                 "binding": {
-                                    "readKey": "duration"
+                                    "key": "duration"
                                 },
                                 "label": "单集长度",
                                 "icon": "IconClock",
@@ -472,7 +474,7 @@
                             {
                                 "type": "button-group",
                                 "binding": {
-                                    "readKey": "pace"
+                                    "key": "pace"
                                 },
                                 "label": "叙事节奏",
                                 "icon": "IconGauge",
@@ -502,7 +504,7 @@
                             {
                                 "type": "select",
                                 "binding": {
-                                    "readKey": "language"
+                                    "key": "language"
                                 },
                                 "label": "语言",
                                 "icon": "IconLanguage",
@@ -567,7 +569,7 @@
                             {
                                 "type": "select",
                                 "binding": {
-                                    "readKey": "audience"
+                                    "key": "audience"
                                 },
                                 "label": "受众分级",
                                 "icon": "IconUsersGroup",
@@ -623,7 +625,7 @@
                             {
                                 "type": "select",
                                 "binding": {
-                                    "readKey": "style"
+                                    "key": "style"
                                 },
                                 "label": "画面风格",
                                 "icon": "IconPalette",

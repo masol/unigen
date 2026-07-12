@@ -43,6 +43,9 @@ function mergeInfocards(data: ProjectActivityData): InfoCardView[] {
 }
 
 export class ProjectActivity {
+    readonly icon: string;
+    readonly statusText: string;
+    readonly inputKey: string;
     readonly header: { title: string, detail: string }
     readonly infocards: InfoCardView[];
     readonly hints: {
@@ -56,29 +59,31 @@ export class ProjectActivity {
 
     constructor(data: ProjectActivityData) {
         this.clearTop();
+        this.icon = data.icon
+        this.statusText = data.statusText
         this.header = data.header
         this.infocards = mergeInfocards(data);
         this.targets = data.targets ?? [];
 
-        console.log("target=",this.targets)
         this.hints = {
             idle: data.hints?.idle ?? "点击下方按钮，让AI开始工作。",
             running: data.hints?.running ?? "每一步结果都会自动保存，再次运行不会重复计算。可随时点击「终止」，已完成的部分不会丢失。",
             term: data.hints?.term ?? "正在等待当前这一步完成后安全停止。若此刻强制关机，当前正在进行的这一步将作废，需要重新计算。",
         };
 
-        if (data.needInput?.ignore) {
+        if (!data.checkInput) {
             this.intputSteps = null;
         } else {
             this.intputSteps = [
                 {
                     target: "ib-input-manager",
-                    title: data.needInput?.title ?? "缺少输入",
-                    description: data.needInput?.description ?? "点击这里打开输入管理，添加输入后，开始运行",
+                    title: data.checkInput?.title ?? "缺少输入",
+                    description: data.checkInput?.description ?? "点击这里打开输入管理，添加输入后，开始运行",
                     position: "top",
                 },
             ];
         }
+        this.inputKey = data.checkInput?.key || "script";
 
         this.service = new ValueService();
 

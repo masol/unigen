@@ -1,4 +1,3 @@
-<!-- $lib/components/script-to-video/SettingSelect.svelte -->
 <!-- ╭───────────────────────────────────────────────────────────────╮ -->
 <!-- │ SettingSelect.svelte                                          │ -->
 <!-- │ 职责：通用「图标标题 + 徽章 + 主副文案」单选下拉。           │ -->
@@ -9,8 +8,8 @@
   lang="ts"
   generics="T extends { value: string; label: string; sub?: string }"
 >
-  import * as Select from "$lib/components/ui/select";
   import { Label } from "$lib/components/ui/label";
+  import * as Select from "$lib/components/ui/select";
   import type { Icon as TablerIcon } from "@tabler/icons-svelte";
   import type { Snippet } from "svelte";
 

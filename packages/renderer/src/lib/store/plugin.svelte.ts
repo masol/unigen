@@ -1,10 +1,10 @@
-import log from 'electron-log/renderer'
+import { api } from '$lib/utils/api'
 import { pluginRuntime } from '$lib/utils/plugin'
 import { BUILDIN_PLUGINS } from '$lib/utils/plugin/shared/plugin'
 import type { PluginInfo, PluginScope } from '@app/main/types'
+import { IconPlug, IconVideo } from "@tabler/icons-svelte"
+import log from 'electron-log/renderer'
 import pMap from 'p-map'
-import { api } from '$lib/utils/api'
-import { IconPlug, IconVideo } from "@tabler/icons-svelte";
 
 function getIcon(name: string): typeof IconVideo {
     switch (name) {

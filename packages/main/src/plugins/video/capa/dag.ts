@@ -1,6 +1,6 @@
 import type { PrjDB } from "$libs/project/controllers/drizzle/index.js";
-import { ProjectDbKeys } from "$libs/project/dbkeys.js";
 import type { IProjectContext } from "$libs/project/type.js";
+import { ProjectDbKeys } from "$libs/utils/db/dbkeys.js";
 import { DirectedGraph } from "graphology";
 
 

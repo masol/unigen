@@ -3,20 +3,20 @@
 <!-- │ 职责：全局要求区域 — 项目基础信息的静态编辑表单       │ -->
 <!-- ╰─────────────────────────────────────────────────────╯ -->
 <script lang="ts">
+  import * as Accordion from "$lib/components/ui/accordion";
+  import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Accordion from "$lib/components/ui/accordion";
+  import { dialogStore } from "$lib/store/ui/dialog.svelte";
+  import { DbKeys } from "$lib/utils/service/dbkeys";
   import {
-    IconFileText,
-    IconPencil,
-    IconLoader2,
     IconAlertTriangle,
+    IconFileText,
+    IconLoader2,
+    IconPencil,
   } from "@tabler/icons-svelte";
   import { inputStore } from "./input.svelte";
-  import { dialogStore } from "$lib/store/ui/dialog.svelte";
   import ScriptSegmentDialog from "./ScriptSegmentDialog.svelte";
-  import { DbKeys } from "../../../dbkeys";
 
   let accordionValue = $state("");
 

@@ -9,6 +9,8 @@ const partialInfoCardSchema = infoCardViewSchema.omit({ id: true }).partial();
 export type PartialInfoCard = z.infer<typeof partialInfoCardSchema>
 
 export const projectActivityDataSchema = z.object({
+    icon: z.string(), // 图标，不能省略。
+    statusText: z.string(), // 状态栏文字，不能省略。
     activities: z.array(leftSidebarItemJSONSchema),
     header: z.object({
         title: z.string(),
@@ -30,12 +32,12 @@ export const projectActivityDataSchema = z.object({
             term: z.string().optional(),
         })
         .optional(),
-    /** 无法开始工作时的提示 */
-    needInput: z
+    /** 开始工作时的输入检查。如果本值给出，则需要检查key(默认script)的有效性。 */
+    checkInput: z
         .object({
             title: z.string().optional(),
             description: z.string().optional(),
-            ignore: z.boolean().optional(),
+            key: z.string().optional(),
         })
         .optional(),
 });

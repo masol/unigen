@@ -25,9 +25,9 @@
     $props();
 
   const bound = useBoundFiles(service, () => node.dir);
-  let images = $derived(coerceList<string>(bound.snapshot.value));
-  let loading = $derived(bound.snapshot.loading);
-  let boundError = $derived(bound.snapshot.error);
+  let images = $derived(coerceList<string>(bound.value));
+  let loading = $derived(bound.loading);
+  let boundError = $derived(bound.error);
 
   let isUploading = $state(false);
   let busy = $derived(isUploading || loading);

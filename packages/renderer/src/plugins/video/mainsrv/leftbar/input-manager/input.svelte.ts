@@ -7,7 +7,7 @@
 
 import { api } from '$lib/utils/api';
 import log from 'electron-log/renderer';
-import { DbKeys } from '../../../dbkeys';
+import { DbKeys } from '../../../../../lib/utils/service/dbkeys';
 import type { ScriptItem } from './types';
 
 

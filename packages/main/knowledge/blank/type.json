@@ -1,4 +1,6 @@
 {
+    "icon": "IconSquarePlus",
+    "statusText": "空白项目",
     "header": {
         "title": "空白类型工作台",
         "detail": "用于开发AI工作流"
@@ -29,7 +31,7 @@
                             {
                                 "type": "text-list",
                                 "binding": {
-                                    "readKey": "scripts"
+                                    "key": "script"
                                 },
                                 "addLabel": "添加输入",
                                 "emptyTitle": "还没有输入",
@@ -62,7 +64,7 @@
                             {
                                 "type": "select",
                                 "binding": {
-                                    "readKey": "language"
+                                    "key": "language"
                                 },
                                 "label": "语言",
                                 "icon": "IconLanguage",

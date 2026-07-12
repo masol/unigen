@@ -4,7 +4,7 @@ import { configService } from "$libs/store/index.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import type { RunState } from "$types/index.js";
 import { getErrorMessage } from "radashi";
-import { ProjectDbKeys } from "../dbkeys.js";
+import { ProjectDbKeys } from "../../utils/db/dbkeys.js";
 import type { IProjectContext } from "../type.js";
 import { BaseProjectController } from "./base.js";
 import { PrjDB } from "./drizzle/index.js";
@@ -57,7 +57,7 @@ ${getErrorMessage(e)}`;
         }
     }
 
-    start(entry?: string): void {
+    start(entry?: string, seq?: number): void {
         if (this.#cmdrunner) {
             const parallelRun = configService().get("parallelRun");
             if (!parallelRun) {
@@ -73,7 +73,7 @@ ${getErrorMessage(e)}`;
             entry = defEntry;
         }
 
-        const ctx = new RunnerContext(this.ctx);
+        const ctx = new RunnerContext(this.ctx, null, seq);
         this.#runner.start(entry, ctx);
     }
 

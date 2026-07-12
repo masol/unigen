@@ -1,7 +1,7 @@
 import { createEmbeding } from "$libs/model/factory/embed.js";
 import type { EmbedingOp, EmbedType } from "$libs/model/factory/type.js";
-import { ProjectDbKeys } from "$libs/project/dbkeys.js";
 import { configService } from "$libs/store/index.js";
+import { ProjectDbKeys } from "$libs/utils/db/dbkeys.js";
 import { throwNotfound, throwPrecondition, throwUnprcessable } from "$libs/utils/err.js";
 import type { Provider } from '$types/index.js';
 import Logger from "electron-log";

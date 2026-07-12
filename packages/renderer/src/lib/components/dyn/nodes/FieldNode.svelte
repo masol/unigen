@@ -13,7 +13,7 @@
 
   const b = useBinding<string>(service, () => node.binding);
   let value = $derived(coerceString(b.value));
-  let loading = $derived(b.loading || service.isLoading);
+  let loading = $derived(b.loading);
   let readonly = $derived(b.readonly);
 
   let isEditing = $state(false);
@@ -77,7 +77,7 @@
     {#if isEditing}
       <div class="flex items-center gap-2">
         <Input
-          id={`field-${node.binding.readKey}`}
+          id={`field-${node.binding.key}`}
           bind:this={inputRef}
           bind:value={tempValue}
           class="rounded-lg flex-1 h-8 text-sm"
@@ -100,7 +100,7 @@
       <div class="flex items-center justify-between gap-3">
         <div class="flex-1 min-w-0">
           <label
-            for={`field-${node.binding.readKey}`}
+            for={`field-${node.binding.key}`}
             class="block text-xs text-muted-foreground mb-1"
           >
             {node.label}

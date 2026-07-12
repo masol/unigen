@@ -17,24 +17,25 @@
 
   const OPEN = "self";
   let accordionValue = $state(node.defaultOpen ? OPEN : "");
-  let loading = $derived(service.isLoading);
   let children = $derived(Array.isArray(node.children) ? node.children : []);
 
-  // 找出用于计数的列表 key（静态推导即可）
+  // 删除原来的： let loading = $derived(service.isLoading);
+
   let countKey = $derived.by(() => {
     if (node.badge !== "count") return undefined;
     const listChild = children.find(
-      (c) => "binding" in c && (c as any).binding?.readKey,
-    ) as { binding: { readKey: string } } | undefined;
-    return listChild?.binding.readKey;
+      (c) => "binding" in c && (c as any).binding?.key, // readKey → key
+    ) as { binding: { key: string } } | undefined;
+    return listChild?.binding.key;
   });
 
-  // 【修正】无 countKey 时 readKey 为空 —— useBinding 已对空 key 短路，
-  // 不会发起任何 fetch/订阅；track 显式关闭。
+  // count 是在「观察」列表 key（本组件不是变更源）→ 必须 track:true 才能实时更新
   const countBound = useBinding(service, () => ({
-    readKey: countKey ?? "",
-    track: false,
+    key: countKey ?? "",
+    track: true,
   }));
+
+  let loading = $derived(countBound.loading);
 
   let badgeText = $derived.by(() => {
     if (node.badge !== "count") return node.badge ?? null;

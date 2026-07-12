@@ -1,51 +1,34 @@
-// src/lib/components/dyn/type.ts
-
-export interface ValueSnapshot<T = unknown> {
-    value: T | undefined;
-    loading: boolean;
-    error: string | null;
-}
-
-export interface ChangePayload<T = unknown> {
-    value: T | undefined;
-    loading?: boolean;
-    error?: string | null;
-}
+// src/lib/store/ui/activity/type.ts
 
 export type Unsubscribe = () => void;
 
+/** 值监听：直接收原值（可能为 undefined），无任何包裹。 */
+export type ValueListener<T = unknown> = (value: T | undefined) => void;
+
+/** 文件列表监听：直接收最新路径数组。 */
+export type FilesListener = (value: string[]) => void;
+
 /**
- * 数据传输原语层。不认识任何业务数据结构：
- *  - 普通值：按 key 读写 / 订阅
- *  - 文件资源：按 dir 读写 / 订阅
- * 列表项结构、子内容 key 拼法等业务知识全部在组件层。
+ * 纯数据传输服务：只提供稳定的「读 / 写 / 删 / 监听」，绝不缓冲、不持有快照。
+ *  - get 永远向 main 读最新值。
+ *  - set/rm 成功后把新值派发给「订阅了该 key 的监听者」。
+ *  - main 静默变更经 onKvChanged 派发。
+ *  - 是否需要缓冲/监听，由组件侧 hook 自行决定（唯一变更源可以不监听）。
  */
 export interface IValueService {
-    /* ── 普通值 · key 维度 ── */
-    get<T = unknown>(key: string): T | undefined;
-    getState<T = unknown>(key: string): ValueSnapshot<T>;
-    onChange<T = unknown>(
-        key: string,
-        cb: (p: ChangePayload<T>) => void,
-    ): Unsubscribe;
-    set(key: string, value: unknown): Promise<void>;
+    /* 普通值：key 维度 */
+    get<T = unknown>(key: string): Promise<T | undefined>;
+    set<T = unknown>(key: string, value: T): Promise<void>;
     rm(key: string): Promise<void>;
+    /** 订阅 key 的一切变更（main 静默变更 + 其它组件的 set/rm 回流）。 */
+    subscribe<T = unknown>(key: string, cb: ValueListener<T>): Unsubscribe;
 
-    /* ── 文件资源 · dir 维度 ── */
+    /* 文件资源：dir 维度 */
     fileList(dir: string): Promise<string[]>;
     fileAdd(dir: string, paths: string[]): Promise<string[]>;
     fileRemove(dir: string, paths: string[]): Promise<void>;
-    onFileChange(
-        dir: string,
-        cb: (p: ChangePayload<string[]>) => void,
-    ): Unsubscribe;
+    subscribeFiles(dir: string, cb: FilesListener): Unsubscribe;
 
-    /* ── 外部变更入口（main 通过它推送；由宿主调用，非组件） ── */
+    /** 宿主推入：main 侧某 key 变更 */
     onKvChanged(key: string, value: unknown): void;
-
-    // type.ts: interface ValueService 增
-    fetch<T = unknown>(key: string): Promise<T | undefined>;
-
-    readonly isLoading: boolean;
-    readonly error: string | null;
 }

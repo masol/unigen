@@ -1,37 +1,37 @@
-// src/lib/components/dyn/input-value-service.ts
+// src/lib/store/ui/activity/value-service.ts
 /**
- * ValueService 实现：纯数据传输原语，不认识任何业务数据结构。
+ * ValueService —— 纯数据传输原语，无缓冲、无快照。
  *  - 普通值：按 key，走 api().project.get/set/rm。
  *  - 文件资源：按 dir，走 api().project.listMetaRes/addMetaRes/rmMetaRes。
  *
- * 订阅：首个监听者时 addSubscribe(key)；无监听者时 rmSubscribe(key)。
- * main 变更通过外部调用 onKvChanged(key, value) 推入，service 内部路由 + 判等。
+ * 设计原则（重要）：
+ *  - service 不持有任何值缓存。get 永远向 main 读最新值。
+ *  - set/rm 成功后，把「新值」派发给该 key 的订阅者（跨组件回流）。
+ *  - main 静默变更经宿主 onKvChanged 推入，同样派发给订阅者。
+ *  - 是否订阅由组件侧决定：唯一变更源的组件可完全不订阅（自己乐观更新）。
  *
- * 防循环：onKvChanged → #onRemoteKey：回声抑制(lastLocalWrite) + 值判等(snapshot)。
+ * subscribe(key, cb)：
+ *  - 注册 cb，并（首个订阅者时）向 main addSubscribe，接收 main 静默变更。
+ *  - 无订阅者时删除 entry，无泄漏。
  */
 import { api } from "$lib/utils/api";
 import log from "electron-log/renderer";
-import { getErrorMessage, isEqual } from "radashi";
+import { getErrorMessage } from "radashi";
 import { toast } from "svelte-sonner";
 import type {
-    ChangePayload,
+    FilesListener,
     IValueService,
     Unsubscribe,
-    ValueSnapshot,
+    ValueListener,
 } from "./type";
 
 interface KeyEntry {
-    snapshot: ValueSnapshot;
-    listeners: Set<(p: ChangePayload) => void>;
-    subscribed: boolean;
-    /** 回声抑制：最近一次本地写入的值（一次性） */
-    lastLocalWrite?: unknown;
-    hasLocalWrite: boolean;
+    listeners: Set<ValueListener>;
+    subscribed: boolean; // 是否已 addSubscribe(main)
 }
 
 interface DirEntry {
-    snapshot: ValueSnapshot<string[]>;
-    listeners: Set<(p: ChangePayload<string[]>) => void>;
+    listeners: Set<FilesListener>;
 }
 
 export class ValueService implements IValueService {
@@ -40,171 +40,96 @@ export class ValueService implements IValueService {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
     #dirs = new Map<string, DirEntry>();
 
-    #isLoading = $state(false);
-    #error = $state<string | null>(null);
-    get isLoading() {
-        return this.#isLoading;
-    }
-    get error() {
-        return this.#error;
-    }
-
     /* ════════════ 普通值：key 维度 ════════════ */
 
-    #keyEntry(key: string): KeyEntry {
-        let e = this.#keys.get(key);
-        if (!e) {
-            e = {
-                snapshot: { value: undefined, loading: true, error: null },
-                // eslint-disable-next-line svelte/prefer-svelte-reactivity
-                listeners: new Set(),
-                subscribed: false,
-                hasLocalWrite: false,
-            };
-            this.#keys.set(key, e);
-        }
-        return e;
-    }
-
-    #emitKey(key: string, patch: Partial<ValueSnapshot>) {
-        const e = this.#keyEntry(key);
-        e.snapshot = { ...e.snapshot, ...patch };
-        const p: ChangePayload = { ...e.snapshot };
-        for (const cb of e.listeners) cb(p);
-    }
-
-    async #loadKey(key: string) {
-        this.#emitKey(key, { loading: true, error: null });
-        try {
-            const value = await api().project.get(key);
-            this.#emitKey(key, { value, loading: false, error: null });
-        } catch (err) {
-            const errMsg = getErrorMessage(err);
-            this.#emitKey(key, { loading: false, error: errMsg });
-            const msg = `[VS] loadKey “${key}” failed: ${errMsg}`
-            log.error(msg);
-            toast.error(msg);
-        }
-    }
-
-    /** 外部（宿主）调用：main 侧某 key 变更 */
-    onKvChanged(key: string, value: unknown): void {
+    #notify(key: string, value: unknown) {
         const e = this.#keys.get(key);
-        // 无 entry / 无活跃监听：忽略（rm 或从未订阅）
-        if (!e || e.listeners.size === 0) return;
+        if (!e) return;
+        // 拷贝一份，避免回调内增删监听者导致迭代异常
+        for (const cb of [...e.listeners]) cb(value);
+    }
 
-        // ① 回声抑制：与自己刚写入的相等 → 丢弃（一次性）
-        if (e.hasLocalWrite && isEqual(value, e.lastLocalWrite)) {
-            e.hasLocalWrite = false;
-            e.lastLocalWrite = undefined;
-            log.debug(`[VS] echo suppressed: ${key}`);
-            return;
+    /** 宿主调用：main 侧某 key 变更 → 直接派发原值 */
+    onKvChanged(key: string, value: unknown): void {
+        this.#notify(key, value);
+    }
+
+    async get<T = unknown>(key: string): Promise<T | undefined> {
+        try {
+            return (await api().project.get(key)) as T | undefined;
+        } catch (err) {
+            // 读失败只记日志并抛出；由调用方（hook）在 UI 内联展示 error，避免 toast 噪音。
+            log.error(`[VS] get “${key}” failed: ${getErrorMessage(err)}`);
+            throw err;
         }
-        // ② 值判等兜底：与当前快照相等 → 丢弃
-        if (isEqual(value, e.snapshot.value)) return;
-
-        this.#emitKey(key, { value, loading: false, error: null });
     }
 
-    get<T = unknown>(key: string): T | undefined {
-        return this.#keys.get(key)?.snapshot.value as T | undefined;
-    }
-
-    getState<T = unknown>(key: string): ValueSnapshot<T> {
-        return this.#keyEntry(key).snapshot as ValueSnapshot<T>;
-    }
-
-    async fetch<T = unknown>(key: string): Promise<T | undefined> {
-        return (await api().project.get(key)) as T | undefined;
-    }
-
-    onChange<T = unknown>(
-        key: string,
-        cb: (p: ChangePayload<T>) => void,
-    ): Unsubscribe {
-        const e = this.#keyEntry(key);
-        e.listeners.add(cb as (p: ChangePayload) => void);
-        if (!e.subscribed) {
-            e.subscribed = true;
-            api().project.addSubscribe(key);
-            void this.#loadKey(key);
-        } else {
-            cb({ ...(e.snapshot as ValueSnapshot<T>) });
-        }
-        return () => {
-            e.listeners.delete(cb as (p: ChangePayload) => void);
-            if (e.listeners.size === 0 && e.subscribed) {
-                e.subscribed = false;
-                api().project.rmSubscribe(key);
-            }
-        };
-    }
-
-    async set(key: string, value: unknown): Promise<void> {
-        const e = this.#keyEntry(key);
-        e.lastLocalWrite = value;
-        e.hasLocalWrite = true;
+    async set<T = unknown>(key: string, value: T): Promise<void> {
         try {
             await api().project.set({ key, value });
-            this.#emitKey(key, { value, loading: false, error: null });
+            this.#notify(key, value); // 回流给订阅者（若有）
         } catch (err) {
-            const errMsg = getErrorMessage(err);
-            this.#emitKey(key, { error: errMsg });
-            const msg = `[VS] set ${key} failed:${errMsg}`
+            const msg = `[VS] set “${key}” failed: ${getErrorMessage(err)}`;
             log.error(msg);
             toast.error(msg);
-            // throw err;
+            throw err; // 让调用方感知失败，避免基于"以为成功"的后续写入
         }
     }
 
     async rm(key: string): Promise<void> {
-        const e = this.#keyEntry(key);
-        e.lastLocalWrite = undefined;
-        e.hasLocalWrite = false;
         try {
             await api().project.rm(key);
+            this.#notify(key, undefined);
         } catch (err) {
-            const errMsg = getErrorMessage(err);
-            this.#emitKey(key, { error: errMsg });
-            const msg = `[VS] rm ${key} failed:${errMsg}`
+            const msg = `[VS] rm “${key}” failed: ${getErrorMessage(err)}`;
             log.error(msg);
             toast.error(msg);
+            throw err;
         }
     }
 
-    /* ════════════ 文件资源：dir 维度（无变更通知） ════════════ */
+    subscribe<T = unknown>(key: string, cb: ValueListener<T>): Unsubscribe {
+        let e = this.#keys.get(key);
+        if (!e) {
+            // eslint-disable-next-line svelte/prefer-svelte-reactivity
+            e = { listeners: new Set(), subscribed: false };
+            this.#keys.set(key, e);
+        }
+        const entry = e;
+        entry.listeners.add(cb as ValueListener);
+        if (!entry.subscribed) {
+            entry.subscribed = true;
+            api().project.addSubscribe(key);
+        }
+
+        let done = false;
+        return () => {
+            if (done) return;
+            done = true;
+            entry.listeners.delete(cb as ValueListener);
+            if (entry.listeners.size === 0) {
+                if (entry.subscribed) api().project.rmSubscribe(key);
+                this.#keys.delete(key);
+            }
+        };
+    }
+
+    /* ════════════ 文件资源：dir 维度 ════════════ */
 
     #dirEntry(dir: string): DirEntry {
         let e = this.#dirs.get(dir);
         if (!e) {
-            e = {
-                snapshot: { value: undefined, loading: true, error: null },
-                // eslint-disable-next-line svelte/prefer-svelte-reactivity
-                listeners: new Set(),
-            };
+            // eslint-disable-next-line svelte/prefer-svelte-reactivity
+            e = { listeners: new Set() };
             this.#dirs.set(dir, e);
         }
         return e;
     }
 
-    #emitDir(dir: string, patch: Partial<ValueSnapshot<string[]>>) {
-        const e = this.#dirEntry(dir);
-        e.snapshot = { ...e.snapshot, ...patch };
-        const p: ChangePayload<string[]> = { ...e.snapshot };
-        for (const cb of e.listeners) cb(p);
-    }
-
-    async #loadDir(dir: string) {
-        this.#emitDir(dir, { loading: true, error: null });
-        try {
-            const value = (await api().project.listMetaRes(dir)) ?? [];
-            this.#emitDir(dir, { value, loading: false, error: null });
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            this.#emitDir(dir, { loading: false, error: msg });
-            log.error(`[VS] loadDir ${dir} failed`, err);
-            toast.error("msg");
-        }
+    #notifyDir(dir: string, value: string[]) {
+        const e = this.#dirs.get(dir);
+        if (!e) return;
+        for (const cb of [...e.listeners]) cb(value);
     }
 
     async fileList(dir: string): Promise<string[]> {
@@ -212,39 +137,40 @@ export class ValueService implements IValueService {
     }
 
     async fileAdd(dir: string, paths: string[]): Promise<string[]> {
-        const e = this.#dirEntry(dir);
-        const added = await api().project.addMetaRes({ dir, paths });
-        const next = [...((e.snapshot.value as string[]) ?? []), ...added];
-        this.#emitDir(dir, { value: next });
-        return added;
+        try {
+            const added = await api().project.addMetaRes({ dir, paths });
+            // 不本地拼接，直接向 main 重拉，保证与真实一致
+            this.#notifyDir(dir, await this.fileList(dir));
+            return added;
+        } catch (err) {
+            const msg = `[VS] fileAdd “${dir}” failed: ${getErrorMessage(err)}`;
+            log.error(msg);
+            toast.error(msg);
+            throw err;
+        }
     }
 
     async fileRemove(dir: string, paths: string[]): Promise<void> {
-        const e = this.#dirEntry(dir);
-        await api().project.rmMetaRes({ dir, paths });
-        // eslint-disable-next-line svelte/prefer-svelte-reactivity
-        const set = new Set(paths);
-        const next = ((e.snapshot.value as string[]) ?? []).filter(
-            (p) => !set.has(p),
-        );
-        this.#emitDir(dir, { value: next });
+        try {
+            await api().project.rmMetaRes({ dir, paths });
+            this.#notifyDir(dir, await this.fileList(dir));
+        } catch (err) {
+            const msg = `[VS] fileRemove “${dir}” failed: ${getErrorMessage(err)}`;
+            log.error(msg);
+            toast.error(msg);
+            throw err;
+        }
     }
 
-    onFileChange(
-        dir: string,
-        cb: (p: ChangePayload<string[]>) => void,
-    ): Unsubscribe {
+    subscribeFiles(dir: string, cb: FilesListener): Unsubscribe {
         const e = this.#dirEntry(dir);
         e.listeners.add(cb);
-        if (e.listeners.size === 1) {
-            void this.#loadDir(dir); // 无 main 订阅，仅本地驱动
-        } else {
-            cb({ ...e.snapshot });
-        }
+        let done = false;
         return () => {
+            if (done) return;
+            done = true;
             e.listeners.delete(cb);
+            if (e.listeners.size === 0) this.#dirs.delete(dir);
         };
     }
 }
-
-// export const inputValueService = new ValueService();

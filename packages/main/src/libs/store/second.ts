@@ -27,7 +27,7 @@ class ConfigService {
         }
 
         this.lru = new QuickLRU({
-            maxSize: 10,
+            maxSize: 6,
         })
         const recents = this.get('recents');
         // 按 time 降序排序，时间小的在前
@@ -42,7 +42,7 @@ class ConfigService {
         const prj = getCurrentProject();
 
         broadcast({
-            name: "recents",
+            name: "recent:projects",
             srcId: prj?.wid || -1,
             payload: this.recents
         })
@@ -60,12 +60,26 @@ class ConfigService {
     get recents() {
         // quick-lru 内部的迭代器是从“最老”到“最新”
         // 用 reverse() 反转，让最新打开的项目排在最前面
-        return Array.from(this.lru.values()).reverse();
+        // return Array.from(this.lru.values()).reverse();
+        // 1. 将 LRU 缓存的值转换为数组
+        const projects = Array.from(this.lru.values());
+
+        // 2. 按 time 属性降序排序（数值大、时间新、排在前面）
+        return projects.sort((a, b) => b.time - a.time);
+    }
+
+    clearRecents() {
+        if (this.lru.size > 0) {
+            this.lru.clear();
+            this.onUpdate();
+        }
     }
 
     removeProject(projectPath: string) {
-        this.lru.delete(projectPath);
-        this.onUpdate();
+        if (this.lru.has(projectPath)) {
+            this.lru.delete(projectPath);
+            this.onUpdate();
+        }
     }
 
     /**

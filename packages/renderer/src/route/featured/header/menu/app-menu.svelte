@@ -8,7 +8,7 @@
 </script>
 
 <Menubar.Root
-  class="h-9 space-x-0 rounded-none border-0 bg-transparent p-0 shadow-none"
+  class="h-9 space-x-0 rounded-none border-0 bg-transparent p-0 shadow-none select-none cursor-pointer"
 >
   <ProjectMenu />
   <RunMenu />

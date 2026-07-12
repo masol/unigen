@@ -2,11 +2,11 @@ import SelectProjectTypeDialog from '$lib/components/dialog/project-type/SelectP
 import { api, procApiError, safeApi } from "$lib/utils/api";
 import evtbus from "$lib/utils/evtbus";
 import { hooks } from '$lib/utils/hook';
+import { DbKeys } from '$lib/utils/service/dbkeys';
 import type { ProjectActivityData, RunState } from "@app/main/types";
 import { COMMON_ORPC_ERROR_DEFS, ORPCError } from "@orpc/client";
 import Logger from "electron-log/renderer";
 import { toast } from "svelte-sonner";
-import { DbKeys } from "../../plugins/video/dbkeys";
 import { pluginStore } from "./plugin.svelte";
 import { ProjectActivity } from "./ui/activity/activity";
 import { confirmStore } from "./ui/confirm.svelte";
@@ -59,13 +59,14 @@ class ProjectStore {
         return procApiError(e);
     }
 
-    async start(): Promise<void> {
+    // 非命令入口！只被dashboardStore调用。
+    async start(seq: number): Promise<void> {
         try {
             if (this.#path.trim().length === 0) {
                 toast.error("尚未打开项目")
                 return
             }
-            await api().project.start();
+            await api().project.start(seq);
             this.#runState = await api().project.runState(); // "running";
             console.log("this.#runState=", this.#runState)
         } catch (e) {

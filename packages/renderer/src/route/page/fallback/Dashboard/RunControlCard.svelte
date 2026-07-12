@@ -4,6 +4,8 @@
   import * as Select from "$lib/components/ui/select";
   import { dashboardStore } from "$lib/store/dashboard.svelte";
   import { projectStore } from "$lib/store/project.svelte";
+  import { tourStore } from "$lib/store/ui/tour.svelte";
+  import { safeApi } from "$lib/utils/api";
   import autoAnimate from "@formkit/auto-animate";
   import {
     IconAlertTriangle,
@@ -99,11 +101,6 @@
       projectStore.activity?.targets[projectStore.activity?.targets.length - 1],
   );
 
-  $effect(() => {
-    console.log("currentTarget=", currentTarget);
-    console.log("activity",projectStore.activity)
-  });
-
   let isLocked = $derived(
     dashboardStore.runState !== "idle" || isUpdatingTarget,
   );
@@ -129,13 +126,20 @@
 
   async function handleMainbutton(): Promise<void> {
     if (dashboardStore.runState === "idle") {
-      // const totalSize = inputStore.scripts.reduce((acc, item) => {
-      //   return acc + item.size;
-      // }, 0);
-      // if (totalSize <= 0) {
-      //   tourStore.start(steps);
-      //   return;
-      // }
+      if (projectStore.activity?.intputSteps) {
+        const inputKey = projectStore.activity.inputKey;
+        const inputValue = await safeApi().project.get(inputKey);
+        let lackInput = true;
+        if (Array.isArray(inputValue) && inputValue.length > 0) {
+          lackInput = false;
+        } else if (inputValue) {
+          lackInput = false;
+        }
+        if (lackInput) {
+          tourStore.start(projectStore.activity?.intputSteps);
+          return;
+        }
+      }
     }
     await dashboardStore.handleMainButton();
   }

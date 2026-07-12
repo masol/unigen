@@ -17,6 +17,7 @@
     IconFolderOpen,
     IconFolderX,
     IconHistory,
+    IconHistoryOff,
     IconLoader2,
     IconLogout,
   } from "@tabler/icons-svelte";
@@ -46,6 +47,10 @@
     if (!canClose) return;
     await projectStore.close();
   }
+
+  async function clearRecent() {
+    await recentProjectsStore.clear();  
+  }
   async function quit() {
     if (dashboardStore.runState === "running") {
       const confirmed = await confirmStore.request({
@@ -61,11 +66,11 @@
 
 <Menubar.Menu>
   <Menubar.Trigger
-    class="h-9 rounded-none px-2.5 text-xs font-normal data-[state=open]:bg-accent/80 hover:bg-accent/80"
+    class="cursor-default select-none h-9 rounded-none px-2.5 text-xs font-normal data-[state=open]:bg-accent/80 hover:bg-accent/80"
   >
     项目
   </Menubar.Trigger>
-  <Menubar.Content align="start" class="z-200 min-w-52">
+  <Menubar.Content align="start" class="select-none z-200 min-w-52">
     <Menubar.Item disabled={isBusy} onSelect={newProject}>
       <IconFilePlus size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
       新建项目
@@ -90,7 +95,7 @@
         />
         最近打开
       </Menubar.SubTrigger>
-      <Menubar.SubContent class="z-200 min-w-64">
+      <Menubar.SubContent side="right" align="start" class="z-200 min-w-64">
         {#if recentsLoading}
           <div
             class="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground"
@@ -118,6 +123,17 @@
               </span>
             </Menubar.Item>
           {/each}
+          <Menubar.Separator></Menubar.Separator>
+          <Menubar.Item disabled={isBusy} onSelect={() => clearRecent()}>
+            <span
+              class="mr-2 flex size-5 shrink-0 items-center justify-center text-muted-foreground"
+            >
+              <IconHistoryOff size={20} />
+            </span>
+            <span class="flex min-w-0 flex-col">
+              <span class="truncate">清空历史记录</span>
+            </span>
+          </Menubar.Item>
         {/if}
       </Menubar.SubContent>
     </Menubar.Sub>

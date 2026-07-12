@@ -10,6 +10,7 @@
   import { i18nStore } from "$lib/store/i18n.svelte";
   import { pluginStore } from "$lib/store/plugin.svelte";
   import { projectStore } from "$lib/store/project.svelte";
+  import { recentProjectsStore } from "$lib/store/recent-projects.svelte";
   import { windowStore } from "$lib/store/window.svelte";
   import { ModeWatcher } from "mode-watcher";
   import { onDestroy, onMount } from "svelte";
@@ -58,7 +59,11 @@
       await configStore.init(); // 先加载配置信息。
 
       //初始化pluginSystem.
-      await Promise.all([pluginStore.init(), i18nStore.init()]);
+      await Promise.all([
+        pluginStore.init(),
+        i18nStore.init(),
+        recentProjectsStore.load(),
+      ]);
 
       await projectStore.init();
 

@@ -8,10 +8,9 @@
   } from "@tabler/icons-svelte";
   import { router } from "svelte-spa-router";
 // ── Stores ──
-  import { configStore } from "$lib/store/config.svelte";
-  import { pluginStore } from "$lib/store/plugin.svelte";
   import { projectStore } from "$lib/store/project.svelte";
-// ── Sub-views ──
+  // ── Sub-views ──
+  import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { safeApi } from "$lib/utils/api";
   import { onMount } from "svelte";
   import EditorStatusBar from "../page/editor/EditorStatusBar.svelte";
@@ -55,26 +54,6 @@
     if (segments.length <= 2) return p;
     return `…/${segments.slice(-2).join("/")}`;
   });
-
-  // ═══════════════════════════════════════════════════════════
-  // Project type — 与新建项目页保持同一真相源(configStore + pluginStore)
-  // ═══════════════════════════════════════════════════════════
-  const projectTypes = $derived(
-    pluginStore.projectPlugins.map((plugin) => ({
-      value: plugin.id,
-      label: plugin.name,
-      note: plugin.description,
-      icon: plugin.icon,
-    })),
-  );
-
-  const currentProjectType = $derived(configStore.projectype ?? "video");
-
-  const currentTypeMeta = $derived(
-    projectTypes.find((t) => t.value === currentProjectType),
-  );
-
-  const currentTypeLabel = $derived(currentTypeMeta?.label ?? "未知类型");
 
   // ═══════════════════════════════════════════════════════════
   // Actions — 在资源管理器中定位项目目录 / 打开作者邮箱
@@ -123,13 +102,16 @@
     <!-- 右侧：项目类型 + Brand -->
     <div class="flex shrink-0 items-center gap-3">
       <button
-        title={currentTypeMeta?.note ?? ""}
         class="flex items-center gap-1 text-xs text-muted-foreground transition-all duration-200 hover:text-foreground"
       >
-        {#if currentTypeMeta?.icon}
-          <currentTypeMeta.icon class="size-3.5" stroke={1.5} />
+        {#if projectStore.activity?.icon}
+          <RuntimeIcon
+            name={projectStore.activity?.icon}
+            class="size-3.5"
+            stroke={1.5}
+          />
         {/if}
-        <span>{currentTypeLabel}</span>
+        <span>{projectStore.activity?.statusText}</span>
       </button>
       <RunState />
     </div>

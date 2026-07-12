@@ -38,11 +38,11 @@
 
 <Menubar.Menu>
   <Menubar.Trigger
-    class="h-9 rounded-none px-2.5 text-xs font-normal data-[state=open]:bg-accent/80 hover:bg-accent/80"
+    class="cursor-default select-none h-9 rounded-none px-2.5 text-xs font-normal data-[state=open]:bg-accent/80 hover:bg-accent/80"
   >
     运行
   </Menubar.Trigger>
-  <Menubar.Content align="start" class="z-200 min-w-48">
+  <Menubar.Content align="start" class="select-none z-200 min-w-48">
     <Menubar.Item disabled={!canStart} onSelect={start}>
       <IconPlayerPlay size={20} stroke={1.5} class="mr-2 text-primary" />
       启动

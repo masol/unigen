@@ -6,11 +6,13 @@ import { loadFunctor } from './capability/index.js';
 import type { Capability } from './capability/is.js';
 import { ICapaFunctor } from './capability/type.js';
 
+let runSeq: number = -1;
 
 export class RunnerContext implements IRunnerContext {
     readonly signal: AbortSignal;
     readonly prj: IProjectContext;
     readonly prjdb: PrjDB;
+    readonly seq: number;
     cmd: CommandInfo = { isCommand: false, body: "" };
     fnNotify: ((title: string, detail: string) => void) | null = null;
     #stack: Capability[] = [];
@@ -18,7 +20,8 @@ export class RunnerContext implements IRunnerContext {
     private readonly abortController: AbortController | null = null;
     #isForceKilled: boolean = false;
 
-    constructor(prj: IProjectContext, signal?: AbortSignal | null) {
+    constructor(prj: IProjectContext, signal?: AbortSignal | null, seq?: number) {
+        this.seq = seq ? seq : runSeq--;
         this.prj = prj;
         this.prjdb = PrjDB.ensure(prj);
 

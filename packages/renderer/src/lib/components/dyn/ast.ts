@@ -9,8 +9,7 @@
  *     不要写死在组件里。
  *  ② 写 `nodes/Xxx.svelte`，props 恒为 `{ node, service }`。
  *     读写数据一律经 `useBinding(service, () => node.binding)`——它自动处理
- *     异步加载 / main 静默变更同步 / 卸载注销 / readonly。切勿自己调
- *     service.onChange。
+ *     异步加载 / main 静默变更同步 / 卸载注销 / readonly。
  *  ③ registry.ts 注册 `type → 组件` 一行；dispatcher 无需改。
  *  ④ 若节点走「文件资源」（按目录，而非 key），用 dir 字段 + service.file*，
  *     见 ImageGridNode。

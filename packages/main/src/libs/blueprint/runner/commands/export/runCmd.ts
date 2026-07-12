@@ -1,5 +1,5 @@
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
-import { ProjectDbKeys } from '$libs/project/dbkeys.js';
+import { ProjectDbKeys } from '$libs/utils/db/dbkeys.js';
 import { throwCancel, throwUnprcessable } from '$libs/utils/err.js';
 import { knowledgeCenter } from '$libs/utils/kc.js';
 import { WindowService } from '$libs/utils/window.js';

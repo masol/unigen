@@ -43,10 +43,6 @@ export const configSchema: Schema<AppConfig> = {
         type: 'boolean',
         default: false,
     },
-    plugin: { // 新项目类型插件名。
-        type: 'string',
-        default: "video"
-    },
     embed_model: {
         type: 'string',
         default: ""

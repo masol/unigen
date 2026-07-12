@@ -14,6 +14,8 @@ export interface CommandInfo {
 export interface IRunnerContext {
     /** 原生的 Web API AbortSignal，可透传给支持取消的异步底层操作 */
     readonly signal: AbortSignal;
+    // 默认的调用序列，用来指示本次runcontext的标识--这个标识只在进程内唯一(用户指定正向增加，内部分配负向减少)
+    readonly seq: number;
 
     /** 快照检查点：判断当前工作流是否已经被终止 */
     readonly isAborted: boolean;

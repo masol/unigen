@@ -1,11 +1,13 @@
 // 轻量DI容器，未使用轻量DI框架(如awilix)，因为其还是太重，本DI不涉及外部扩展代码的问题。
 
+import { secondConfig } from "$libs/store/second.js";
 import { throwUnprcessable } from "$libs/utils/err.js";
 import { knowledgeCenter } from "$libs/utils/kc.js";
 import { notify } from "$libs/utils/rpcevt.js";
 import type { ProjectActivityData } from "$types/index.js";
 import { projectActivityDataSchema } from "$types/shared/template/project.js";
 import { BrowserWindow } from "electron";
+import Logger from "electron-log/main.js";
 import fsExtra from 'fs-extra';
 import { join } from "node:path";
 import { z } from "zod";
@@ -87,20 +89,21 @@ export class ProjectContainer implements IProjectContext {
     }
 
 
-    private validatePrjData(type: unknown): ProjectActivityData {
+    private validatePrjData(file: string, type: unknown): ProjectActivityData {
         const result = projectActivityDataSchema.safeParse(type);
         if (result.success) {
             return type as ProjectActivityData;
-
         }
-        const formattedErrors = z.treeifyError(result.error);
-        throwUnprcessable(`项目UI相关信息错误:${JSON.stringify(formattedErrors, null, 2)}`)
+        const formattedErrors = z.prettifyError(result.error);
+        const msg = `项目UI文件${file}加载失败，详情查看日志。`
+        Logger.error(msg, formattedErrors);
+        throwUnprcessable(msg)
     }
 
     async loadUI(): Promise<ProjectActivityData> {
         const uiFile = this.getPath("type.json");
         const uiJSOn = await fsExtra.readJSON(uiFile);
-        const prjdata = this.validatePrjData(uiJSOn);
+        const prjdata = this.validatePrjData(uiFile, uiJSOn);
         return prjdata;
     }
 
@@ -114,9 +117,11 @@ export class ProjectContainer implements IProjectContext {
             //     // 提前加载插件，才能注册tapable事件响应点。
             //     this.#plugin = await pluginManager.load(configService().get("plugin"), this)
             // }
-            await openProject(this);
+
+            await openProject(this, prjdata.icon);
             return prjdata
         } catch (e) {
+            secondConfig().removeProject(path)
             this.#path = "";
             throw e;
         }
@@ -137,8 +142,8 @@ export class ProjectContainer implements IProjectContext {
                 throwUnprcessable(`请求的类型${type}未提供UI界面定义。`)
             }
             const typejson = await fsExtra.readJSON(typePath, "utf-8");
-            const prjdata = this.validatePrjData(typejson);
-            await createProject(this, type, bForce);
+            const prjdata = this.validatePrjData(typePath, typejson);
+            await createProject(this, type, prjdata.icon, bForce);
             await Promise.all([
                 // this.saveMeta(type),
                 fsExtra.copyFile(typePath, this.getPath("type.json"))

@@ -1,16 +1,18 @@
 <script lang="ts">
+  import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { i18nStore } from "$lib/store/i18n.svelte";
+  import { projectStore } from "$lib/store/project.svelte";
   import { recentProjectsStore } from "$lib/store/recent-projects.svelte";
   import type { RecentProject } from "@app/main/types";
-  import { IconClock, IconFolder } from "@tabler/icons-svelte";
+  import { IconClock } from "@tabler/icons-svelte";
 
   function formatDate(ts: number) {
     return i18nStore.dayjs(ts).fromNow();
   }
 
   function handleOpen(project: RecentProject) {
-    void recentProjectsStore.open(project);
+    void projectStore.open(project.path);
   }
 
   // 从路径里推断显示名（type 中无 name 字段，取最后一段）
@@ -56,7 +58,8 @@
             onclick={() => handleOpen(project)}
             class="group flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-left transition-colors hover:border-border hover:bg-accent"
           >
-            <IconFolder
+            <RuntimeIcon
+              name={project.icon}
               class="size-5 shrink-0 text-muted-foreground group-hover:text-foreground"
             />
             <div class="min-w-0 flex-1">

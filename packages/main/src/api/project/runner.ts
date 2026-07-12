@@ -7,10 +7,11 @@ import { RpcContext } from '../type.js';
 
 
 const start = os
-    .handler(async ({ context }) => {
+    .input(z.number().optional())
+    .handler(async ({ input, context }) => {
         const ctx = context as RpcContext;
         const runner = PrjRunner.ensure(ctx.project);
-        runner.start();
+        runner.start(undefined, input);
     });
 
 

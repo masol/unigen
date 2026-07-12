@@ -13,12 +13,12 @@
 // 不持有响应式状态，专为 PluginRuntimeManager / pluginStore 服务
 //─────────────────────────────────────────────────────────
 
+import type { ModuleSource } from '@app/main/types'
 import log from 'electron-log/renderer'
 import pTimeout from 'p-timeout'
-import type { ModuleSource } from '@app/main/types'
-import { BUILTIN_MODULES } from './shared/module'
-import { api } from '../api'
 import { isObject } from 'radashi'
+import { api } from '../api'
+import { BUILTIN_MODULES } from './shared/module'
 
 // ══════════════════════════ 类型 ══════════════════════════
 
