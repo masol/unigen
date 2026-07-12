@@ -1,31 +1,22 @@
 <!-- 职责：核心运行按钮 + 动态提示文案 + 运行终止点设置。点击调用 store 方法。 -->
 <script lang="ts">
+  import { RuntimeIcon } from "$lib/components/runtimeicon";
   import * as Select from "$lib/components/ui/select";
-  import type { Step } from "$lib/components/ui/walkthrough/ctx";
-  import { dashboardStore, type RunTarget } from "$lib/store/dashboard.svelte";
-  import { tourStore } from "$lib/store/ui/tour.svelte";
+  import { dashboardStore } from "$lib/store/dashboard.svelte";
+  import { projectStore } from "$lib/store/project.svelte";
   import autoAnimate from "@formkit/auto-animate";
   import {
     IconAlertTriangle,
-    IconCamera,
     IconCheck,
     IconChevronDown,
     IconClock,
     IconDatabase,
     IconFlag,
     IconInfoCircle,
-    IconLayoutGrid,
     IconLoader2,
-    IconMicrophone,
-    IconPalette,
     IconPlayerPlayFilled,
     IconPlayerStopFilled,
-    IconScissors,
-    IconUsers,
-    IconVideo,
-    IconWand,
   } from "@tabler/icons-svelte";
-  import { inputStore } from "../../../../plugins/video/mainsrv/leftbar/input-manager";
 
   function fmtTime(s: number) {
     const m = Math.floor(s / 60);
@@ -33,78 +24,85 @@
     return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
   }
 
-  // 终止点元数据 - 全局唯一来源
-  const TARGET_OPTIONS: {
-    value: RunTarget;
-    label: string;
-    desc: string;
-    icon: typeof IconScissors;
-    step: number;
-  }[] = [
-    {
-      value: "shot",
-      label: "镜头目标",
-      desc: "确定镜头要表达的目标",
-      icon: IconCamera,
-      step: 1,
-    },
-    {
-      value: "entities",
-      label: "实体生成",
-      desc: "完成人物 / 场景实体抽取后停止",
-      icon: IconUsers,
-      step: 2,
-    },
-    {
-      value: "voice",
-      label: "语音生成",
-      desc: "完成台词配音合成后停止",
-      icon: IconMicrophone,
-      step: 3,
-    },
-    {
-      value: "segmentation",
-      label: "镜头确定",
-      desc: "确定镜头拍摄细节",
-      icon: IconScissors,
-      step: 4,
-    },
-    {
-      value: "storyboard",
-      label: "分镜绘制",
-      desc: "完成分镜草图后停止",
-      icon: IconLayoutGrid,
-      step: 5,
-    },
-    {
-      value: "visual",
-      label: "视觉生成",
-      desc: "完成关键帧成片渲染后停止",
-      icon: IconPalette,
-      step: 6,
-    },
-    {
-      value: "video",
-      label: "视频生成",
-      desc: "完成视频片段合成后停止",
-      icon: IconVideo,
-      step: 7,
-    },
-    {
-      value: "post",
-      label: "后期处理",
-      desc: "完成全流程产出最终交付",
-      icon: IconWand,
-      step: 8,
-    },
-  ];
+  // // 终止点元数据 - 全局唯一来源
+  // const TARGET_OPTIONS: {
+  //   value: RunTarget;
+  //   label: string;
+  //   desc: string;
+  //   icon: typeof IconScissors;
+  //   step: number;
+  // }[] = [
+  //   {
+  //     value: "shot",
+  //     label: "镜头目标",
+  //     desc: "确定镜头要表达的目标",
+  //     icon: IconCamera,
+  //     step: 1,
+  //   },
+  //   {
+  //     value: "entities",
+  //     label: "实体生成",
+  //     desc: "完成人物 / 场景实体抽取后停止",
+  //     icon: IconUsers,
+  //     step: 2,
+  //   },
+  //   {
+  //     value: "voice",
+  //     label: "语音生成",
+  //     desc: "完成台词配音合成后停止",
+  //     icon: IconMicrophone,
+  //     step: 3,
+  //   },
+  //   {
+  //     value: "segmentation",
+  //     label: "镜头确定",
+  //     desc: "确定镜头拍摄细节",
+  //     icon: IconScissors,
+  //     step: 4,
+  //   },
+  //   {
+  //     value: "storyboard",
+  //     label: "分镜绘制",
+  //     desc: "完成分镜草图后停止",
+  //     icon: IconLayoutGrid,
+  //     step: 5,
+  //   },
+  //   {
+  //     value: "visual",
+  //     label: "视觉生成",
+  //     desc: "完成关键帧成片渲染后停止",
+  //     icon: IconPalette,
+  //     step: 6,
+  //   },
+  //   {
+  //     value: "video",
+  //     label: "视频生成",
+  //     desc: "完成视频片段合成后停止",
+  //     icon: IconVideo,
+  //     step: 7,
+  //   },
+  //   {
+  //     value: "post",
+  //     label: "后期处理",
+  //     desc: "完成全流程产出最终交付",
+  //     icon: IconWand,
+  //     step: 8,
+  //   },
+  // ];
 
   let isUpdatingTarget = $state(false);
 
   let currentTarget = $derived(
-    TARGET_OPTIONS.find((o) => o.value === dashboardStore.target) ??
-      TARGET_OPTIONS[TARGET_OPTIONS.length - 1],
+    projectStore.activity?.targets.find(
+      (o) => o.value === dashboardStore.target,
+    ) ??
+      projectStore.activity?.targets[projectStore.activity?.targets.length - 1],
   );
+
+  $effect(() => {
+    console.log("currentTarget=", currentTarget);
+    console.log("activity",projectStore.activity)
+  });
 
   let isLocked = $derived(
     dashboardStore.runState !== "idle" || isUpdatingTarget,
@@ -114,30 +112,30 @@
     if (!value || value === dashboardStore.target) return;
     isUpdatingTarget = true;
     try {
-      await dashboardStore.setTarget(value as RunTarget);
+      await dashboardStore.setTarget(value);
     } finally {
       isUpdatingTarget = false;
     }
   }
 
-  const steps: Step[] = [
-    {
-      target: "ib-input-manager",
-      title: "没有剧本",
-      description: "点击这里打开剧本集管理，添加剧本后，开始运行",
-      position: "top",
-    },
-  ];
+  // const steps: Step[] = [
+  //   {
+  //     target: "ib-input-manager",
+  //     title: "没有剧本",
+  //     description: "点击这里打开剧本集管理，添加剧本后，开始运行",
+  //     position: "top",
+  //   },
+  // ];
 
   async function handleMainbutton(): Promise<void> {
     if (dashboardStore.runState === "idle") {
-      const totalSize = inputStore.scripts.reduce((acc, item) => {
-        return acc + item.size;
-      }, 0);
-      if (totalSize <= 0) {
-        tourStore.start(steps);
-        return;
-      }
+      // const totalSize = inputStore.scripts.reduce((acc, item) => {
+      //   return acc + item.size;
+      // }, 0);
+      // if (totalSize <= 0) {
+      //   tourStore.start(steps);
+      //   return;
+      // }
     }
     await dashboardStore.handleMainButton();
   }
@@ -155,112 +153,119 @@
     <!-- │ [可抽取子组件 → RunTargetSelector.svelte]          │ -->
     <!-- │ 职责：运行终止点下拉选择器，支持禁用与异步加载态     │ -->
     <!-- ╰─────────────────────────────────────────────────────╯ -->
-    <div class="flex w-full max-w-md flex-col items-center gap-3">
-      <div
-        class="flex items-center gap-2 text-xs font-medium tracking-wide text-muted-foreground uppercase"
-      >
-        <IconFlag size={14} stroke={1.5} />
-        <span>运行终止点</span>
-      </div>
-
-      <Select.Root
-        type="single"
-        value={dashboardStore.target}
-        onValueChange={handleTargetChange}
-        disabled={isLocked}
-      >
-        <Select.Trigger
-          class="group flex h-auto w-full items-center justify-between gap-3 rounded-xl border border-border/50 bg-background px-4 py-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
+    {#if currentTarget}
+      {@const TARGET_OPTIONS = projectStore.activity?.targets ?? []}
+      <div class="flex w-full max-w-md flex-col items-center gap-3">
+        <div
+          class="flex items-center gap-2 text-xs font-medium tracking-wide text-muted-foreground uppercase"
         >
-          <div class="flex min-w-0 flex-1 items-center gap-3">
-            <div
-              class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
-            >
-              {#if isUpdatingTarget}
-                <IconLoader2 size={18} stroke={1.5} class="animate-spin" />
-              {:else}
-                <currentTarget.icon size={18} stroke={1.5} />
-              {/if}
-            </div>
-            <div class="flex min-w-0 flex-1 flex-col">
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-medium text-foreground">
-                  {currentTarget.label}
-                </span>
-                <span
-                  class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
-                >
-                  STEP {currentTarget.step}/8
-                </span>
-              </div>
-              <span class="truncate text-xs text-muted-foreground">
-                {isUpdatingTarget ? "正在同步配置…" : currentTarget.desc}
-              </span>
-            </div>
-          </div>
-          <IconChevronDown
-            size={18}
-            stroke={1.5}
-            class="shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
-          />
-        </Select.Trigger>
+          <IconFlag size={14} stroke={1.5} />
+          <span>运行终止点</span>
+        </div>
 
-        <Select.Content
-          class="rounded-xl border border-border/50 p-2 shadow-xl"
+        <Select.Root
+          type="single"
+          value={dashboardStore.target}
+          onValueChange={handleTargetChange}
+          disabled={isLocked}
         >
-          {#each TARGET_OPTIONS as opt (opt.value)}
-            <Select.Item
-              value={opt.value}
-              class="group/item flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-all duration-200 data-highlighted:bg-muted"
-            >
-              {#snippet children({ selected })}
-                <div
-                  class={[
-                    "flex size-8 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
-                    selected
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground group-hover/item:bg-primary/10 group-hover/item:text-primary",
-                  ]}
-                >
-                  <opt.icon size={16} stroke={1.5} />
-                </div>
-                <div class="flex min-w-0 flex-1 flex-col">
-                  <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium text-foreground">
-                      {opt.label}
-                    </span>
-                    <span
-                      class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
-                    >
-                      {opt.step}/8
-                    </span>
-                  </div>
-                  <span class="truncate text-xs text-muted-foreground">
-                    {opt.desc}
-                  </span>
-                </div>
-                {#if selected}
-                  <IconCheck
-                    size={16}
+          <Select.Trigger
+            class="group flex h-auto w-full items-center justify-between gap-3 rounded-xl border border-border/50 bg-background px-4 py-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
+          >
+            <div class="flex min-w-0 flex-1 items-center gap-3">
+              <div
+                class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+              >
+                {#if isUpdatingTarget}
+                  <IconLoader2 size={18} stroke={1.5} class="animate-spin" />
+                {:else}
+                  <RuntimeIcon
+                    name={currentTarget?.icon}
+                    size={18}
                     stroke={1.5}
-                    class="shrink-0 text-primary"
                   />
                 {/if}
-              {/snippet}
-            </Select.Item>
-          {/each}
-        </Select.Content>
-      </Select.Root>
+              </div>
+              <div class="flex min-w-0 flex-1 flex-col">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium text-foreground">
+                    {currentTarget.label}
+                  </span>
+                  <span
+                    class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                  >
+                    STEP {currentTarget.step}/8
+                  </span>
+                </div>
+                <span class="truncate text-xs text-muted-foreground">
+                  {isUpdatingTarget ? "正在同步配置…" : currentTarget.desc}
+                </span>
+              </div>
+            </div>
+            <IconChevronDown
+              size={18}
+              stroke={1.5}
+              class="shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+            />
+          </Select.Trigger>
 
-      {#if dashboardStore.runState !== "idle"}
-        <p
-          class="flex items-center gap-1.5 text-[11px] text-muted-foreground animate-fade-in"
-        >
-          <IconInfoCircle size={12} stroke={1.5} />
-          <span>运行期间不可修改终止点</span>
-        </p>
-      {/if}
-    </div>
+          <Select.Content
+            class="rounded-xl border border-border/50 p-2 shadow-xl"
+          >
+            {#each TARGET_OPTIONS as opt (opt.value)}
+              <Select.Item
+                value={opt.value}
+                class="group/item flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-all duration-200 data-highlighted:bg-muted"
+              >
+                {#snippet children({ selected })}
+                  <div
+                    class={[
+                      "flex size-8 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
+                      selected
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground group-hover/item:bg-primary/10 group-hover/item:text-primary",
+                    ]}
+                  >
+                    <RuntimeIcon name={opt.icon} size={16} stroke={1.5} />
+                  </div>
+                  <div class="flex min-w-0 flex-1 flex-col">
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm font-medium text-foreground">
+                        {opt.label}
+                      </span>
+                      <span
+                        class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                      >
+                        {opt.step}/8
+                      </span>
+                    </div>
+                    <span class="truncate text-xs text-muted-foreground">
+                      {opt.desc}
+                    </span>
+                  </div>
+                  {#if selected}
+                    <IconCheck
+                      size={16}
+                      stroke={1.5}
+                      class="shrink-0 text-primary"
+                    />
+                  {/if}
+                {/snippet}
+              </Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+
+        {#if dashboardStore.runState !== "idle"}
+          <p
+            class="flex items-center gap-1.5 text-[11px] text-muted-foreground animate-fade-in"
+          >
+            <IconInfoCircle size={12} stroke={1.5} />
+            <span>运行期间不可修改终止点</span>
+          </p>
+        {/if}
+      </div>
+    {/if}
     <!-- ╭─── / RunTargetSelector ───╮ -->
 
     <div class="h-px w-full max-w-md bg-border/50"></div>

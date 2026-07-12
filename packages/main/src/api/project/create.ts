@@ -7,13 +7,15 @@ import { z } from 'zod';
 import { RpcContext } from '../type.js';
 // import { configService } from '$libs/store/index.js';
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
-import { UNIGEN_ERROR_DEFS } from '$libs/utils/err.js';
+import { throwUnprcessable, UNIGEN_ERROR_DEFS } from '$libs/utils/err.js';
 import { GetListResponseSchema, QueryParamsSchema } from '$types/shared/api/list.js';
+import { projectActivityDataSchema } from '$types/shared/template/project.js';
 import { COMMON_ORPC_ERROR_DEFS } from "@orpc/client";
 // import { PrjCreator } from '$libs/project/helper/create.js';
 
 const open = os
     .input(z.string().optional())
+    .output(projectActivityDataSchema)
     .handler(async ({ input, context }) => {
         let pathName = input;
         if (!pathName) {
@@ -51,14 +53,27 @@ const open = os
     })
 
 
+const loadUI = os
+    .output(projectActivityDataSchema)
+    .handler(async ({ context }) => {
+
+        const ctx = context as RpcContext;
+        const prj = projectManager.getByPath(ctx.project.path);
+        if (prj && prj.wid >= 0) {
+            return await prj.loadUI();
+        }
+        throwUnprcessable("无法定位项目对象。")
+    })
 
 const create = os
     .input(
         z.object({
             path: z.string().optional(),
-            force: z.boolean().optional()
+            force: z.boolean().optional(),
+            type: z.string()
         })
     )
+    .output(projectActivityDataSchema)
     .handler(async ({ input, context }) => {
         let pathName = input.path;
         if (!pathName) {
@@ -92,7 +107,7 @@ const create = os
             //     return true;
             // }
         }
-        return await ctx.project.create(pathName, input.force);
+        return await ctx.project.create(pathName, input.type, input.force);
     })
 
 
@@ -123,6 +138,28 @@ const get = os
     .handler(async ({ input, context }) => {
         const ctx = context as RpcContext;
         return PrjDB.ensure(ctx.project).get(input);
+    });
+
+const addSubscribe = os
+    .input(z.string())
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        return PrjDB.ensure(ctx.project).addSub(input);
+    });
+
+
+const rmSubscribe = os
+    .input(z.string())
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        return PrjDB.ensure(ctx.project).rmSub(input);
+    });
+
+
+const clearSubscribe = os
+    .handler(async ({ context }) => {
+        const ctx = context as RpcContext;
+        return PrjDB.ensure(ctx.project).clearSubs();
     });
 
 const getWithTime = os
@@ -177,8 +214,12 @@ const list = os
 export default {
     open,
     create,
+    loadUI,
     info,
     get,
+    addSubscribe,
+    rmSubscribe,
+    clearSubscribe,
     getWithTime,
     set,
     rm,

@@ -5,10 +5,10 @@
  * 架构：Svelte 5 Runes 类 Store 模式（纯客户端 · 模块级单例）。
  */
 
-import log from 'electron-log/renderer';
-import type { ScriptItem } from './types';
 import { api } from '$lib/utils/api';
+import log from 'electron-log/renderer';
 import { DbKeys } from '../../../dbkeys';
+import type { ScriptItem } from './types';
 
 
 class InputManagerStore {
@@ -82,14 +82,14 @@ class InputManagerStore {
 
             const [
                 scriptsRes,
-                visualStyleRes,
+                // visualStyleRes,
                 synopsisRes,
                 charSpecRes,
                 bookNameRes,
                 requirementsRes
             ] = await Promise.all([
                 projectApi.get(DbKeys.scripts),
-                projectApi.visualref(),
+                // projectApi.visualref(),
                 projectApi.get(DbKeys.synopsis),
                 projectApi.get(DbKeys.character_specifications),
                 projectApi.get(DbKeys.book_name),
@@ -98,7 +98,7 @@ class InputManagerStore {
 
             // 2. 统一进行赋值和类型断言
             this.#scripts = (scriptsRes ?? []) as ScriptItem[];
-            this.#visualStyle = visualStyleRes;
+            // this.#visualStyle = visualStyleRes;
             this.#synopsis = (synopsisRes ?? "") as string;
             this.#charSpec = (charSpecRes ?? "") as string;
             this.#bookName = (bookNameRes ?? "") as string;
@@ -202,15 +202,15 @@ class InputManagerStore {
         }
     }
 
-    async addVisualRef(images: string[]): Promise<void> {
+    async addVisualRef(_images: string[]): Promise<void> {
 
-        const tmpResult = await api().project.addvref(images);
-        console.log("tmpResult=", tmpResult)
-        this.#visualStyle = [...this.#visualStyle, ...tmpResult]
+        // const tmpResult = await api().project.addvref(images);
+        // console.log("tmpResult=", tmpResult)
+        // this.#visualStyle = [...this.#visualStyle, ...tmpResult]
     }
 
     async rmVisualRef(image: string): Promise<void> {
-        await api().project.rmvref([image])
+        // await api().project.rmvref([image])
         this.#visualStyle = this.#visualStyle.filter((vs) => vs !== image);
     }
 

@@ -11,11 +11,12 @@ import { RpcContext } from '../type.js';
 
 // 项目参考图相关： @todo: 这属于video专有，应该使用tapable(hookable)将其改为插件实现！
 
-const visualref = os
+const listMetaRes = os
+    .input(z.string())
     .output(z.array(z.string()))
-    .handler(async ({ context }) => {
+    .handler(async ({ input, context }) => {
         const ctx = context as RpcContext;
-        const visualrefDir = ctx.project.getPath('visualref');
+        const visualrefDir = ctx.project.getPath(input);
         if (await pathExists(visualrefDir)) {
             const result = await readdir(visualrefDir);
             return result.map(item => join(visualrefDir, item));
@@ -24,16 +25,19 @@ const visualref = os
     });
 
 
-const addvref = os
-    .input(z.array(z.string()))
+const addMetaRes = os
+    .input(z.object({
+        dir: z.string(),
+        paths: z.array(z.string())
+    }))
     .output(z.array(z.string()))
     .handler(async ({ input, context }) => {
         const ctx = context as RpcContext;
-        const visualrefDir = ctx.project.getPath('visualref');
+        const visualrefDir = ctx.project.getPath(input.dir);
         await ensureDir(visualrefDir)
 
         const result = await pMap(
-            input,
+            input.paths,
             async (src) => {
                 const suffix = extname(src);
                 const id = randomUUID();
@@ -47,14 +51,16 @@ const addvref = os
     });
 
 
-const rmvref = os
-    .input(z.array(z.string()))
+const rmMetaRes = os
+    .input(z.object({
+        dir: z.string(),
+        paths: z.array(z.string())
+    }))
     .handler(async ({ input, context }) => {
         const ctx = context as RpcContext;
-        const visualrefDir = ctx.project.getPath('visualref');
-
+        const visualrefDir = ctx.project.getPath(input.dir);
         await pMap(
-            input,
+            input.paths,
             async (src) => {
                 if (src.startsWith(visualrefDir)) {
                     await rm(src, {
@@ -68,7 +74,7 @@ const rmvref = os
         )
     });
 export default {
-    visualref,
-    addvref,
-    rmvref,
+    listMetaRes,
+    addMetaRes,
+    rmMetaRes,
 }

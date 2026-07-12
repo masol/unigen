@@ -27,6 +27,9 @@ export class PrjDB extends BaseProjectController {
     private migrationsPath: string = ""
     private dqlite: Database.Database | null = null;
     private db: DrizzleDBType | null = null;
+
+    // 设置关注了kvstore中哪些值的变动，这些值的变化，将通知客户端。
+    private subKeys: Set<string> = new Set();
     // #job: PrjJob | null = null;
     constructor(ctx: IProjectContext) {
         super(ctx)
@@ -52,6 +55,7 @@ export class PrjDB extends BaseProjectController {
         // if (this.#job) {
         //     this.#job.forceShutdown();
         // }
+        this.clearSubs();
         if (this.dqlite && this.dqlite.open) {
             try {
                 Logger.info('[Database] 正在安全断开数据库连接，写入 WAL 缓冲区...');
@@ -126,6 +130,21 @@ export class PrjDB extends BaseProjectController {
                 set: { value },
             })
             .run(); // 同步执行，执行完后此行代码才向下走
+        if (this.subKeys.has(key)) {
+            this.ctx.notify("kv-changed", { key, value })
+        }
+    }
+
+    clearSubs() {
+        this.subKeys.clear();
+    }
+
+    addSub(key: string) {
+        this.subKeys.add(key);
+    }
+
+    rmSub(key: string) {
+        this.subKeys.delete(key);
     }
 
 
@@ -259,14 +278,15 @@ export class PrjDB extends BaseProjectController {
             }
             case 'glossary':
                 {
-                    const value = this.get(id);
+                    const value = this.get<string>(id);
                     if (value === null) {
                         throwNotfound(`没有key为${id}的术语。`)
                     }
-                    if (id.startsWith('_')) { // 资源类的不做JSON化，直接默认其是字符串。
-                        return value as string;
+                    // 资源类的不做JSON化，直接默认其是字符串。content为true，在export时发出，方便存储。
+                    if (content || id.startsWith('_')) { 
+                        return value;
                     }
-                    return JSON.stringify(value, null, 2)
+                    return JSON.stringify(value, null, 2) // 这是为了方便编辑器。
                 }
             case 'metag':
                 {

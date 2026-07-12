@@ -7,36 +7,12 @@
     IconLoader2,
   } from "@tabler/icons-svelte";
 
-  import { dialogStore } from "$lib/store/ui/dialog.svelte";
-  import SelectProjectTypeDialog from "./project-type/SelectProjectTypeDialog.svelte";
-
   async function handleOpenProject() {
-    if (projectStore.isBusy) return;
-    projectStore.loading = "open";
-    try {
-      await projectStore.open();
-    } finally {
-      projectStore.loading = null;
-    }
+    await projectStore.open();
   }
 
   async function handleNewProject() {
-    if (projectStore.isBusy) return;
-    projectStore.loading = "new";
-    try {
-      const typeId = await dialogStore.safeShow(
-        SelectProjectTypeDialog,
-        {
-          // onManage 留给你实现内部路由跳转（非新窗口）
-          onManage: () => alert("/settings/project-types"),
-        },
-        { size: "xl" }, // 宽屏网格，选用 xl
-      );
-      if (typeId === null) return; // 用户取消
-      await projectStore.create();
-    } finally {
-      projectStore.loading = null;
-    }
+    await projectStore.create();
   }
 </script>
 

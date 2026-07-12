@@ -2,26 +2,19 @@
 <script lang="ts">
   import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { Label } from "$lib/components/ui/label";
+  import { type IValueService } from "$lib/store/ui/activity/type";
   import { cn } from "$lib/utils";
   import type { ButtonGroupNode } from "../ast";
-  import {
-    readStringOr,
-    writeKeyOf,
-    type ValueService,
-  } from "../value-service";
+  import { coerceStringOr, useBinding } from "../binding.svelte";
 
-  let { node, service }: { node: ButtonGroupNode; service: ValueService } =
+  let { node, service }: { node: ButtonGroupNode; service: IValueService } =
     $props();
-
-  let current = $derived(
-    readStringOr(service, node.binding.readKey, node.fallback),
-  );
-  const writeKey = writeKeyOf(node.binding);
+  const b = useBinding<string>(service, () => node.binding);
+  let current = $derived(coerceStringOr(b.value, node.fallback));
   let columns = $derived(node.columns ?? 3);
-
   async function select(value: string) {
     if (value === current) return;
-    await service.set(writeKey, value);
+    await b.set(value);
   }
 </script>
 

@@ -3,62 +3,18 @@
 // 子组件通过只读 getter 消费，通过调用方法修改，完全不持有本地状态。
 import { projectStore } from "$lib/store/project.svelte";
 import { confirmStore } from "$lib/store/ui/confirm.svelte";
-import { api } from "$lib/utils/api";
+import { api, safeApi } from "$lib/utils/api";
 import evtbus from "$lib/utils/evtbus";
-import { IconBook2, IconSparkles, IconVideo } from "@tabler/icons-svelte";
+import type { RunState } from "@app/main/types";
 import log from "electron-log/renderer";
 import { toast } from "svelte-sonner";
 
 // ─── 类型 ───────────────────────────────────────────────────────
-export interface LogEntry {
+interface LogEntry {
     id: string;
     time: number; // 时间戳（毫秒）
     message: string;
 }
-
-export interface InfoBlock {
-    key: "input" | "spec" | "output";
-    title: string;
-    subtitle: string;
-    summary: string;
-    icon: typeof IconBook2;
-    metaLabel: string;
-    metaTone: "ready" | "pending";
-}
-
-// ─── 静态数据（运行期不变，无需响应式包装）────────────────────
-const infoBlocks: InfoBlock[] = [
-    {
-        key: "input",
-        title: "输入",
-        subtitle: "小说源文件",
-        summary: "《长安十二时辰》· 24 章 · 18.6 万字",
-        icon: IconBook2,
-        metaLabel: "已就绪",
-        metaTone: "ready",
-    },
-    {
-        key: "spec",
-        title: "说明要求",
-        subtitle: "生成规格",
-        summary: "电影风格 · 9:16 竖屏 · 单章约 3 分钟 · 中文配音",
-        icon: IconSparkles,
-        metaLabel: "已配置",
-        metaTone: "ready",
-    },
-    {
-        key: "output",
-        title: "输出",
-        subtitle: "导出目标",
-        summary: "MP4 · 1080×1920 · H.264 · 本地 + 阿里云 OSS",
-        icon: IconVideo,
-        metaLabel: "待生成",
-        metaTone: "pending",
-    },
-];
-
-export type RunTarget = "segmentation" | "shot" | "entities" | "voice" | "storyboard" | "visual" | "video" | "post"
-
 
 // ─── Store ──────────────────────────────────────────────────────
 class DashboardStore {
@@ -66,7 +22,7 @@ class DashboardStore {
     #elapsedSeconds = $state(0);
     #terminatingSeconds = $state(0);
     #logs = $state.raw<LogEntry[]>([]);
-    #target = $state<RunTarget>("post");
+    #target = $state<string>("post");
     #preserveLogs = $state(false); // 是否保留日志（跨任务重启）
     forceShowLog = $state(false);
 
@@ -85,12 +41,19 @@ class DashboardStore {
                 : "正在终止",
     );
 
+    private getHintText(state: RunState): string {
+        switch (state) {
+            case 'idle':
+                return projectStore.activity?.hints.idle ?? "点击下方按钮，让AI开始工作。";
+            case 'running':
+                return projectStore.activity?.hints.running ?? "每一步结果都会自动保存，再次运行不会重复计算。可随时点击「终止」，已完成的部分不会丢失。";
+            default:
+                return projectStore.activity?.hints.term ?? "正在等待当前这一步完成后安全停止。若此刻强制关机，当前正在进行的这一步将作废，需要重新计算。"
+        }
+    }
+
     readonly #hintText = $derived(
-        projectStore.runState === "idle"
-            ? "点击下方按钮，开始将剧本转换为视频。"
-            : projectStore.runState === "running"
-                ? "每一步结果都会自动保存，再次运行不会重复计算。可随时点击「终止」，已完成的部分不会丢失。"
-                : "正在等待当前这一步完成后安全停止。若此刻强制关机，当前正在进行的这一步将作废，需要重新计算。",
+        this.getHintText(projectStore.runState)
     );
 
     readonly #buttonLabel = $derived(
@@ -135,7 +98,7 @@ class DashboardStore {
     }
 
     // ── 只读门面 ─────────────────────────────────────────────────
-    get target(): RunTarget {
+    get target(): string {
         return this.#target;
     }
     get runState() {
@@ -151,7 +114,7 @@ class DashboardStore {
         return this.#logs;
     }
     get infoBlocks() {
-        return infoBlocks;
+        return projectStore.activity?.infocards ?? [];
     }
     get statusLabel() {
         return this.#statusLabel;
@@ -166,8 +129,8 @@ class DashboardStore {
         return this.#preserveLogs;
     }
 
-    async setTarget(newTarget: RunTarget): Promise<void> {
-        await api().project.set({
+    async setTarget(newTarget: string): Promise<void> {
+        await safeApi().project.set({
             key: "target",
             value: newTarget
         });

@@ -48,7 +48,7 @@ class ConfigService {
         })
     }
 
-    newProject(path: string, time: number, icon: string) {
+    addProject(path: string, time: number, icon: string) {
         this.lru.set(path, {
             path,
             time,

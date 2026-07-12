@@ -9,6 +9,7 @@ import { pathExists } from 'fs-extra';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import pMap from 'p-map';
 import { basename, dirname, extname, join } from 'path';
+import { getErrorMessage } from 'radashi';
 import { fileURLToPath } from 'url';
 import { throwUnprcessable } from './err.js';
 
@@ -105,6 +106,36 @@ class KnowledgeCenter {
         await writeFile(fullPath, content, 'utf-8');
     }
 
+
+    // 按照优先级次序，获取文件，返回全路径，如果文件不存在，则返回null.
+    public async getFile(subDir: string, relativePath: string): Promise<string | null> {
+        const fullPath: string = join(this.kcPath, subDir, relativePath);
+        if (await pathExists(fullPath)) {
+            return fullPath;
+        }
+        const resPath = join(this.resourcePath, subDir, relativePath);
+        if (await pathExists(resPath)) {
+            return resPath;
+        }
+        return null;
+    }
+
+
+    public async readJSON<T = unknown>(subDir: string, relativePath: string): Promise<T | null> {
+        const filePath = await this.getFile(subDir, relativePath);
+        if (!filePath) {
+            return null;
+        }
+        try {
+            const raw: string = await readFile(filePath, 'utf-8');
+            return JSON.parse(raw) as T;
+        } catch (error) {
+            throwUnprcessable(
+                `[KnowledgeCenter] JSON 解析失败: ${filePath}\n${getErrorMessage(error)}`,
+            );
+        }
+    }
+
     // ────────────────────────── 收集 & 分类 ──────────────────────────
 
     /**
@@ -161,7 +192,7 @@ class KnowledgeCenter {
     }
 
     /** 以 JSON 形式读取文件内容，解析失败抛出带全路径的异常 */
-    private async readJson<T = unknown>(file: CollectedFile): Promise<T> {
+    private async internalReadJson<T = unknown>(file: CollectedFile): Promise<T> {
         try {
             const raw: string = await readFile(file.fullPath, 'utf-8');
             return JSON.parse(raw) as T;
@@ -192,7 +223,7 @@ class KnowledgeCenter {
         await pMap(
             files,
             async (file) => {
-                const data = await this.readJson(file);
+                const data = await this.internalReadJson(file);
                 // TODO(自行实现): 处理解析后的 mg 数据（prj / data / file.relativePath / file.fullPath）
                 if (Array.isArray(data)) {
                     data.forEach(d => {
@@ -221,7 +252,7 @@ class KnowledgeCenter {
         await pMap(
             capaFiles,
             async (file) => {
-                const data = await this.readJson(file);
+                const data = await this.internalReadJson(file);
                 if (!isCapability(data)) {
                     Logger.warn(`忽略错误格式的能力定义:${JSON.stringify(data, null, 2)}`);
                     return;

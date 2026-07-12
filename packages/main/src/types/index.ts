@@ -9,5 +9,6 @@ export type { FileFilterPreset } from './shared/api/sys.js'
 export type { Model, ModelOption, ModelTags, Provider, ProviderProtocol } from './shared/model.js'
 export type { ModuleSource, PluginInfo, PluginScope, PluginStatus } from './shared/plugin.js'
 export type { WindowEventPayload, WindowEventType } from './shared/rpcevt.js'
-export type { ProjectType } from './shared/template/prjtype.js'
+
+export type * from './shared/template/index.js'
 

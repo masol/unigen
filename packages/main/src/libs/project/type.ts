@@ -1,4 +1,3 @@
-import type { IProjectPlugin } from "./plugin.js";
 
 /**
  * 定义项目上下文的公共接口（契约）
@@ -7,8 +6,8 @@ import type { IProjectPlugin } from "./plugin.js";
 export interface IProjectContext {
     readonly path: string;
     readonly wid: number;
-    readonly plugin: IProjectPlugin;
-    getPath(partName: 'meta' | 'visualref'): string;
+    // 获取项目目录--partName为项目路径下，metadir下的路径，返回拼接后的路径。
+    getPath(partName: string | string[]): string;
     notify(evtName: string, payload: unknown, srcId?: number): boolean
     register<T extends IProjectController>(token: ControllerConstructor<T>): void;
     // 允许子控制器之间通过接口互相获取同级服务

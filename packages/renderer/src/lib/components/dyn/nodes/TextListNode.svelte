@@ -1,10 +1,12 @@
 <!-- src/lib/components/dyn/nodes/TextListNode.svelte -->
 <script lang="ts">
+  // @todo: 未来通过schema来拓展任意数据类型，可引入[svelte-jsonschema-form](https://github.com/x0k/svelte-jsonschema-form)来全自动化。
   import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import { i18nStore } from "$lib/store/i18n.svelte";
+  import { type IValueService } from "$lib/store/ui/activity/type";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
   import autoAnimate from "@formkit/auto-animate";
@@ -17,10 +19,11 @@
     IconTrash,
   } from "@tabler/icons-svelte";
   import type { TextListNode } from "../ast";
-  import ScriptSegmentDialog from "../dialog/ScriptSegmentDialog.svelte";
-  import { readList, writeKeyOf, type ValueService } from "../value-service";
+// 【修正】coerceList / writeKeyOf / useBinding 全部从 binding 模块引入，统一来源
+  import { coerceList, useBinding, writeKeyOf } from "../binding.svelte";
+  import ScriptSegmentDialog from "../dialog/TextInputDialog.svelte";
 
-  let { node, service }: { node: TextListNode; service: ValueService } =
+  let { node, service }: { node: TextListNode; service: IValueService } =
     $props();
 
   interface ListItem {
@@ -29,12 +32,20 @@
     updatedAt?: number | string;
   }
 
-  let loading = $derived(service.isLoading);
-  let error = $derived(service.error);
-  let items = $derived(readList<ListItem>(service, node.binding.readKey));
-  // svelte-ignore state_referenced_locally
-  const writeKey = writeKeyOf(node.binding);
+  // 【修正】原为顶层 const，固化了 node.binding 的 key；一旦 node 变更会与
+  // useBinding 重订阅的新 key 错位。改为 $derived，随 node 响应式更新。
+  let readKey = $derived(node.binding.readKey);
+  let writeKey = $derived(writeKeyOf(node.binding));
+  const itemKey = (id: string) => `${readKey}_${id}`;
 
+  const b = useBinding<ListItem[]>(service, () => node.binding);
+  let items = $derived(coerceList<ListItem>(b.value));
+  let loading = $derived(b.loading || service.isLoading);
+  let error = $derived(b.error);
+
+  async function readItemContent(id: string): Promise<string> {
+    return service.get<string>(itemKey(id)) ?? "";
+  }
   async function handleAppend() {
     if (loading) return;
     const content = await dialogStore.safeShow(
@@ -42,35 +53,47 @@
       { title: node.addDialogTitle ?? "添加", initialText: "" },
       { size: "xl" },
     );
-    if (content === null) return;
-    await service.listAppend(writeKey, content);
+    if (content === null || !content) return;
+    const id = crypto.randomUUID();
+    const item: ListItem = { id, size: content.length, updatedAt: Date.now() };
+    await service.set(itemKey(id), content);
+    await service.set(writeKey, [...items, item]);
   }
-
   async function handleEdit(item: ListItem) {
     if (loading) return;
-    const orig = await service.getItemContent(node.binding.readKey, item.id);
+    // 优先读缓存，缺失则同步一次（也可加 service.fetch，但 get 已够）
+    const orig = await readItemContent(item.id);
     const content = await dialogStore.safeShow(
       ScriptSegmentDialog,
       {
         title: node.editDialogTitle ?? "编辑",
         description: node.editDialogDescription,
-        initialText: orig ?? "",
+        initialText: orig,
         alert: node.editAlert,
       },
       { size: "xl" },
     );
     if (content === null) return;
-    await service.listUpdate(writeKey, item.id, content);
+    const next = items.map((s) =>
+      s.id === item.id
+        ? { ...s, size: content.length, updatedAt: Date.now() }
+        : s,
+    );
+    await service.set(itemKey(item.id), content);
+    await service.set(writeKey, next);
   }
-
   async function handleDelete(item: ListItem, index: number) {
     if (loading) return;
     const ok = await confirmStore.request({
-      title: "删除",
-      message: `确定要删除第 ${index + 1} 项吗？此操作无法撤销。`,
+      title: node.confirmTitle ?? "删除",
+      message:
+        node.confirmMessage ??
+        `确定要删除第 ${index + 1} 项吗？此操作无法撤销。`,
     });
     if (!ok) return;
-    await service.listRemove(writeKey, item.id);
+    const next = items.filter((s) => s.id !== item.id);
+    await service.rm(itemKey(item.id));
+    await service.set(writeKey, next);
   }
 </script>
 
@@ -156,6 +179,16 @@
             </div>
           </div>
         {/each}
+      </div>
+    {:else if loading}
+      <div
+        class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/50 bg-muted/20 p-12 text-center"
+      >
+        <IconLoader2
+          size={20}
+          stroke={1.5}
+          class="animate-spin text-muted-foreground"
+        />
       </div>
     {:else}
       <div

@@ -2,26 +2,27 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import type { IValueService } from "$lib/store/ui/activity/type";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
-  import { IconPencil } from "@tabler/icons-svelte";
+  import { IconLoader2, IconPencil } from "@tabler/icons-svelte";
   import type { FieldNode } from "../ast";
-  import ScriptSegmentDialog from "../dialog/ScriptSegmentDialog.svelte";
-  import { readString, writeKeyOf, type ValueService } from "../value-service";
+  import { coerceString, useBinding } from "../binding.svelte";
+  import TextInputDialog from "../dialog/TextInputDialog.svelte";
 
-  let { node, service }: { node: FieldNode; service: ValueService } = $props();
+  let { node, service }: { node: FieldNode; service: IValueService } = $props();
 
-  let loading = $derived(service.isLoading);
-  let value = $derived(readString(service, node.binding.readKey));
-  const writeKey = writeKeyOf(node.binding);
+  const b = useBinding<string>(service, () => node.binding);
+  let value = $derived(coerceString(b.value));
+  let loading = $derived(b.loading || service.isLoading);
+  let readonly = $derived(b.readonly);
 
-  // inline 编辑态
   let isEditing = $state(false);
   let tempValue = $state("");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let inputRef: any = null;
 
   function startInline() {
-    if (loading || node.readonly) return;
+    if (loading || readonly) return;
     tempValue = value;
     isEditing = true;
     setTimeout(() => {
@@ -33,9 +34,7 @@
   async function saveInline() {
     if (loading) return;
     const trimmed = tempValue.trim();
-    if (trimmed && trimmed !== value) {
-      await service.set(writeKey, trimmed);
-    }
+    if (trimmed && trimmed !== value) await b.set(trimmed);
     isEditing = false;
   }
 
@@ -54,9 +53,9 @@
   }
 
   async function editDialog() {
-    if (loading || node.readonly) return;
+    if (loading || readonly) return;
     const content = await dialogStore.safeShow(
-      ScriptSegmentDialog,
+      TextInputDialog,
       {
         title: node.dialogTitle ?? `编辑${node.label}`,
         description: node.dialogDescription,
@@ -67,12 +66,11 @@
       { size: "xl" },
     );
     if (content === null) return;
-    await service.set(writeKey, content);
+    await b.set(content);
   }
 </script>
 
 {#if node.editor === "inline"}
-  <!-- ╭─ inline：就地单行编辑 ─╮ -->
   <div
     class="group relative rounded-xl border border-border/50 bg-card px-4 py-3 shadow-sm transition-all duration-200 hover:shadow-md"
   >
@@ -106,46 +104,56 @@
             class="block text-xs text-muted-foreground mb-1"
           >
             {node.label}
+            {#if loading}
+              <IconLoader2
+                size={12}
+                stroke={1.5}
+                class="ml-1 inline animate-spin text-muted-foreground"
+              />
+            {/if}
           </label>
           <button
             class="text-sm font-medium text-foreground hover:text-primary transition-colors duration-200 text-left truncate w-full"
             onclick={startInline}
-            onkeydown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                startInline();
-              }
-            }}
+            disabled={readonly}
           >
             {value || node.emptyHint || "未设置"}
           </button>
+          {#if b.error}
+            <p class="mt-1 text-xs text-destructive">{b.error}</p>
+          {/if}
         </div>
-        <Button
-          size="icon"
-          variant="ghost"
-          class="h-7 w-7 rounded-lg shrink-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-          onclick={startInline}
-          disabled={loading}
-          aria-label={`编辑${node.label}`}
-        >
-          <IconPencil size={14} stroke={1.5} />
-        </Button>
+        {#if !readonly}
+          <Button
+            size="icon"
+            variant="ghost"
+            class="h-7 w-7 rounded-lg shrink-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+            onclick={startInline}
+            disabled={loading}
+            aria-label={`编辑${node.label}`}
+          >
+            <IconPencil size={14} stroke={1.5} />
+          </Button>
+        {/if}
       </div>
     {/if}
   </div>
 {:else}
-  <!-- ╭─ dialog：点击弹对话框编辑多行 ─╮ -->
   <button
     class="group w-full text-left rounded-xl border border-border/50 bg-card px-4 py-3 shadow-sm transition-all duration-200 hover:shadow-md hover:border-border"
     onclick={editDialog}
-    disabled={loading || node.readonly}
+    disabled={loading || readonly}
   >
     <div class="flex items-start justify-between gap-3">
       <div class="flex-1 min-w-0">
         <div class="text-xs text-muted-foreground mb-1.5">
           {node.label}
-          {#if node.readonly}
-            <span class="text-muted-foreground/50">（未实现）</span>
+          {#if loading}
+            <IconLoader2
+              size={12}
+              stroke={1.5}
+              class="ml-1 inline animate-spin text-muted-foreground"
+            />
           {/if}
         </div>
         {#if value}
@@ -158,11 +166,13 @@
           </p>
         {/if}
       </div>
-      <IconPencil
-        size={14}
-        stroke={1.5}
-        class="shrink-0 mt-0.5 text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-      />
+      {#if !readonly}
+        <IconPencil
+          size={14}
+          stroke={1.5}
+          class="shrink-0 mt-0.5 text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+        />
+      {/if}
     </div>
   </button>
 {/if}

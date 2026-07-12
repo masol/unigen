@@ -1,10 +1,10 @@
 <!-- src/lib/components/dyn/NodeRenderer.svelte -->
 <script lang="ts">
+  import type { IValueService } from "$lib/store/ui/activity/type";
   import type { DynNode } from "./ast";
   import { resolveNode } from "./registry";
-  import type { ValueService } from "./value-service";
 
-  let { node, service }: { node: DynNode; service: ValueService } = $props();
+  let { node, service }: { node: DynNode; service: IValueService } = $props();
   let Comp = $derived(resolveNode(node.type));
 </script>
 

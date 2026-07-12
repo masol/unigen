@@ -37,6 +37,11 @@ class DataCenter {
         }
     }
 
+    public findType(type: string): ProjectType | null {
+        if (!type) return null;
+        return this.tplMetas?.find(tpl => tpl.id == type) || null;
+    }
+
     /**
      * 以文本形式读取 data 目录下的文件。
      * - 优先读取 userData/data 下的同名文件；

@@ -1,11 +1,11 @@
 <!-- src/lib/components/dyn/nodes/PanelNode.svelte -->
 <script lang="ts">
   import { ScrollArea } from "$lib/components/ui/scroll-area";
+  import type { IValueService } from "$lib/store/ui/activity/type";
   import NodeRenderer from "../NodeRenderer.svelte";
   import { keyOf, type PanelNode } from "../ast";
-  import type { ValueService } from "../value-service";
 
-  let { node, service }: { node: PanelNode; service: ValueService } = $props();
+  let { node, service }: { node: PanelNode; service: IValueService } = $props();
 
   let children = $derived(Array.isArray(node.children) ? node.children : []);
 </script>

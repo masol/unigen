@@ -3,27 +3,21 @@
   import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
+  import { type IValueService } from "$lib/store/ui/activity/type";
   import { cn } from "$lib/utils";
   import type { SelectNode } from "../ast";
-  import {
-    readStringOr,
-    writeKeyOf,
-    type ValueService,
-  } from "../value-service";
+  import { coerceStringOr, useBinding } from "../binding.svelte";
 
-  let { node, service }: { node: SelectNode; service: ValueService } = $props();
-
-  let current = $derived(
-    readStringOr(service, node.binding.readKey, node.fallback),
-  );
+  let { node, service }: { node: SelectNode; service: IValueService } =
+    $props();
+  const b = useBinding<string>(service, () => node.binding);
+  let current = $derived(coerceStringOr(b.value, node.fallback));
   let selected = $derived(
     node.options.find((o) => o.value === current) ?? node.options[0],
   );
-  const writeKey = writeKeyOf(node.binding);
-
   async function handleChange(next: string | undefined) {
     if (!next || next === current) return;
-    await service.set(writeKey, next);
+    await b.set(next);
   }
 </script>
 

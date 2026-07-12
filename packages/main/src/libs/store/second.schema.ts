@@ -1,5 +1,5 @@
-import { Schema } from 'electron-store';
 import { SecondConfig } from '$types/appconfig.js';
+import { Schema } from 'electron-store';
 
 export const secondSchema: Schema<SecondConfig> = {
     "recents": {
@@ -13,7 +13,7 @@ export const secondSchema: Schema<SecondConfig> = {
                 "path": {
                     "type": "string",
                 },
-                "type": {
+                "icon": {
                     "type": "string",
                 },
                 "time": {

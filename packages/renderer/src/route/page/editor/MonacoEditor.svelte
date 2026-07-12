@@ -206,7 +206,7 @@
         // 1378, // Top-level 'await' expressions ... module/target 限制
         // 1431, // 'for await' loops ... 顶层限制
         // 1432, // Top-level 'for await' ...
-        // 1108, // 'return' can only be used within a function body（with 包裹场景）
+        1108, // 'return' can only be used within a function body（with 包裹场景）
         // 2304, // Cannot find name 'await'（await 被当标识符时的残留误报，见下）
       ],
     });

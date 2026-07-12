@@ -59,13 +59,13 @@ export function collectJobs(
                 jobs.push({
                     kind: 'entry',
                     filePath: path.join(targetPath, 'entry', `${id}.kv`),
-                    load: () => prjdb.getContent({ kind: 'glossary', id, content: false }),
+                    load: () => prjdb.getContent({ kind: 'glossary', id, content: true }),
                 });
             } else if (isRes && !flags.noRes) {
                 jobs.push({
                     kind: 'res',
                     filePath: path.join(targetPath, 'res', `${id}.kv`),
-                    load: () => prjdb.getContent({ kind: 'glossary', id, content: false }),
+                    load: () => prjdb.getContent({ kind: 'glossary', id, content: true }),
                 });
             }
         }

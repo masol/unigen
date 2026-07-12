@@ -4,6 +4,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { dashboardStore } from "$lib/store/dashboard.svelte";
+  import { projectStore } from "$lib/store/project.svelte";
   import {
     IconAlertTriangle,
     IconBolt,
@@ -34,10 +35,10 @@
     </div>
     <div class="space-y-1">
       <h1 class="text-2xl font-semibold tracking-tight lg:text-3xl">
-        小说视频化工作台
+        {projectStore.activity?.header.title}
       </h1>
       <p class="text-sm text-muted-foreground">
-        输入小说 · 输出视频 · 全流程自动编排
+        {projectStore.activity?.header.detail}
       </p>
     </div>
   </div>

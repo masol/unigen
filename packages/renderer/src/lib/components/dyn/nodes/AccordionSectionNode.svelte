@@ -4,27 +4,42 @@
   import { RuntimeIcon } from "$lib/components/runtimeicon";
   import * as Accordion from "$lib/components/ui/accordion";
   import { Badge } from "$lib/components/ui/badge";
+  import type { IValueService } from "$lib/store/ui/activity/type";
   import { IconLoader2 } from "@tabler/icons-svelte";
   import NodeRenderer from "../NodeRenderer.svelte";
   import { keyOf, type AccordionSectionNode } from "../ast";
-  import { readList, type ValueService } from "../value-service";
+  import { coerceList, useBinding } from "../binding.svelte";
 
-  let { node, service }: { node: AccordionSectionNode; service: ValueService } =
-    $props();
+  let {
+    node,
+    service,
+  }: { node: AccordionSectionNode; service: IValueService } = $props();
 
   const OPEN = "self";
   let accordionValue = $state(node.defaultOpen ? OPEN : "");
   let loading = $derived(service.isLoading);
   let children = $derived(Array.isArray(node.children) ? node.children : []);
 
-  // badge="count" → 取第一个带 binding 的子节点列表长度
-  let badgeText = $derived.by(() => {
-    if (node.badge !== "count") return node.badge ?? null;
+  // 找出用于计数的列表 key（静态推导即可）
+  let countKey = $derived.by(() => {
+    if (node.badge !== "count") return undefined;
     const listChild = children.find(
       (c) => "binding" in c && (c as any).binding?.readKey,
     ) as { binding: { readKey: string } } | undefined;
-    if (!listChild) return null;
-    return String(readList(service, listChild.binding.readKey).length);
+    return listChild?.binding.readKey;
+  });
+
+  // 【修正】无 countKey 时 readKey 为空 —— useBinding 已对空 key 短路，
+  // 不会发起任何 fetch/订阅；track 显式关闭。
+  const countBound = useBinding(service, () => ({
+    readKey: countKey ?? "",
+    track: false,
+  }));
+
+  let badgeText = $derived.by(() => {
+    if (node.badge !== "count") return node.badge ?? null;
+    if (!countKey) return null;
+    return String(coerceList(countBound.value).length);
   });
 </script>
 

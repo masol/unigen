@@ -1,4 +1,5 @@
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
+import { ProjectDbKeys } from '$libs/project/dbkeys.js';
 import { throwCancel, throwUnprcessable } from '$libs/utils/err.js';
 import { knowledgeCenter } from '$libs/utils/kc.js';
 import { WindowService } from '$libs/utils/window.js';
@@ -21,7 +22,8 @@ export async function runCmd(ctx: IRunnerContext): Promise<void> {
     let targetPath: string;
 
     if (useKc) {
-        const type = ctx.prj?.plugin?.type || 'common';
+        const prjdb = PrjDB.ensure(ctx.prj)
+        const type = prjdb.get<string>(ProjectDbKeys.projectType) || 'common';
         targetPath = join(knowledgeCenter.kcPath, type);
         // 确保目录存在
         await fsExtra.ensureDir(targetPath);

@@ -1,16 +1,16 @@
 <!-- src/lib/components/dyn/Entry.svelte -->
 <script lang="ts">
+  import type { IValueService } from "$lib/store/ui/activity/type";
   import NodeRenderer from "./NodeRenderer.svelte";
   import type { PanelNode } from "./ast";
-  import type { ValueService } from "./value-service";
 
-  // setupActivities 注入的 props：id 用于选 service/ast，ast 可内联
+  // setupActivities 注入的 props：ast 为内联的根 PanelNode，service 为其数据服务。
   let {
     ast,
     service,
   }: {
     ast: PanelNode;
-    service: ValueService;
+    service: IValueService;
   } = $props();
 </script>
 

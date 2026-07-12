@@ -18,6 +18,7 @@ export type Events = {
     "task_finished": { success: boolean, reason?: string } // 任务结束，启动时间。
     "task_progess_report": string // 项目主任务进度报告。
     "runcommand-end": { suc: boolean, seq: number }
+    "kv-changed": { key: string, value: unknown }
     "before-input-evt": {
         key: string;
         ctrlKey: boolean;

@@ -1,0 +1,133 @@
+{
+    "header": {
+        "title": "空白类型工作台",
+        "detail": "用于开发AI工作流"
+    },
+    "hints": {
+        "idle": "空白项目，需要编辑工作流才可以继续。"
+    },
+    "needInput": {
+        "title": "没有输入",
+        "description": "点击这里打开输入管理，然后可以开始运行"
+    },
+    "targets": [],
+    "activities": [
+        {
+            "id": "input-manager",
+            "label": "输入管理",
+            "icon": "IconBook2",
+            "panel": {
+                "type": "panel",
+                "children": [
+                    {
+                        "type": "accordion-section",
+                        "title": "输入集",
+                        "icon": "IconScript",
+                        "defaultOpen": true,
+                        "badge": "count",
+                        "children": [
+                            {
+                                "type": "text-list",
+                                "binding": {
+                                    "readKey": "scripts"
+                                },
+                                "addLabel": "添加输入",
+                                "emptyTitle": "还没有输入",
+                                "emptyIcon": "IconBook2",
+                                "addDialogTitle": "添加输入",
+                                "editDialogTitle": "编辑输入",
+                                "editDialogDescription": "输入变动，需要重新计算，相当于新建项目，非必要不改动输入。",
+                                "editAlert": true,
+                                "confirmTitle": "删除输入",
+                                "confirmMessage": "确定要删除这段输入吗？此操作无法撤销。"
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "id": "spec-setting",
+            "label": "生成规格",
+            "icon": "IconSparkles",
+            "panel": {
+                "type": "panel",
+                "children": [
+                    {
+                        "type": "accordion-section",
+                        "title": "生成规格",
+                        "icon": "IconSettings",
+                        "defaultOpen": true,
+                        "children": [
+                            {
+                                "type": "select",
+                                "binding": {
+                                    "readKey": "language"
+                                },
+                                "label": "语言",
+                                "icon": "IconLanguage",
+                                "fallback": "zh",
+                                "options": [
+                                    {
+                                        "value": "zh",
+                                        "label": "中文",
+                                        "sub": "普通话 / 简体",
+                                        "badge": {
+                                            "text": "ZH",
+                                            "className": "bg-linear-to-br from-rose-500 to-amber-500 text-white shadow-sm"
+                                        }
+                                    },
+                                    {
+                                        "value": "en",
+                                        "label": "English",
+                                        "sub": "美式英语",
+                                        "badge": {
+                                            "text": "EN",
+                                            "className": "bg-linear-to-br from-sky-500 to-indigo-500 text-white shadow-sm"
+                                        }
+                                    },
+                                    {
+                                        "value": "ja",
+                                        "label": "日本語",
+                                        "sub": "标准日语",
+                                        "badge": {
+                                            "text": "JA",
+                                            "className": "bg-linear-to-br from-pink-500 to-fuchsia-500 text-white shadow-sm"
+                                        }
+                                    },
+                                    {
+                                        "value": "ko",
+                                        "label": "한국어",
+                                        "sub": "标准韩语",
+                                        "badge": {
+                                            "text": "KO",
+                                            "className": "bg-linear-to-br from-emerald-500 to-teal-500 text-white shadow-sm"
+                                        }
+                                    },
+                                    {
+                                        "value": "es",
+                                        "label": "Español",
+                                        "sub": "西班牙语",
+                                        "badge": {
+                                            "text": "ES",
+                                            "className": "bg-linear-to-br from-orange-500 to-red-500 text-white shadow-sm"
+                                        }
+                                    },
+                                    {
+                                        "value": "fr",
+                                        "label": "Français",
+                                        "sub": "法语",
+                                        "badge": {
+                                            "text": "FR",
+                                            "className": "bg-linear-to-br from-blue-500 to-cyan-500 text-white shadow-sm"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+}

@@ -3,12 +3,14 @@
   import { Button } from "$lib/components/ui/button";
   import * as ImageZoom from "$lib/components/ui/image-zoom";
   import { ScrollArea } from "$lib/components/ui/scroll-area";
+  import { type IValueService } from "$lib/store/ui/activity/type";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
   import { api } from "$lib/utils/api";
   import { path2URL } from "$lib/utils/str";
   import autoAnimate from "@formkit/auto-animate";
   import { ORPCError } from "@orpc/client";
   import {
+    IconAlertTriangle,
     IconLoader2,
     IconPhoto,
     IconPlus,
@@ -16,14 +18,19 @@
   } from "@tabler/icons-svelte";
   import { toast } from "svelte-sonner";
   import type { ImageGridNode } from "../ast";
-  import { readList, writeKeyOf, type ValueService } from "../value-service";
+  import { coerceList } from "../binding.svelte";
+  import { useBoundFiles } from "../use-bound-files.svelte";
 
-  let { node, service }: { node: ImageGridNode; service: ValueService } =
+  let { node, service }: { node: ImageGridNode; service: IValueService } =
     $props();
 
+  const bound = useBoundFiles(service, () => node.dir);
+  let images = $derived(coerceList<string>(bound.snapshot.value));
+  let loading = $derived(bound.snapshot.loading);
+  let boundError = $derived(bound.snapshot.error);
+
   let isUploading = $state(false);
-  let images = $derived(readList<string>(service, node.binding.readKey));
-  const writeKey = writeKeyOf(node.binding);
+  let busy = $derived(isUploading || loading);
 
   function procError(e: unknown): void {
     let msg: string;
@@ -41,7 +48,7 @@
   }
 
   async function handlePick() {
-    if (isUploading) return;
+    if (busy) return;
     isUploading = true;
     try {
       const result = await api().system.openFile({ filters: "image" });
@@ -49,7 +56,7 @@
       if (typeof result === "string") paths = [result];
       else if (Array.isArray(result)) paths = result;
       else throw new Error("Invalid openFile result");
-      await service.listAppend(writeKey, paths);
+      await service.fileAdd(node.dir, paths);
     } catch (e) {
       procError(e);
     } finally {
@@ -61,12 +68,12 @@
     event.stopPropagation();
     event.preventDefault();
     const ok = await confirmStore.request({
-      title: "确认删除",
-      message: "确定要删除这张参考图吗？",
+      title: node.confirmTitle ?? "确认删除",
+      message: node.confirmMessage ?? "确定要删除这张图片吗？",
     });
     if (!ok) return;
     try {
-      await service.listRemove(writeKey, image);
+      await service.fileRemove(node.dir, [image]);
     } catch (e) {
       procError(e);
     }
@@ -74,9 +81,19 @@
 </script>
 
 <div class="space-y-3">
+  {#if boundError}
+    <div
+      class="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+      role="alert"
+    >
+      <IconAlertTriangle size={16} stroke={1.5} class="mt-0.5 shrink-0" />
+      <span class="whitespace-pre-wrap wrap-break-word">{boundError}</span>
+    </div>
+  {/if}
+
   <Button
     class="w-full rounded-xl shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl"
-    disabled={isUploading}
+    disabled={busy}
     onclick={handlePick}
   >
     {#if isUploading}
@@ -113,6 +130,16 @@
           {/each}
         </div>
       </ImageZoom.Root>
+    {:else if loading}
+      <div
+        class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/50 bg-muted/20 p-12 text-center"
+      >
+        <IconLoader2
+          size={20}
+          stroke={1.5}
+          class="animate-spin text-muted-foreground"
+        />
+      </div>
     {:else}
       <div
         class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/50 bg-muted/20 p-12 text-center"

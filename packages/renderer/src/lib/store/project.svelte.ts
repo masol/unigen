@@ -1,28 +1,30 @@
-import { api, procApiError } from "$lib/utils/api";
+import SelectProjectTypeDialog from '$lib/components/dialog/project-type/SelectProjectTypeDialog.svelte';
+import { api, procApiError, safeApi } from "$lib/utils/api";
 import evtbus from "$lib/utils/evtbus";
 import { hooks } from '$lib/utils/hook';
-import type { RunState } from "@app/main/types";
+import type { ProjectActivityData, RunState } from "@app/main/types";
 import { COMMON_ORPC_ERROR_DEFS, ORPCError } from "@orpc/client";
 import Logger from "electron-log/renderer";
 import { toast } from "svelte-sonner";
 import { DbKeys } from "../../plugins/video/dbkeys";
-import { activityStore } from "./dyn/activity.svelte";
 import { pluginStore } from "./plugin.svelte";
+import { ProjectActivity } from "./ui/activity/activity";
 import { confirmStore } from "./ui/confirm.svelte";
+import { dialogStore } from "./ui/dialog.svelte";
 
 
 type LoadingAction = "open" | "new" | null;
 
 class ProjectStore {
     // ── 私有状态 ──────────────────────────────────────────────
-
+    #activity = $state.raw<ProjectActivity | null>(null)
     /**
      * pluginId → PluginMeta
      * Map 整体替换触发顶层响应；Meta 内字段逐个修改触发细粒度响应
      * 选 $state 深度响应：需要对 Meta 字段做 mutation（busy / status / …）
      */
     #path = $state<string>("");
-    #depPlugins: string[] = [];
+    #depPlugins: string[] | null = null;
     #runState = $state<RunState>("idle");
     loading = $state<LoadingAction>(null);
 
@@ -32,6 +34,16 @@ class ProjectStore {
     }
     get runState(): RunState {
         return this.#runState;
+    }
+
+    get activity(): ProjectActivity | null {
+        // if (!this.#activity) {
+        //     const msg = "当前没有有效的项目级活动信息，哪里的时序出问题了？"
+        //     toast.error(msg)
+        //     Logger.error(msg)
+        //     throw new Error(msg)
+        // }
+        return this.#activity;
     }
 
     isBusy = $derived(this.loading !== null);
@@ -79,14 +91,27 @@ class ProjectStore {
         }
     }
 
+    // 需要确保本函数在path设置之前执行，否则可能触发主控台报错。
+    private setupUI(activityData: ProjectActivityData) {
+        this.#activity = new ProjectActivity(activityData);
+    }
 
+
+    // 刷新后同步。
     async init(): Promise<void> {
         try {
-            this.#path = await api().project.info("path");
-            if (this.#path) {
+            const path = await api().project.info("path");
+            if (path) {
                 // 已经打开了项目。同步依赖插件。
+                const prjData = await safeApi().project.loadUI();
+                this.setupUI(prjData);
+                // await delay(10);
+                this.#path = path;
+                // @todo: 获取项目的activity数据。
                 this.#depPlugins = await api().project.get(DbKeys.depplugins);
-                await pluginStore.ensurePlugins(this.#depPlugins);
+                if (this.#depPlugins) {
+                    await pluginStore.ensurePlugins(this.#depPlugins);
+                }
                 await hooks.callHook("project:loaded", { path: this.#path });
             }
         } catch (e) {
@@ -95,35 +120,78 @@ class ProjectStore {
     }
 
     async open(pathName?: string): Promise<boolean> {
+        if (this.isBusy) return false;
+
         try {
-            await api().project.open(pathName);
+            this.loading = "open";
+
+            const prjData = await api().project.open(pathName);
+            this.setupUI(prjData);
             this.#path = await api().project.info("path");
             this.#depPlugins = await api().project.get(DbKeys.depplugins);
-            await pluginStore.ensurePlugins(this.#depPlugins);
+            if (this.#depPlugins && this.#depPlugins.length > 0) {
+                await pluginStore.ensurePlugins(this.#depPlugins);
+            }
             await hooks.callHook("project:loaded", { path: this.#path });
             Logger.debug("项目打开成功", this.#path)
             return true;
         } catch (e) {
             return this.procError(e);
+        } finally {
+            this.loading = null;
         }
     }
 
     async close(): Promise<void> {
-        activityStore.setupActivities();
-    }
-
-    private async doCreate(bForce: boolean, pathName?: string): Promise<boolean> {
-        await api().project.create({ path: pathName, force: bForce });
-        this.#path = await api().project.info("path");
-        this.#depPlugins = await api().project.get(DbKeys.depplugins);
-        await pluginStore.ensurePlugins(this.#depPlugins);
-        return true;
+        if (this.#path.length === 0) return;
+        await safeApi().project.close();
+        // 首先关闭项目。
+        this.#path = "";
+        if (this.#activity) {
+            setTimeout(() => {
+                this.#activity?.clearTop();
+                this.#activity?.close();
+                this.#activity = null;
+            }, 10);
+        }
     }
 
     async create(pathName?: string): Promise<boolean> {
+        if (this.isBusy) return false;
+        this.loading = "new";
+        try {
+            const typeId = await dialogStore.safeShow(
+                SelectProjectTypeDialog,
+                {
+                    // onManage 留给你实现内部路由跳转（非新窗口）
+                    onManage: () => alert("/settings/project-types"),
+                },
+                { size: "xl" }, // 宽屏网格，选用 xl
+            );
+            if (typeId === null) return false; // 用户取消
+            await this.createImpl(typeId, pathName);
+            return true;
+        } finally {
+            this.loading = null;
+        }
+    }
+
+
+    private async doCreate(bForce: boolean, type: string, pathName?: string): Promise<boolean> {
+        const prjActivities = await api().project.create({ path: pathName, force: bForce, type });
+        this.setupUI(prjActivities)
+        this.#path = await api().project.info("path");
+        this.#depPlugins = await api().project.get(DbKeys.depplugins);
+        if (this.#depPlugins && this.#depPlugins.length > 0) {
+            await pluginStore.ensurePlugins(this.#depPlugins);
+        }
+        return true;
+    }
+
+    private async createImpl(prjType: string, pathName?: string): Promise<boolean> {
         let realPathname: string | undefined;
         try {
-            return await this.doCreate(false, pathName);
+            return await this.doCreate(false, prjType, pathName);
         } catch (e) {
             if (e instanceof ORPCError && e.status === COMMON_ORPC_ERROR_DEFS.UNSUPPORTED_MEDIA_TYPE.status) {
                 // 不做任何处理。继续向下强制执行。
@@ -144,7 +212,7 @@ class ProjectStore {
         }
 
         try {
-            const result = await this.doCreate(true, realPathname);
+            const result = await this.doCreate(true, prjType, realPathname);
             if (result) {
                 await hooks.callHook("project:loaded", { path: this.#path });
             }

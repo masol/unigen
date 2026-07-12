@@ -1,6 +1,7 @@
 // Project的KvStore的有效keys.
 
 export const ProjectDbKeys = {
+    version: "create-version",
     embedingModelName: 'vecModelName',
     embedingSize: 'embdingSize',
     embedingFrom: 'embeding_from',
@@ -9,6 +10,7 @@ export const ProjectDbKeys = {
     entry_common: "entry_common", // 执行命令时，如果未指定命令，这是默认入口，执行意图识别+命令路由。
     //entry_commandstr // 动态拼接的command_str
     imported: "imported", // 指示项目是否已导入了初始知识库。
+    projectType: "project-type", // 指示项目类型。
 
     /// 下面是video插件定义的keys，先写这里了，应该移入video plugin.
     scripts: "script",
