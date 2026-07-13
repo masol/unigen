@@ -23,6 +23,7 @@ export enum ModelTags {
     Video = "video",   // 视频理解
     Tool = "tool", // 函数调用(工具)
     Audio = 'audio', // 语音理解
+    Outline = "outline", // 支持结构化输出。
 
     // 以上为输入/输出能力。
 }

@@ -12,6 +12,7 @@ import {
     IconDeviceDesktop,
     IconDiamond,
     IconEye,
+    IconJson,
     IconMessage,
     IconMicrophone,
     IconMoodSmile,
@@ -96,6 +97,7 @@ export const tagLabels: Record<ModelTags, string> = {
     "audio": "音频",
     "tool": "工具",
     "video": "视频",
+    "outline": "格式",
 };
 
 export const tagIcons: Record<ModelTags, typeof IconMessage> = {
@@ -118,6 +120,7 @@ export const tagIcons: Record<ModelTags, typeof IconMessage> = {
     "audio": IconMicrophone,
     "tool": IconTool,
     "video": IconVideo,
+    "outline": IconJson,
 };
 
 // 1. 功能与核心任务标签
@@ -146,6 +149,7 @@ export const CAPABILITY_TAGS: Record<string, ModelTags> = {
     audio: 'audio' as ModelTags,
     tool: 'tool' as ModelTags,
     video: 'video' as ModelTags,
+    outline: 'outline' as ModelTags,
 };
 
 export const protocolLabels: Record<ProviderProtocol, string> = {

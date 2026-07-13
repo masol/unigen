@@ -22,6 +22,7 @@ export enum ModelTags {
     Video = 'video',         // 视频理解
     Tool = 'tool',           // 函数调用
     Audio = 'audio',         // 语音理解
+    Outline = 'outline',     // 支持 Constrained Decoding（约束解码 / 结构化输出）
 }
 
 export interface ModelFeatures {
@@ -37,7 +38,7 @@ export interface ModelFeatures {
 }
 
 // ============================================================================
-// 常用上下文/输出档位常量（进入 1M 时代，集中管理便于维护）
+// 常用上下文/输出档位常量（2026 H2：普遍进入 256K~1M+ 时代）
 // ============================================================================
 
 const CTX = {
@@ -48,6 +49,7 @@ const CTX = {
     K128: 131_072,
     K200: 200_000,
     K256: 262_144,
+    K512: 524_288,
     M1: 1_000_000,
     M1_ACTUAL: 1_048_576, // 2^20，部分厂商真实值
     M2: 2_097_152,
@@ -63,6 +65,11 @@ const OUT = {
     K100: 100_000,
     K128: 131_072, // 长推理模型可达
 } as const;
+
+// 2026 H2 现代默认档位：非旗舰对话模型的最低预期
+const DEFAULT_INCTX = CTX.K256;         // 提高默认输入窗口（原为 128K）
+const DEFAULT_OUT = OUT.K16;            // 提高默认输出（原为 8K）
+const DEFAULT_REASON_OUT = OUT.K64;     // 推理模型默认输出
 
 // ============================================================================
 // 数据表 1：厂商识别规则（关键词 → provider）
@@ -140,6 +147,7 @@ const BASE_MODELS: BaseSpec[] = [
     { match: 'gpt-4o', abilities: [...OMNI], inctx: CTX.K128, outctx: OUT.K16, score: 86 },
     { match: 'gpt-4-turbo', abilities: [...CHAT_V], inctx: CTX.K128, outctx: OUT.K4, score: 83 },
     { match: 'gpt-4', abilities: [...CHAT], inctx: CTX.K8, outctx: OUT.K4, score: 80 },
+    // gpt-3.5：早期 completion 血统，结构化输出支持不完整 → 进入 CD 黑名单
     { match: 'gpt-3.5', abilities: [...CHAT, T.Flash], inctx: CTX.K16, outctx: OUT.K4, score: 65 },
     { match: 'chatgpt-4o', abilities: [...OMNI], inctx: CTX.K128, outctx: OUT.K16, score: 84 },
 
@@ -166,7 +174,7 @@ const BASE_MODELS: BaseSpec[] = [
     { match: 'gemini-3', abilities: [...OMNI_R, T.Video, T.Plus], inctx: CTX.M1, outctx: OUT.K64, score: 93 },
     { match: 'gemini', abilities: [...OMNI, T.Video], inctx: CTX.M1_ACTUAL, outctx: OUT.K64, score: 84 },
     { match: 'gemma-3', abilities: [...CHAT_V], inctx: CTX.K128, outctx: OUT.K8, score: 74 },
-    { match: 'gemma', abilities: [...CHAT], inctx: CTX.K8, outctx: OUT.K8, score: 68 },
+    { match: 'gemma', abilities: [...CHAT], inctx: CTX.K32, outctx: OUT.K8, score: 68 },
 
     // ===== DeepSeek =====
     { match: 'deepseek-reasoner', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K64, score: 90 },
@@ -206,7 +214,7 @@ const BASE_MODELS: BaseSpec[] = [
     // ===== Zhipu GLM =====
     { match: 'glm-4.6', abilities: [...REASON_V], inctx: CTX.K200, outctx: OUT.K128, score: 88 },
     { match: 'glm-4.5v', abilities: [...REASON_V, T.Video], inctx: CTX.K64, outctx: OUT.K16, score: 85 },
-    { match: 'glm-4.5-air', abilities: [...REASON, T.Flash], inctx: CTX.K128, outctx: OUT.K128 ?? OUT.K64, score: 82 },
+    { match: 'glm-4.5-air', abilities: [...REASON, T.Flash], inctx: CTX.K128, outctx: OUT.K64, score: 82 },
     { match: 'glm-4.5', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K128, score: 87 },
     { match: 'glm-4-plus', abilities: [...CHAT, T.Plus], inctx: CTX.K128, outctx: OUT.K16, score: 82 },
     { match: 'glm-4-flash', abilities: [...CHAT, T.Flash], inctx: CTX.K128, outctx: OUT.K16, score: 70 },
@@ -221,7 +229,7 @@ const BASE_MODELS: BaseSpec[] = [
     { match: 'ernie-4.0', abilities: [...CHAT, T.Ultra], inctx: CTX.K128, outctx: OUT.K8, score: 80 },
     { match: 'ernie', abilities: [...CHAT], inctx: CTX.K32, outctx: OUT.K8, score: 76 },
 
-    // ===== ByteDance Doubao =====
+    // ===== ByteDance Doubao（接上文） =====
     { match: 'doubao-1.5-vision', abilities: [...CHAT_V], inctx: CTX.K128, outctx: OUT.K16, score: 83 },
     { match: 'doubao-1.5-pro', abilities: [...CHAT, T.Plus], inctx: CTX.K256, outctx: OUT.K16, score: 84 },
     { match: 'doubao-1.5-thinking', abilities: [...REASON_V], inctx: CTX.K128, outctx: OUT.K32, score: 86 },
@@ -349,6 +357,25 @@ const BASE_MODELS: BaseSpec[] = [
 ];
 
 // ============================================================================
+// 数据表 2.5：约束解码（Constrained Decoding）黑名单
+// ----------------------------------------------------------------------------
+// 设计原则（最佳实践）：
+//   1) CD 覆盖面 ≥ Tool。凡对话模型默认「派生」Outline 能力，无需逐条硬编码。
+//   2) 仅对「已知不支持结构化输出」的少数模型用黑名单剔除，避免维护地狱。
+//   3) 匹配基于 baseName 子串，命中即视为不支持 CD。
+// ============================================================================
+
+const NO_OUTLINE_MATCHERS: string[] = [
+    'gpt-3.5',        // 早期 completion 血统，json_schema 支持不完整
+    'davinci',        // 纯 completion，无结构化输出
+    'gpt-4-turbo',    // 早期 4-turbo API 仅 json_object，无严格 json_schema（保守剔除）
+    'gpt-4-0',        // gpt-4 早期快照
+    'claude-3-opus',  // Anthropic 早期，结构化输出仅靠 tool 间接实现，非原生 CD
+    'claude-3-sonnet',
+    'claude-3-haiku',
+];
+
+// ============================================================================
 // 数据表 3：ID 关键词兜底推断（当基座表未命中时使用）
 // ============================================================================
 
@@ -427,14 +454,14 @@ export function parseModel(modelId: string): ModelFeatures | null {
         const category = abilities.find((a) =>
             [T.Embedding, T.Rerank, T.ImageGeneration].includes(a),
         );
-        // 预估：文本类默认给现代主流档位（128K 输入 / 8K 输出）
+        // 预估：文本类默认给 2026 H2 现代主流档位（256K 输入 / 16K 输出）
         if (category === T.Embedding) { inctx = CTX.K8; score = 72; }
         else if (category === T.Rerank) { score = 72; }
         else if (category === T.ImageGeneration) { score = 74; }
         else {
-            inctx = CTX.K128;
+            inctx = DEFAULT_INCTX; // 256K（提高后的默认值）
             // 若推断为推理模型 → 拉高输出上限
-            outctx = abilities.includes(T.Reasoning) ? OUT.K32 : OUT.K8;
+            outctx = abilities.includes(T.Reasoning) ? DEFAULT_REASON_OUT : DEFAULT_OUT;
             score = 72;
         }
     }
@@ -454,8 +481,13 @@ export function parseModel(modelId: string): ModelFeatures | null {
         abilities.push(T.Reasoning);
     }
     if (abilities.includes(T.Reasoning) && (!outctx || outctx < OUT.K16)) {
-        outctx = OUT.K32; // 推理模型需要更大输出预算
+        outctx = DEFAULT_REASON_OUT; // 推理模型需要更大输出预算
     }
+
+    // 9. 派生「约束解码（Outline）」能力
+    //    规则：所有文本生成模型默认支持 CD（覆盖面 ≥ Tool），
+    //         但命中黑名单的少数模型除外。
+    applyOutlineAbility(baseName, abilities);
 
     return {
         rawId: raw,
@@ -535,6 +567,31 @@ function appendKeywordTags(lower: string, abilities: ModelTags[]): void {
     abilities.push(...set);
 }
 
+/**
+ * 派生「约束解码 / 结构化输出（Outline）」能力。
+ *
+ * 工程决策依据：
+ *  - 约束解码本质是【推理引擎】层面的能力（outlines / xgrammar / lm-format-enforcer，
+ *    以及各闭源 API 的 response_format=json_schema），其覆盖面 ≥ 函数调用（Tool）。
+ *  - 因此采用「默认支持 + 黑名单剔除」策略，而非逐条硬编码，避免维护地狱。
+ *
+ * 规则：
+ *  1. 仅文本生成模型（TextGeneration）才有 CD 意义；
+ *     Embedding / Rerank / 纯 ImageGeneration 无文本 token 生成，跳过。
+ *  2. 命中 NO_OUTLINE_MATCHERS 黑名单的少数老模型 → 不授予 Outline。
+ *  3. 其余文本模型 → 默认授予 Outline。
+ */
+function applyOutlineAbility(baseName: string, abilities: ModelTags[]): void {
+    if (!abilities.includes(T.TextGeneration)) return;
+
+    const blocked = NO_OUTLINE_MATCHERS.some((m) => baseName.includes(m));
+    if (blocked) return;
+
+    if (!abilities.includes(T.Outline)) {
+        abilities.push(T.Outline);
+    }
+}
+
 /** 数组去重（保持顺序） */
 function dedupe<T>(arr: T[]): T[] {
     return Array.from(new Set(arr));
@@ -559,4 +616,29 @@ export function getModelCategory(modelId: string): ModelTags | 'unknown' {
     if (abilities.includes(ModelTags.ImageGeneration)) return ModelTags.ImageGeneration;
     if (abilities.includes(ModelTags.TextGeneration)) return ModelTags.TextGeneration;
     return 'unknown';
+}
+
+/**
+ * 是否支持函数调用（Tool / Function Calling）。
+ */
+export function supportsToolCalling(modelId: string): boolean {
+    return hasAbility(modelId, ModelTags.Tool);
+}
+
+/**
+ * 是否支持约束解码 / 结构化输出（Constrained Decoding / Structured Output）。
+ *
+ * 语义说明：
+ *  - 返回 true 表示该模型可稳定地按 JSON Schema / 正则 / 语法约束生成结构化输出。
+ *  - 覆盖面通常 ≥ supportsToolCalling（工具调用可视为 CD 的一种应用）。
+ */
+export function supportsConstrainedDecoding(modelId: string): boolean {
+    return hasAbility(modelId, ModelTags.Outline);
+}
+
+/**
+ * 是否为推理（思考）模型。
+ */
+export function isReasoningModel(modelId: string): boolean {
+    return hasAbility(modelId, ModelTags.Reasoning);
 }

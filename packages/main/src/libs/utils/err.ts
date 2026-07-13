@@ -24,6 +24,21 @@ export function throwNotfound(message: string): never {
     })
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function isORPCError(err: unknown): err is ORPCError<any, any> {
+    if (err instanceof ORPCError) {
+        return true;
+    }
+    return false;
+}
+
+export function isNotfoundError(err: unknown): boolean {
+    if (isORPCError(err)) {
+        return err.status === 404;
+    }
+    return false;
+}
+
 
 export function throwPrecondition(message: string): never {
     throw new ORPCError(COMMON_ORPC_ERROR_DEFS.PRECONDITION_FAILED.message, {

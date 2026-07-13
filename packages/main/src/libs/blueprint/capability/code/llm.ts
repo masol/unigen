@@ -1,5 +1,5 @@
 import { getSmartModel } from "$libs/model/index.js";
-import { NL2Format } from "$libs/model/llm/struct.js";
+import { NL2Format } from "$libs/model/llm/outline.js";
 import { LlmParamArgs } from "$types/ai/gentext.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import { generateText, Output } from "ai";

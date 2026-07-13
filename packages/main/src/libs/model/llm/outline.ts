@@ -1,10 +1,9 @@
-import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
-import { getCurrentProject } from "$libs/utils/api.js";
-import { ProjectDbKeys } from "$libs/utils/db/dbkeys.js";
-import { throwPrecondition } from "$libs/utils/err.js";
+import { isNotfoundError, throwPrecondition } from "$libs/utils/err.js";
 import type { GenTextArgs, GenTextReturn } from "$types/ai/gentext.js";
-import { generateText, ModelMessage, NoObjectGeneratedError, Output, TypeValidationError } from "ai";
-import { z } from "zod";
+import { ModelTags } from "$types/shared/model.js";
+import { extractJsonMiddleware, generateText, ModelMessage, NoObjectGeneratedError, Output, TypeValidationError, wrapLanguageModel } from "ai";
+import Logger from "electron-log/main.js";
+import { isPlainObject } from "radashi";
 import { SortStrategy } from "../balancer/candidate.js";
 import { getSmartModel } from "../balancer/get-smart-model.js";
 
@@ -24,47 +23,69 @@ export interface NlFormatType {
 }
 
 // 从nl中抽取json object.失败抛出异常。
-export async function exfmt<T extends z.ZodType>(nl: string, schema: T): Promise<z.infer<T> | null> {
-    const result = await safeExfmt(nl, schema);
-    if (result.success) {
-        return result.value?.output
-    }
-    throw result.err
-}
+// export async function exfmt<T extends z.ZodType>(nl: string, schema: T): Promise<z.infer<T> | null> {
+//     const result = await safeExfmt(nl, schema);
+//     if (result.success) {
+//         return result.value?.output
+//     }
+//     throw result.err
+// }
 
-function getExtractPrompt() {
-    const prj = getCurrentProject();
-    if (prj) {
-        const prjdb: PrjDB = PrjDB.ensure(prj);
-        const str = prjdb.get<string>(ProjectDbKeys.extract_json_prompt)
-        if (str) {
-            // @todo: 使用hea
-            return str;
-        }
-    }
-}
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function safeExfmtWithPrompt(nl: string, output: any): Promise<NlFormatType> {
     try {
-        // const model = getSmartModel({ sort: SortStrategy.VersionAsc });
-        // 模型负责从自然语言文本中提取符合 schema 的 JSON。
-        const result = await generateText({
-            // @todo:  预估token规模，并以minInctx: est(nl.length)作为筛选条件。
-            model: getSmartModel({ sort: SortStrategy.VersionAsc }), // 弱模型优先。
-            instructions: "",
-            prompt: nl,
-            temperature: 0,
-            output,
-        });
-        return {
-            success: true,
-            value: result
+        const format = await output.responseFormat;
+        if (isPlainObject(format) && 'type' in format && 'schema' in format && format.type == 'json') {
+            // 拿到要求，开始
+            // 模型负责从自然语言文本中提取符合 schema 的 JSON。
+            const instructions = `你是一个严格的 JSON 生成器。
+请必须、只能返回一个符合以下标准 JSON Schema 结构的 JSON 字符串。前后不能有任何解释性废话。
+
+【目标 JSON 结构定义】：
+${JSON.stringify(format.schema, null, 2)}
+现在开始，从用户输入的内容中，提取并输出符合上述JSON Schema规范的JSON字符串。`;
+
+            const result = await generateText({
+                // @todo:  预估token规模，并以minInctx: est(nl.length)作为筛选条件。
+                model: wrapLanguageModel({
+                    model: getSmartModel({ sort: SortStrategy.VersionAsc }),
+                    middleware: extractJsonMiddleware()
+                }), // 弱模型优先。
+                instructions,
+                prompt: nl,
+                temperature: 0,
+                output: Output.text(),
+            });
+
+            const value = await output.parseCompleteOutput({
+                text: result.text
+            }, {
+                response: result.finalStep.response,
+                usage: result.usage,
+                finishReason: result.finishReason
+            })
+            if (value) {
+                return {
+                    success: true,
+                    value: {
+                        ...result,
+                        output: value
+                    }
+                }
+            }
+            return {
+                success: false
+            }
+        } else {
+            const msg = `[Outline] 在从约束输出降级为提示词约束时，因无法定位schema而无法降级:${format}`;
+            Logger.warn(msg);
+            return {
+                success: false,
+                err: new Error(msg)
+            }
         }
     } catch (e) {
-        if (NoObjectGeneratedError.isInstance(e)) {
-            // 无对象生成。通常是The feature "responseFormat" is not supported. 降级为使用提示词来提取JSON.
-            return safeExfmtWithPrompt(nl, output);
-        }
         return {
             success: false,
             err: e
@@ -81,7 +102,7 @@ export async function safeExfmt(nl: string, output: any): Promise<NlFormatType> 
         // 模型负责从自然语言文本中提取符合 schema 的 JSON。
         const result = await generateText({
             // @todo:  预估token规模，并以minInctx: est(nl.length)作为筛选条件。
-            model: getSmartModel({ sort: SortStrategy.VersionAsc }), // 弱模型优先。
+            model: getSmartModel({ sort: SortStrategy.VersionAsc, requiredAbilities: [ModelTags.Outline] }), // 弱模型优先。
             prompt: nl,
             temperature: 0,
             output,
@@ -91,7 +112,7 @@ export async function safeExfmt(nl: string, output: any): Promise<NlFormatType> 
             value: result
         }
     } catch (e) {
-        if (NoObjectGeneratedError.isInstance(e)) {
+        if (NoObjectGeneratedError.isInstance(e) || isNotfoundError(e)) {
             // 无对象生成。通常是The feature "responseFormat" is not supported. 降级为使用提示词来提取JSON.
             return safeExfmtWithPrompt(nl, output);
         }
