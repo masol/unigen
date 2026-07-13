@@ -75,7 +75,7 @@ class BlueprintStore {
 
     /** 防抖包装：短时间内多次触发合并为一次真实 API 调用 */
     #debouncedLoad = debounce({ delay: LOAD_DEBOUNCE_MS }, () => {
-        void this.#doLoad()
+        void this.doLoad()
     })
 
     constructor() {
@@ -91,7 +91,7 @@ class BlueprintStore {
     }
 
     // ── 真实的加载逻辑（仅内部调用）──
-    async #doLoad(): Promise<void> {
+    async doLoad(): Promise<void> {
         const seq = ++this.#requestSeq
         log.debug(
             `[BlueprintStore] #doLoad() kind=${this.#kind}, name="${this.#name}", page=${this.#pageIndex}, size=${this.#pageSize}`,
@@ -132,7 +132,7 @@ class BlueprintStore {
     /** 立即加载（跳过防抖），用于需要同步等待结果的场景 */
     async loadNow(): Promise<void> {
         this.#debouncedLoad.cancel()
-        await this.#doLoad()
+        await this.doLoad()
     }
 
     setKind(value: BlueprintKind): void {

@@ -10,7 +10,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { metaDirName, type IProjectContext } from "../../type.js";
 // import { PrjJob } from "../../helper/job.js";
-import { metagToJson, type MetagRow, type NewMetagRow } from '$libs/blueprint/metag/is.js';
+import { metagFromJson, metagToJson, type MetagRow, type NewMetagRow } from '$libs/blueprint/metag/is.js';
 import { throwNotfound, throwNotimplement, throwPrecondition } from "$libs/utils/err.js";
 import type { Capability, NewCapability } from "$types/blueprint/capability.js";
 import type { PrjTimeStamps, PrjTimeStore } from "$types/prjstore.js";
@@ -283,7 +283,7 @@ export class PrjDB extends BaseProjectController {
                         throwNotfound(`没有key为${id}的术语。`)
                     }
                     // 资源类的不做JSON化，直接默认其是字符串。content为true，在export时发出，方便存储。
-                    if (content || id.startsWith('_')) { 
+                    if (content || id.startsWith('_')) {
                         return value;
                     }
                     return JSON.stringify(value, null, 2) // 这是为了方便编辑器。
@@ -337,8 +337,9 @@ export class PrjDB extends BaseProjectController {
             case 'metag':
                 {
                     const cntJson = JSON.parse(content);
+                    const metag = metagFromJson(cntJson);
                     this.upcertMetag({
-                        ...cntJson,
+                        ...metag,
                         fieldKey: id
                     })
                     return id

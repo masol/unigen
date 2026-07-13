@@ -18,6 +18,7 @@
   import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
   import { getErrorMessage } from "radashi";
   import { createHighlighter } from "shiki";
+  import { getExtraLib } from "./libs";
   import { editorStore as store } from "./store.svelte";
 
   // 内置亮/暗 Shiki 主题（无自定义时使用）
@@ -211,6 +212,11 @@
       ],
     });
 
+    const extraLibs = getExtraLib();
+    extraLibs.forEach((lib) => {
+      js.addExtraLib(lib.content, `ts:filename/${lib.name}.d.ts`);
+    });
+
     if (comfiles.NODE_AND_CUSTOM_DTS) {
       js.addExtraLib(comfiles.NODE_AND_CUSTOM_DTS, "ts:filename/globals.d.ts");
     }
@@ -297,6 +303,10 @@
       const ed = monaco.editor.create(container, {
         value: store.content,
         language: store.language,
+        suggest: {
+          // 关闭模块提示，这会隐藏 globalThis
+          showModules: false,
+        },
         theme: themeName(),
         "semanticHighlighting.enabled": true,
         automaticLayout: true,

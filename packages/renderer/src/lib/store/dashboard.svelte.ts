@@ -5,6 +5,7 @@ import { projectStore } from "$lib/store/project.svelte";
 import { confirmStore } from "$lib/store/ui/confirm.svelte";
 import { api, safeApi } from "$lib/utils/api";
 import evtbus from "$lib/utils/evtbus";
+import { hooks } from "$lib/utils/hook";
 import type { RunState } from "@app/main/types";
 import log from "electron-log/renderer";
 import { toast } from "svelte-sonner";
@@ -110,6 +111,16 @@ class DashboardStore {
                 toast.error(msg);
             }
         });
+
+        hooks.hook("project:loaded", async () => {
+            // 新项目已打开，清空旧数据。重新加载必要的内容。
+            this.#target = await safeApi().project.get("target");
+            if (!this.#target && projectStore.activity) {
+                const targetSize = projectStore.activity.targets.length;
+                this.#target = `${targetSize}/${targetSize}`
+            }
+            this.#releaseRun();
+        })
     }
 
     // ── 只读门面 ─────────────────────────────────────────────────

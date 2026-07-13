@@ -4,7 +4,6 @@ import { generateText, ModelMessage, NoObjectGeneratedError, Output, TypeValidat
 import { z } from "zod";
 import { SortStrategy } from "../balancer/candidate.js";
 import { getSmartModel } from "../balancer/get-smart-model.js";
-import { getZodSchema } from "./util.js";
 
 /**
  * 如果 arg.output 为 object/array，并且使用了 zod，则拦截 output，
@@ -31,7 +30,8 @@ export async function exfmt<T extends z.ZodType>(nl: string, schema: T): Promise
 }
 
 // 从自然语言中，抽取JSON信息。
-export async function safeExfmt<T extends z.ZodType>(nl: string, schema: T): Promise<NlFormatType> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function safeExfmt(nl: string, output: any): Promise<NlFormatType> {
     try {
         // 模型负责从自然语言文本中提取符合 schema 的 JSON。
         const result = await generateText({
@@ -39,7 +39,7 @@ export async function safeExfmt<T extends z.ZodType>(nl: string, schema: T): Pro
             model: getSmartModel({ sort: SortStrategy.VersionAsc }), // 弱模型优先。
             prompt: nl,
             temperature: 0,
-            output: Output.object({ schema }),
+            output,
         });
         return {
             success: true,
@@ -54,8 +54,7 @@ export async function safeExfmt<T extends z.ZodType>(nl: string, schema: T): Pro
 }
 
 export async function NL2Format(arg: GenTextArgs): Promise<GenTextReturn> {
-    const zodSchema = getZodSchema(arg);
-    if (!zodSchema) {
+    if (!arg.output) {
         return await generateText(arg);
     }
 
@@ -77,7 +76,7 @@ export async function NL2Format(arg: GenTextArgs): Promise<GenTextReturn> {
         });
         const newText = genedText.text;
 
-        const nlresult = await safeExfmt(newText, zodSchema);
+        const nlresult = await safeExfmt(newText, arg.output);
         if (nlresult.success && nlresult.value) {
             return nlresult.value
         }

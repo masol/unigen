@@ -14,60 +14,44 @@
     },
     "targets": [
         {
-            "value": "shot",
             "label": "镜头目标",
             "desc": "确定镜头要表达的目标",
-            "icon": "IconCamera",
-            "step": 1
+            "icon": "IconCamera"
         },
         {
-            "value": "entities",
             "label": "实体生成",
             "desc": "完成人物 / 场景实体抽取后停止",
-            "icon": "IconUsers",
-            "step": 2
+            "icon": "IconUsers"
         },
         {
-            "value": "voice",
             "label": "语音生成",
             "desc": "完成台词配音合成后停止",
-            "icon": "IconMicrophone",
-            "step": 3
+            "icon": "IconMicrophone"
         },
         {
-            "value": "segmentation",
             "label": "镜头确定",
             "desc": "确定镜头拍摄细节",
-            "icon": "IconScissors",
-            "step": 4
+            "icon": "IconScissors"
         },
         {
-            "value": "storyboard",
             "label": "分镜绘制",
             "desc": "完成分镜草图后停止",
-            "icon": "IconLayoutGrid",
-            "step": 5
+            "icon": "IconLayoutGrid"
         },
         {
-            "value": "visual",
             "label": "视觉生成",
             "desc": "完成关键帧成片渲染后停止",
-            "icon": "IconPalette",
-            "step": 6
+            "icon": "IconPalette"
         },
         {
-            "value": "video",
             "label": "视频生成",
             "desc": "完成视频片段合成后停止",
-            "icon": "IconVideo",
-            "step": 7
+            "icon": "IconVideo"
         },
         {
-            "value": "post",
             "label": "后期处理",
             "desc": "完成全流程产出最终交付",
-            "icon": "IconWand",
-            "step": 8
+            "icon": "IconWand"
         }
     ],
     "activities": [

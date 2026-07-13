@@ -65,6 +65,12 @@ export class ProjectActivity {
         this.infocards = mergeInfocards(data);
         this.targets = data.targets ?? [];
 
+        const targetSize = this.targets.length;
+        this.targets.forEach((t, idx) => {
+            t.value = `${idx + 1}/${targetSize}`
+            t.step = idx + 1
+        })
+
         this.hints = {
             idle: data.hints?.idle ?? "点击下方按钮，让AI开始工作。",
             running: data.hints?.running ?? "每一步结果都会自动保存，再次运行不会重复计算。可随时点击「终止」，已完成的部分不会丢失。",

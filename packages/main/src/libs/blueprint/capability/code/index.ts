@@ -2,10 +2,10 @@ import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import { LanceDB } from "$libs/project/controllers/lance/index.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import vm from "node:vm";
-import { getGlossary } from "../../glossary/index.js";
 import { BaseFunctor } from "../base.js";
 import { Capability } from "../is.js";
 import { FIXED_PACKAGES } from "./fixedpkgs.js";
+import { getGlossary } from "./glossary.js";
 import { getLLMPkgs } from "./llm.js";
 
 /**

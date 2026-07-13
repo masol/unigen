@@ -26,72 +26,6 @@
     return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
   }
 
-  // // 终止点元数据 - 全局唯一来源
-  // const TARGET_OPTIONS: {
-  //   value: RunTarget;
-  //   label: string;
-  //   desc: string;
-  //   icon: typeof IconScissors;
-  //   step: number;
-  // }[] = [
-  //   {
-  //     value: "shot",
-  //     label: "镜头目标",
-  //     desc: "确定镜头要表达的目标",
-  //     icon: IconCamera,
-  //     step: 1,
-  //   },
-  //   {
-  //     value: "entities",
-  //     label: "实体生成",
-  //     desc: "完成人物 / 场景实体抽取后停止",
-  //     icon: IconUsers,
-  //     step: 2,
-  //   },
-  //   {
-  //     value: "voice",
-  //     label: "语音生成",
-  //     desc: "完成台词配音合成后停止",
-  //     icon: IconMicrophone,
-  //     step: 3,
-  //   },
-  //   {
-  //     value: "segmentation",
-  //     label: "镜头确定",
-  //     desc: "确定镜头拍摄细节",
-  //     icon: IconScissors,
-  //     step: 4,
-  //   },
-  //   {
-  //     value: "storyboard",
-  //     label: "分镜绘制",
-  //     desc: "完成分镜草图后停止",
-  //     icon: IconLayoutGrid,
-  //     step: 5,
-  //   },
-  //   {
-  //     value: "visual",
-  //     label: "视觉生成",
-  //     desc: "完成关键帧成片渲染后停止",
-  //     icon: IconPalette,
-  //     step: 6,
-  //   },
-  //   {
-  //     value: "video",
-  //     label: "视频生成",
-  //     desc: "完成视频片段合成后停止",
-  //     icon: IconVideo,
-  //     step: 7,
-  //   },
-  //   {
-  //     value: "post",
-  //     label: "后期处理",
-  //     desc: "完成全流程产出最终交付",
-  //     icon: IconWand,
-  //     step: 8,
-  //   },
-  // ];
-
   let isUpdatingTarget = $state(false);
 
   let currentTarget = $derived(
@@ -218,7 +152,7 @@
           >
             {#each TARGET_OPTIONS as opt (opt.value)}
               <Select.Item
-                value={opt.value}
+                value={opt.value!}
                 class="group/item flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-all duration-200 data-highlighted:bg-muted"
               >
                 {#snippet children({ selected })}
@@ -240,7 +174,7 @@
                       <span
                         class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
                       >
-                        {opt.step}/8
+                        {opt.step}/{TARGET_OPTIONS.length}
                       </span>
                     </div>
                     <span class="truncate text-xs text-muted-foreground">

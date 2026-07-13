@@ -1,20 +1,36 @@
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import { throwNotimplement } from "$libs/utils/err.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
-import Logger from "electron-log";
+import { isPlainObject } from "radashi";
 import { MetagRow } from "../metag/is.js";
 import { getFieldkey } from "./util.js";
 
 function upcertOutput(prjDB: PrjDB, output: MetagRow, key: string, value: unknown) {
-    // @TODO： 需要跟随CapaIOType.reducer策略，来决定是否跟随还是覆盖。现在是直接覆盖。
-    if (output.reducer && output.reducer !== 'replace') {
-        throwNotimplement("尚未实现除replace之外的reducer策略。");
+    if (output.reducer) {
+        switch (output.reducer) {
+            case 'replace':
+                break;
+            case 'merge':
+                {
+                    const older = prjDB.get(key);
+                    if (older && isPlainObject(older) && isPlainObject(value)) {
+                        prjDB.set(key, {
+                            ...older,
+                            ...value
+                        })
+                        return;
+                    }
+                }
+                break;
+            default:
+                throwNotimplement(`尚未实现reducer策略:${output.reducer}。`);
+        }
     }
     prjDB.set(key, value);
 }
 
 /**
- * 保存数据到输出,调用者需自行维护数组，本函数只提供单个输出的保存功能。
+ * 保存数据到输出，本函数只提供单个输出的保存功能。
  * @param ctx 
  * @param output 
  * @param value 裸值。但是如果是数组-- 标准的item属性保存的是PrjTimeStore -- 可以没有updatedAt属性，但是要维护value结构。
@@ -26,6 +42,7 @@ export function saveToOutput(ctx: IRunnerContext, outputKey: string, value: unkn
 
     const output = prjDB.getMetag(outputKey)[0];
     if (!output) {
+        ctx.error(`请求保存时，未能找到元术语定义:${outputKey}`)
         return false;
     }
     // Logger.debug("saveToOutput value=", value)
@@ -46,7 +63,7 @@ export function saveToOutput(ctx: IRunnerContext, outputKey: string, value: unkn
                 if (key) {
                     upcertOutput(prjDB, output, key, item);
                 } else {
-                    Logger.error(`Cannot save data for output with id ${v.id} because fieldKey is missing.`);
+                    ctx.error(`Cannot save data for output with id ${v.id} because fieldKey is missing.`);
                 }
             }
         })
@@ -67,5 +84,6 @@ export function saveToOutput(ctx: IRunnerContext, outputKey: string, value: unkn
         // Logger.debug("all save to", key, value)
         return true;
     }
+    ctx.error(`请求保存时，元术语定义${outputKey}中，无法获取存储key。`)
     return false;
 }

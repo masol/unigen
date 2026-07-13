@@ -19,15 +19,50 @@
  * 3. 规范化维度关系的自维护，避免过度依赖 LLM 直觉（这是产生幻觉和缺乏条理的根源）。
  */
 
+import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
-import { getIOInfo } from "./ioinfo.js";
-import { saveToOutput } from "./output.js";
+import { isPlainObject } from "radashi";
+import z, { ZodType } from "zod";
+import { getIOInfo } from "../../glossary/ioinfo.js";
+import { saveToOutput } from "../../glossary/output.js";
 
+const fixed = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    validate: <T extends ZodType<any, any, any>>(schema: T,
+        data: unknown
+    ): z.infer<T> | null => {
+        const result = schema.safeParse(data);
+        if (result.success) {
+            return result.data; // 校验成功，返回类型安全的类型对象
+        }
+        return null; // 校验失败，返回 null
+    }
+}
 
 export function getGlossary(ctx: IRunnerContext) {
     return {
+        ...fixed,
         getIO: getIOInfo.bind(null, ctx),
         save: saveToOutput.bind(null, ctx),
+        set: (key: string, value: unknown, opt?: {
+            reducer?: "merge" | "replace"
+        }) => {
+            const prjDB = PrjDB.ensure(ctx.prj);
+            if (opt?.reducer === "merge") {
+                const older = prjDB.get(key);
+                if (older && isPlainObject(older) && isPlainObject(value)) {
+                    prjDB.set(key, {
+                        ...older,
+                        ...value
+                    })
+                    return;
+                }
+            }
+            PrjDB.ensure(ctx.prj).set(key, value);
+        },
+        get: <T = unknown>(key: string): T | null => {
+            return PrjDB.ensure(ctx.prj).get<T>(key);
+        }
         //getPair: //从withTime数据中，获取指定下标，自动计算是否过期，并返回原数据。//@todo: 侵入式 or 非侵入式？
     }
 }

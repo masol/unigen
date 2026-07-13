@@ -16,7 +16,15 @@ export type IOInfo<IType = unknown, OType = unknown> = {
     outputsWithTime: Array<PrjTimeStore<OType> | null> | null;
 }
 
-
+/**
+ * 获取全部IO对象，并判断是否失效。(资源，输入包括capa自身，更新时间都需要早于输出，否则expired.)
+ * 但是未使用schema验证数据内容，策略是写入时验证，而不是读取时验证。
+ * @param capa 能力对象
+ * @param reses 依赖资源。 
+ * @param inputKeys 输入metag数组，如未指定，使用capa.input.
+ * @param outputKeys 输出metag数组，如未指定，使用capa.output.
+ * @returns IOInfo
+ */
 export function getIOInfo<ITYpe = any, OType = any>(ctx: IRunnerContext, capa: Capability,
     reses?: string[], inputKeys?: string[],
     outputKeys?: string[]): IOInfo<ITYpe, OType> {

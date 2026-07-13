@@ -1,0 +1,204 @@
+// ai-sdk.d.ts
+
+// 1. 基础类型定义
+type JSONValue = string | number | boolean | null | { [key: string]: JSONValue } | JSONValue[];
+interface FlexibleSchema<T> { _type: T; }
+type DeepPartial<T> = T extends object ? { [P in keyof T]?: DeepPartial<T[P]> } : T;
+
+interface Output<OUTPUT = any, PARTIAL = any, ELEMENT = any> {
+    name: string;
+    responseFormat: PromiseLike<any>;
+    parseCompleteOutput(options: { text: string }, context: any): Promise<OUTPUT>;
+    parsePartialOutput(options: { text: string }): Promise<{ partial: PARTIAL } | undefined>;
+    createElementStreamTransform(): TransformStream<any, ELEMENT> | undefined;
+}
+
+// 2. 核心：直接声明全局变量，类型匿名内联
+declare global {
+
+    /**
+   * 排序策略:决定候选的"强弱链"顺序(fallback 依此链依次上溯)。
+   * ⚠️ 空闲优先不属于此策略——它只决定"从链的哪个位置切入",
+   *    绝不打乱本链的相对强弱顺序。
+   */
+    export enum SortStrategy {
+        VersionDesc = 'version-desc',
+        VersionAsc = 'version-asc',
+        ScoreDesc = 'score-desc',
+        ScoreAsc = 'score-asc',
+    }
+
+    /**
+     * 模型能力或版本标签（可根据实际业务扩展字符串字面量）
+     */
+    export type ModelTags = string;
+
+    type SystemModelMessage = {
+        role: 'system';
+        content: string;
+        /**
+         * Additional provider-specific metadata. They are passed through
+         * to the provider from the AI SDK and enable provider-specific
+         * functionality that can be fully encapsulated in the provider.
+         */
+        providerOptions?: Record<string, unknown>;
+    };
+
+    /**
+     * 智能模型筛选与兜底路由配置项
+     */
+    export interface GetSmartModelOptions {
+        requiredAbilities?: ModelTags[];
+        preferVersion?: ModelTags;
+        minScore?: number;
+
+        /** 用正则匹配 modelId(能力筛选之后再过滤) */
+        modelPattern?: RegExp;
+
+        /** 精确指定 providerId + modelId,不 fallback,只占用并发通道 */
+        exact?: { providerId: string; modelId: string };
+
+        /**
+         * 流式/长任务 slot 兜底超时(毫秒)。默认 30 分钟。
+         * 未来视频等长任务可调大。
+         */
+        streamHoldTimeoutMs?: number;
+        /**
+         * 候选排序策略,决定 fallback 尝试顺序(第 0 个为首选)。
+         * 默认 VersionDesc:最强模型优先。
+         */
+        sort?: SortStrategy;
+        /** 最小输入上下文窗口(Tokens),排除 inctx 不足(或未声明)的模型 */
+        minInctx?: number;
+    }
+
+    /**
+     * 语言模型流式/核心配置项
+     */
+    interface CoreModelOptions {
+        /** 
+         * 指定要使用的模型或其路由策略。
+         * 可以是代表特定模型 ID 的字符串，也可以是复杂的智能路由筛选配置 `GetSmartModelOptions`。
+         */
+        model?: string | GetSmartModelOptions;
+        /** 采样温度，介于 0 和 2 之间。值越大越随机，值越小越集中。 */
+        temperature?: number;
+        /** 核采样（Top-p），用于控制模型生成的确定性。 */
+        topP?: number;
+        /** 惩罚在生成文本中重复出现的词。 */
+        presencePenalty?: number;
+        /** 惩罚在生成文本中频繁出现的词。 */
+        frequencyPenalty?: number;
+        /** 限制模型生成的最大 Token 数量。 */
+        maxTokens?: number;
+        /** 生成文本的停止序列，模型遇到该字符会停止输出。 */
+        stopSequences?: string[];
+        output?: Output;
+        /** 额外的提供商特有参数。 */
+        providerOptions?: Record<string, any>;
+        /** 系统提示词，用于设定 AI 的角色或全局行为规则。 */
+        instructions?: string | SystemModelMessage | Array<SystemModelMessage>;
+        /** 传递给模型的工具集。 */
+        tools?: Record<string, {
+            description?: string;
+            parameters: Record<string, any>;
+        }>;
+    }
+
+    /**
+     * 消息历史记录节点结构
+     */
+    interface ModelMessage {
+        /** 消息角色：'user' 用户, 'assistant' 助手, 'system' 系统, 'tool' 工具响应 */
+        role: 'user' | 'assistant' | 'system' | 'tool';
+        /** 消息文本内容或多模态内容块 */
+        content: string | any[];
+        /** 伴随的工具调用结果（如果角色是 tool） */
+        toolResults?: any[];
+    }
+
+    /**
+     * 模式 A：单一提示词（不能包含 messages）
+     */
+    type PromptArgs = CoreModelOptions & {
+        /** 想要发送给模型的输入提示词 */
+        prompt: string;
+        /** 在 Prompt 模式下，messages 必须为 undefined */
+        messages?: never;
+    };
+
+    /**
+     * 模式 B：对话上下文数组（不能包含 prompt）
+     */
+    type MessagesArgs = CoreModelOptions & {
+        /** 多轮对话的结构化消息历史记录 */
+        messages: ModelMessage[];
+        /** 在 Messages 模式下，prompt 必须为 undefined */
+        prompt?: never;
+    };
+
+    /**
+     * generate 函数的合法参数组合（互斥联合类型）
+     */
+    type GenerateArgs = PromptArgs | MessagesArgs;
+
+    /**
+     * 文本生成执行结果
+     */
+    interface GenerateResult {
+        /** 模型生成的最终文本结果 */
+        text: string;
+        output: any;
+        /** 模型停止生成的直接原因 */
+        finishReason: 'stop' | 'length' | 'tool-calls' | 'content-filter' | 'other';
+        /** 本次交互的位置/路由和消耗统计 */
+        usage: {
+            /** 输入提示词消耗的 Token 数 */
+            promptTokens: number;
+            /** 模型输出回复消耗的 Token 数 */
+            completionTokens: number;
+            /** 总消耗 Token 数 */
+            totalTokens: number;
+        };
+        /** 模型在执行过程中触发的工具调用列表 */
+        toolCalls?: any[];
+        /** 工具调用执行后返回的结果列表 */
+        toolResults?: any[];
+    }
+
+    /**
+     * 封装了全局大语言模型能力的通用服务对象
+     */
+    const llm: {
+        /**
+         * 调用大语言模型，直接返回完整的执行结果。
+         * 支持通过单个 `prompt` 或多轮 `messages` 进行文本和工具的生成。
+         * 
+         * @param args 配置项，必须提供 `prompt` 或 `messages` 其中之一。
+         */
+        generate(args: GenerateArgs): Promise<GenerateResult>;
+        nL2Format(args: GenerateArgs): Promise<GenerateResult>;
+        Output: {
+            text: () => Output<string, string, never>;
+
+            object: <OBJECT>({ schema, name, description }: {
+                schema: any; name?: string; description?: string;
+            }) => Output<OBJECT, DeepPartial<OBJECT>, never>;
+
+            array: <ELEMENT>({ element, name, description }: {
+                element: FlexibleSchema<ELEMENT>; name?: string; description?: string;
+            }) => Output<Array<ELEMENT>, Array<ELEMENT>, ELEMENT>;
+
+            choice: <CHOICE extends string>({ options, name, description }: {
+                options: Array<CHOICE>; name?: string; description?: string;
+            }) => Output<CHOICE, CHOICE, never>;
+
+            json: ({ name, description }?: {
+                name?: string; description?: string;
+            }) => Output<JSONValue, JSONValue, never>;
+        };
+    };
+}
+
+// 3. 确保文件被识别为模块
+export { };

@@ -1,7 +1,6 @@
 declare global {
   // ── Node.js 常用全局 ──
   // function require(id: string): any;
-  const module: { exports: any };
   const process: {
     env: Record<string, string | undefined>;
     argv: string[];
@@ -20,6 +19,7 @@ declare global {
   ): number;
   function clearTimeout(id: number): void;
   function clearInterval(id: number): void;
+  function delay(ms: number, signal?: AbortSignal): Promise<void>
   function setImmediate(cb: (...args: any[]) => void, ...args: any[]): number;
 
 
@@ -41,6 +41,7 @@ declare global {
     role: string;
     goal: string;
     code: string;
+    dims: string[];
     input: string[];
     output: string[];
     process: string;
@@ -79,156 +80,6 @@ declare global {
     error(message: string, ...args: unknown[]): void;
     debug(message: string, ...args: unknown[]): void;
   }
-  /**
- * 排序策略:决定候选的"强弱链"顺序(fallback 依此链依次上溯)。
- * ⚠️ 空闲优先不属于此策略——它只决定"从链的哪个位置切入",
- *    绝不打乱本链的相对强弱顺序。
- */
-  export enum SortStrategy {
-    VersionDesc = 'version-desc',
-    VersionAsc = 'version-asc',
-    ScoreDesc = 'score-desc',
-    ScoreAsc = 'score-asc',
-  }
-
-  /**
-   * 模型能力或版本标签（可根据实际业务扩展字符串字面量）
-   */
-  export type ModelTags = string;
-
-  /**
-   * 智能模型筛选与兜底路由配置项
-   */
-  export interface GetSmartModelOptions {
-    requiredAbilities?: ModelTags[];
-    preferVersion?: ModelTags;
-    minScore?: number;
-
-    /** 用正则匹配 modelId(能力筛选之后再过滤) */
-    modelPattern?: RegExp;
-
-    /** 精确指定 providerId + modelId,不 fallback,只占用并发通道 */
-    exact?: { providerId: string; modelId: string };
-
-    /**
-     * 流式/长任务 slot 兜底超时(毫秒)。默认 30 分钟。
-     * 未来视频等长任务可调大。
-     */
-    streamHoldTimeoutMs?: number;
-    /**
-     * 候选排序策略,决定 fallback 尝试顺序(第 0 个为首选)。
-     * 默认 VersionDesc:最强模型优先。
-     */
-    sort?: SortStrategy;
-    /** 最小输入上下文窗口(Tokens),排除 inctx 不足(或未声明)的模型 */
-    minInctx?: number;
-  }
-
-  /**
-   * 语言模型流式/核心配置项
-   */
-  interface CoreModelOptions {
-    /** 
-     * 指定要使用的模型或其路由策略。
-     * 可以是代表特定模型 ID 的字符串，也可以是复杂的智能路由筛选配置 `GetSmartModelOptions`。
-     */
-    model?: string | GetSmartModelOptions;
-    /** 采样温度，介于 0 和 2 之间。值越大越随机，值越小越集中。 */
-    temperature?: number;
-    /** 核采样（Top-p），用于控制模型生成的确定性。 */
-    topP?: number;
-    /** 惩罚在生成文本中重复出现的词。 */
-    presencePenalty?: number;
-    /** 惩罚在生成文本中频繁出现的词。 */
-    frequencyPenalty?: number;
-    /** 限制模型生成的最大 Token 数量。 */
-    maxTokens?: number;
-    /** 生成文本的停止序列，模型遇到该字符会停止输出。 */
-    stopSequences?: string[];
-    /** 额外的提供商特有参数。 */
-    providerOptions?: Record<string, any>;
-    /** 系统提示词，用于设定 AI 的角色或全局行为规则。 */
-    system?: string;
-    /** 传递给模型的工具集。 */
-    tools?: Record<string, {
-      description?: string;
-      parameters: Record<string, any>;
-    }>;
-  }
-
-  /**
-   * 消息历史记录节点结构
-   */
-  interface ModelMessage {
-    /** 消息角色：'user' 用户, 'assistant' 助手, 'system' 系统, 'tool' 工具响应 */
-    role: 'user' | 'assistant' | 'system' | 'tool';
-    /** 消息文本内容或多模态内容块 */
-    content: string | any[];
-    /** 伴随的工具调用结果（如果角色是 tool） */
-    toolResults?: any[];
-  }
-
-  /**
-   * 模式 A：单一提示词（不能包含 messages）
-   */
-  type PromptArgs = CoreModelOptions & {
-    /** 想要发送给模型的输入提示词 */
-    prompt: string;
-    /** 在 Prompt 模式下，messages 必须为 undefined */
-    messages?: never;
-  };
-
-  /**
-   * 模式 B：对话上下文数组（不能包含 prompt）
-   */
-  type MessagesArgs = CoreModelOptions & {
-    /** 多轮对话的结构化消息历史记录 */
-    messages: ModelMessage[];
-    /** 在 Messages 模式下，prompt 必须为 undefined */
-    prompt?: never;
-  };
-
-  /**
-   * generate 函数的合法参数组合（互斥联合类型）
-   */
-  type GenerateArgs = PromptArgs | MessagesArgs;
-
-  /**
-   * 文本生成执行结果
-   */
-  interface GenerateResult {
-    /** 模型生成的最终文本结果 */
-    text: string;
-    /** 模型停止生成的直接原因 */
-    finishReason: 'stop' | 'length' | 'tool-calls' | 'content-filter' | 'other';
-    /** 本次交互的位置/路由和消耗统计 */
-    usage: {
-      /** 输入提示词消耗的 Token 数 */
-      promptTokens: number;
-      /** 模型输出回复消耗的 Token 数 */
-      completionTokens: number;
-      /** 总消耗 Token 数 */
-      totalTokens: number;
-    };
-    /** 模型在执行过程中触发的工具调用列表 */
-    toolCalls?: any[];
-    /** 工具调用执行后返回的结果列表 */
-    toolResults?: any[];
-  }
-
-  /**
-   * 封装了全局大语言模型能力的通用服务对象
-   */
-  const llm: {
-    /**
-     * 调用大语言模型，直接返回完整的执行结果。
-     * 支持通过单个 `prompt` 或多轮 `messages` 进行文本和工具的生成。
-     * 
-     * @param args 配置项，必须提供 `prompt` 或 `messages` 其中之一。
-     */
-    generate(args: GenerateArgs): Promise<GenerateResult>;
-  };
-
 
   export interface ICapaFunctor {
     run(ctx: IRunnerContext): Promise<void>;
@@ -239,11 +90,22 @@ declare global {
     updatedAt: string | null;
   }
 
+  type MetagRow = {
+    createdAt: string;
+    updatedAt: string;
+    schema: ZodType<unknown, unknown, unknown> | null;
+    fieldKey: string;
+    intent: string | null;
+    reducer: "replace" | "merge" | "append" | "prepend" | null;
+    storage: "flatten" | "monolith" | null;
+  }
+
   /** 数据库访问层，全局可用 */
   const db: {
     get<T>(key: string): T | null;
     set(key: string, value: any): void;
     remove(key: string): void;
+    getMetag(id: string | string[]): (MetagRow | null)[];
     getWithTime<T>(key: string): PrjTimeStore<T> | null;
     geUpdTime(key: string): string | null;
     geUpdTime(key: string[]): Record<string, string>;
@@ -278,13 +140,46 @@ declare global {
   };
 
   interface IGlossary {
+    /**
+     * 获取指定的IO数据，并判断是否失效。(资源，输入包括capa自身，更新时间都需要早于输出，否则expired.)
+     * 但是未使用schema验证数据内容，策略是写入时验证，而不是读取时验证。
+     * @param capa 能力对象
+     * @param reses 依赖资源。 
+     * @param inputKeys 输入metag数组，如未指定，使用capa.input.
+     * @param outputKeys 输出metag数组，如未指定，使用capa.output.
+     * @returns IOInfo
+     */
     getIO<ITYpe = any, OType = any>(
       capa: Capability,
       reses?: string[],
       inputKeys?: string[],
       outputKeys?: string[],
     ): IOInfo<ITYpe, OType>;
+    /**
+     * 保存到metag的指定的位置，如果metag定义了schema,value必须能通过过其验证，否则失败。
+     * @param outputKey metag的名称。 
+     * @param value 
+     * @returns 成功保存返回true,否则返回false。查看日志了解出错原因。
+     */
     save(outputKey: string, value: unknown): boolean;
+
+    /**
+     * 直接获取原始数据(无更新时间).
+     */
+    get<T = unknown>(key: string): T | null;
+
+    /**
+     * 直接保存到原始数据(自动更新更新时间).
+     */
+    set(key: string, value: unknown, opt?: {
+      reducer?: "merge" | "replace"
+    }): void;
+    /**
+     * 验证数据是否符合schema定义。
+     */
+    validate: <T extends ZodType<any, any, any>>(schema: T,
+      data: unknown
+    ) => z.infer<T> | null;
   }
   const glossary: IGlossary;
 
@@ -312,7 +207,42 @@ declare global {
     ): (...args: Parameters<T>) => void;
     isString(str: unknown): string;
   }
-  const util: IRadashi;
+
+  interface ZodType<Output = any, Def = any, Input = any> {
+    readonly _output: Output;
+    readonly _input: Input;
+    readonly _def: Def;
+
+    // 如果需要，可以顺便补全 zod 自带的 parse 方法
+    parse(data: unknown): Output;
+  }
+
+  // 2. 模拟 z.infer 的类型提取器（通过读取 _output 属性拿到真实 TS 类型）
+  namespace z {
+    type infer<T extends ZodType<any, any, any>> = T extends ZodType<infer Output, any, any>
+      ? Output
+      : never;
+  }
+
+  const z: any;
+
+  const util: IRadashi & {
+    /**
+   * 能限制同时执行任务数、支持流式数据、且自带过滤功能的加强版 Promise.all。
+   * @param input 包含 Promise 或普通值的可迭代对象（如数组）
+   * @param mapper 异步映射回调函数
+   * @param options 并发控制配置项
+   */
+    pMap: <Element, NewElement>(
+      input: AsyncIterable<Element | Promise<Element>> | Iterable<Element | Promise<Element>>,
+      mapper: (element: Element, index: number) => NewElement | Promise<NewElement>,
+      options?: {
+        readonly concurrency?: number;
+        readonly stopOnError?: boolean;
+        readonly signal?: AbortSignal;
+      }
+    ) => Promise<Array<NewElement>>;
+  };
 }
 
 export { };
