@@ -7,6 +7,7 @@ import {
     LanguageModelV4Middleware,
 } from '@ai-sdk/provider';
 import { wrapLanguageModel } from 'ai';
+import Logger from 'electron-log/main.js';
 import { createModel } from '../index.js';
 import { selectCandidates, SortStrategy, type Candidate } from './candidate.js';
 import { getLimiter, syncAndGetProviders } from './pool-registry.js';
@@ -93,7 +94,7 @@ function wrapWithLimiter(
 
             // 1) 先拿 slot(带 15 分钟兜底超时)
             const handle = await c.limiter.acquire(holdTimeoutMs, () => {
-                (ctx?.warn ?? console.warn)(
+                (ctx?.warn ?? Logger.warn)(
                     `⏰ [chat-stream] slot 持有超时(${holdTimeoutMs}ms),强制释放 (${c.provider.id}::${c.model.id})`,
                 );
             });
@@ -156,7 +157,7 @@ function buildFallbackModel(
                     lastErr = e;
                     // abort:立即终止,不再尝试
                     if (isAbortError(e) || ctx?.isAborted) {
-                        (ctx?.warn ?? console.warn)(
+                        (ctx?.warn ?? Logger.warn)(
                             `[chat] 已取消,终止 fallback (${c.provider.id}::${c.model.id})`,
                         );
                         throw e;
@@ -167,13 +168,13 @@ function buildFallbackModel(
                         (e as any)?.statusCode ?? (e as any)?.status ?? 'err';
                     if (isLast) {
                         // 最后一个候选也失败:抛出,交给上层(上层需 .catch)
-                        (ctx?.error ?? console.error)(
+                        (ctx?.error ?? Logger.error)(
                             `❌ [chat] 所有候选均失败,最后 [${c.provider.id}::${c.model.id}] (${status})`,
                         );
                         throw e;
                     }
                     // 非最后一个:无论什么错误都尝试下一个候选
-                    (ctx?.warn ?? console.warn)(
+                    (ctx?.warn ?? Logger.warn)(
                         `🚨 [chat] 候选 [${c.provider.id}::${c.model.id}] 失败 (${status}),尝试下一个...`,
                     );
                 }
@@ -193,19 +194,19 @@ function buildFallbackModel(
                 } catch (e) {
                     lastErr = e;
                     if (isAbortError(e) || ctx?.isAborted) {
-                        (ctx?.warn ?? console.warn)(
+                        (ctx?.warn ?? Logger.warn)(
                             `[chat-stream] 已取消,终止 fallback (${c.provider.id}::${c.model.id})`,
                         );
                         throw e;
                     }
                     const isLast = i === wrapped.length - 1;
                     if (isLast) {
-                        (ctx?.error ?? console.error)(
+                        (ctx?.error ?? Logger.error)(
                             `❌ [chat-stream] 所有候选均失败,最后 [${c.provider.id}::${c.model.id}]`,
                         );
                         throw e;
                     }
-                    (ctx?.warn ?? console.warn)(
+                    (ctx?.warn ?? Logger.warn)(
                         `🚨 [chat-stream] 候选 [${c.provider.id}::${c.model.id}] 失败,尝试下一个...`,
                     );
                 }

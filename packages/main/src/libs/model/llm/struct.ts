@@ -1,3 +1,6 @@
+import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
+import { getCurrentProject } from "$libs/utils/api.js";
+import { ProjectDbKeys } from "$libs/utils/db/dbkeys.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import type { GenTextArgs, GenTextReturn } from "$types/ai/gentext.js";
 import { generateText, ModelMessage, NoObjectGeneratedError, Output, TypeValidationError } from "ai";
@@ -29,10 +32,52 @@ export async function exfmt<T extends z.ZodType>(nl: string, schema: T): Promise
     throw result.err
 }
 
+function getExtractPrompt() {
+    const prj = getCurrentProject();
+    if (prj) {
+        const prjdb: PrjDB = PrjDB.ensure(prj);
+        const str = prjdb.get<string>(ProjectDbKeys.extract_json_prompt)
+        if (str) {
+            // @todo: 使用hea
+            return str;
+        }
+    }
+}
+
+export async function safeExfmtWithPrompt(nl: string, output: any): Promise<NlFormatType> {
+    try {
+        // const model = getSmartModel({ sort: SortStrategy.VersionAsc });
+        // 模型负责从自然语言文本中提取符合 schema 的 JSON。
+        const result = await generateText({
+            // @todo:  预估token规模，并以minInctx: est(nl.length)作为筛选条件。
+            model: getSmartModel({ sort: SortStrategy.VersionAsc }), // 弱模型优先。
+            instructions: "",
+            prompt: nl,
+            temperature: 0,
+            output,
+        });
+        return {
+            success: true,
+            value: result
+        }
+    } catch (e) {
+        if (NoObjectGeneratedError.isInstance(e)) {
+            // 无对象生成。通常是The feature "responseFormat" is not supported. 降级为使用提示词来提取JSON.
+            return safeExfmtWithPrompt(nl, output);
+        }
+        return {
+            success: false,
+            err: e
+        }
+    }
+}
+
+
 // 从自然语言中，抽取JSON信息。
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function safeExfmt(nl: string, output: any): Promise<NlFormatType> {
     try {
+        // const model = getSmartModel({ sort: SortStrategy.VersionAsc });
         // 模型负责从自然语言文本中提取符合 schema 的 JSON。
         const result = await generateText({
             // @todo:  预估token规模，并以minInctx: est(nl.length)作为筛选条件。
@@ -46,6 +91,10 @@ export async function safeExfmt(nl: string, output: any): Promise<NlFormatType> 
             value: result
         }
     } catch (e) {
+        if (NoObjectGeneratedError.isInstance(e)) {
+            // 无对象生成。通常是The feature "responseFormat" is not supported. 降级为使用提示词来提取JSON.
+            return safeExfmtWithPrompt(nl, output);
+        }
         return {
             success: false,
             err: e

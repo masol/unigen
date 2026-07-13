@@ -1,11 +1,11 @@
-import Logger from 'electron-log/main.js';
-import { getLlama } from 'node-llama-cpp'
-import type { Llama, LlamaEmbeddingContext, LlamaModel } from 'node-llama-cpp'
-import { EmbedManyResult, EmbedResult } from 'ai';
 import { throwPrecondition } from '$libs/utils/err.js';
-import pMap from 'p-map';
 import { appLife } from '$libs/utils/tapable/applife.js';
-import { EmbedingOptions, EmbedingImpl } from '../type.js';
+import { EmbedManyResult, EmbedResult } from 'ai';
+import Logger from 'electron-log/main.js';
+import type { Llama, LlamaEmbeddingContext, LlamaModel } from 'node-llama-cpp';
+import { getLlama } from 'node-llama-cpp';
+import pMap from 'p-map';
+import { EmbedingImpl, EmbedingOptions } from '../type.js';
 
 class LocalEmbeding {
     embeddingModel: LlamaModel | null = null;
@@ -18,7 +18,7 @@ class LocalEmbeding {
 
             await this.dispose();
 
-            console.log('[ProjectManager] 清理资源完成。');
+            Logger.debug('[LocalEmbeding] 清理资源完成。');
         });
     }
 

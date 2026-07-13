@@ -1,4 +1,5 @@
 import * as Electron from 'electron';
+import Logger from 'electron-log/main.js';
 import { URL } from 'node:url';
 import { AbstractSecurityRule } from './AbstractSecurityModule.js';
 
@@ -30,7 +31,7 @@ export class BlockNotAllowedOrigins extends AbstractSecurityRule {
       event.preventDefault();
 
       if (import.meta.env.DEV) {
-        console.warn(`Blocked navigating to disallowed origin: ${origin}`);
+        Logger.warn(`Blocked navigating to disallowed origin: ${origin}`);
       }
     });
   }

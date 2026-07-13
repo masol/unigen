@@ -1,4 +1,5 @@
 import { shell } from 'electron';
+import Logger from 'electron-log/main.js';
 import { URL } from 'node:url';
 import { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../types/ModuleContext.js';
@@ -17,9 +18,9 @@ export class ExternalUrls implements AppModule {
         const { origin } = new URL(url);
 
         if (this.#externalUrls.has(origin)) {
-          shell.openExternal(url).catch(console.error);
+          shell.openExternal(url).catch(Logger.error);
         } else if (import.meta.env.DEV) {
-          console.warn(`Blocked the opening of a disallowed external origin: ${origin}`);
+          Logger.warn(`Blocked the opening of a disallowed external origin: ${origin}`);
         }
 
         // Prevent creating a new window.

@@ -65,9 +65,9 @@ export class PrjDB extends BaseProjectController {
                 this.dqlite.close();
                 this.dqlite = null;
                 this.db = null;
-                console.log('[Database] 数据库已成功关闭，文件锁已释放。');
+                Logger.debug('[Database] 数据库已成功关闭，文件锁已释放。');
             } catch (error) {
-                console.error('[Database] 关闭数据库时发生错误:', error);
+                Logger.error('[Database] 关闭数据库时发生错误:', error);
             }
         }
     }

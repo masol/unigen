@@ -4,11 +4,11 @@
   import * as Collapsible from "$lib/components/ui/collapsible";
   import {
     IconAlertTriangle,
-    IconLogout,
-    IconRefresh,
+    IconCheck,
     IconChevronDown,
     IconCopy,
-    IconCheck,
+    IconLogout,
+    IconRefresh,
   } from "@tabler/icons-svelte";
   import { Motion } from "svelte-motion";
 

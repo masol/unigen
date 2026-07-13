@@ -6,6 +6,7 @@ import {
     ImageModelV4CallOptions,
     ImageModelV4Result,
 } from '@ai-sdk/provider';
+import Logger from 'electron-log/main.js';
 import { createImageModel } from '../index.js';
 import { selectCandidates, SortStrategy, type Candidate } from './candidate.js';
 import { getLimiter, syncAndGetProviders } from './pool-registry.js';
@@ -81,12 +82,12 @@ function buildImageProxy(
                 } catch (e) {
                     lastErr = e;
                     if (isAbortError(e) || ctx?.isAborted) {
-                        (ctx?.warn ?? console.warn)(
+                        (ctx?.warn ?? Logger.warn)(
                             `[image] 已取消,终止 fallback (${c.provider.id}::${c.model.id})`,
                         );
                         throw e;
                     }
-                    (ctx?.warn ?? console.warn)(
+                    (ctx?.warn ?? Logger.warn)(
                         `🚨 [image] 候选 [${c.provider.id}::${c.model.id}] 失败,尝试下一个...`,
                     );
                     if (!isRetryable(e)) throw e;

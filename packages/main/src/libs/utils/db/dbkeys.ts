@@ -11,6 +11,7 @@ export const ProjectDbKeys = {
     //entry_commandstr // 动态拼接的command_str
     imported: "imported", // 指示项目是否已导入了初始知识库。
     projectType: "project-type", // 指示项目类型。
+    extract_json_prompt: "_extract_json",
 
     /// 下面是video插件定义的keys，先写这里了，应该移入video plugin.
     scripts: "script",

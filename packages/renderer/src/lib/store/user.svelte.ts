@@ -6,6 +6,7 @@
 
 // import { api } from '$lib/utils/api';
 import evtbus from '$lib/utils/evtbus';
+import Logger from 'electron-log/renderer.js';
 
 //─── 类型定义 ─────────────────────────────────────────────────
 
@@ -77,7 +78,7 @@ class UserStore {
         // 🔔 监听 logout 事件 → 自动清空用户状态并重置状态机
         evtbus.on('user:logout', () => {
             this.#reset();
-            console.info('[UserStore] 用户已注销，状态已重置');
+            Logger.info('[UserStore] 用户已注销，状态已重置');
         });
 
         // 🔔 监听用户资料局部更新
@@ -90,7 +91,7 @@ class UserStore {
         //   this.#error = message;
         // });
 
-        console.info('[UserStore] 单例初始化完成，事件监听已注册');
+        Logger.info('[UserStore] 单例初始化完成，事件监听已注册');
     }
 
     // ━━━ 异步 Action：登录 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
