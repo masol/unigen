@@ -7,6 +7,7 @@ import { parse, ParseEntry } from 'shell-quote';
 import yargsParser from 'yargs-parser';
 import { BaseRunner } from './base.js';
 import { runCmd as doExport } from './commands/export/runCmd.js';
+import { runCmd as doPlan } from './commands/plan/main.js';
 
 
 /**
@@ -95,6 +96,9 @@ export class CmdRunner extends BaseRunner {
         switch (ctx.cmd.command) {
             case 'export':
                 await doExport(ctx);
+                break;
+            case 'plan':
+                await doPlan(ctx);
                 break;
             case 'test':
                 await delay(10000, ctx.signal);

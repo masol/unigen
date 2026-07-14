@@ -15,8 +15,8 @@ export const chatCommands: ChatCommand[] = [
 --nocap:\t 不导出能力。
 --nometag: 不导出元术语。
 ` },
-    { id: "summarize", label: "/summarize", desc: "总结当前对话或长文本\n总结当前对话或长文本总结当前对话或长文本总结当前对话或长文本总结当前对话或长文本" },
-    { id: "explain", label: "/explain", desc: "解释术语、概念或代码" },
+    { id: "plan", label: "/plan", desc: "给出输入/输出(如从剧本生成视频)，规划工作流。" },
+    { id: "prism", label: "/prism", desc: "使用prism方法回答你的问题--无上下文。" },
     { id: "polish", label: "/polish", desc: "润色 / 改写文字表达" },
     { id: "clear", label: "/clear", desc: "清空当前对话记录" },
 ];
