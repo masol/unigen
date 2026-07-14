@@ -19,8 +19,9 @@
 <summary><b>🏗️ 系统架构</b></summary>
 
 - [[Architecture-Overview|🗺️ 架构全局总览]]
-- [[Database-Schema|🗄️ 数据库设计模型]]
-- [[Security-Policy|🔒 安全合规策略]]
+- [[prism|🗄️ 棱镜推理]]
+- [[planner|🔒 规划器]]
+- [[loom |🔒 现行规划器]]
 </details>
 
 ---
