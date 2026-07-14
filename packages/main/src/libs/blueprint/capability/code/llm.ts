@@ -1,5 +1,6 @@
 import { getSmartModel } from "$libs/model/index.js";
-import { NL2Format } from "$libs/model/llm/outline.js";
+import { NL2Format, safefmt } from "$libs/model/llm/outline.js";
+import { prism, PrismOpts } from "$libs/model/llm/prism/prism.js";
 import { LlmParamArgs } from "$types/ai/gentext.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import { generateText, Output } from "ai";
@@ -17,6 +18,16 @@ const generate = async (ctx: IRunnerContext, args: LlmParamArgs) => {
     return result;
 }
 
+const prsimaProxy = async (ctx: IRunnerContext, query: string, opts?: PrismOpts) => {
+    const result = await prism(query, opts, ctx);
+    return result;
+}
+
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const safefmProxy = async (ctx: IRunnerContext, nl: string, output: any) => {
+    return await safefmt(nl, output, ctx);
+}
 
 const nl2fmt = async (ctx: IRunnerContext, args: LlmParamArgs) => {
     const { model, ...rest } = args;
@@ -36,5 +47,7 @@ export function getLLMPkgs(ctx: IRunnerContext) {
         ...fixed,
         generate: generate.bind(null, ctx),
         nL2Format: nl2fmt.bind(null, ctx),
+        prism: prsimaProxy.bind(null, ctx),
+        safefmt: safefmProxy.bind(null, ctx)
     } as const
 };

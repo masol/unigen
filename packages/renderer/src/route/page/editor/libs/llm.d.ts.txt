@@ -178,6 +178,12 @@ declare global {
          */
         generate(args: GenerateArgs): Promise<GenerateResult>;
         nL2Format(args: GenerateArgs): Promise<GenerateResult>;
+        safefmt(nl: string, output: Output<any, DeepPartial<any>, never>): Promise<{ success: boolean, value?: GenerateResult, err?: unknown }>
+        prism(nl: string, opts?: {
+            maxFacets?: number,
+            maxRefineRounds?: number,
+            kind?: string
+        }): Promise<{ text: string }>;
         Output: {
             text: () => Output<string, string, never>;
 

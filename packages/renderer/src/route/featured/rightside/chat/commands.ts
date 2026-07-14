@@ -16,8 +16,16 @@ export const chatCommands: ChatCommand[] = [
 --nometag: 不导出元术语。
 ` },
     { id: "plan", label: "/plan", desc: "给出输入/输出(如从剧本生成视频)，规划工作流。" },
-    { id: "prism", label: "/prism", desc: "使用prism方法回答你的问题--无上下文。" },
-    { id: "polish", label: "/polish", desc: "润色 / 改写文字表达" },
+    {
+        id: "prism", label: "/prism", desc: `使用prism方法回答你的问题--无上下文，支持如下参数：
+--facets: 最大视角数，默认5.
+--rounds: 最大轮次，默认2.
+--kind:   日志中的名称。
+` },
+    {
+        id: "preprism", label: "/preprism", desc: `使用preprism方法回答你的问题--无上下文，支持如下参数：
+--facets: 最大维度数，默认5.
+--kind:   日志中的名称。`},
     { id: "clear", label: "/clear", desc: "清空当前对话记录" },
 ];
 
