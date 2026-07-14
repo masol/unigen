@@ -1,23 +1,23 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { ScrollArea } from "$lib/components/ui/scroll-area";
   import * as Accordion from "$lib/components/ui/accordion";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
   import * as ImageZoom from "$lib/components/ui/image-zoom";
-  import {
-    IconPhoto,
-    IconPlus,
-    IconPalette,
-    IconLoader2,
-    IconX,
-  } from "@tabler/icons-svelte";
-  import autoAnimate from "@formkit/auto-animate";
-  import { inputStore } from "./input.svelte";
+  import { ScrollArea } from "$lib/components/ui/scroll-area";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
-  import { ORPCError } from "@orpc/client";
-  import { toast } from "svelte-sonner";
   import { api } from "$lib/utils/api";
   import { path2URL } from "$lib/utils/str";
+  import autoAnimate from "@formkit/auto-animate";
+  import { ORPCError } from "@orpc/client";
+  import {
+    IconLoader2,
+    IconPalette,
+    IconPhoto,
+    IconPlus,
+    IconX,
+  } from "@tabler/icons-svelte";
+  import { toast } from "svelte-sonner";
+  import { inputStore } from "./input.svelte";
 
   let accordionValue = $state("");
   let isUploading = $state(false);
@@ -34,7 +34,7 @@
     try {
       const result = await api().system.openFile({ filters: "image" });
 
-      console.log("result=", result);
+      // console.log("result=", result);
 
       let realPathname: string[];
 

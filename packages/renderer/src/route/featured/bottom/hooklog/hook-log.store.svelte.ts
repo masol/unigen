@@ -1,6 +1,6 @@
 import { api } from '$lib/utils/api';
 import type { LogLevel, LogMessage } from 'electron-log';
-import log from 'electron-log/renderer';
+import { default as log, default as Logger } from 'electron-log/renderer';
 
 const ALL_LEVELS: LogLevel[] = [
     "error",
@@ -135,7 +135,7 @@ class HookLogStore {
         try {
             this.controller?.abort(this.abortError);
         } catch (e) {
-            console.log("abort error =", e)
+            Logger.error("[hoo-log.store] 终止日志流监听时发生错误", e)
             // abort 本身极少抛错，兜底捕获
         } finally {
             this.controller = null;

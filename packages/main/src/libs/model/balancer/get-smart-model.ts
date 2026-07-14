@@ -8,6 +8,7 @@ import {
 } from '@ai-sdk/provider';
 import { wrapLanguageModel } from 'ai';
 import Logger from 'electron-log/main.js';
+import { getErrorMessage } from 'radashi';
 import { createModel } from '../index.js';
 import { selectCandidates, SortStrategy, type Candidate } from './candidate.js';
 import { getLimiter, syncAndGetProviders } from './pool-registry.js';
@@ -175,7 +176,7 @@ function buildFallbackModel(
                     }
                     // 非最后一个:无论什么错误都尝试下一个候选
                     (ctx?.warn ?? Logger.warn)(
-                        `🚨 [chat] 候选 [${c.provider.id}::${c.model.id}] 失败 (${status}),尝试下一个...`,
+                        `🚨 [chat] 候选 [${c.provider.id}::${c.model.id}] 失败 ${getErrorMessage(e)}(${status}),尝试下一个...`,
                     );
                 }
             }

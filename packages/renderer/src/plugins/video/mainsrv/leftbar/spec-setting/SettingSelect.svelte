@@ -38,7 +38,7 @@
 
   // 同步外部 value 到内部状态
   async function handleChange(newValue: string | undefined) {
-    console.log("handleChange",newValue)
+    // console.log("handleChange",newValue)
     if (!newValue || newValue === value) return;
 
     // 立即更新 UI（乐观更新）

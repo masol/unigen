@@ -1,5 +1,11 @@
 // src/lib/components/dashboard/card-status.svelte.ts
-import type { CardStatus } from "$lib/store/ui/activity/info-card";
+
+import type { InfoCardView } from "@app/main/types";
+
+interface CardStatus {
+    label: string;
+    tone: 'ready' | ''
+}
 
 /**
  * 卡片状态解析器（内部计算，禁止外部注入）。
@@ -10,8 +16,8 @@ import type { CardStatus } from "$lib/store/ui/activity/info-card";
  *
  * 建议用 $derived 保持响应式；这里给出占位实现。
  */
-export function resolveCardStatus(id: string): CardStatus | undefined {
-    // TODO: 由你实现。示例骨架：
+export function resolveCardStatus(card: InfoCardView): CardStatus | undefined {
+    // TODO: 示例骨架：
     // switch (id) {
     //   case "input-manager": {
     //     const ready = /* 读 store 判定 */ false;
@@ -19,6 +25,6 @@ export function resolveCardStatus(id: string): CardStatus | undefined {
     //   }
     //   ...
     // }
-    void id;
+    void card;
     return undefined;
 }

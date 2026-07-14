@@ -2,7 +2,6 @@
 <!-- 职责：作为「状态中枢」独占一份私有 store。其余子组件仅接收 props 渲染。 -->
 <script lang="ts">
   import autoAnimate from "@formkit/auto-animate";
-  import { onDestroy } from "svelte";
 
   import { dashboardStore } from "$lib/store/dashboard.svelte";
   import DashboardHeader from "./DashboardHeader.svelte";
@@ -10,7 +9,7 @@
   import RunControlCard from "./RunControlCard.svelte";
   import RunLogPanel from "./RunLogPanel.svelte";
 
-  onDestroy(() => dashboardStore.destroy());
+  // onDestroy(() => dashboardStore.destroy());
 </script>
 
 <div

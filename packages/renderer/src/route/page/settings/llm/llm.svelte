@@ -79,15 +79,29 @@
     if (!provider) {
       throw new Error(`请求增加的模型，其所属供应商${pid}无效。`);
     }
+    const oldId = model?.id;
     await dialogStore.safeShow(ModelConfigDialog, {
       model,
       fetchCtx: { baseUrl: provider.baseUrl, apiKey: provider.apiKey },
-      onSave: async (model: Model): Promise<void> => {
-        console.log("save model", model);
+      onSave: async (model: Model): Promise<boolean> => {
+        console.error("remove old id:", oldId, model.id);
+        if (oldId && oldId !== model.id) {
+          const overwittenModel = configStore.findModelById(pid, model.id);
+          if (overwittenModel) {
+            const confirmed = await confirmStore.request({
+              title: "额外删除确认",
+              message: `本次修改，将删除旧模型${oldId},同时覆盖已有的模型${model.id},确定继续吗？`,
+            });
+            if (!confirmed) {
+              return true;
+            }
+          }
+          await configStore.removeModel(pid, oldId);
+        }
         await configStore.upsertModel(pid, model);
+        return false;
       },
     });
-    console.log(model);
   }
 
   /* ═══════════════════════════════════════════════════════════

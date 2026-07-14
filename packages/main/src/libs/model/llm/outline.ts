@@ -1,7 +1,8 @@
 import { isNotfoundError, throwPrecondition } from "$libs/utils/err.js";
 import type { GenTextArgs, GenTextReturn } from "$types/ai/gentext.js";
+import { IRunnerContext } from "$types/blueprint/context.js";
 import { ModelTags } from "$types/shared/model.js";
-import { extractJsonMiddleware, generateText, ModelMessage, NoObjectGeneratedError, Output, TypeValidationError, wrapLanguageModel } from "ai";
+import { APICallError, extractJsonMiddleware, generateText, ModelMessage, NoObjectGeneratedError, Output, TypeValidationError, wrapLanguageModel } from "ai";
 import Logger from "electron-log/main.js";
 import { isPlainObject } from "radashi";
 import { SortStrategy } from "../balancer/candidate.js";
@@ -33,23 +34,35 @@ export interface NlFormatType {
 
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function safeExfmtWithPrompt(nl: string, output: any): Promise<NlFormatType> {
+export async function safefmtUsePrompt(nl: string, output: any, ctx?: IRunnerContext): Promise<NlFormatType> {
     try {
         const format = await output.responseFormat;
         if (isPlainObject(format) && 'type' in format && 'schema' in format && format.type == 'json') {
             // 拿到要求，开始
             // 模型负责从自然语言文本中提取符合 schema 的 JSON。
-            const instructions = `你是一个严格的 JSON 生成器。
-请必须、只能返回一个符合以下标准 JSON Schema 结构的 JSON 字符串。前后不能有任何解释性废话。
+            const instructions = `You are a deterministic JSON text extractor. Your single task is to translate user input into a valid JSON object that strictly adheres to the given JSON Schema.
 
-【目标 JSON 结构定义】：
+[VALIDATION COMPLIANCE]
+- You MUST generate all required fields specified in the schema.
+- If the user input does not provide data for a required field, you MUST populate it with an appropriate schema-compliant default value (e.g., "", 0, [], false, or a logical fallback inferred from context).
+- Strictly maintain the exact keys and data types (string, number, boolean, array, object) defined in the schema. Do not create unexpected fields.
+
+[FORMATTING RULES]
+- Output the raw JSON string matching the schema.
+- Avoid any conversational dialogue, explanations, or text outside the JSON structure.
+
+[TARGET JSON SCHEMA]
+\`\`\`json
 ${JSON.stringify(format.schema, null, 2)}
-现在开始，从用户输入的内容中，提取并输出符合上述JSON Schema规范的JSON字符串。`;
+\`\`\`
+
+[CONVERSION EXECUTION]
+Process the user input and generate the schema-compliant JSON now:`;
 
             const result = await generateText({
                 // @todo:  预估token规模，并以minInctx: est(nl.length)作为筛选条件。
                 model: wrapLanguageModel({
-                    model: getSmartModel({ sort: SortStrategy.VersionAsc }),
+                    model: getSmartModel({ sort: SortStrategy.VersionAsc }, ctx),
                     middleware: extractJsonMiddleware()
                 }), // 弱模型优先。
                 instructions,
@@ -94,15 +107,19 @@ ${JSON.stringify(format.schema, null, 2)}
 }
 
 
-// 从自然语言中，抽取JSON信息。
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function safeExfmt(nl: string, output: any): Promise<NlFormatType> {
+/**
+ * 从自然语言中，抽取JSON信息。
+ * @param nl 
+ * @param output vercel ai sdk的Ouput.object()的返回值。
+ * @returns 
+ */ // eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function safefmt(nl: string, output: any, ctx?: IRunnerContext): Promise<NlFormatType> {
     try {
         // const model = getSmartModel({ sort: SortStrategy.VersionAsc });
         // 模型负责从自然语言文本中提取符合 schema 的 JSON。
         const result = await generateText({
             // @todo:  预估token规模，并以minInctx: est(nl.length)作为筛选条件。
-            model: getSmartModel({ sort: SortStrategy.VersionAsc, requiredAbilities: [ModelTags.Outline] }), // 弱模型优先。
+            model: getSmartModel({ sort: SortStrategy.VersionAsc, requiredAbilities: [ModelTags.Outline] }, ctx), // 弱模型优先。
             prompt: nl,
             temperature: 0,
             output,
@@ -112,9 +129,9 @@ export async function safeExfmt(nl: string, output: any): Promise<NlFormatType> 
             value: result
         }
     } catch (e) {
-        if (NoObjectGeneratedError.isInstance(e) || isNotfoundError(e)) {
+        if (NoObjectGeneratedError.isInstance(e) || isNotfoundError(e) || APICallError.isInstance(e)) {
             // 无对象生成。通常是The feature "responseFormat" is not supported. 降级为使用提示词来提取JSON.
-            return safeExfmtWithPrompt(nl, output);
+            return safefmtUsePrompt(nl, output, ctx);
         }
         return {
             success: false,
@@ -146,7 +163,7 @@ export async function NL2Format(arg: GenTextArgs): Promise<GenTextReturn> {
         });
         const newText = genedText.text;
 
-        const nlresult = await safeExfmt(newText, arg.output);
+        const nlresult = await safefmt(newText, arg.output);
         if (nlresult.success && nlresult.value) {
             return nlresult.value
         }

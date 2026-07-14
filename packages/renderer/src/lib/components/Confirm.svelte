@@ -2,11 +2,11 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
   import {
-    IconAlertTriangle,
-    IconInfoCircle,
-    IconHelp,
-    IconCircleCheck,
     IconAlertCircle,
+    IconAlertTriangle,
+    IconCircleCheck,
+    IconHelp,
+    IconInfoCircle,
   } from "@tabler/icons-svelte";
 </script>
 
@@ -17,7 +17,7 @@
   open={confirmStore.open}
   onOpenChange={(v) => confirmStore.handleOpenChange(v)}
 >
-  <AlertDialog.Content class="max-w-md gap-0 overflow-hidden p-0">
+  <AlertDialog.Content class="z-100 max-w-md gap-0 overflow-hidden p-0">
     <!-- 顶部装饰条 -->
     <div
       class={[

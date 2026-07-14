@@ -8,8 +8,8 @@
 <script lang="ts">
   import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { Badge } from "$lib/components/ui/badge";
-  import type { InfoCardView } from "$lib/store/ui/activity/info-card";
   import { layoutStore } from "$lib/store/ui/layout.svelte";
+  import type { InfoCardView } from "@app/main/types";
   import {
     IconChevronRight,
     IconCircleCheckFilled,
@@ -59,7 +59,7 @@
 
 <div class="grid grid-cols-1 gap-6 md:grid-cols-3 animate-fade-in">
   {#each cards as card (card.id)}
-    {@const status = resolveCardStatus(card.id)}
+    {@const status = resolveCardStatus(card)}
     <button
       type="button"
       id={`ib-${card.id}`}

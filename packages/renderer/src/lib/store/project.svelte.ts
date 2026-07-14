@@ -49,8 +49,7 @@ class ProjectStore {
     isBusy = $derived(this.loading !== null);
 
     constructor() {
-        evtbus.on("task_finished", (evt) => {
-            console.log("task finished!!!", evt.success, evt.reason ?? "");
+        evtbus.on("task_finished", () => {
             this.#runState = "idle";
         })
     }
@@ -68,7 +67,7 @@ class ProjectStore {
             }
             await api().project.start(seq);
             this.#runState = await api().project.runState(); // "running";
-            console.log("this.#runState=", this.#runState)
+            // console.log("this.#runState=", this.#runState)
         } catch (e) {
             this.procError(e);
         }

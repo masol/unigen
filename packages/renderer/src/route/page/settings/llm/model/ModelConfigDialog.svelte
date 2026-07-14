@@ -47,7 +47,7 @@
     model?: Partial<Model>;
     /** 拉取可用模型列表的上下文（透传给 fetchAvailableModels） */
     fetchCtx?: { baseUrl?: string; apiKey?: string };
-    onSave?: (model: Model) => Promise<void>;
+    onSave?: (model: Model) => Promise<boolean>;
   } & DialogComponentProps<Model>;
 
   let { model, fetchCtx, onSave, onClose, onCancel }: Props = $props();
@@ -275,7 +275,12 @@
     };
 
     try {
-      if (onSave) await onSave(result);
+      if (onSave) {
+        if (await onSave(result)) {
+          // 返回true,保持不要关闭。
+          return;
+        }
+      }
       onClose(result);
     } catch (e) {
       errorMessage = e instanceof Error ? e.message : "保存失败，请重试";

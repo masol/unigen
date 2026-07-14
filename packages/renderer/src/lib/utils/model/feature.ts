@@ -1,29 +1,8 @@
+import { BASE_MODELS, CTX, ModelTags, OUT, PROVIDER_RULES } from "./base_models";
 // ============================================================================
 // 类型与枚举定义
 // ============================================================================
 
-export enum ModelTags {
-    // —— 类别 ——
-    Embedding = 'embedding',
-    Rerank = 'rerank',
-    TextGeneration = 'text-generation',
-    ImageGeneration = 'image-generation',
-
-    // —— 版本区别 ——
-    Ultra = 'ultra',   // 旗舰版
-    Plus = 'plus',     // 专业版
-    Flash = 'flash',   // 轻量版
-    Micro = 'micro',   // 端侧版
-
-    // —— 输入/输出能力 ——
-    Search = 'search',       // 联网搜索
-    Reasoning = 'reasoning', // 思考模式
-    Vision = 'vision',       // 视觉理解
-    Video = 'video',         // 视频理解
-    Tool = 'tool',           // 函数调用
-    Audio = 'audio',         // 语音理解
-    Outline = 'outline',     // 支持 Constrained Decoding（约束解码 / 结构化输出）
-}
 
 export interface ModelFeatures {
     rawId: string;
@@ -37,324 +16,18 @@ export interface ModelFeatures {
     score?: number;         // 能力评分 (0-100 预估)
 }
 
-// ============================================================================
-// 常用上下文/输出档位常量（2026 H2：普遍进入 256K~1M+ 时代）
-// ============================================================================
-
-const CTX = {
-    K8: 8_192,
-    K16: 16_384,
-    K32: 32_768,
-    K64: 65_536,
-    K128: 131_072,
-    K200: 200_000,
-    K256: 262_144,
-    K512: 524_288,
-    M1: 1_000_000,
-    M1_ACTUAL: 1_048_576, // 2^20，部分厂商真实值
-    M2: 2_097_152,
-    M10: 10_000_000,
-} as const;
-
-const OUT = {
-    K4: 4_096,
-    K8: 8_192,
-    K16: 16_384,
-    K32: 32_768,
-    K64: 65_536,
-    K100: 100_000,
-    K128: 131_072, // 长推理模型可达
-} as const;
+const T = ModelTags;
 
 // 2026 H2 现代默认档位：非旗舰对话模型的最低预期
 const DEFAULT_INCTX = CTX.K256;         // 提高默认输入窗口（原为 128K）
 const DEFAULT_OUT = OUT.K16;            // 提高默认输出（原为 8K）
 const DEFAULT_REASON_OUT = OUT.K64;     // 推理模型默认输出
 
-// ============================================================================
-// 数据表 1：厂商识别规则（关键词 → provider）
-// ============================================================================
 
-const PROVIDER_RULES: Array<{ provider: string; keywords: string[] }> = [
-    { provider: 'openai', keywords: ['gpt', 'o1', 'o3', 'o4', 'chatgpt', 'dall-e', 'text-embedding', 'davinci', 'whisper', 'sora'] },
-    { provider: 'anthropic', keywords: ['claude'] },
-    { provider: 'google', keywords: ['gemini', 'gemma', 'imagen', 'palm', 'veo'] },
-    { provider: 'alibaba', keywords: ['qwen', 'qwq', 'qvq', 'wan', 'tongyi', 'wanx'] },
-    { provider: 'deepseek', keywords: ['deepseek'] },
-    { provider: 'moonshot', keywords: ['moonshot', 'kimi'] },
-    { provider: 'zhipu', keywords: ['glm', 'chatglm', 'cogview', 'cogvideo'] },
-    { provider: 'baidu', keywords: ['ernie', 'wenxin'] },
-    { provider: 'bytedance', keywords: ['doubao', 'seed', 'seedream', 'seedance'] },
-    { provider: 'tencent', keywords: ['hunyuan'] },
-    { provider: 'minimax', keywords: ['minimax', 'abab'] },
-    { provider: 'xai', keywords: ['grok'] },
-    { provider: 'meta', keywords: ['llama'] },
-    { provider: 'mistral', keywords: ['mistral', 'mixtral', 'codestral', 'ministral', 'pixtral', 'magistral', 'devstral'] },
-    { provider: 'baai', keywords: ['bge'] },
-    { provider: 'jina', keywords: ['jina'] },
-    { provider: '01ai', keywords: ['yi-'] },
-    { provider: 'stepfun', keywords: ['step-'] },
-    { provider: 'cohere', keywords: ['command', 'rerank', 'aya', 'embed-'] },
-    { provider: 'microsoft', keywords: ['phi-', 'phi3', 'phi4'] },
-    { provider: 'nvidia', keywords: ['nemotron', 'nvidia'] },
-    { provider: 'inclusionai', keywords: ['ling-', 'ring-'] }, // 蚂蚁
-    { provider: 'baichuan', keywords: ['baichuan'] },
-    { provider: 'sensetime', keywords: ['sensechat', 'nova'] },
-    { provider: 'ibm', keywords: ['granite'] },
-    { provider: 'perplexity', keywords: ['sonar', 'pplx'] },
-];
 
 // ============================================================================
 // 数据表 2：基座模型特征表（少量精确数据，其余靠推断）
 // ============================================================================
-
-const T = ModelTags;
-
-// 常用能力组合
-const CHAT = [T.TextGeneration, T.Tool];
-const CHAT_V = [T.TextGeneration, T.Tool, T.Vision];
-const REASON = [T.TextGeneration, T.Tool, T.Reasoning];
-const REASON_V = [T.TextGeneration, T.Tool, T.Reasoning, T.Vision];
-const OMNI = [T.TextGeneration, T.Tool, T.Vision, T.Audio];
-const OMNI_R = [T.TextGeneration, T.Tool, T.Vision, T.Audio, T.Reasoning];
-const OMNI_FULL = [T.TextGeneration, T.Tool, T.Vision, T.Audio, T.Video];
-
-interface BaseSpec {
-    match: string;          // baseName 包含此子串即命中（小写）
-    abilities: ModelTags[];
-    inctx?: number;
-    outctx?: number;
-    score?: number;
-}
-
-// 顺序敏感：更具体的放前面
-const BASE_MODELS: BaseSpec[] = [
-    // ===== OpenAI =====
-    { match: 'gpt-5-mini', abilities: [...OMNI_R, T.Flash], inctx: CTX.K256, outctx: OUT.K128, score: 88 },
-    { match: 'gpt-5-nano', abilities: [...OMNI_R, T.Micro], inctx: CTX.K256, outctx: OUT.K128, score: 82 },
-    { match: 'gpt-5', abilities: [...OMNI_R], inctx: CTX.K256, outctx: OUT.K128, score: 95 },
-    { match: 'o4-mini', abilities: [...REASON_V], inctx: CTX.K200, outctx: OUT.K100, score: 89 },
-    { match: 'o3-pro', abilities: [...REASON_V, T.Ultra], inctx: CTX.K200, outctx: OUT.K100, score: 92 },
-    { match: 'o3-mini', abilities: [...REASON], inctx: CTX.K200, outctx: OUT.K100, score: 85 },
-    { match: 'o3', abilities: [...REASON_V], inctx: CTX.K200, outctx: OUT.K100, score: 91 },
-    { match: 'o1-mini', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K64, score: 80 },
-    { match: 'o1-pro', abilities: [...REASON_V, T.Ultra], inctx: CTX.K200, outctx: OUT.K100, score: 89 },
-    { match: 'o1', abilities: [...REASON_V], inctx: CTX.K200, outctx: OUT.K100, score: 87 },
-    { match: 'gpt-4.1-nano', abilities: [...CHAT_V, T.Micro], inctx: CTX.M1, outctx: OUT.K32, score: 78 },
-    { match: 'gpt-4.1-mini', abilities: [...CHAT_V, T.Flash], inctx: CTX.M1, outctx: OUT.K32, score: 83 },
-    { match: 'gpt-4.1', abilities: [...CHAT_V], inctx: CTX.M1, outctx: OUT.K32, score: 88 },
-    { match: 'gpt-4o-mini', abilities: [...OMNI, T.Flash], inctx: CTX.K128, outctx: OUT.K16, score: 78 },
-    { match: 'gpt-4o', abilities: [...OMNI], inctx: CTX.K128, outctx: OUT.K16, score: 86 },
-    { match: 'gpt-4-turbo', abilities: [...CHAT_V], inctx: CTX.K128, outctx: OUT.K4, score: 83 },
-    { match: 'gpt-4', abilities: [...CHAT], inctx: CTX.K8, outctx: OUT.K4, score: 80 },
-    // gpt-3.5：早期 completion 血统，结构化输出支持不完整 → 进入 CD 黑名单
-    { match: 'gpt-3.5', abilities: [...CHAT, T.Flash], inctx: CTX.K16, outctx: OUT.K4, score: 65 },
-    { match: 'chatgpt-4o', abilities: [...OMNI], inctx: CTX.K128, outctx: OUT.K16, score: 84 },
-
-    // ===== Anthropic =====
-    { match: 'claude-opus-4', abilities: [...REASON_V, T.Ultra], inctx: CTX.K200, outctx: OUT.K32, score: 93 },
-    { match: 'claude-sonnet-4', abilities: [...REASON_V, T.Plus], inctx: CTX.M1, outctx: OUT.K64, score: 90 },
-    { match: 'claude-haiku-4', abilities: [...REASON_V, T.Flash], inctx: CTX.K200, outctx: OUT.K32, score: 82 },
-    { match: 'claude-3-7-sonnet', abilities: [...REASON_V], inctx: CTX.K200, outctx: OUT.K64, score: 89 },
-    { match: 'claude-3-5-sonnet', abilities: [...CHAT_V], inctx: CTX.K200, outctx: OUT.K8, score: 87 },
-    { match: 'claude-3-5-haiku', abilities: [...CHAT_V, T.Flash], inctx: CTX.K200, outctx: OUT.K8, score: 76 },
-    { match: 'claude-3-opus', abilities: [...CHAT_V, T.Ultra], inctx: CTX.K200, outctx: OUT.K4, score: 85 },
-    { match: 'claude-3-sonnet', abilities: [...CHAT_V], inctx: CTX.K200, outctx: OUT.K4, score: 80 },
-    { match: 'claude-3-haiku', abilities: [...CHAT_V, T.Flash], inctx: CTX.K200, outctx: OUT.K4, score: 70 },
-    { match: 'claude', abilities: [...REASON_V], inctx: CTX.K200, outctx: OUT.K32, score: 87 },
-
-    // ===== Google Gemini =====
-    { match: 'gemini-2.5-pro', abilities: [...OMNI_R, T.Video, T.Plus], inctx: CTX.M1_ACTUAL, outctx: OUT.K64, score: 92 },
-    { match: 'gemini-2.5-flash-lite', abilities: [...OMNI, T.Video, T.Micro], inctx: CTX.M1_ACTUAL, outctx: OUT.K64, score: 80 },
-    { match: 'gemini-2.5-flash', abilities: [...OMNI_R, T.Video, T.Flash], inctx: CTX.M1_ACTUAL, outctx: OUT.K64, score: 86 },
-    { match: 'gemini-2.0-flash-lite', abilities: [...OMNI, T.Video, T.Micro], inctx: CTX.M1_ACTUAL, outctx: OUT.K8, score: 76 },
-    { match: 'gemini-2.0-flash', abilities: [...OMNI_FULL, T.Flash], inctx: CTX.M1_ACTUAL, outctx: OUT.K8, score: 83 },
-    { match: 'gemini-1.5-pro', abilities: [...CHAT_V, T.Video, T.Audio, T.Plus], inctx: CTX.M2, outctx: OUT.K8, score: 84 },
-    { match: 'gemini-1.5-flash', abilities: [...CHAT_V, T.Video, T.Flash], inctx: CTX.M1_ACTUAL, outctx: OUT.K8, score: 77 },
-    { match: 'gemini-3', abilities: [...OMNI_R, T.Video, T.Plus], inctx: CTX.M1, outctx: OUT.K64, score: 93 },
-    { match: 'gemini', abilities: [...OMNI, T.Video], inctx: CTX.M1_ACTUAL, outctx: OUT.K64, score: 84 },
-    { match: 'gemma-3', abilities: [...CHAT_V], inctx: CTX.K128, outctx: OUT.K8, score: 74 },
-    { match: 'gemma', abilities: [...CHAT], inctx: CTX.K32, outctx: OUT.K8, score: 68 },
-
-    // ===== DeepSeek =====
-    { match: 'deepseek-reasoner', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K64, score: 90 },
-    { match: 'deepseek-r1', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K64, score: 90 },
-    { match: 'deepseek-v3.1', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K64, score: 89 },
-    { match: 'deepseek-v3', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 86 },
-    { match: 'deepseek-chat', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 86 },
-    { match: 'deepseek-coder', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 82 },
-    { match: 'deepseek-vl', abilities: [...CHAT_V], inctx: CTX.K32, outctx: OUT.K8, score: 80 },
-    { match: 'deepseek', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 85 },
-
-    // ===== Alibaba Qwen（进入 1M 时代，qwen3 系列） =====
-    { match: 'qwen3-max', abilities: [...REASON_V, T.Ultra], inctx: CTX.M1, outctx: OUT.K32, score: 90 },
-    { match: 'qwen3-vl', abilities: [...REASON_V, T.Video], inctx: CTX.M1, outctx: OUT.K32, score: 87 },
-    { match: 'qwen3-coder', abilities: [...CHAT], inctx: CTX.M1, outctx: OUT.K64, score: 86 },
-    { match: 'qwen3', abilities: [...REASON], inctx: CTX.K256, outctx: OUT.K32, score: 85 },
-    { match: 'qwen2.5-max', abilities: [...CHAT, T.Ultra], inctx: CTX.K128, outctx: OUT.K8, score: 84 },
-    { match: 'qwen2.5-vl', abilities: [...CHAT_V, T.Video], inctx: CTX.K128, outctx: OUT.K8, score: 82 },
-    { match: 'qwen2.5-coder', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 82 },
-    { match: 'qwen2.5', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 81 },
-    { match: 'qwen-max', abilities: [...CHAT, T.Ultra], inctx: CTX.K32, outctx: OUT.K8, score: 84 },
-    { match: 'qwen-plus', abilities: [...CHAT, T.Plus], inctx: CTX.M1, outctx: OUT.K32, score: 82 },
-    { match: 'qwen-turbo', abilities: [...CHAT, T.Flash], inctx: CTX.M1, outctx: OUT.K16, score: 74 },
-    { match: 'qwen-vl', abilities: [...CHAT_V], inctx: CTX.K32, outctx: OUT.K8, score: 79 },
-    { match: 'qwq', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K32, score: 84 },
-    { match: 'qvq', abilities: [...REASON_V], inctx: CTX.K128, outctx: OUT.K32, score: 82 },
-    { match: 'qwen', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 80 },
-
-    // ===== Moonshot / Kimi =====
-    { match: 'kimi-k2', abilities: [...CHAT], inctx: CTX.K256, outctx: OUT.K16, score: 87 },
-    { match: 'kimi-thinking', abilities: [...REASON_V], inctx: CTX.K256, outctx: OUT.K64, score: 86 },
-    { match: 'kimi-latest', abilities: [...CHAT_V], inctx: CTX.K128, outctx: OUT.K8, score: 82 },
-    { match: 'moonshot-v1-128k', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 80 },
-    { match: 'moonshot', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 78 },
-    { match: 'kimi', abilities: [...CHAT_V], inctx: CTX.K128, outctx: OUT.K8, score: 82 },
-
-    // ===== Zhipu GLM =====
-    { match: 'glm-4.6', abilities: [...REASON_V], inctx: CTX.K200, outctx: OUT.K128, score: 88 },
-    { match: 'glm-4.5v', abilities: [...REASON_V, T.Video], inctx: CTX.K64, outctx: OUT.K16, score: 85 },
-    { match: 'glm-4.5-air', abilities: [...REASON, T.Flash], inctx: CTX.K128, outctx: OUT.K64, score: 82 },
-    { match: 'glm-4.5', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K128, score: 87 },
-    { match: 'glm-4-plus', abilities: [...CHAT, T.Plus], inctx: CTX.K128, outctx: OUT.K16, score: 82 },
-    { match: 'glm-4-flash', abilities: [...CHAT, T.Flash], inctx: CTX.K128, outctx: OUT.K16, score: 70 },
-    { match: 'glm-4v', abilities: [...CHAT_V], inctx: CTX.K8, outctx: OUT.K4, score: 78 },
-    { match: 'glm-z1', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K32, score: 84 },
-    { match: 'glm-zero', abilities: [...REASON], inctx: CTX.K32, outctx: OUT.K16, score: 80 },
-    { match: 'glm-4', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K16, score: 80 },
-
-    // ===== Baidu ERNIE =====
-    { match: 'ernie-4.5', abilities: [...REASON_V], inctx: CTX.K128, outctx: OUT.K16, score: 84 },
-    { match: 'ernie-x1', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K16, score: 83 },
-    { match: 'ernie-4.0', abilities: [...CHAT, T.Ultra], inctx: CTX.K128, outctx: OUT.K8, score: 80 },
-    { match: 'ernie', abilities: [...CHAT], inctx: CTX.K32, outctx: OUT.K8, score: 76 },
-
-    // ===== ByteDance Doubao（接上文） =====
-    { match: 'doubao-1.5-vision', abilities: [...CHAT_V], inctx: CTX.K128, outctx: OUT.K16, score: 83 },
-    { match: 'doubao-1.5-pro', abilities: [...CHAT, T.Plus], inctx: CTX.K256, outctx: OUT.K16, score: 84 },
-    { match: 'doubao-1.5-thinking', abilities: [...REASON_V], inctx: CTX.K128, outctx: OUT.K32, score: 86 },
-    { match: 'doubao-pro', abilities: [...CHAT_V, T.Plus], inctx: CTX.K256, outctx: OUT.K8, score: 81 },
-    { match: 'doubao-lite', abilities: [...CHAT, T.Flash], inctx: CTX.K32, outctx: OUT.K8, score: 70 },
-    { match: 'doubao-seed', abilities: [...REASON_V], inctx: CTX.K256, outctx: OUT.K32, score: 85 },
-    { match: 'doubao', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 78 },
-
-    // ===== Tencent Hunyuan =====
-    { match: 'hunyuan-t1', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K16, score: 83 },
-    { match: 'hunyuan-turbos', abilities: [...CHAT, T.Flash], inctx: CTX.K128, outctx: OUT.K8, score: 80 },
-    { match: 'hunyuan-large', abilities: [...CHAT, T.Ultra], inctx: CTX.K128, outctx: OUT.K8, score: 82 },
-    { match: 'hunyuan-vision', abilities: [...CHAT_V], inctx: CTX.K32, outctx: OUT.K8, score: 79 },
-    { match: 'hunyuan', abilities: [...CHAT], inctx: CTX.K32, outctx: OUT.K8, score: 77 },
-
-    // ===== MiniMax =====
-    { match: 'minimax-m1', abilities: [...REASON], inctx: CTX.M1, outctx: OUT.K64, score: 86 },
-    { match: 'minimax-text', abilities: [...CHAT], inctx: CTX.M1, outctx: OUT.K16, score: 84 },
-    { match: 'minimax', abilities: [...CHAT], inctx: CTX.K256, outctx: OUT.K8, score: 82 },
-    { match: 'abab', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 76 },
-
-    // ===== xAI Grok =====
-    { match: 'grok-4', abilities: [...REASON_V, T.Search, T.Ultra], inctx: CTX.K256, outctx: OUT.K64, score: 92 },
-    { match: 'grok-3-mini', abilities: [...REASON, T.Flash], inctx: CTX.K128, outctx: OUT.K32, score: 82 },
-    { match: 'grok-3', abilities: [...REASON_V, T.Search], inctx: CTX.K128, outctx: OUT.K32, score: 88 },
-    { match: 'grok-2-vision', abilities: [...CHAT_V], inctx: CTX.K32, outctx: OUT.K8, score: 82 },
-    { match: 'grok-2', abilities: [...CHAT, T.Search], inctx: CTX.K128, outctx: OUT.K8, score: 83 },
-    { match: 'grok', abilities: [...REASON_V, T.Search], inctx: CTX.K128, outctx: OUT.K32, score: 85 },
-
-    // ===== Meta Llama（开源） =====
-    { match: 'llama-4-maverick', abilities: [...CHAT_V, T.Plus], inctx: CTX.M1, outctx: OUT.K16, score: 85 },
-    { match: 'llama-4-scout', abilities: [...CHAT_V, T.Flash], inctx: CTX.M10, outctx: OUT.K16, score: 82 },
-    { match: 'llama-4', abilities: [...CHAT_V], inctx: CTX.M1, outctx: OUT.K16, score: 84 },
-    { match: 'llama-3.3', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 80 },
-    { match: 'llama-3.2-vision', abilities: [...CHAT_V], inctx: CTX.K128, outctx: OUT.K8, score: 77 },
-    { match: 'llama-3.2', abilities: [...CHAT, T.Micro], inctx: CTX.K128, outctx: OUT.K8, score: 72 },
-    { match: 'llama-3.1', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 78 },
-    { match: 'llama', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 74 },
-
-    // ===== Mistral（开源/闭源混合） =====
-    { match: 'mistral-large', abilities: [...CHAT_V, T.Ultra], inctx: CTX.K128, outctx: OUT.K8, score: 84 },
-    { match: 'mistral-medium', abilities: [...CHAT_V, T.Plus], inctx: CTX.K128, outctx: OUT.K8, score: 82 },
-    { match: 'mistral-small', abilities: [...CHAT_V, T.Flash], inctx: CTX.K128, outctx: OUT.K8, score: 76 },
-    { match: 'magistral', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K32, score: 83 },
-    { match: 'pixtral', abilities: [...CHAT_V], inctx: CTX.K128, outctx: OUT.K8, score: 79 },
-    { match: 'codestral', abilities: [...CHAT], inctx: CTX.K256, outctx: OUT.K8, score: 80 },
-    { match: 'devstral', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 80 },
-    { match: 'ministral', abilities: [...CHAT, T.Micro], inctx: CTX.K128, outctx: OUT.K8, score: 70 },
-    { match: 'mixtral', abilities: [...CHAT], inctx: CTX.K32, outctx: OUT.K8, score: 72 },
-    { match: 'mistral', abilities: [...CHAT], inctx: CTX.K32, outctx: OUT.K8, score: 74 },
-
-    // ===== Microsoft Phi（开源，端侧） =====
-    { match: 'phi-4', abilities: [...REASON, T.Micro], inctx: CTX.K16, outctx: OUT.K16, score: 76 },
-    { match: 'phi-3.5-vision', abilities: [...CHAT_V, T.Micro], inctx: CTX.K128, outctx: OUT.K4, score: 68 },
-    { match: 'phi-3', abilities: [...CHAT, T.Micro], inctx: CTX.K128, outctx: OUT.K4, score: 66 },
-    { match: 'phi', abilities: [...CHAT, T.Micro], inctx: CTX.K16, outctx: OUT.K4, score: 68 },
-
-    // ===== NVIDIA Nemotron（开源） =====
-    { match: 'nemotron', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K16, score: 82 },
-
-    // ===== 01.AI Yi =====
-    { match: 'yi-lightning', abilities: [...CHAT, T.Flash], inctx: CTX.K16, outctx: OUT.K4, score: 80 },
-    { match: 'yi-vision', abilities: [...CHAT_V], inctx: CTX.K16, outctx: OUT.K4, score: 76 },
-    { match: 'yi-large', abilities: [...CHAT, T.Ultra], inctx: CTX.K32, outctx: OUT.K8, score: 81 },
-    { match: 'yi-', abilities: [...CHAT], inctx: CTX.K32, outctx: OUT.K8, score: 76 },
-
-    // ===== StepFun =====
-    { match: 'step-3', abilities: [...REASON_V, T.Video], inctx: CTX.K256, outctx: OUT.K32, score: 86 },
-    { match: 'step-2', abilities: [...CHAT], inctx: CTX.K16, outctx: OUT.K8, score: 80 },
-    { match: 'step-1v', abilities: [...CHAT_V], inctx: CTX.K32, outctx: OUT.K8, score: 78 },
-    { match: 'step-1', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 78 },
-    { match: 'step-', abilities: [...CHAT_V], inctx: CTX.K128, outctx: OUT.K8, score: 79 },
-
-    // ===== Baichuan =====
-    { match: 'baichuan', abilities: [...CHAT], inctx: CTX.K32, outctx: OUT.K8, score: 76 },
-
-    // ===== Cohere =====
-    { match: 'command-a', abilities: [...CHAT, T.Search, T.Ultra], inctx: CTX.K256, outctx: OUT.K8, score: 83 },
-    { match: 'command-r-plus', abilities: [...CHAT, T.Search, T.Plus], inctx: CTX.K128, outctx: OUT.K4, score: 80 },
-    { match: 'command-r', abilities: [...CHAT, T.Search], inctx: CTX.K128, outctx: OUT.K4, score: 76 },
-    { match: 'command', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K4, score: 74 },
-    { match: 'aya', abilities: [...CHAT], inctx: CTX.K8, outctx: OUT.K4, score: 72 },
-
-    // ===== IBM Granite（开源） =====
-    { match: 'granite', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 72 },
-
-    // ===== Perplexity Sonar =====
-    { match: 'sonar-reasoning', abilities: [...REASON, T.Search], inctx: CTX.K128, outctx: OUT.K8, score: 83 },
-    { match: 'sonar-pro', abilities: [...CHAT, T.Search, T.Plus], inctx: CTX.K200, outctx: OUT.K8, score: 82 },
-    { match: 'sonar', abilities: [...CHAT, T.Search], inctx: CTX.K128, outctx: OUT.K8, score: 78 },
-
-    // ===== 蚂蚁 Ling / Ring（开源） =====
-    { match: 'ring', abilities: [...REASON], inctx: CTX.K128, outctx: OUT.K16, score: 80 },
-    { match: 'ling', abilities: [...CHAT], inctx: CTX.K128, outctx: OUT.K8, score: 78 },
-
-    // ===== 图像生成模型 =====
-    { match: 'gpt-image', abilities: [T.ImageGeneration, T.Vision], score: 88 },
-    { match: 'dall-e', abilities: [T.ImageGeneration], score: 80 },
-    { match: 'imagen', abilities: [T.ImageGeneration], score: 85 },
-    { match: 'seedream', abilities: [T.ImageGeneration], score: 84 },
-    { match: 'cogview', abilities: [T.ImageGeneration], score: 78 },
-    { match: 'wanx', abilities: [T.ImageGeneration], score: 78 },
-    { match: 'wan', abilities: [T.ImageGeneration], score: 76 },
-    { match: 'flux', abilities: [T.ImageGeneration], score: 84 },
-    { match: 'stable-diffusion', abilities: [T.ImageGeneration], score: 78 },
-    { match: 'hunyuan-image', abilities: [T.ImageGeneration], score: 80 },
-    { match: 'qwen-image', abilities: [T.ImageGeneration], score: 82 },
-
-    // ===== Embedding 模型 =====
-    { match: 'gemini-embedding', abilities: [T.Embedding], inctx: CTX.K8, score: 88 },
-    { match: 'text-embedding-3', abilities: [T.Embedding], inctx: CTX.K8, score: 85 },
-    { match: 'text-embedding-v', abilities: [T.Embedding], inctx: CTX.K8, score: 84 }, // 阿里 v3/v4
-    { match: 'text-embedding', abilities: [T.Embedding], inctx: CTX.K8, score: 80 },
-    { match: 'qwen3-embedding', abilities: [T.Embedding], inctx: CTX.K32, score: 87 },
-    { match: 'bge-m3', abilities: [T.Embedding], inctx: CTX.K8, score: 84 },
-    { match: 'bge', abilities: [T.Embedding], inctx: 512, score: 78 },
-    { match: 'jina-embeddings', abilities: [T.Embedding], inctx: CTX.K8, score: 82 },
-    { match: 'embed-', abilities: [T.Embedding], inctx: CTX.K8, score: 80 }, // cohere embed
-
-    // ===== Rerank 模型 =====
-    { match: 'qwen3-reranker', abilities: [T.Rerank], score: 85 },
-    { match: 'bge-reranker', abilities: [T.Rerank], score: 82 },
-    { match: 'jina-reranker', abilities: [T.Rerank], score: 82 },
-    { match: 'rerank', abilities: [T.Rerank], score: 80 },
-];
 
 // ============================================================================
 // 数据表 2.5：约束解码（Constrained Decoding）黑名单
@@ -373,6 +46,10 @@ const NO_OUTLINE_MATCHERS: string[] = [
     'claude-3-opus',  // Anthropic 早期，结构化输出仅靠 tool 间接实现，非原生 CD
     'claude-3-sonnet',
     'claude-3-haiku',
+    // 专用 MT 引擎（非通用 LLM，通常仅输出译文，无 json_schema 约束能力）
+    'opus-mt',
+    'nllb',
+    'madlad',
 ];
 
 // ============================================================================
@@ -383,6 +60,11 @@ const KEYWORD_TAGS: Array<{ re: RegExp; tag: ModelTags }> = [
     { re: /embedding|embed(?!ded)|bge(?!-reranker)/, tag: ModelTags.Embedding },
     { re: /rerank|reranker/, tag: ModelTags.Rerank },
     { re: /image|dall-?e|imagen|cogview|flux|diffusion|draw|paint|wanx?|seedream/, tag: ModelTags.ImageGeneration },
+    // —— 机器翻译：以边界形式识别 -mt-，避免误伤 "format"、"prompt" 等 ——
+    { re: /(?:^|[-_/])mt(?:[-_./]|$)|translat|翻译/, tag: ModelTags.MT },
+    // —— 代码 / 数学专精（边界匹配，避免误伤 "encode"、"format"）——
+    { re: /(?:^|[-_/])coder?(?:[-_./]|$)|代码/, tag: ModelTags.Code },
+    { re: /(?:^|[-_/])math(?:[-_./]|$)|数学/, tag: ModelTags.Math },
     { re: /reason|thinking|think|-r1\b|reasoner|-o1\b|-o3\b|qwq|qvq|glm-z|magistral/, tag: ModelTags.Reasoning },
     { re: /vl\b|vision|visual|-v\d|multimodal|omni|pixtral/, tag: ModelTags.Vision },
     { re: /video|veo|sora|cogvideo|seedance/, tag: ModelTags.Video },
@@ -395,6 +77,15 @@ const VERSION_TAGS: Array<{ re: RegExp; tag: ModelTags }> = [
     { re: /plus|pro(?!mpt)|large|maverick/, tag: ModelTags.Plus },
     { re: /flash|turbo|lite|mini|haiku|air|small|fast/, tag: ModelTags.Flash },
     { re: /micro|nano|tiny|edge|端侧|0\.5b|1\.5b|1b\b|3b\b|scout/, tag: ModelTags.Micro },
+];
+
+// 类别标签集合：这些标签互斥于「补充能力」逻辑（用于 appendKeywordTags 跳过判断）
+const CATEGORY_TAGS: ModelTags[] = [T.Embedding, T.Rerank, T.ImageGeneration];
+
+// 生成/推理类功能标签：类别模型（Embedding/Rerank/Image/MT）需一并剥离，仅留类别 + 版本
+const LLM_FUNCTIONAL_TAGS: ModelTags[] = [
+    T.TextGeneration, T.Tool, T.Vision, T.Reasoning,
+    T.Audio, T.Video, T.Search, T.Outline, T.Math, T.Code,
 ];
 
 // ============================================================================
@@ -458,6 +149,10 @@ export function parseModel(modelId: string): ModelFeatures | null {
         if (category === T.Embedding) { inctx = CTX.K8; score = 72; }
         else if (category === T.Rerank) { score = 72; }
         else if (category === T.ImageGeneration) { score = 74; }
+        else if (abilities.includes(T.MT)) {
+            // 专用翻译模型：上下文一般较小
+            inctx = CTX.K32; outctx = DEFAULT_OUT; score = 73;
+        }
         else {
             inctx = DEFAULT_INCTX; // 256K（提高后的默认值）
             // 若推断为推理模型 → 拉高输出上限
@@ -469,10 +164,11 @@ export function parseModel(modelId: string): ModelFeatures | null {
     // 6. 补充版本标签（Ultra/Plus/Flash/Micro）
     appendVersionTags(lower, abilities);
 
-    // 7. 补充能力标签（search/vision/reasoning 等命名信号）
+    // 7. 补充能力标签（search/vision/reasoning/mt/math/code 等命名信号）
     appendKeywordTags(lower, abilities);
 
-    // 8. 一致性修正：显式含 thinking/reasoning 关键词 → 确保开启推理并提升输出上限
+    // 8. 一致性修正
+    // 8a. 显式含 thinking/reasoning 关键词 → 确保开启推理
     if (
         abilities.includes(T.TextGeneration) &&
         /thinking|think|reason|-r1\b|reasoner/.test(lower) &&
@@ -480,13 +176,26 @@ export function parseModel(modelId: string): ModelFeatures | null {
     ) {
         abilities.push(T.Reasoning);
     }
-    if (abilities.includes(T.Reasoning) && (!outctx || outctx < OUT.K16)) {
-        outctx = DEFAULT_REASON_OUT; // 推理模型需要更大输出预算
+    // 8b. 代码 / 数学专精 → 依据你的判断规则，默认自带深度思考能力
+    if (
+        (abilities.includes(T.Code) || abilities.includes(T.Math)) &&
+        abilities.includes(T.TextGeneration) &&
+        !abilities.includes(T.Reasoning)
+    ) {
+        abilities.push(T.Reasoning);
     }
+    // 8c. 推理模型需要更大的输出预算
+    if (abilities.includes(T.Reasoning) && (!outctx || outctx < OUT.K16)) {
+        outctx = DEFAULT_REASON_OUT;
+    }
+    // 8d. MT 是独立品类（同 嵌入/重排/绘图）：剥离所有 LLM 功能标签
+    //     （含 base 表带入的 TextGeneration / Outline 等），仅保留 MT + 版本标签。
+    enforceMtExclusivity(abilities);
 
     // 9. 派生「约束解码（Outline）」能力
     //    规则：所有文本生成模型默认支持 CD（覆盖面 ≥ Tool），
     //         但命中黑名单的少数模型除外。
+    //    注：MT 已在 8d 剥离 TextGeneration，此处自动跳过，不会误授 Outline。
     applyOutlineAbility(baseName, abilities);
 
     return {
@@ -517,22 +226,23 @@ function inferAbilitiesByKeyword(lower: string): ModelTags[] {
     const isEmbedding = tags.has(T.Embedding);
     const isRerank = tags.has(T.Rerank);
     const isImage = tags.has(T.ImageGeneration);
+    const isMT = tags.has(T.MT);
 
-    // 非嵌入/重排/图像 → 默认文本生成 + 工具调用
-    if (!isEmbedding && !isRerank && !isImage) {
+    // 非嵌入/重排/图像/翻译 → 默认文本生成 + 工具调用
+    // （代码 / 数学模型本质仍是文本生成，走此分支；MT 是独立品类，不走）
+    if (!isEmbedding && !isRerank && !isImage && !isMT) {
         tags.add(T.TextGeneration);
         tags.add(T.Tool);
     }
 
-    // 互斥清理：嵌入/重排模型剥离对话能力
-    if (isEmbedding || isRerank) {
-        tags.delete(T.TextGeneration);
-        tags.delete(T.Tool);
-        tags.delete(T.Vision);
-        tags.delete(T.Reasoning);
-        tags.delete(T.Audio);
-        tags.delete(T.Video);
-        tags.delete(T.Search);
+    // 代码 / 数学专精 → 默认自带深度思考
+    if (tags.has(T.Code) || tags.has(T.Math)) {
+        tags.add(T.Reasoning);
+    }
+
+    // 互斥清理：嵌入/重排/翻译（MT）模型剥离一切 LLM 功能标签，仅保留自身类别
+    if (isEmbedding || isRerank || isMT) {
+        for (const tag of LLM_FUNCTIONAL_TAGS) tags.delete(tag);
     }
 
     return Array.from(tags);
@@ -553,18 +263,40 @@ function appendVersionTags(lower: string, abilities: ModelTags[]): void {
     }
 }
 
-/** 追加基于关键词的补充能力标签 */
+/**
+ * 追加基于关键词的补充能力标签。
+ * 仅对文本类模型生效；类别标签（Embedding/Rerank/Image）不在此补充。
+ * MT / Math / Code / Search / Vision / Reasoning 等命名信号均可在此叠加。
+ * 注：MT 模型不含 TextGeneration，函数开头即返回，不会被误加功能标签。
+ */
 function appendKeywordTags(lower: string, abilities: ModelTags[]): void {
     const set = new Set(abilities);
     if (!set.has(T.TextGeneration)) return; // 仅对文本类补充
 
     for (const { re, tag } of KEYWORD_TAGS) {
-        if ([T.Embedding, T.Rerank, T.ImageGeneration].includes(tag)) continue;
+        if (CATEGORY_TAGS.includes(tag)) continue; // 跳过类别标签
         if (re.test(lower)) set.add(tag);
     }
 
     abilities.length = 0;
     abilities.push(...set);
+}
+
+/**
+ * MT（机器翻译）品类排他：与嵌入/重排/绘图同理，翻译模型不应携带
+ * text-generation / tool / outline 等对话类功能标签。命中 MT 时，
+ * 剥离所有 LLM 功能标签，仅保留 MT 本身与版本标签（Ultra/Plus/Flash/Micro）。
+ *
+ * 该修正覆盖两条路径：
+ *  - 基座表命中（如 qwen-mt 的 [MT, TextGeneration]）；
+ *  - 关键词兜底（inferAbilitiesByKeyword 已先剥离，此处幂等）。
+ */
+function enforceMtExclusivity(abilities: ModelTags[]): void {
+    if (!abilities.includes(T.MT)) return;
+
+    const kept = abilities.filter((a) => !LLM_FUNCTIONAL_TAGS.includes(a));
+    abilities.length = 0;
+    abilities.push(...kept);
 }
 
 /**
@@ -577,8 +309,8 @@ function appendKeywordTags(lower: string, abilities: ModelTags[]): void {
  *
  * 规则：
  *  1. 仅文本生成模型（TextGeneration）才有 CD 意义；
- *     Embedding / Rerank / 纯 ImageGeneration 无文本 token 生成，跳过。
- *  2. 命中 NO_OUTLINE_MATCHERS 黑名单的少数老模型 → 不授予 Outline。
+ *     Embedding / Rerank / MT / 纯 ImageGeneration 无文本 token 生成，跳过。
+ *  2. 命中 NO_OUTLINE_MATCHERS 黑名单的少数老模型 / 专用 MT 引擎 → 不授予 Outline。
  *  3. 其余文本模型 → 默认授予 Outline。
  */
 function applyOutlineAbility(baseName: string, abilities: ModelTags[]): void {
@@ -609,11 +341,17 @@ export function hasAbility(modelId: string, tag: ModelTags): boolean {
     return parseModel(modelId)?.abilities.includes(tag) ?? false;
 }
 
+/**
+ * 返回模型「主类别」。
+ * 优先级：Embedding > Rerank > ImageGeneration > MT > TextGeneration。
+ * MT（机器翻译）虽仍生成文本，但语义上是独立品类，故排在 TextGeneration 之前。
+ */
 export function getModelCategory(modelId: string): ModelTags | 'unknown' {
     const abilities = parseModel(modelId)?.abilities ?? [];
     if (abilities.includes(ModelTags.Embedding)) return ModelTags.Embedding;
     if (abilities.includes(ModelTags.Rerank)) return ModelTags.Rerank;
     if (abilities.includes(ModelTags.ImageGeneration)) return ModelTags.ImageGeneration;
+    if (abilities.includes(ModelTags.MT)) return ModelTags.MT;
     if (abilities.includes(ModelTags.TextGeneration)) return ModelTags.TextGeneration;
     return 'unknown';
 }
@@ -641,4 +379,25 @@ export function supportsConstrainedDecoding(modelId: string): boolean {
  */
 export function isReasoningModel(modelId: string): boolean {
     return hasAbility(modelId, ModelTags.Reasoning);
+}
+
+/**
+ * 是否为机器翻译（MT）模型。
+ */
+export function isTranslationModel(modelId: string): boolean {
+    return hasAbility(modelId, ModelTags.MT);
+}
+
+/**
+ * 是否为代码专精模型（含代码生成/补全优化）。
+ */
+export function isCodeModel(modelId: string): boolean {
+    return hasAbility(modelId, ModelTags.Code);
+}
+
+/**
+ * 是否为数学专精模型（数学推理优化）。
+ */
+export function isMathModel(modelId: string): boolean {
+    return hasAbility(modelId, ModelTags.Math);
 }

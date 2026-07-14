@@ -219,7 +219,7 @@ class DashboardStore {
         const seq = ++this.#seqCounter;
         this.#activeSeq = seq;
         this.#terminationRequested = false;
-        this.forceShowLog = false;
+        // this.forceShowLog = false; // 必须用户明确关闭日志，否则一直处于强制显示日志状态。
         log.debug(`[DashboardStore] startRunning() called, seq=${seq}`);
 
         // 如果未勾选“保留日志”，则清空历史日志（在真正启动前）。

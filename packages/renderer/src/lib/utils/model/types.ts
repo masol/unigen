@@ -7,12 +7,15 @@ import {
     IconBrandOpenai,
     IconCirclePlus,
     IconCloud,
+    IconCode,
     IconCpu,
     IconDatabase,
     IconDeviceDesktop,
     IconDiamond,
     IconEye,
     IconJson,
+    IconLanguage,
+    IconMathFunction,
     IconMessage,
     IconMicrophone,
     IconMoodSmile,
@@ -98,6 +101,9 @@ export const tagLabels: Record<ModelTags, string> = {
     "tool": "工具",
     "video": "视频",
     "outline": "格式",
+    'math': "数学",
+    'code': "代码",
+    'mt': "翻译",
 };
 
 export const tagIcons: Record<ModelTags, typeof IconMessage> = {
@@ -121,6 +127,9 @@ export const tagIcons: Record<ModelTags, typeof IconMessage> = {
     "tool": IconTool,
     "video": IconVideo,
     "outline": IconJson,
+    'math': IconMathFunction,
+    'code': IconCode,
+    'mt': IconLanguage,
 };
 
 // 1. 功能与核心任务标签
@@ -129,6 +138,7 @@ export const FUNCTION_TAGS: Record<string, ModelTags> = {
     image: 'image-generation' as ModelTags,
     embedding: 'embedding' as ModelTags,
     rerank: 'rerank' as ModelTags,
+    mt: 'mt' as ModelTags,
 };
 
 export const VERSION_TAGS: Record<string, ModelTags> = {
@@ -141,7 +151,6 @@ export const VERSION_TAGS: Record<string, ModelTags> = {
 
 // 2. 版本、输入输出及附加能力标签
 export const CAPABILITY_TAGS: Record<string, ModelTags> = {
-
     // 输入/输出与核心能力
     search: 'search' as ModelTags,
     reasoning: 'reasoning' as ModelTags,
@@ -150,6 +159,8 @@ export const CAPABILITY_TAGS: Record<string, ModelTags> = {
     tool: 'tool' as ModelTags,
     video: 'video' as ModelTags,
     outline: 'outline' as ModelTags,
+    math: 'math' as ModelTags,
+    code: 'code' as ModelTags,
 };
 
 export const protocolLabels: Record<ProviderProtocol, string> = {

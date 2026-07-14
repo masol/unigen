@@ -24,7 +24,9 @@ export enum ModelTags {
     Tool = "tool", // 函数调用(工具)
     Audio = 'audio', // 语音理解
     Outline = "outline", // 支持结构化输出。
-
+    Math = "math", // 数学推理优化。
+    Code = "code", // 代码生成优化。
+    MT = "mt", // 机器翻译优化。
     // 以上为输入/输出能力。
 }
 

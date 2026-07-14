@@ -22,7 +22,7 @@
 
   const tip = $derived.by(() => {
     if (phase === "idle") return "运行";
-    if (phase === "running") return "停止中…（点击停止）";
+    if (phase === "running") return "运行中…（点击停止）";
     return "强制终止中…";
   });
 
@@ -44,7 +44,7 @@
         {...props}
         id="run-status-control"
         onclick={handleClick}
-        title={tip}
+        // title={tip}
         data-phase={phase}
         class="run-status group relative ml-3 flex size-5 shrink-0 items-center justify-center overflow-hidden rounded transition-colors duration-200"
         aria-label={tip}

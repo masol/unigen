@@ -1,3 +1,4 @@
+import { m } from '$lib/paraglide/messages.js';
 import {
     setLocale as internalSetLocale,
     locales,
@@ -5,14 +6,13 @@ import {
 } from '$lib/paraglide/runtime.js';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import { m } from '$lib/paraglide/messages.js';
 
 // 预加载所有需要的 dayjs 语言包（只注册，不切换）
+import evtbus from '$lib/utils/evtbus';
+import 'dayjs/locale/en';
 import 'dayjs/locale/zh-cn';
 import 'dayjs/locale/zh-tw';
-import 'dayjs/locale/en';
 import { configStore } from './config.svelte';
-import evtbus from '$lib/utils/evtbus';
 // import 'dayjs/locale/es';
 // import 'dayjs/locale/ko';
 // import 'dayjs/locale/ru';
@@ -105,7 +105,7 @@ class I18nStore {
     async init() {
 
         evtbus.on("lang:changed", (lang: string) => {
-            console.log('on event,set lang to', lang);
+            // console.log('on event,set lang to', lang);
             this.setLocale(lang);
         });
 

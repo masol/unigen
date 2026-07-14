@@ -120,7 +120,7 @@
   /* ─── 打开官网 ─── */
   function handleOpenWebsite() {
     if (websiteUrl) {
-      console.log("websiteUrl=", websiteUrl);
+      // console.log("websiteUrl=", websiteUrl);
       openExternal(websiteUrl);
     }
   }

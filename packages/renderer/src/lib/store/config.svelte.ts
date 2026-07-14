@@ -563,8 +563,9 @@ class ConfigStore {
     }
 
     /** 按 id 查找 Model（跨所有 Provider 扁平搜索） */
-    findModelById(modelId: string): { provider: Provider; model: Provider['models'][number] } | undefined {
-        for (const provider of this.#providers) {
+    findModelById(pid: string, modelId: string): { provider: Provider; model: Provider['models'][number] } | undefined {
+        const provider = this.findProviderById(pid);
+        if (provider) {
             const model = provider.models.find((m) => m.id === modelId)
             if (model) return { provider, model }
         }
