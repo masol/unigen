@@ -5,14 +5,14 @@
 
 # 🚀 Getting Started
 
-This page gets you up and running in the shortest possible time. Creators can start working after finishing this page; developers should continue with the [[Developer-Guide.en|Workflow Development Overview]] afterwards.
+This page gets you up and running in the shortest possible time. Creators can start working after finishing this page; developers should continue with the [[Workflow Development Overview|Developer-Guide.en]] afterwards.
 
 ## 1. Installation
 
 Unigen is an Electron desktop application supporting **Windows / Linux / macOS**.
 
 - **Recommended**: download the **portable build** for your platform from [Releases](https://github.com/masol/unigen/releases), unzip, and run.
-- **Build from source**: see [[Local-Setup.en|Local Setup]].
+- **Build from source**: see [[Local Setup|Local-Setup.en]].
 
 ### System Requirements: Decide Your Model Strategy First
 
@@ -46,9 +46,9 @@ These settings **only need to be configured once** and apply to all project type
 Creating a project requires choosing a **project type**:
 
 - **Script-to-Video** — the current demonstration project type, for testing and experiencing the full pipeline.
-- **Blank Project** — for developers, with workflow-development capabilities built in (see [[Developer-Guide.en|Developer Guide]]).
+- **Blank Project** — for developers, with workflow-development capabilities built in (see [[Developer Guide|Developer-Guide.en]]).
 
-Creators should choose "Script-to-Video" to explore. More project types will land per the [[Roadmap.en|Roadmap]]; you can also import project types published by developers. (**Note: the current version trusts code by default — template provenance verification and malicious-code protection are weak. Do not install project templates from untrusted sources.**)
+Creators should choose "Script-to-Video" to explore. More project types will land per the [[Roadmap|Roadmap.en]]; you can also import project types published by developers. (**Note: the current version trusts code by default — template provenance verification and malicious-code protection are weak. Do not install project templates from untrusted sources.**)
 
 ![project-type](./images/prjtpl.jpg)
 
@@ -68,15 +68,15 @@ With any project open, click the **right edge** to expand the Reflection Assista
 /prism Give me a few short, hilarious ad concepts for facial tissues.
 ```
 
-`/prism` does not persist anything, so you can directly compare **Prism against the model's direct answer**. For how it works, see [[prism.en|Prism Reasoning]] (Section 10 is a verbatim transcript of exactly this example).
+`/prism` does not persist anything, so you can directly compare **Prism against the model's direct answer**. For how it works, see [[Prism Reasoning|prism.en]] (Section 10 is a verbatim transcript of exactly this example).
 
 ```
 /plan From an idea to a complete novel
 ```
 
-`/plan` persists its output and takes a very long time. For the current planner, see [[loom.en|Loom: Reverse Deliverable Planning on a Graph Blackboard]]. You can then execute, improve, and publish the resulting workflow.
+`/plan` persists its output and takes a very long time. For the current planner, see [[Loom: Reverse Deliverable Planning on a Graph Blackboard|loom.en]]. You can then execute, improve, and publish the resulting workflow.
 
 ## 6. Next Steps
 
-- **Creators** → [[Using-Workflows.en|Running Your First Workflow]]
-- **Developers** → [[Developer-Guide.en|Workflow Development Overview]]
+- **Creators** → [[Running Your First Workflow|Using-Workflows.en]]
+- **Developers** → [[Workflow Development Overview|Developer-Guide.en]]

@@ -42,16 +42,16 @@ That is what "logic-oriented AI" means. Mapped onto the roadmap, layer by layer:
 
 | Stage                       | Form of dimensional calculus                                                                 |
 | --------------------------- | --------------------------------------------------------------------------------------------- |
-| [[prism.en\|Prism]] (now)   | **Most degenerate form**: extract dimensions → evaluate independently per dimension → merge. Between dimensions there is only one operation: aggregation |
-| [[loom.en\|Loom]]           | Dimensions gain **structure**: AND/OR, dependencies, backtracking on the deliverable graph — constraint propagation between dimensions begins |
-| [[planner.en\|HTN/Prolog]]  | Inter-dimensional calculus is handed to a **symbolic engine**: unification, resolution, backtracking; Horn clauses as the formal carrier of dimensional relations |
+| [[Prism|prism.en]] (now)   | **Most degenerate form**: extract dimensions → evaluate independently per dimension → merge. Between dimensions there is only one operation: aggregation |
+| [[Loom|loom.en]]           | Dimensions gain **structure**: AND/OR, dependencies, backtracking on the deliverable graph — constraint propagation between dimensions begins |
+| [[HTN/Prolog|planner.en]]  | Inter-dimensional calculus is handed to a **symbolic engine**: unification, resolution, backtracking; Horn clauses as the formal carrier of dimensional relations |
 | Cognitive model (long-term) | Dimensional calculus subject to **objective-world constraints**: which coordinate transformations simply do not exist in reality |
 
 ## 4. Why Prism Is the Foundation Stone
 
 If inter-dimensional calculus is the building, Prism is the load-bearing test: it validates the most basic thing of all — **whether an LLM can, for a concrete problem, produce orthogonal, on-topic dimensions, and judge reliably within a single dimension.**
 
-These two capabilities are the precondition for all subsequent dimensional calculus. If they fail, Loom's graphs and HTN's clauses are castles in the air; if they hold (preliminary evidence positive — see [[prism.en|Prism Reasoning]], Section 3), then every later layer is just adding richer operations to the primitive called "dimension."
+These two capabilities are the precondition for all subsequent dimensional calculus. If they fail, Loom's graphs and HTN's clauses are castles in the air; if they hold (preliminary evidence positive — see [[Prism Reasoning|prism.en]], Section 3), then every later layer is just adding richer operations to the primitive called "dimension."
 
 That is why I keep obsessing over this "small trick," and why multi-perspective empirical feedback is listed as the most urgent need.
 
@@ -61,18 +61,18 @@ What on this page is confirmed, and what is conjecture:
 
 **Reasonably confident** (preliminary evidence or mature theory):
 
-- Viewpoint splitting substantially lifts weak models' generation quality (simple-task evidence, [[prism.en|prism.en.md]], Section 3);
-- The structural isomorphism between HTN decomposition and Prolog SLD resolution (classical planning literature, [[planner.en|planner.en.md]], Section 6);
+- Viewpoint splitting substantially lifts weak models' generation quality (simple-task evidence, [[prism.en.md|prism.en]], Section 3);
+- The structural isomorphism between HTN decomposition and Prolog SLD resolution (classical planning literature, [[planner.en.md|planner.en]], Section 6);
 - Neural and symbolic approaches each have irreplaceable strengths (industry consensus).
 
 **Open hypotheses** (may be falsified; attacks welcome):
 
 - The neural and logical routes of approximation are equivalent in expressive power;
-- Problem complexity is relative to the cognitive model, not to the problem itself ([[prism.en|prism.en.md]], Conjecture B);
+- Problem complexity is relative to the cognitive model, not to the problem itself ([[prism.en.md|prism.en]], Conjecture B);
 - This route can reach "ultra-long-chain, ultra-high-determinism self-evolution."
 
 **Known unreachable** (no matter how good the method):
 
-- Input→output mappings the objective world does not permit ([[prism.en|prism.en.md]], Conjecture C). No dimensional transformation can build a perpetual motion machine — this delimits the hard boundary of logic-oriented AI.
+- Input→output mappings the objective world does not permit ([[prism.en.md|prism.en]], Conjecture C). No dimensional transformation can build a perpetual motion machine — this delimits the hard boundary of logic-oriented AI.
 
 [^1]: A rigorous mathematical equivalence (coordinate-transformation solving vs. function fitting under a fixed basis) currently has no confirmed theorem behind it — the universal approximation theorem covers only the neural side, and the logical side's counterpart (the Turing completeness of Horn clauses) is not directly comparable on the same scale.

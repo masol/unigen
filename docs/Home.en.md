@@ -22,17 +22,17 @@ Unigen explicitly serves two audiences — please enter through the matching doo
 
 You are a video creator, a novelist, or anyone who wants AI to do big work at high quality. What you need is a **mature workflow that is flexible and locally adjustable** — whether it was evolved by AI or written by hand is not your concern.
 
-→ Start with [[Getting-Started.en|Getting Started]] and [[Using-Workflows.en|Running Your First Workflow]].
+→ Start with [[Getting Started|Getting-Started.en]] and [[Running Your First Workflow|Using-Workflows.en]].
 
 ### 🧩 I'm a developer — I want to build / evolve workflows
 
 You want to build high-determinism long-chain workflows for a domain, or you are interested in the direction itself: letting a planner automatically generate and improve workflows. Unigen gives you:
 
 - A **code-based**, dynamically loadable workflow runtime;
-- A built-in long-chain development method: [[prism.en|Prism: Multi-Facet Critique-Refinement]];
-- A clear planner evolution path: [[loom.en|Loom: Graph-Blackboard Planning]] → [[planner.en|HTN/HDDL Symbolic Planning]].
+- A built-in long-chain development method: [[Prism: Multi-Facet Critique-Refinement|prism.en]];
+- A clear planner evolution path: [[Loom: Graph-Blackboard Planning|loom.en]] → [[HTN/HDDL Symbolic Planning|planner.en]].
 
-→ Start with [[Developer-Guide.en|Workflow Development Overview]].
+→ Start with [[Workflow Development Overview|Developer-Guide.en]].
 
 ---
 
@@ -40,7 +40,7 @@ You want to build high-determinism long-chain workflows for a domain, or you are
 
 Unigen workflows are **readable, editable, publishable** structures that humans can step into directly; all execution history is collected and retained via OpenTelemetry-compatible endpoints, serving as the evidence base for human or AI improvement.
 
-The evolution path (see [[Roadmap.en|Roadmap]]):
+The evolution path (see [[Roadmap|Roadmap.en]]):
 
 > Carry workflows of real practical value (primarily hand-written)
 > → Planner-assisted generation and improvement

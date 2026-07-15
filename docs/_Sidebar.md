@@ -1,34 +1,34 @@
-🌐 **[[Home|中文]]** | [[Home.en|English]]
+🌐 **[[中文|Home]]** | [[English|Home.en]]
 
 ---
 
 <details open>
 <summary><b>🗺️ 导航目录（中文）</b></summary>
 
-- **[[Home|🎯 欢迎首页]]**
-- **[[Getting-Started|🚀 快速开始]]**
+- **[[🎯 欢迎首页|Home]]**
+- **[[🚀 快速开始|Getting-Started]]**
 
 **🎨 创作者（使用工作流）**
 
-- [[Using-Workflows|▶️ 运行你的第一个工作流]]
-- [[FAQ|❓ 常见问题答疑]]
+- [[▶️ 运行你的第一个工作流|Using-Workflows]]
+- [[❓ 常见问题答疑|FAQ]]
 
 **🧩 开发者（构建工作流）**
 
-- [[Developer-Guide|📐 工作流开发总览]]
-- [[Panel-JSON|🎛️ 动态面板 JSON 指南]]
-- [[Local-Setup|💻 本地环境配置]]
+- [[📐 工作流开发总览|Developer-Guide]]
+- [[🎛️ 动态面板 JSON 指南|Panel-JSON]]
+- [[💻 本地环境配置|Local-Setup]]
 
 **🏗️ 系统架构**
 
-- [[prism|🔮 棱镜推理 Prism]]
-- [[loom|🧵 过渡规划器 Loom]]
-- [[planner|⚙️ 符号规划器]]
-- [[Logic-Oriented-AI|🧮 逻辑向 AI]]
+- [[🔮 棱镜推理 Prism|prism]]
+- [[🧵 过渡规划器 Loom|loom]]
+- [[⚙️ 符号规划器|planner]]
+- [[🧮 逻辑向 AI|Logic-Oriented-AI]]
 
 **📈 项目**
 
-- [[Roadmap|🧭 路线图]]
+- [[🧭 路线图|Roadmap]]
 - [💬 提交反馈 (Issue)](https://github.com/masol/unigen/issues)
 
 </details>
@@ -36,30 +36,30 @@
 <details>
 <summary><b>🗺️ Navigation (English)</b></summary>
 
-- **[[Home.en|🎯 Welcome]]**
-- **[[Getting-Started.en|🚀 Getting Started]]**
+- **[[🎯 Welcome|Home.en]]**
+- **[[🚀 Getting Started|Getting-Started.en]]**
 
 **🎨 Creators (using workflows)**
 
-- ▶️ Running Your First Workflow — *not yet translated, see [[Using-Workflows|中文]]*
-- ❓ FAQ — *not yet translated, see [[FAQ|中文]]*
+- ▶️ Running Your First Workflow — *not yet translated, see [[中文|Using-Workflows]]*
+- ❓ FAQ — *not yet translated, see [[中文|FAQ]]*
 
 **🧩 Developers (building workflows)**
 
-- [[Developer-Guide.en|📐 Workflow Development Overview]]
-- 🎛️ Dynamic Panel JSON Guide — *not yet translated, see [[Panel-JSON|中文]]*
-- 💻 Local Setup — *not yet translated, see [[Local-Setup|中文]]*
+- [[📐 Workflow Development Overview|Developer-Guide.en]]
+- 🎛️ Dynamic Panel JSON Guide — *not yet translated, see [[中文|Panel-JSON]]*
+- 💻 Local Setup — *not yet translated, see [[中文|Local-Setup]]*
 
 **🏗️ Architecture**
 
-- [[prism.en|🔮 Prism Reasoning]]
-- 🧵 Loom (Transitional Planner) — *not yet translated, see [[loom|中文]]*
-- [[planner.en|⚙️ Symbolic Planner]]
-- [[Logic-Oriented-AI.en|🧮 Logic-Oriented AI]]
+- [[🔮 Prism Reasoning|prism.en]]
+- 🧵 Loom (Transitional Planner) — *not yet translated, see [[中文|loom]]*
+- [[⚙️ Symbolic Planner|planner.en]]
+- [[🧮 Logic-Oriented AI|Logic-Oriented-AI.en]]
 
 **📈 Project**
 
-- [[Roadmap.en|🧭 Roadmap]]
+- [[🧭 Roadmap|Roadmap.en]]
 - [💬 File an Issue](https://github.com/masol/unigen/issues)
 
 </details>

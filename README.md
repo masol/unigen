@@ -29,13 +29,13 @@
 
 Electron 桌面应用[^unigen-tauri]，支持 **Windows / Linux / macOS**：
 
-- **推荐**：从 [Releases](../releases) 下载对应平台的**免安装版**，解压即用。
-- **从源码构建**：见 wiki 的 [本地环境配置](../wiki/Local-Setup)（提供 Ubuntu 完整步骤）。
+- **推荐**：从 [Releases](../../releases) 下载对应平台的**免安装版**，解压即用。
+- **从源码构建**：见 wiki 的 [本地环境配置](../../wiki/Local-Setup)（提供 Ubuntu 完整步骤）。
 
 **系统要求**：若全部使用外部模型 API（禁用内建模型），本地只有 SQLite 与
 LanceDB 两个轻量存储，普通办公机即可流畅运行（参考下限：4 核 CPU / 8GB 内存 /
 2GB 磁盘，无需 GPU）——**创作者推荐此方式**。若启用内建模型（嵌入/重排等），
-可用模型取决于你的机器配置，详见 wiki [快速开始](../wiki/Getting-Started)。
+可用模型取决于你的机器配置，详见 wiki [快速开始](../../wiki/Getting-Started)。
 
 首次启动只需配置一次模型（左下角设置），即适配全部项目类型。
 
@@ -50,14 +50,14 @@ LanceDB 两个轻量存储，普通办公机即可流畅运行（参考下限：
 4. **迭代靠记录，不靠猜**——执行历史可追溯（OpenTelemetry 兼容采集），
    每一次改进都基于真实运行数据。
 
-## 了解更多 → [Wiki](../wiki)
+## 了解更多 → [Wiki](../../wiki)
 
-- **创作者**：[快速开始](../wiki/Getting-Started) → 新建项目 → 点击运行。
-- **开发者**：[工作流开发总览](../wiki/Developer-Guide)
+- **创作者**：[快速开始](../../wiki/Getting-Started) → 新建项目 → 点击运行。
+- **开发者**：[工作流开发总览](../../wiki/Developer-Guide)
 
 ## 参与
 
-- 提交 [Issue](../issues)
+- 提交 [Issue](../../issues)
 - 尤其欢迎：**用复杂真实任务证伪我的方法**
 
 ## 协议

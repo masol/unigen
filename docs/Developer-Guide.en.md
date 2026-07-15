@@ -26,7 +26,7 @@ The command-style interaction entry point: run commands, dispatch tasks.
 Click **Blueprint** to view and edit every detail of the workflow. Two things to note:
 
 1. Your manual edits and the planner's automatic improvements act on **the same blueprint** — this shared substrate is what makes "humans can intervene + AI keeps improving" coexist.
-2. The blueprint's user-facing configuration UI is described by a JSON tree — see [[Panel-JSON.en|Dynamic Panel JSON Guide]].
+2. The blueprint's user-facing configuration UI is described by a JSON tree — see [[Dynamic Panel JSON Guide|Panel-JSON.en]].
 
 ## The Path from Development to Publication
 
@@ -48,4 +48,4 @@ The shared stance across all three layers: **code as skeleton, LLM as filler** �
 
 ## Development Environment
 
-- [[Local-Setup.en|Local Setup]] (includes complete Ubuntu build-from-source instructions)
+- [[Local Setup|Local-Setup.en]] (includes complete Ubuntu build-from-source instructions)

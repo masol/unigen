@@ -29,10 +29,10 @@
 
 An Electron desktop application[^unigen-tauri], supporting **Windows / Linux / macOS**:
 
-- **Recommended**: download the **portable build** for your platform from [Releases](../releases) — unzip and run.
-- **Build from source**: see [Local Setup](../wiki/Local-Setup.en) in the wiki (full Ubuntu instructions provided).
+- **Recommended**: download the **portable build** for your platform from [Releases](../../releases) — unzip and run.
+- **Build from source**: see [Local Setup](../../wiki/Local-Setup.en) in the wiki (full Ubuntu instructions provided).
 
-**System requirements**: if you use external model APIs exclusively (built-in models disabled), the only local components are two lightweight stores — SQLite and LanceDB — so an ordinary office machine runs smoothly (reference floor: 4-core CPU / 8 GB RAM / 2 GB disk, no GPU required). **This is the recommended setup for creators.** If you enable built-in models (embedding / reranking, etc.), which models you can run depends on your hardware — see [Getting Started](../wiki/Getting-Started.en) in the wiki.
+**System requirements**: if you use external model APIs exclusively (built-in models disabled), the only local components are two lightweight stores — SQLite and LanceDB — so an ordinary office machine runs smoothly (reference floor: 4-core CPU / 8 GB RAM / 2 GB disk, no GPU required). **This is the recommended setup for creators.** If you enable built-in models (embedding / reranking, etc.), which models you can run depends on your hardware — see [Getting Started](../../wiki/Getting-Started.en) in the wiki.
 
 On first launch, configure your models once (settings, bottom-left) — the configuration applies to all project types.
 
@@ -43,14 +43,14 @@ On first launch, configure your models once (settings, bottom-left) — the conf
 3. **Code as skeleton, LLM as filler** — structure (dependencies, vocabulary, acyclicity) is hard-guaranteed by code; semantics are filled in locally by LLMs. Zero tolerance for long-chain drift.
 4. **Iteration is driven by records, not guesses** — execution history is fully traceable (collected via OpenTelemetry-compatible endpoints); every improvement is grounded in real run data.
 
-## Learn More → [Wiki](../wiki)
+## Learn More → [Wiki](../../wiki)
 
-- **Creators**: [Getting Started](../wiki/Getting-Started.en) → create a project → click run.
-- **Developers**: [Workflow Development Overview](../wiki/Developer-Guide.en)
+- **Creators**: [Getting Started](../../wiki/Getting-Started.en) → create a project → click run.
+- **Developers**: [Workflow Development Overview](../../wiki/Developer-Guide.en)
 
 ## Contributing
 
-- File an [Issue](../issues)
+- File an [Issue](../../issues)
 - Especially welcome: **falsify my methods with complex, real-world tasks.**
 
 ## License
