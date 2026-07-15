@@ -6,6 +6,7 @@
 # Planner Design Notes: Graph-Constrained HDDL Generation and Path Solving
 
 Current path: docs/planner.en.md
+
 Status: concept-validation stage. The core data pipeline (graph construction + vocabulary alignment) is under development; the solving layer is a transitional implementation.
 
 This document records the design trade-offs and evolution direction of this system's **task planning** layer. What is described here is a route under validation, not a settled conclusion; the comparisons in this document rest on logical reasoning and architectural design, not engineering benchmarks. The industry mainstream — ReAct, Plan-and-Solve, LangGraph state machines — has extensive community practice and the test of time behind it; this route is still early, and many of its judgments await being overturned or corrected by real tasks.

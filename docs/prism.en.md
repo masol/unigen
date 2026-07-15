@@ -6,6 +6,7 @@
 # Prism: A Multi-Facet Critique-Refinement Method
 
 Current path: docs/prism.en.md
+
 Status: early empirical stage. Positive results have been observed on several **simple generation tasks** (see Section 3), but complex tasks, quantitative metrics, and scaled cross-model comparisons are all incomplete. This document is both a method description and an open request for verification — you are welcome to falsify or correct the claims below with more complex, real-world tasks.
 
 ---

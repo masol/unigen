@@ -6,6 +6,7 @@
 # 🧮 Logic-Oriented AI: Dimensions, Coordinate Systems, and Two Kinds of Approximation
 
 Current path: wiki/Logic-Oriented-AI.en.md
+
 Status: open hypotheses. This page is the worldview behind all of Unigen's engineering decisions, deliberately kept separate from the engineering docs — most judgments here are **unverified**, and anything falsified will be explicitly marked as corrected. You may reject this page entirely; the value of Prism/Loom/HTN stands on its own.
 
 ---
@@ -42,9 +43,9 @@ That is what "logic-oriented AI" means. Mapped onto the roadmap, layer by layer:
 
 | Stage                       | Form of dimensional calculus                                                                 |
 | --------------------------- | --------------------------------------------------------------------------------------------- |
-| [[Prism|prism.en]] (now)   | **Most degenerate form**: extract dimensions → evaluate independently per dimension → merge. Between dimensions there is only one operation: aggregation |
-| [[Loom|loom.en]]           | Dimensions gain **structure**: AND/OR, dependencies, backtracking on the deliverable graph — constraint propagation between dimensions begins |
-| [[HTN/Prolog|planner.en]]  | Inter-dimensional calculus is handed to a **symbolic engine**: unification, resolution, backtracking; Horn clauses as the formal carrier of dimensional relations |
+| Prism (now)   | **Most degenerate form**: extract dimensions → evaluate independently per dimension → merge. Between dimensions there is only one operation: aggregation |
+| Loom           | Dimensions gain **structure**: AND/OR, dependencies, backtracking on the deliverable graph — constraint propagation between dimensions begins |
+| HTN/Prolog  | Inter-dimensional calculus is handed to a **symbolic engine**: unification, resolution, backtracking; Horn clauses as the formal carrier of dimensional relations |
 | Cognitive model (long-term) | Dimensional calculus subject to **objective-world constraints**: which coordinate transformations simply do not exist in reality |
 
 ## 4. Why Prism Is the Foundation Stone

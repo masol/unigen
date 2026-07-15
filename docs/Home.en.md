@@ -1,4 +1,7 @@
 [中文](Home) | **English**
+> 🌐 This is a translation. The **Chinese version is authoritative** — if anything here conflicts with the [Chinese original](Home), the Chinese version prevails, and translations may lag behind it.
+
+
 
 # 🎯 Welcome to Unigen
 
