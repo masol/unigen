@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** S1 · 棱面拆分：从自由文本里提取评估视角 */
+/** S1 · 棱面拆分：全流程唯一一次结构化提取（代码需要 facet 列表来派发并发批判） */
 export const FacetsSchema = z.object({
     facets: z
         .array(
@@ -19,29 +19,8 @@ export const FacetsSchema = z.object({
 export type Facets = z.infer<typeof FacetsSchema>;
 export type Facet = Facets["facets"][number];
 
-/** S2 · 分面批判：从自由文本里提取单视角评价 */
-export const CritiqueSchema = z.object({
-    facet: z.string().describe("本次批判所属的视角名。"),
-    score: z
-        .number()
-        .min(0)
-        .max(10)
-        .describe("仅从本视角看，这份答案的质量分，0 到 10，越好越高。"),
-    issues: z.array(z.string()).describe("从本视角发现的具体问题；没有则为空。"),
-    fixes: z.array(z.string()).describe("针对上述问题的可执行修改建议；没有则为空。"),
-});
-export type Critique = z.infer<typeof CritiqueSchema>;
-
-/** S3 · 合并精炼：从自由文本里提取成稿与改动 */
-export const RefineSchema = z.object({
-    refined_artifact: z
-        .string()
-        .describe(
-            "最终要给用户的答案本身（若判断无需修改，则返回空字符串），不包含分析过程。"
-        ),
-    changed: z.boolean().describe("相对当前答案是否做了实质性修改。"),
-    changelog: z
-        .array(z.string())
-        .describe("做了哪些修改、分别针对哪个视角；未修改则为空。"),
-});
-export type Refine = z.infer<typeof RefineSchema>;
+/** S2 · 分面批判：自然语言评审稿，代码不解析内容，仅回填视角名用于拼接精炼提示。 */
+export interface FacetCritique {
+    facet: string;
+    text: string;
+}

@@ -20,8 +20,8 @@
 
 - [[Architecture-Overview|🗺️ 架构全局总览]]
 - [[prism|🗄️ 棱镜推理]]
-- [[planner|🔒 规划器]]
-- [[loom |🔒 现行规划器]]
+- [[planner|🔒 符号规划器]]
+- [[loom |🔒 过渡规划器]]
 </details>
 
 ---

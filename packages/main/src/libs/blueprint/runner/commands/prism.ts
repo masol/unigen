@@ -8,7 +8,7 @@ export async function runCmd(ctx: IRunnerContext): Promise<void> {
     if (!body) {
         throwUnprcessable("请求prism，但是未提供任何问题。")
     }
-    ctx.notify("准备中", "开始Prism");
+    ctx.notify("裸调用中", "获取初始草稿中...");
     const opts: PrismOpts = {};
     const args = ctx.cmd.args ?? {};
 
