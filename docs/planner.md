@@ -1,3 +1,5 @@
+**中文** | [English](planner.en)
+
 # 规划器设计说明：图约束下的 HDDL 生成与路径解算
 
 当前路径: docs/planner.md
