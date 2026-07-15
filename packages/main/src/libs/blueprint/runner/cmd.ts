@@ -7,7 +7,7 @@ import { parse, ParseEntry } from 'shell-quote';
 import yargsParser from 'yargs-parser';
 import { BaseRunner } from './base.js';
 import { runCmd as doExport } from './commands/export/runCmd.js';
-import { runCmd as doPlan } from './commands/plan/main.js';
+import { runCmd as doPlan } from './commands/plan-htn/main.js';
 import { runCmd as doPreprism } from './commands/preprism.js';
 import { runCmd as doPrism } from './commands/prism.js';
 
