@@ -15,7 +15,11 @@ export const chatCommands: ChatCommand[] = [
 --nocap:\t 不导出能力。
 --nometag: 不导出元术语。
 ` },
-    { id: "plan", label: "/plan", desc: "给出输入/输出(如从剧本生成视频)，规划工作流。" },
+    {
+        id: "plan", label: "/plan", desc: `给出输入/输出(如从剧本生成视频)，规划工作流。支持如下参数：
+--cap: 指定根能力，而不是当前项目类型。new或uuid,new表示新建。
+--rounds: 最大轮次，默认2.
+` },
     {
         id: "prism", label: "/prism", desc: `使用prism方法回答你的问题--无上下文，支持如下参数：
 --facets: 最大视角数，默认5.

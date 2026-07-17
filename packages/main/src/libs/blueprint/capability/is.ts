@@ -58,3 +58,15 @@ export function getInternalName(name: CapaNameType): string | null {
     // 不匹配则返回null
     return null;
 }
+
+
+const planPrefix = "#plan::"
+// 如果是一个plan,则返回其字符串，否则，返回null.
+export function getPlanDesc(name: CapaNameType): string | null {
+    if (name?.startsWith(planPrefix)) {
+        // 截取 #plan:: 后面的剩余内容
+        return name.slice(planPrefix.length);
+    }
+    // 不匹配则返回null
+    return null;
+}

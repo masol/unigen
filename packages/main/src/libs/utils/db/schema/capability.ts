@@ -21,6 +21,7 @@ export const capabilities = sqliteTable('capabilities', {
     // #inter::后续为名称。 
     // #workflow: code 保存 workflow 定义。 
     // #code::: code 保存 functor 的 run 源码 (依赖注入，无外部引用)。
+    // #plan:: 处于规划状态中。(#plan::pending -- 未决状态)
     // 其它:: code保存提示词(如有的话，如果以_开头，表示需要索引资源对象【内容为提示词】)
     name: text('name').notNull().default(""),
     role: text('role').notNull().default(""),

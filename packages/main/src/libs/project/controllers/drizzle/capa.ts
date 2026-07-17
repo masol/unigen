@@ -16,7 +16,7 @@ export function upsertCapability(db: DrizzleDBType, capability: NewCapability): 
     const finalId = id ?? crypto.randomUUID();
 
     db.insert(capabilities)
-        .values({ id, ...updateData })
+        .values({ id: finalId, ...updateData })
         .onConflictDoUpdate({
             target: capabilities.id,
             //  无需硬编码：直接把剩余字段整体塞给 set
