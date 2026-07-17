@@ -84,7 +84,10 @@ function wrapWithLimiter(
             if (ctx?.isAborted) {
                 throw new DOMException('Aborted by context', 'AbortError');
             }
-            return c.limiter.run(() => doGenerate());
+            return c.limiter.run(() => {
+                Logger.debug(`[smart llm balancer]:dequeue and call with ${c.provider.id}::${c.model.id}`)
+                return doGenerate()
+            });
         },
 
         // 流式:acquire 拿 slot,流结束/出错/abort/超时 四重释放保障

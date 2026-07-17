@@ -6,11 +6,20 @@
  * 守门 → 展开(Prism) → 闸门+落库(被拒带原因回炉) → 复杂度判定。
  * 无内存队列;任意时刻中断,重跑本函数从库中状态无损续跑。
  */
+import { getPlanDesc, makePlanDesc } from '$libs/blueprint/capability/is.js';
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { throwUnprcessable } from '$libs/utils/err.js';
 import { Capability } from '$types/blueprint/capability.js';
 import type { IRunnerContext } from '$types/blueprint/context.js';
-import { realizeStep } from './steps/realize.js';
+import { WORKFLOW_IMPOSSIBLE, WORKFLOW_PENDING, WORKFLOW_STEP2 } from './config.js';
+import { realizeOutput } from './steps/realize.js';
+
+
+async function designBinary(rootCap: Capability, ctx: IRunnerContext) {
+    void (rootCap)
+    void (ctx)
+    // 二进制层的多视角工作流设计，暂未实现--需要接入外部搜索及验证库。
+}
 
 export async function planLoop(rootCap: Capability, ctx: IRunnerContext) {
     //首先检查
@@ -19,17 +28,41 @@ export async function planLoop(rootCap: Capability, ctx: IRunnerContext) {
     if (!metag) {
         throwUnprcessable("未定位输出。")
     }
-    await realizeStep({
-        target: {
-            name: metag?.fieldKey,
-            intent: metag?.intent ?? ""
-        },
-        goal: rootCap.goal,
-        criteria: rootCap.criteria.split("\n"),
-        availablePrograms: "",
-        availableTexts: "",
-        ctx
-    });
+    let planDesc = getPlanDesc(rootCap.name);
+    const tasks: Array<Promise<void>> = []
+    if (planDesc === WORKFLOW_PENDING) {
+        const realizeResult = await realizeOutput({
+            target: {
+                name: metag?.fieldKey,
+                intent: metag?.intent ?? ""
+            },
+            goal: rootCap.goal,
+            criteria: rootCap.criteria.split("\n"),
+            availablePrograms: "",
+            availableTexts: "",
+            ctx
+        });
+        switch (realizeResult.kind) {
+            case 'dag':
+                tasks.push(designBinary(rootCap, ctx));
+            // eslint-disable-next-line no-fallthrough
+            case 'text':
+                rootCap.name = makePlanDesc(WORKFLOW_STEP2)
+                break;
+            case "impossible":
+                rootCap.name = makePlanDesc(WORKFLOW_IMPOSSIBLE)
+                break;
+            default:
+                throwUnprcessable(`无法识别的输出实现类别：${realizeResult}`)
+        }
+        prjdb.upcertCapa(rootCap);
+
+        planDesc = WORKFLOW_STEP2;
+    }
+
+    if (planDesc === WORKFLOW_STEP2) {
+        // 开始递归规划整层的文本处理链条。
+    }
 }
 
 // export async function planLoop(

@@ -70,3 +70,7 @@ export function getPlanDesc(name: CapaNameType): string | null {
     // 不匹配则返回null
     return null;
 }
+
+export function makePlanDesc(desc: string): string {
+    return `${planPrefix}${desc}`
+}

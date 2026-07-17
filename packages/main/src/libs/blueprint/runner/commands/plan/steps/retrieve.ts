@@ -1,3 +1,4 @@
+import { makePlanDesc } from "$libs/blueprint/capability/is.js";
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import { ProjectDbKeys } from "$libs/utils/db/dbkeys.js";
 import { throwUnprcessable } from "$libs/utils/err.js";
@@ -5,6 +6,7 @@ import { Capability } from "$types/blueprint/capability.js";
 import { IRunnerContext } from "$types/blueprint/context.js";
 import Logger from "electron-log/main.js";
 import validator from "validator";
+import { WORKFLOW_PENDING } from "../config.js";
 import type { AnchorOut, TermType } from "../prompts/anchor.js";
 import { extractRequirement } from "./anchor.js";
 
@@ -28,7 +30,7 @@ async function createCaps(ctx: IRunnerContext, reqCap: AnchorOut): Promise<Capab
     })
 
     const capId = prjdb.upcertCapa({
-        name: "#plan::pending",
+        name: makePlanDesc(WORKFLOW_PENDING),
         input: reqCap.inputs.map(i => i.name),
         output: reqCap.outputs.map(i => i.name),
         goal: reqCap.goal,
