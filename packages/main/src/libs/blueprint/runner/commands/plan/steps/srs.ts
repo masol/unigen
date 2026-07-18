@@ -165,6 +165,8 @@ ISSUE: [编号] [问题简述] [修正方向]
 只输出上述格式，不要添加任何额外说明。`,
         prompt: `用户原始输入：${originalGoal}\n\n待审查规格：\n${JSON.stringify(srs, null, 2)}`
     });
+
+    Logger.debug("[plan-srs] LLM裁判返回：", text)
     const lines = text.split('\n').filter(l => l.trim() !== '');
 
     // 检查是否全部通过
