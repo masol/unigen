@@ -8,7 +8,7 @@ import Logger from "electron-log/main.js";
 import { ensureDir, pathExists } from "fs-extra";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { metaDirName, type IProjectContext } from "../../type.js";
+import { metaDirName, type EmbedKVStore, type IProjectContext } from "../../type.js";
 // import { PrjJob } from "../../helper/job.js";
 import { metagFromJson, metagToJson, type MetagRow, type NewMetagRow } from '$libs/blueprint/metag/is.js';
 import { throwNotfound, throwNotimplement, throwPrecondition } from "$libs/utils/err.js";
@@ -23,7 +23,7 @@ import type { DrizzleDBType } from "./type.js";
 
 const dbName = 'db.sqlite'
 
-export class PrjDB extends BaseProjectController {
+export class PrjDB extends BaseProjectController implements EmbedKVStore {
     private migrationsPath: string = ""
     private dqlite: Database.Database | null = null;
     private db: DrizzleDBType | null = null;

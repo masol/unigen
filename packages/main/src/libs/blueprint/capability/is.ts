@@ -74,3 +74,8 @@ export function getPlanDesc(name: CapaNameType): string | null {
 export function makePlanDesc(desc: string): string {
     return `${planPrefix}${desc}`
 }
+
+/** 是否处于规划态(name 以 #plan:: 开头) */
+export function isPlanning(name: CapaNameType): boolean {
+    return name?.startsWith(planPrefix) ?? false;
+}

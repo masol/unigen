@@ -30,5 +30,10 @@ export interface IProjectController {
 export type ControllerConstructor<T extends IProjectController = IProjectController> =
     new (context: IProjectContext) => T;
 
+    
+export interface EmbedKVStore {
+    get<T>(key: string): T | undefined | null;
+    set(key: string, value: unknown): void;
+}
 
 export const metaDirName = 'meta'

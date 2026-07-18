@@ -28,6 +28,19 @@ export const WORKFLOW_PENDING = "pending";
 export const WORKFLOW_STEP2 = "step2"; // 设计顶层文本层。
 export const WORKFLOW_IMPOSSIBLE = "impossible";
 
+// ———— 多 pass 编译骨架新增(只增不改;WORKFLOW_STEP2 遗留不再使用) ————
+/** #plan:: 状态编码"下一个待执行的 pass":
+ *  pending → chain → (node::pending) → codegen → done / impossible */
+export const PASS_CHAIN = 'chain';       // Pass2: 反向链路降级
+export const PASS_CODEGEN = 'codegen';   // Pass3: 叶子发码
+export const PASS_DONE = 'done';
+/** KV 落盘后缀(键 = _#${capId}_${suffix},见 PlanContext.kvKey) */
+export const KV_REQUIREMENT = 'requirement';           // 需求文档:原话+五节结构稿
+export const KV_DELIVERABLE_SPEC = 'deliverable_spec'; // 交付物字段级 spec(含 form)
+export const KV_TOOLS = 'tools';                       // 已解析工具(含 assumed 标记)
+export const KV_TRACE = 'trace';                       // 追加式留痕
+export const TOOL_SEARCH_LIMIT = 8;
+export const MAX_NODE_RETRY = 2; // 生成工作流内:单节点被 PlanViolation 回溯重答上限
 
 export function getRefineRounds(ctx: IRunnerContext): number {
     const args = ctx.cmd.args ?? {};

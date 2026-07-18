@@ -1,180 +1,71 @@
 /**
  * ============================================================================
- * 【P-05 · 主循环(reconcile)】(附 BACKGROUND.md)
+ * 【P-05 · 多 pass 主循环(编译器归约)】(附 BACKGROUND.md)
  * ============================================================================
- * 库即黑板的"查询-处理-回写"循环。每轮从库中选一个 draft 能力:
- * 守门 → 展开(Prism) → 闸门+落库(被拒带原因回炉) → 复杂度判定。
- * 无内存队列;任意时刻中断,重跑本函数从库中状态无损续跑。
+ * 概念对齐 LLVM:一遍遍扫描、多 pass 把"图的图"归约到代码节点。
+ * 库即黑板:每轮从库中取一个 name=#plan::* 的能力,按状态分发对应 pass,
+ * pass 内部落库并推进状态。无内存队列;任意中断,重跑本函数无损续跑。
+ * 无 #plan:: 残留 → Pass4 全图链接校验 → done。
  */
-import { getPlanDesc, makePlanDesc } from '$libs/blueprint/capability/is.js';
-import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
+import { getPlanDesc, isPlanning, makePlanDesc } from '$libs/blueprint/capability/is.js';
 import { throwUnprcessable } from '$libs/utils/err.js';
 import { Capability } from '$types/blueprint/capability.js';
-import type { IRunnerContext } from '$types/blueprint/context.js';
-import { WORKFLOW_IMPOSSIBLE, WORKFLOW_PENDING, WORKFLOW_STEP2 } from './config.js';
-import { realizeOutput } from './steps/realize.js';
+import Logger from 'electron-log/main.js';
+import {
+    MAX_ITERATIONS, NODE_PENDING, PASS_CHAIN, PASS_CODEGEN,
+    WORKFLOW_IMPOSSIBLE, WORKFLOW_PENDING,
+} from './config.js';
+import { PlanContext } from './context.js';
+import { passChain } from './steps/chain.js';
+import { passCodegen } from './steps/codegen.js';
+import { passNode } from './steps/node.js';
+import { passSchema } from './steps/solidify.js';
+import { passVerify } from './steps/verify.js';
 
+const tag = '[plan:loop]';
 
-async function designBinary(rootCap: Capability, ctx: IRunnerContext) {
-    void (rootCap)
-    void (ctx)
-    // 二进制层的多视角工作流设计，暂未实现--需要接入外部搜索及验证库。
+/** 取下一个待处理能力:根子树内 #plan::* 且非 impossible,浅层优先 */
+function nextPlannable(pctx: PlanContext): Capability | null {
+    // @TODO: PrjDB 增加按 name 前缀查询接口(根子树限定 + createdAt 排序)
+    const caps = pctx.prjdb.listCapasByNamePrefix(makePlanDesc(''));
+    return caps.find(
+        (c) => isPlanning(c.name) && getPlanDesc(c.name) !== WORKFLOW_IMPOSSIBLE,
+    ) ?? null;
 }
 
-export async function planLoop(rootCap: Capability, ctx: IRunnerContext) {
-    //首先检查
-    const prjdb = PrjDB.ensure(ctx.prj);
-    const metag = prjdb.getMetag(rootCap.output)[0];
-    if (!metag) {
-        throwUnprcessable("未定位输出。")
-    }
-    let planDesc = getPlanDesc(rootCap.name);
-    const tasks: Array<Promise<void>> = []
-    if (planDesc === WORKFLOW_PENDING) {
-        const realizeResult = await realizeOutput({
-            target: {
-                name: metag?.fieldKey,
-                intent: metag?.intent ?? ""
-            },
-            goal: rootCap.goal,
-            criteria: rootCap.criteria.split("\n"),
-            availablePrograms: "",
-            availableTexts: "",
-            ctx
-        });
-        switch (realizeResult.kind) {
-            case 'dag':
-                tasks.push(designBinary(rootCap, ctx));
-            // eslint-disable-next-line no-fallthrough
-            case 'text':
-                rootCap.name = makePlanDesc(WORKFLOW_STEP2)
+export async function passLoop(rootCap: Capability, pctx: PlanContext): Promise<void> {
+    for (let iter = 1; iter <= MAX_ITERATIONS; iter++) {
+        const cap = nextPlannable(pctx);
+
+        // ---- 终局:无待处理 → Pass4 链接校验(全部叶子须为 #code/#workflow) ----
+        if (!cap) {
+            await passVerify(rootCap, pctx);
+            return;
+        }
+
+        const state = getPlanDesc(cap.name)!;
+        Logger.info(`${tag} 轮次 ${iter}/${MAX_ITERATIONS} | pass=${state} | ${cap.id}`);
+        pctx.notify(`Pass:${state}`, cap.goal);
+
+        switch (state) {
+            case WORKFLOW_PENDING: // Pass1: 交付物数据结构固化(工具先行)
+                await passSchema(cap, pctx);
                 break;
-            case "impossible":
-                rootCap.name = makePlanDesc(WORKFLOW_IMPOSSIBLE)
+            case PASS_CHAIN:       // Pass2: 反向链路降级(binary建DAG/text转LLM节点)
+                await passChain(cap, pctx);
+                break;
+            case NODE_PENDING:     // Pass2.5: 工具步落定(候选→工具id,assumed兜底)
+                await passNode(cap, pctx);
+                break;
+            case PASS_CODEGEN:     // Pass3: 叶子发码(vm+PlanViolation契约)
+                await passCodegen(cap, pctx);
                 break;
             default:
-                throwUnprcessable(`无法识别的输出实现类别：${realizeResult}`)
+                throwUnprcessable(`未知规划状态:${state}(${cap.id})`);
         }
-        prjdb.upcertCapa(rootCap);
-
-        planDesc = WORKFLOW_STEP2;
     }
 
-    if (planDesc === WORKFLOW_STEP2) {
-        // 开始递归规划整层的文本处理链条。
-    }
+    // 轮次熔断:诚实报告而非硬撑
+    pctx.trace(rootCap.id, 'loop', `达到轮次上限 ${MAX_ITERATIONS},未收敛`);
+    throwUnprcessable(`规划未收敛:达到轮次上限 ${MAX_ITERATIONS}`);
 }
-
-// export async function planLoop(
-//     rootCapId: string,
-//     ctx: IRunnerContext,
-// ): Promise<LoopResult> {
-//     const tag = '[plan:loop]';
-
-//     for (let iter = 1; iter <= MAX_ITERATIONS; iter++) {
-//         // ================================================================
-//         // 1) 选取:根子树内 status='draft',按 depth ASC(浅层优先)取 1 个
-//         //    —— 图查询代替队列,库即黑板
-//         // ================================================================
-//         const drafts = await findExpandable(rootCapId);
-
-//         // ---- 终局判定:无 draft → 全局校验交付 or 汇总 blocked ----
-//         if (drafts.length === 0) {
-//             const stats = await subtreeStats(rootCapId);
-//             if (stats.blocked > 0) {
-//                 const blocked = await listBlocked(rootCapId);
-//                 Logger.warn(`${tag} 收敛但存在 ${stats.blocked} 个 blocked 节点`);
-//                 return {
-//                     ok: false,
-//                     rootCapId,
-//                     blocked: blocked.map((b) => ({
-//                         capId: b.id, goal: b.goal, reason: b.blockReason,
-//                     })),
-//                 };
-//             }
-//             // 全部触底且无阻塞 → 终检(纯代码):叶子皆 atomic/fieldKey 无悬空/
-//             // DAG 重放/chunk 终检,过则登记 KV 并返回统计
-//             Logger.info(`${tag} 无剩余 draft,进入全局校验`);
-//             return verifyAndDeliver(rootCapId);
-//         }
-
-//         const cap = drafts[0];
-//         Logger.info(`${tag} 轮次 ${iter}/${MAX_ITERATIONS} | 处理 ${cap.id} (depth=${cap.depth}) | 剩余 draft=${drafts.length}`);
-//         ctx.notify(`规划中 ${iter}`, `${cap.goal} (深度${cap.depth}, 待处理${drafts.length})`);
-
-//         // ================================================================
-//         // 2) 递归守门(纯代码,先于一切 LLM 调用):深度上限 + 祖先 goal 重复
-//         // ================================================================
-//         const ancestors = await ancestorsOf(cap.id);
-//         const guard = checkRecursion({
-//             goal: cap.goal,
-//             depth: cap.depth,
-//             maxDepth: args.depth,
-//             ancestorGoals: ancestors.map((a) => ({ capId: a.id, goal: a.goal })),
-//         });
-//         if (!guard.ok) {
-//             Logger.warn(`${tag} 守门拦截 ${cap.id}: ${guard.reasons.join('; ')}`);
-//             await setStatus(cap.id, 'blocked', `recursion_guard: ${guard.reasons.join('; ')}`);
-//             continue; // blocked 不再展开,终局判定时汇总上报
-//         }
-
-//         // ================================================================
-//         // 3) 展开 + 闸门落库:被拒则带原因回炉,最多 args.retry 次
-//         //    (s2 产层稿[Prism 收敛] → s3 先闸门[接口铁律+DAG]后事务落库)
-//         // ================================================================
-//         let capIds: string[] | null = null;
-//         let rejectReasons: string[] | undefined;
-
-//         for (let attempt = 0; attempt <= args.retry; attempt++) {
-//             if (attempt > 0) {
-//                 Logger.info(`${tag} ${cap.id} 第 ${attempt} 次回炉,原因: ${rejectReasons?.join('; ')}`);
-//             }
-
-//             // ▶ LLM【单层展开:1 草稿 + 5 棱面并发批判 + ≤rounds 精炼】→ LayerPlan
-//             const plan = await expandLayer({
-//                 parentCapId: cap.id,
-//                 args,
-//                 rejectReasons, // 回炉时注入上次闸门拒绝原因,要求换思路
-//                 ctx,
-//             });
-
-//             // 闸门(纯代码) + 事务落库;闸门拒绝时库无任何变更
-//             const persisted = await persistLayer({ plan, args, ctx });
-//             if (persisted.ok) {
-//                 capIds = persisted.capIds ?? [];
-//                 break;
-//             }
-//             rejectReasons = persisted.reasons;
-//         }
-
-//         if (!capIds) {
-//             // 重试耗尽仍被闸门拒绝 → 诚实标 blocked,留最后一次拒绝原因
-//             Logger.warn(`${tag} ${cap.id} 重试耗尽(${args.retry}),标 blocked`);
-//             await setStatus(cap.id, 'blocked', `layer_rejected: ${rejectReasons?.join('; ') ?? 'unknown'}`);
-//             continue;
-//         }
-//         // 此时 s3 已将父能力置 status='planned',子能力皆 status='draft'
-
-//         // ================================================================
-//         // 4) 复杂度判定(本层子能力并发):atomic → 触底;否则保持 draft 待下轮
-//         // ================================================================
-//         // ▶ LLM【复杂度判定 ×N 并发,已有能力高相似则代码速判免调】
-//         const verdicts = await judgeComplexity(capIds, ctx);
-//         let atomicCount = 0;
-//         for (const [, v] of verdicts) if (v.atomic) atomicCount++;
-//         Logger.info(`${tag} ${cap.id} 展开完成: 子能力 ${capIds.length} 个,其中 atomic ${atomicCount} 个`);
-//         // (judgeComplexity 内部已完成 setStatus('atomic')/chunk 修正/planTrace 记录)
-//     }
-
-//     // ================================================================
-//     // 轮次熔断:未收敛,诚实报告而非硬撑
-//     // ================================================================
-//     Logger.warn(`${tag} 达到轮次上限 ${MAX_ITERATIONS},未收敛`);
-//     await setStatus(rootCapId, 'blocked', `max_iterations(${MAX_ITERATIONS})`);
-//     const blocked = await listBlocked(rootCapId);
-//     return {
-//         ok: false,
-//         rootCapId,
-//         blocked: blocked.map((b) => ({ capId: b.id, goal: b.goal, reason: b.blockReason })),
-//     };
-// }

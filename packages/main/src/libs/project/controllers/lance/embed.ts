@@ -1,5 +1,6 @@
 import { createEmbeding } from "$libs/model/factory/embed.js";
 import type { EmbedingOp, EmbedType } from "$libs/model/factory/type.js";
+import type { EmbedKVStore } from "$libs/project/type.js";
 import { configService } from "$libs/store/index.js";
 import { ProjectDbKeys } from "$libs/utils/db/dbkeys.js";
 import { throwNotfound, throwPrecondition, throwUnprcessable } from "$libs/utils/err.js";
@@ -7,7 +8,6 @@ import type { Provider } from '$types/index.js';
 import Logger from "electron-log";
 import pMap from 'p-map';
 import { cluster, isNumber } from "radashi";
-import type { PrjDB } from "../drizzle/index.js";
 
 export class LanceEmbeding {
     #embeddingSize: number = -1;
@@ -19,7 +19,7 @@ export class LanceEmbeding {
     }
 
     get embedSize(): number {
-        if (!isNumber(this.#embeddingSize || this.#embeddingSize <= 0)) {
+        if (!isNumber(this.#embeddingSize) || this.#embeddingSize <= 0) {
             throwPrecondition("[LanceDB] 未配置向量支持。")
         }
         return this.#embeddingSize;
@@ -32,7 +32,7 @@ export class LanceEmbeding {
         return this.#embed;
     }
 
-    async init(prjdb: PrjDB): Promise<void> {
+    async init(prjdb: EmbedKVStore): Promise<void> {
         const curVecModelName = configService().get("embed_model");
         if (!curVecModelName) {
             const msg = "[LanceDB] 未设置向量模型，这将禁用RAG及知识消歧，降低任务准确度。";
@@ -73,8 +73,8 @@ export class LanceEmbeding {
             const vecInfo = await this.#embed.embed("x", "document");
             this.#embeddingSize = vecInfo.embedding.length
             // console.log("this.#embeddingSize=", this.#embeddingSize);
-            prjdb.set("vecModelName", finalEmbedModelName);
-            prjdb.set("embdingSize", this.#embeddingSize);
+            prjdb.set(ProjectDbKeys.embedingModelName, finalEmbedModelName);
+            prjdb.set(ProjectDbKeys.embedingSize, this.#embeddingSize);
         } else {
             this.#embeddingSize = embdingSize;
         }

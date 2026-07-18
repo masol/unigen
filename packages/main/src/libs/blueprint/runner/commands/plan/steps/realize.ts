@@ -8,10 +8,9 @@
  *            回炉,最多 MAX_LAYER_RETRY 次)→ 就地建 DAG 落库 → {kind:'dag', id};
  *   other  → impossible(调用方按 blocked 处理)。
  */
-import { makePlanDesc } from '$libs/blueprint/capability/is.js';
+import { Capability, makePlanDesc } from '$libs/blueprint/capability/is.js';
 import { getSmartModel } from '$libs/model/balancer/get-smart-model.js';
 import { safefmt } from '$libs/model/llm/outline.js';
-import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { throwUnprcessable } from '$libs/utils/err.js';
 import type { IRunnerContext } from '$types/blueprint/context.js';
 import { generateText, Output } from 'ai';
@@ -25,11 +24,14 @@ import {
     FORM_OTHER,
     FORM_TEXT,
     getRefineRounds,
+    KV_TOOLS,
     MAX_LAYER_RETRY,
     NO_ISSUE_MARK,
     NODE_PENDING,
+    WORKFLOW_PENDING,
     WORKFLOW_PREFIX
 } from '../config.js';
+import { PlanContext } from '../context.js';
 import type { TermType } from '../prompts/anchor.js';
 import {
     CHAIN_FACETS,
@@ -109,31 +111,31 @@ async function converge(p: {
  * - 父能力         → WORKFLOW,code = graphology 序列化串
  */
 function buildChainDag(p: {
+    cap: Capability;            // ← DAG 挂回本体,不再新建父能力
     resolved: ResolvedChain;
     target: TermType;
     goal: string;
-    ctx: IRunnerContext;
+    pctx: PlanContext;
 }): string {
-    const prjdb = PrjDB.ensure(p.ctx.prj);
+    const { prjdb } = p.pctx;
     const graph = new DirectedGraph();
-    const producer = new Map<string, string>(); // 产出名 → 节点 id
+    const producer = new Map<string, string>();
 
-    // 1) 外部纯文本输入
-    // for (const inp of p.resolved.inputs) {
-    //     prjdb.upcertMetag({ fieldKey: inp.name, intent: inp.intent });
-    //     const tid = prjdb.upcertCapa({
-    //         name: PLAN_PENDING,
-    //         input: [],
-    //         output: [inp.name],
-    //         goal: `产出文本材料「${inp.name}」:${inp.intent}(被链路第 ${inp.usedBy.join('、')} 步引用)`,
-    //         criteria: '',
-    //         negative: '',
-    //     });
-    //     graph.addNode(tid);
-    //     producer.set(inp.name, tid);
-    // }
+    // 1) 外部纯文本输入 → pending 叶子(回 Pass1,文本侧 LLM 强调用递归)
+    for (const inp of p.resolved.inputs) {
+        prjdb.upcertMetag({ fieldKey: inp.name, intent: inp.intent });
+        const tid = prjdb.upcertCapa({
+            name: makePlanDesc(WORKFLOW_PENDING),
+            input: [],
+            output: [inp.name],
+            goal: `产出文本材料「${inp.name}」:${inp.intent}(被链路第 ${inp.usedBy.join('、')} 步引用)`,
+            criteria: '', negative: '',
+        });
+        graph.addNode(tid);
+        producer.set(inp.name, tid);
+    }
 
-    // 2) 程序步 → 原子叶子
+    // 2) 程序步 → node::pending 叶子(Pass2.5 落定工具,Pass3 发码)
     for (const s of p.resolved.steps) {
         prjdb.upcertMetag({ fieldKey: s.output_name, intent: s.output_intent });
         const sid = prjdb.upcertCapa({
@@ -141,14 +143,15 @@ function buildChainDag(p: {
             input: s.inputs.map((i) => i.name),
             output: [s.output_name],
             goal: `调用 ${s.program}(候选:${s.candidates.join('、')})`,
-            criteria: '',
-            negative: '',
+            criteria: '', negative: '',
         });
         graph.addNode(sid);
         producer.set(s.output_name, sid);
+        // 候选原文落盘,供 passNode 做代码侧工具解析
+        p.pctx.kvSet(sid, KV_TOOLS, s.candidates);
     }
 
-    // 3) 连边(resolveChain 已保证可解析、无环)
+    // 3) 连边
     for (const s of p.resolved.steps) {
         const sid = producer.get(s.output_name)!;
         for (const input of s.inputs) {
@@ -156,24 +159,17 @@ function buildChainDag(p: {
             if (src && src !== sid) graph.addEdge(src, sid);
         }
     }
-
     if (graph.order === 0) throwUnprcessable(`链路子层为空:${p.target.name}`);
     if (hasCycle(graph)) throwUnprcessable(`链路子层存在环:${p.target.name}`);
 
-    // 4) 父能力承载 DAG
-    prjdb.upcertMetag({ fieldKey: p.target.name, intent: p.target.intent });
-    const dagId = prjdb.upcertCapa({
-        name: WORKFLOW_PREFIX,
-        input: p.resolved.inputs.map((i) => i.name),
-        output: p.resolved.outputs,
-        goal: p.goal,
-        criteria: '',
-        negative: '',
-        code: JSON.stringify(graph.export()),
-    });
+    // 4) DAG 挂回本能力:name 转 #workflow,离开规划态
+    p.cap.name = WORKFLOW_PREFIX;
+    p.cap.input = p.resolved.inputs.map((i) => i.name);
+    p.cap.code = JSON.stringify(graph.export());
+    prjdb.upcertCapa(p.cap);
 
-    Logger.info(`${tag} ${p.target.name} → DAG ${dagId}:${graph.order} 节点 / ${graph.size} 边`);
-    return dagId;
+    p.pctx.trace(p.cap.id, 'chain', `DAG 落库:${graph.order} 节点/${graph.size} 边`);
+    return p.cap.id;
 }
 
 export async function realizeOutput(p: {
