@@ -1,5 +1,6 @@
 import { COMMON_ORPC_ERROR_DEFS } from "@orpc/client";
 import { ORPCError } from "@orpc/server";
+import Logger from "electron-log/main.js";
 
 export const UNIGEN_ERROR_DEFS = {
     USER_CANCEL: {
@@ -48,7 +49,10 @@ export function throwPrecondition(message: string): never {
 }
 
 
-export function throwUnprcessable(message: string): never {
+export function throwUnprcessable(message: string, blogger = false): never {
+    if (blogger) {
+        Logger.error(message);
+    }
     throw new ORPCError(COMMON_ORPC_ERROR_DEFS.UNPROCESSABLE_CONTENT.message, {
         status: COMMON_ORPC_ERROR_DEFS.UNPROCESSABLE_CONTENT.status,
         message

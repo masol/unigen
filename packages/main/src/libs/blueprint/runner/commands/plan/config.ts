@@ -12,7 +12,7 @@ export const MAX_LAYER_NODES = 7;       // 单层最大节点数(分层批量展
 export const MAX_DEPTH = 5;             // 递归展开最大深度
 export const DEF_REFINE_ROUNDS = 2;     // Prism 精炼轮上限(二值门+回退)
 export const MAX_LAYER_RETRY = 3;       // 层被接口闸门拒绝后的重生成上限
-export const MAX_ITERATIONS = 100;      // 主循环轮次熔断
+export const MAX_ITERATIONS = 100;      // 主循环熔断轮次:后续抛出错误，如果是逻辑可回溯问题，需要回溯重新计算。-- 当前版本人工维护，未引入符号跟踪机制。
 export const PRESCREEN_THRESHOLD = 0.62;// 术语相似度预筛:高于才调 LLM 对齐复核
 export const ALIGN_CONF_THRESHOLD = 0.75;// 对齐置信度:低于不自动合并,标 needsReview
 export const CRITIQUE_CONCURRENCY = 8;  // 棱面批判并发数
@@ -41,6 +41,34 @@ export const KV_TOOLS = 'tools';                       // 已解析工具(含 as
 export const KV_TRACE = 'trace';                       // 追加式留痕
 export const TOOL_SEARCH_LIMIT = 8;
 export const MAX_NODE_RETRY = 2; // 生成工作流内:单节点被 PlanViolation 回溯重答上限
+
+
+/** 自然语言起草 → 可行性评审 的最大轮次（宽松循环，不必太多） */
+export const MAX_DRAFT_ROUNDS = 4;
+/** JSON 结构提取 + 机械校验 的最大重试次数 */
+export const MAX_EXTRACT_ATTEMPTS = 5;
+/** Fuse 相似度阈值：score 低于此值视为"疑似相同"，交 LLM 归一裁决 */
+export const ARTIFACT_FUZZY_THRESHOLD = 0.35;
+/** 全局 DAG 树 + 产物注册表 的落盘键 */
+export const KV_PLAN_GRAPH = 'plan_graph';
+
+/**
+ * 单一设计循环的最大轮次：起草→评审→提取→图校验 都在这一个循环里，
+ * 任何一环失败都回喂起草对话重出蓝图。
+ */
+export const MAX_DESIGN_ROUNDS = 6;
+
+export const StepNames = {
+    dag: 'dag',
+    /** PlanContext 整体状态 blob 的落盘名 */
+    state: 'state',
+} as const;
+export const StatusNames = {
+    pending: 'pending',
+    running: 'running',
+    done: 'done',
+} as const;
+
 
 export function getRefineRounds(ctx: IRunnerContext): number {
     const args = ctx.cmd.args ?? {};
