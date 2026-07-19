@@ -3,6 +3,7 @@
  * 【P-00 · 入口调度(多 pass 编译版)】
  * ============================================================================
  */
+import { throwUnprcessable } from '$libs/utils/err.js';
 import type { IRunnerContext } from '$types/blueprint/context.js';
 import { MAX_ITERATIONS } from './config.js';
 import { ConflictSignal, createPlanContext } from './context.js';
@@ -31,7 +32,9 @@ export async function runCmd(ctx: IRunnerContext): Promise<void> {
     for (let iter = 1; iter <= MAX_ITERATIONS; iter++) {
         try {
             await designTop(pctx);
-            break;
+
+            ctx.notify("", JSON.stringify(pctx.gdag.toJSON(), null, 2))
+            return;
         } catch (e) {
             if (e instanceof ConflictSignal) {
                 continue;
@@ -39,5 +42,6 @@ export async function runCmd(ctx: IRunnerContext): Promise<void> {
             throw e;
         }
     }
+    throwUnprcessable(`[plan] 规划未收敛:达到轮次上限 ${MAX_ITERATIONS}`, true);
     // await passLoop(cap, pctx);
 }
