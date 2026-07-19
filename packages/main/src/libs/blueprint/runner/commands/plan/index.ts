@@ -33,7 +33,7 @@ export async function runCmd(ctx: IRunnerContext): Promise<void> {
         try {
             await designTop(pctx);
 
-            ctx.notify("", JSON.stringify(pctx.gdag.toJSON(), null, 2))
+            ctx.notify("", "```json\n" + JSON.stringify(pctx.gdag.toJSON(), null, 2) + "\n\n```")
             return;
         } catch (e) {
             if (e instanceof ConflictSignal) {

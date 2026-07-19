@@ -269,9 +269,9 @@ export async function registerLayer(
         const norm = async (ios: typeof n.inputs) => {
             const out = [];
             for (const io of ios) {
-                Logger.debug("gdag.registerArtifact")
+                // Logger.debug("gdag.registerArtifact")
                 const formal = await gdag.registerArtifact(io, pctx.ctx);
-                Logger.debug("gdag.registerArtifactformal=", formal)
+                // Logger.debug("gdag.registerArtifactformal=", formal)
                 out.push({ ...io, name: formal });
             }
             return out;
