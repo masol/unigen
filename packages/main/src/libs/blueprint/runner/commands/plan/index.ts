@@ -7,6 +7,7 @@ import { throwUnprcessable } from '$libs/utils/err.js';
 import type { IRunnerContext } from '$types/blueprint/context.js';
 import { MAX_ITERATIONS } from './config.js';
 import { ConflictSignal, createPlanContext } from './context.js';
+import { expandPass } from './steps/expand.js';
 import { designTop } from './steps/srs.js';
 
 export async function runCmd(ctx: IRunnerContext): Promise<void> {
@@ -32,6 +33,7 @@ export async function runCmd(ctx: IRunnerContext): Promise<void> {
     for (let iter = 1; iter <= MAX_ITERATIONS; iter++) {
         try {
             await designTop(pctx);
+            await expandPass(pctx);
 
             ctx.notify("", "```json\n" + JSON.stringify(pctx.gdag.toJSON(), null, 2) + "\n\n```")
             return;

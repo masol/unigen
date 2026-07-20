@@ -18,7 +18,8 @@ export const chatCommands: ChatCommand[] = [
     {
         id: "plan", label: "/plan", desc: `给出输入/输出(如从剧本生成视频)，规划工作流。支持如下参数：
 --cap: 指定根能力，而不是当前项目类型。new或uuid,new表示新建。
---rounds: 最大轮次，默认2.
+--rounds: 最大轮次，默认6.
+--expand-depth: 最大展开的层级，默认6.
 ` },
     {
         id: "prism", label: "/prism", desc: `使用prism方法回答你的问题--无上下文，支持如下参数：

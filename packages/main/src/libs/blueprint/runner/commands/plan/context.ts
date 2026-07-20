@@ -79,7 +79,7 @@ export class PlanContext {
         const state: PlanState = {
             gdag: this.#gdag ? this.#gdag.toJSON() : null
         };
-        Logger.debug("state=", JSON.stringify(state, null, 2))
+        // Logger.debug("state=", JSON.stringify(state, null, 2))
         this.prjdb.set(this.getJsonName(StepNames.state), state);
     }
 
