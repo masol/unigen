@@ -105,7 +105,7 @@
           <MiniMap pannable zoomable />
         {/if}
 
-        <Panel position="top-right" class="!z-10">
+        <Panel position="top-right" class="z-10!">
           <SelectedNodePanel />
         </Panel>
       </SvelteFlow>

@@ -77,7 +77,7 @@
 <!-- │ [可抽取子组件 → ArtifactEdge.svelte]                │ -->
 <!-- │ 职责：产物边（ELK 折线路由/贝塞尔回退）+ hover 详情 │ -->
 <!-- ╰─────────────────────────────────────────────────────╯ -->
-<BaseEdge {id} path={edgePath} class="!stroke-muted-foreground/40" />
+<BaseEdge {id} path={edgePath} class="stroke-muted-foreground/40!" />
 
 {#if displayName}
   <EdgeLabel x={labelX} y={labelY} style="pointer-events: all;">

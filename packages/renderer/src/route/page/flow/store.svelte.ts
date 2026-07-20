@@ -327,7 +327,7 @@ export class FlowStore {
 
     // ── 布局 ──
     /** 布局策略配置项：默认 elk（拓扑干净优先） */
-    layoutAlgo = $state<LayoutAlgo>('elk');
+    layoutAlgo = $state<LayoutAlgo>('dagre');
     /** ELK 异步计算中（simple/dagre 为同步，不置位） */
     layouting = $state<boolean>(false);
     /** 当前布局结果（ELK 异步产出后写回，触发 nodes/edges 重算） */
@@ -412,14 +412,24 @@ export class FlowStore {
     );
     depth = $derived(this.crumbs.length);
 
-    // ── 派生：选中节点（供右上角属性浮层）──
+    // ── 派生：选中节点 —— 直接取自底层图，避开 nodes 派生的中间态 ──
     selectedNode: PNode | null = $derived.by<PNode | null>(() => {
-        if (!this.selectedNodeId) return null;
-        return (
-            this.nodes.find((n) => n.id === this.selectedNodeId)?.data.pnode ?? null
-        );
+        void this.raw; // 数据重载时重算
+        const id = this.selectedNodeId;
+        const gid = this.currentGraphId;
+        if (!id || !gid) return null;
+        const g = this.graphs.get(gid);
+        if (!g || !g.hasNode(id)) return null;
+        const pnode = g.getNodeAttributes(id) as unknown as PNode;
+        // 深拷贝关键数组字段并补默认值，交付给 UI 的对象永远字段完整
+        return {
+            ...pnode,
+            id,
+            inputs: pnode.inputs ?? [],
+            outputs: pnode.outputs ?? [],
+            facets: pnode.facets ?? {}
+        };
     });
-
     // ─────────────────────────────────────────────────────────
     //  布局调度：图/策略变化后调用；ELK 异步 + 失败降级
     // ─────────────────────────────────────────────────────────
@@ -443,16 +453,18 @@ export class FlowStore {
             return;
         }
 
-        // elk：异步；期间先给一个同步兜底布局避免节点堆叠在原点
+        // elk：异步；期间先给同步兜底布局避免堆叠原点
         this.layout = layoutSimple(g);
         this.layouting = true;
         try {
             const result = await layoutElk(g);
-            if (seq !== this.layoutSeq) return; // 已有更新的布局请求，丢弃
+            if (seq !== this.layoutSeq) return; // 有更新的请求，丢弃
             this.layout = result;
-            this.requestFit();
+            // 让本次 layout 变更先被渲染链消化，再触发 fit，避开渲染撞车
+            queueMicrotask(() => {
+                if (seq === this.layoutSeq) this.requestFit();
+            });
         } catch (e) {
-            // ELK 失败 → 降级 dagre 再降级 simple
             if (seq !== this.layoutSeq) return;
             console.warn('[flow] ELK layout failed, fallback to dagre:', e);
             try {

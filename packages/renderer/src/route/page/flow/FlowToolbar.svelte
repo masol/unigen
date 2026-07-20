@@ -100,7 +100,7 @@
         {#if i === 0}
           <IconHome size={16} stroke={1.5} />
         {/if}
-        <span class="max-w-[10rem] truncate">{crumb.label}</span>
+        <span class="max-w-40 truncate">{crumb.label}</span>
       </button>
     {/each}
   </nav>
