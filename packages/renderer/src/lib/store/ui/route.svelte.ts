@@ -11,6 +11,7 @@ import IconGallery from '../../../route/page/dev/icon-gallery.svelte';
 import IconPlayground from "../../../route/page/dev/icon-playground.svelte";
 import EditorPage from '../../../route/page/editor/EditorPage.svelte';
 import FallbackComponent from "../../../route/page/fallback/Main.svelte";
+import FlowPage from "../../../route/page/flow/FlowPage.svelte";
 import DevSetting from "../../../route/page/settings/develops/DevSettingsPanel.svelte";
 import GeneralSetting from "../../../route/page/settings/general/general.svelte";
 import Keybindings from '../../../route/page/settings/Keybindings.svelte';
@@ -46,6 +47,7 @@ class RouterStore {
         "/settings/develops": DevSetting,
         "/settings/keybindings": Keybindings,
         "/settings/projectype": ProjectTypeManager,
+        '/flow/view/:id': FlowPage,
         // content 为可选查询/路径参数
         '/editor/:kind/:id': EditorPage,
         '/editor/:kind/:id/:content?': EditorPage,

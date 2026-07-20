@@ -90,6 +90,20 @@ class BlueprintStore {
         return ""
     }
 
+    canShowDesign(term: BlueprintTerm): string {
+        if (this.kind === 'glossary') {
+            if (term.name.startsWith('.')) {
+                const pattern = /^\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_state$/i;
+                const match = term.name.match(pattern);
+                if (match) {
+                    const uuid = match[1]; // 提取出的 UUID
+                    return uuid;
+                }
+            }
+        }
+        return ""
+    }
+
     // ── 真实的加载逻辑（仅内部调用）──
     async doLoad(): Promise<void> {
         const seq = ++this.#requestSeq

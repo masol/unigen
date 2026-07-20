@@ -32,15 +32,17 @@
  */
 import { getSmartModel } from "$libs/model/index.js";
 import { throwUnprcessable } from "$libs/utils/err.js";
+import { PNode } from "$types/index.js";
+import { DagDesignResult, Io } from "$types/shared/plan/nodes.js";
 import { generateText } from "ai";
 import Logger from "electron-log/main.js";
 import { EXPAND_CONCURRENCY, getExpandDepth } from "../config.js";
 import { ConflictSignal, PlanContext } from "../context.js";
 import {
     FacetNames, GDag, getFacet, isExecutable,
-    type PNode, type WalkEntry,
+    NodeStatusValue,
+    type WalkEntry,
 } from "../graph/gdag.js";
-import type { DagDesignResult, Io } from "../schema/node.js";
 import { designDag, makeExpandTask, registerLayer, ReviewFeedback } from "./dag.js";
 
 // ─── 复杂度判定 ────────────────────────────────────────────────────────────
@@ -373,7 +375,7 @@ export async function expandPass(pctx: PlanContext): Promise<void> {
     }
 
     // 崩溃/中断恢复：上轮遗留的 expanding 一律回退 pending(判定结果在 facets 里，不丢)
-    for (const { node } of gdag.scan('expanding')) {
+    for (const { node } of gdag.scan(NodeStatusValue.expanding)) {
         gdag.updateNode(node.id, { status: 'pending' });
     }
 
@@ -400,7 +402,7 @@ export async function expandPass(pctx: PlanContext): Promise<void> {
     }
 
     // 不变式核验：全图应无 pending/conflict，节点非 expanded 即 awaiting_code
-    const leftovers = [...gdag.scan('pending'), ...gdag.scan('conflict')];
+    const leftovers = [...gdag.scan('pending'), ...gdag.scan(NodeStatusValue.conflict)];
     if (leftovers.length > 0) {
         throwUnprcessable(
             `[expand] 遍历结束仍有未落定节点：` +
@@ -408,6 +410,6 @@ export async function expandPass(pctx: PlanContext): Promise<void> {
     }
 
     pctx.persist();
-    Logger.debug(`[expand] 完成：叶子 ${gdag.scan('awaiting_code').length} 个，` +
-        `展开节点 ${gdag.scan('expanded').length} 个`);
+    Logger.debug(`[expand] 完成：叶子 ${gdag.scan(NodeStatusValue.awaiting_code).length} 个，` +
+        `展开节点 ${gdag.scan(NodeStatusValue.expanded).length} 个`);
 }

@@ -8,6 +8,7 @@
     IconDotsVertical,
     IconEdit,
     IconFileText,
+    IconSparkleHighlight,
     IconTrash,
   } from "@tabler/icons-svelte";
   import { push } from "svelte-spa-router";
@@ -18,6 +19,8 @@
   // 是否允许「编辑内容」——由 store 决定（当前固定 true，逻辑由你实现）
   const editContentFmt = $derived(blueprintStore.canEditContent(term));
 
+  const showDesignUUID = $derived(blueprintStore.canShowDesign(term));
+
   function handleEdit() {
     // console.log("blueprintStore.kind=", blueprintStore.kind);
     push(`/editor/${blueprintStore.kind}/${term.name}/`);
@@ -25,6 +28,10 @@
 
   function handleEditContent() {
     push(`/editor/${blueprintStore.kind}/${term.name}/${editContentFmt}`);
+  }
+
+  function handleShowDesign() {
+    if (showDesignUUID) push(`/flow/view/${showDesignUUID}`);
   }
 
   async function handleDelete() {
@@ -64,6 +71,12 @@
       <DropdownMenu.Item class="rounded-lg" onclick={handleEditContent}>
         <IconFileText size={20} stroke={1.5} />
         编辑内容
+      </DropdownMenu.Item>
+    {/if}
+    {#if showDesignUUID.trim().length > 0}
+      <DropdownMenu.Item class="rounded-lg" onclick={handleShowDesign}>
+        <IconSparkleHighlight size={20} stroke={1.5} />
+        查看设计
       </DropdownMenu.Item>
     {/if}
     {#if configStore.rmblueprint}

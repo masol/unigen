@@ -25,14 +25,14 @@
 import { getSmartModel } from "$libs/model/index.js";
 import { extractErrmsg, safefmt } from "$libs/model/llm/outline.js";
 import { throwUnprcessable } from "$libs/utils/err.js";
+import type { PNode } from "$types/index.js";
+import { DagDesignResult, DagNode, Io, NodeListSchema } from "$types/shared/plan/nodes.js";
 import { generateText, Output, type ModelMessage } from "ai";
 import Logger from "electron-log/main.js";
 import { DirectedGraph } from "graphology";
 import { hasCycle } from "graphology-dag";
 import { getDesignRounds } from "../config.js";
 import { PlanContext } from "../context.js";
-import { type PNode } from "../graph/gdag.js";
-import { DagDesignResult, NodeListSchema, type DagNode, type Io } from "../schema/node.js";
 
 // ─── 提示词组装：共享基座 ─────────────────────────────────────────────────
 

@@ -17,10 +17,11 @@ import { globalToolDB } from '$libs/tooldb/index.js'; // @TODO: 对齐实际导�
 import { ProjectDbKeys } from '$libs/utils/db/dbkeys.js';
 import { throwUnprcessable } from '$libs/utils/err.js';
 import type { IRunnerContext } from '$types/blueprint/context.js';
+import type { GDagJSON } from '$types/index.js';
 import Logger from 'electron-log/main.js';
 import validator from 'validator';
 import { StepNames, TOOL_SEARCH_LIMIT } from './config.js';
-import { GDag, type GDagJSON } from './graph/gdag.js';
+import { GDag } from './graph/gdag.js';
 
 export interface ResolvedTool {
     id: string;

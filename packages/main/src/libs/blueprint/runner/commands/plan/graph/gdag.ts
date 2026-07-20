@@ -26,32 +26,14 @@
  */
 import { getSmartModel } from "$libs/model/index.js";
 import type { IRunnerContext } from '$types/blueprint/context.js';
+import { GDagJSON, Io, PNode, RegArtifact, TriState } from "$types/shared/plan/nodes.js";
 import { generateText } from "ai";
 import Logger from "electron-log/main.js";
 import Fuse from "fuse.js";
 import { DirectedGraph } from "graphology";
 import { topologicalSort } from "graphology-dag";
-import type { SerializedGraph } from "graphology-types";
+import { NodeStatus } from "../../plan-htn/types.js";
 import { ARTIFACT_FUZZY_THRESHOLD } from "../config.js";
-import type { DagNode, Io } from "../schema/node.js";
-
-/**
- * 节点生命周期(对齐 capability 的演进路径)：
- *  pending       刚登记，仅有 name/intent/io，等待处理
- *  expanding     处理中(正在为其设计子 DAG 或细化数据结构)
- *  expanded      已展开，dag 指向子图；自身退化为归约视图
- *  awaiting_code 设计完毕，等待生成可执行载体(code/workflow/提示词)
- *  done          已落为 capability
- *  conflict      被校验/评审判定矛盾，等待重生成
- */
-export type NodeStatus =
-    | 'pending' | 'expanding' | 'expanded'
-    | 'awaiting_code' | 'done' | 'conflict';
-
-// ── facets：并行判定维度(三态) ───────────────────────────────────────────
-
-export type TriState = 'pending' | 'yes' | 'no';
-export type Facets = Record<string, TriState>;
 
 /** facet 名字典。新维度只在此加名字，不改任何结构 */
 export const FacetNames = {
@@ -76,35 +58,14 @@ export function isExecutable(n: PNode): boolean {
         || getFacet(n, FacetNames.lib) === 'yes';
 }
 
-/** 代码级运行时节点：从 DagNode 派生，LLM 不产出、不可见 */
-export interface PNode extends DagNode {
-    id: string;
-    status: NodeStatus;
-    /** 子图 id；null = 未展开(叶子)。展开 = 把本节点当作交付目标设计子 DAG */
-    dag: string | null;
-    /** conflict 时的矛盾描述，回喂重生成用 */
-    error: string | null;
-    /** 并行判定维度。禁止经 updateNode 整体打补丁(浅合并会整包覆盖)，用 setFacet */
-    facets: Facets;
-    /**
-     * 强制裁决留痕(与 error 的 conflict 语义分离)：非空 = 该节点是被
-     * 深度熔断等机制"强制"落叶的，判定结果不可信，转代码时必须特殊对待。
-     */
-    forcedNote?: string;
-}
-
-export interface RegArtifact {
-    name: string;           // 归一后的正式名
-    intent: string;
-    aliases: string[];      // 归一吸收的别名，留痕供审计
-    dataSchema: unknown | null; // 后续 pass 的细化槽位，第一遍恒为 null
-}
-
-export interface GDagJSON {
-    rootId: string | null;
-    graphs: { id: string; data: SerializedGraph }[];
-    artifacts: RegArtifact[];
-}
+export const NodeStatusValue: Record<string, NodeStatus> = {
+    pending: 'pending' as NodeStatus,
+    expanding: 'expanding' as NodeStatus,
+    expanded: 'expanded' as NodeStatus,
+    awaiting_code: 'awaiting_code' as NodeStatus,
+    done: 'done' as NodeStatus,
+    conflict: 'conflict' as NodeStatus,
+} as const
 
 // ── 遍历访问器协议 ──────────────────────────────────────────────────────────
 
