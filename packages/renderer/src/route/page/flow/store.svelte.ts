@@ -1,4 +1,5 @@
 /* eslint-disable svelte/prefer-svelte-reactivity */
+
 // src/lib/flow/store.svelte.ts
 
 import { safeApi } from '$lib/utils/api';
@@ -10,7 +11,6 @@ import type {
 } from '@app/main/types';
 import dagre from '@dagrejs/dagre';
 import type { Edge as XYEdge, Node as XYNode } from '@xyflow/svelte';
-import ELK from 'elkjs/lib/elk.bundled.js';
 import DirectedGraph from 'graphology';
 
 export type { GDagJSON, NodeStatus, PNode, RegArtifact };
@@ -27,25 +27,9 @@ export interface Crumb {
     fromNodeId: string | null;
 }
 
-/** 布局策略：elk = 拓扑最干净(默认，含边路由)；dagre = 快而顺眼；simple = 零依赖兜底 */
-export type LayoutAlgo = 'elk' | 'dagre' | 'simple';
-
-export const LAYOUT_ALGO_LABEL: Record<LayoutAlgo, string> = {
-    elk: 'ELK',
-    dagre: 'Dagre',
-    simple: '简易'
-};
-
 export interface XY {
     x: number;
     y: number;
-}
-
-/** 边路由：ELK 规划的折线点（含起终点）+ 标签锚点（折线半程处） */
-export interface EdgeRoute {
-    points: XY[];
-    labelX: number;
-    labelY: number;
 }
 
 export interface FlowNodeData extends Record<string, unknown> {
@@ -56,12 +40,25 @@ export interface FlowNodeData extends Record<string, unknown> {
 export interface FlowEdgeData extends Record<string, unknown> {
     artifact: RegArtifact | null;
     rawName: string;
-    /** 非 null = 使用 ELK 规划的折线路径；null = 回退贝塞尔 */
-    route: EdgeRoute | null;
 }
 
 export type DagFlowNode = XYNode<FlowNodeData>;
 export type DagFlowEdge = XYEdge<FlowEdgeData>;
+
+/** 选中产物的来源方向，用于面板标注「作为 X 的输入/输出」 */
+export type ArtifactRole = 'input' | 'output';
+
+/** 选中产物的视图模型：注册信息 + 相对当前节点的角色 */
+export interface SelectedArtifact {
+    name: string;
+    role: ArtifactRole;
+    /** artifacts 注册表命中项；未登记为 null */
+    artifact: RegArtifact | null;
+    /** 该产物的所有生产者节点（在当前图中） */
+    producers: { id: string; name: string }[];
+    /** 该产物的所有消费者节点（在当前图中） */
+    consumers: { id: string; name: string }[];
+}
 
 // ─────────────────────────────────────────────────────────────
 //  语义标签
@@ -101,72 +98,11 @@ export const TRISTATE_LABEL: Record<string, string> = {
 const NODE_W = 260;
 const NODE_H = 132;
 
-interface LayoutResult {
-    positions: Map<string, XY>;
-    /** edgeKey → 路由折线；仅 ELK 产出，其它引擎为空 Map */
-    routes: Map<string, EdgeRoute>;
-}
-
 // ─────────────────────────────────────────────────────────────
-//  引擎 1：简易 Kahn 分层（零依赖兜底）
+//  唯一布局引擎：dagre（交叉最小化）
 // ─────────────────────────────────────────────────────────────
 
-const GAP_X = 96;
-const GAP_Y = 72;
-
-function layoutSimple(graph: DirectedGraph): LayoutResult {
-    const pos = new Map<string, XY>();
-    const indeg = new Map<string, number>();
-    graph.forEachNode((n) => indeg.set(n, 0));
-    graph.forEachDirectedEdge((_e, _a, s, t) => {
-        indeg.set(t, (indeg.get(t) ?? 0) + 1);
-    });
-
-    const level = new Map<string, number>();
-    let frontier = [...indeg.entries()].filter(([, d]) => d === 0).map(([n]) => n);
-    if (frontier.length === 0 && graph.order > 0) {
-        frontier = graph.nodes(); // 有环兜底
-    }
-    frontier.forEach((n) => level.set(n, 0));
-
-    const localIndeg = new Map(indeg);
-    const queue = [...frontier];
-    while (queue.length) {
-        const n = queue.shift()!;
-        const lv = level.get(n) ?? 0;
-        graph.forEachOutNeighbor(n, (m) => {
-            const d = (localIndeg.get(m) ?? 0) - 1;
-            localIndeg.set(m, d);
-            level.set(m, Math.max(level.get(m) ?? 0, lv + 1));
-            if (d === 0) queue.push(m);
-        });
-    }
-
-    const byLevel = new Map<number, string[]>();
-    graph.forEachNode((n) => {
-        const lv = level.get(n) ?? 0;
-        if (!byLevel.has(lv)) byLevel.set(lv, []);
-        byLevel.get(lv)!.push(n);
-    });
-
-    const maxRows = Math.max(...[...byLevel.values()].map((a) => a.length), 1);
-    for (const [lv, nodes] of byLevel.entries()) {
-        const offset = ((maxRows - nodes.length) * (NODE_H + GAP_Y)) / 2;
-        nodes.forEach((n, i) => {
-            pos.set(n, {
-                x: lv * (NODE_W + GAP_X),
-                y: offset + i * (NODE_H + GAP_Y)
-            });
-        });
-    }
-    return { positions: pos, routes: new Map() };
-}
-
-// ─────────────────────────────────────────────────────────────
-//  引擎 2：dagre（交叉最小化，无边路由）
-// ─────────────────────────────────────────────────────────────
-
-function layoutDagre(graph: DirectedGraph): LayoutResult {
+function layoutDagre(graph: DirectedGraph): Map<string, XY> {
     const g = new dagre.graphlib.Graph();
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({
@@ -187,122 +123,7 @@ function layoutDagre(graph: DirectedGraph): LayoutResult {
         const { x, y } = g.node(n);
         pos.set(n, { x: x - NODE_W / 2, y: y - NODE_H / 2 }); // 中心点 → 左上角
     });
-    return { positions: pos, routes: new Map() };
-}
-
-// ─────────────────────────────────────────────────────────────
-//  引擎 3：ELK layered（默认）——「拓扑干净优先」
-//  核心：edgeRouting=ORTHOGONAL 强制边走正交折线绕开节点；
-//        spacing.edgeNode 保证边与节点的最小间距（防压硬约束）。
-// ─────────────────────────────────────────────────────────────
-
-const elk = new ELK();
-
-const ELK_OPTIONS: Record<string, string> = {
-    'elk.algorithm': 'layered',
-    'elk.direction': 'RIGHT',
-    // ── 拓扑干净三件套 ──
-    'elk.edgeRouting': 'ORTHOGONAL',                            // 正交折线，绕节点
-    'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP', // 交叉最小化
-    'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',    // 平衡的节点定位
-    // ── 间距硬约束（防压核心）──
-    'elk.spacing.nodeNode': '56',
-    'elk.layered.spacing.nodeNodeBetweenLayers': '120',
-    'elk.spacing.edgeNode': '32',   // 边与节点最小间距
-    'elk.spacing.edgeEdge': '16',   // 边与边最小间距
-    'elk.layered.spacing.edgeNodeBetweenLayers': '32',
-    // ── 其它 ──
-    'elk.layered.mergeEdges': 'false',
-    'elk.portConstraints': 'FIXED_SIDE'
-};
-
-interface ElkPoint { x: number; y: number }
-interface ElkSection {
-    startPoint: ElkPoint;
-    endPoint: ElkPoint;
-    bendPoints?: ElkPoint[];
-}
-interface ElkEdgeOut {
-    id: string;
-    sections?: ElkSection[];
-}
-interface ElkNodeOut {
-    id: string;
-    x?: number;
-    y?: number;
-    children?: ElkNodeOut[];
-    edges?: ElkEdgeOut[];
-}
-
-/** 折线半程点：作为边标签锚点，比几何中点更贴合折线走向 */
-function polylineMidpoint(points: XY[]): XY {
-    if (points.length === 0) return { x: 0, y: 0 };
-    let total = 0;
-    for (let i = 1; i < points.length; i++) {
-        total += Math.hypot(
-            points[i].x - points[i - 1].x,
-            points[i].y - points[i - 1].y
-        );
-    }
-    let walk = total / 2;
-    for (let i = 1; i < points.length; i++) {
-        const seg = Math.hypot(
-            points[i].x - points[i - 1].x,
-            points[i].y - points[i - 1].y
-        );
-        if (walk <= seg && seg > 0) {
-            const t = walk / seg;
-            return {
-                x: points[i - 1].x + (points[i].x - points[i - 1].x) * t,
-                y: points[i - 1].y + (points[i].y - points[i - 1].y) * t
-            };
-        }
-        walk -= seg;
-    }
-    return points[Math.floor(points.length / 2)];
-}
-
-async function layoutElk(graph: DirectedGraph): Promise<LayoutResult> {
-    const children: { id: string; width: number; height: number }[] = [];
-    graph.forEachNode((n) =>
-        children.push({ id: n, width: NODE_W, height: NODE_H })
-    );
-
-    const elkEdges: { id: string; sources: string[]; targets: string[] }[] = [];
-    graph.forEachDirectedEdge((ekey, _a, s, t) => {
-        elkEdges.push({
-            id: ekey ?? `${s}->${t}`,
-            sources: [s],
-            targets: [t]
-        });
-    });
-
-    const out = (await elk.layout({
-        id: 'root',
-        layoutOptions: ELK_OPTIONS,
-        children,
-        edges: elkEdges
-    })) as ElkNodeOut;
-
-    const positions = new Map<string, XY>();
-    for (const c of out.children ?? []) {
-        positions.set(c.id, { x: c.x ?? 0, y: c.y ?? 0 });
-    }
-
-    const routes = new Map<string, EdgeRoute>();
-    for (const e of out.edges ?? []) {
-        const sec = e.sections?.[0];
-        if (!sec) continue;
-        const points: XY[] = [
-            sec.startPoint,
-            ...(sec.bendPoints ?? []),
-            sec.endPoint
-        ].map((p) => ({ x: p.x, y: p.y }));
-        const mid = polylineMidpoint(points);
-        routes.set(e.id, { points, labelX: mid.x, labelY: mid.y });
-    }
-
-    return { positions, routes };
+    return pos;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -325,24 +146,18 @@ export class FlowStore {
     lastError = $state<string | null>(null);
     private loadedId: string | null = null;
 
-    // ── 布局 ──
-    /** 布局策略配置项：默认 elk（拓扑干净优先） */
-    layoutAlgo = $state<LayoutAlgo>('dagre');
-    /** ELK 异步计算中（simple/dagre 为同步，不置位） */
-    layouting = $state<boolean>(false);
-    /** 当前布局结果（ELK 异步产出后写回，触发 nodes/edges 重算） */
-    private layout = $state.raw<LayoutResult>({
-        positions: new Map(),
-        routes: new Map()
-    });
-    /** 竞态防护：只接受最后一次布局请求的结果 */
-    private layoutSeq = 0;
+    // ── 布局结果（dagre 同步产出） ──
+    private positions = $state.raw<Map<string, XY>>(new Map());
 
     // ── 导航栈（面包屑）──
     crumbs = $state<Crumb[]>([]);
 
     // ── 交互态 ──
     selectedNodeId = $state<string | null>(null);
+    /** 当前在详情面板查看的产物名（点击 IO Badge 触发） */
+    selectedArtifactName = $state<string | null>(null);
+    /** 记录点击来源角色，用于面板文案 */
+    selectedArtifactRole = $state<ArtifactRole>('output');
 
     // ── 视图偏好 ──
     fitTrigger = $state<number>(0);
@@ -353,14 +168,14 @@ export class FlowStore {
         this.crumbs.length > 0 ? this.crumbs[this.crumbs.length - 1].graphId : null
     );
 
-    // ── 派生：当前 xyflow 节点（位置读自 layout 状态）──
+    // ── 派生：当前 xyflow 节点（位置读自 positions 状态）──
     nodes = $derived.by<DagFlowNode[]>(() => {
         void this.raw;
         const gid = this.currentGraphId;
         if (!gid) return [];
         const g = this.graphs.get(gid);
         if (!g) return [];
-        const { positions } = this.layout;
+        const positions = this.positions;
         const out: DagFlowNode[] = [];
         g.forEachNode((key, attr) => {
             const pnode = attr as unknown as PNode;
@@ -377,14 +192,13 @@ export class FlowStore {
         return out;
     });
 
-    // ── 派生：当前 xyflow 边（路由读自 layout 状态）──
+    // ── 派生：当前 xyflow 边 ──
     edges = $derived.by<DagFlowEdge[]>(() => {
         void this.raw;
         const gid = this.currentGraphId;
         if (!gid) return [];
         const g = this.graphs.get(gid);
         if (!g) return [];
-        const { routes } = this.layout;
         const out: DagFlowEdge[] = [];
         g.forEachDirectedEdge((ekey, attr, source, target) => {
             const eid = ekey ?? `${source}->${target}`;
@@ -398,7 +212,7 @@ export class FlowStore {
                 source,
                 target,
                 type: 'artifact',
-                data: { artifact, rawName, route: routes.get(eid) ?? null }
+                data: { artifact, rawName }
             });
         });
         return out;
@@ -430,64 +244,64 @@ export class FlowStore {
             facets: pnode.facets ?? {}
         };
     });
+
+    // ── 派生：当前查看的产物详情（点击 IO 触发）──
+    selectedArtifact: SelectedArtifact | null = $derived.by<SelectedArtifact | null>(
+        () => {
+            void this.raw;
+            const name = this.selectedArtifactName;
+            const gid = this.currentGraphId;
+            if (!name || !gid) return null;
+            const g = this.graphs.get(gid);
+            if (!g) return null;
+
+            const artifact = this.artifactIndex.get(name) ?? null;
+            const producers: { id: string; name: string }[] = [];
+            const consumers: { id: string; name: string }[] = [];
+
+            // 在当前图内扫描：谁产出（output）此产物、谁消费（input）此产物
+            g.forEachNode((key, attr) => {
+                const pn = attr as unknown as PNode;
+                const outs = pn.outputs ?? [];
+                const ins = pn.inputs ?? [];
+                const matchName = (io: { name: string }) => {
+                    if (io.name === name) return true;
+                    // 别名归一：产物注册名或其别名命中
+                    const reg = this.artifactIndex.get(io.name);
+                    return reg?.name === (artifact?.name ?? name);
+                };
+                if (outs.some(matchName))
+                    producers.push({ id: key, name: pn.name || key });
+                if (ins.some(matchName))
+                    consumers.push({ id: key, name: pn.name || key });
+            });
+
+            return {
+                name,
+                role: this.selectedArtifactRole,
+                artifact,
+                producers,
+                consumers
+            };
+        }
+    );
+
     // ─────────────────────────────────────────────────────────
-    //  布局调度：图/策略变化后调用；ELK 异步 + 失败降级
+    //  布局调度：图变化后调用（dagre 同步）
     // ─────────────────────────────────────────────────────────
 
-    private async runLayout() {
+    private runLayout() {
         const gid = this.currentGraphId;
         if (!gid) return;
         const g = this.graphs.get(gid);
         if (!g) return;
-
-        const seq = ++this.layoutSeq;
-
-        if (this.layoutAlgo === 'simple') {
-            this.layout = layoutSimple(g);
-            this.requestFit();
-            return;
-        }
-        if (this.layoutAlgo === 'dagre') {
-            this.layout = layoutDagre(g);
-            this.requestFit();
-            return;
-        }
-
-        // elk：异步；期间先给同步兜底布局避免堆叠原点
-        this.layout = layoutSimple(g);
-        this.layouting = true;
-        try {
-            const result = await layoutElk(g);
-            if (seq !== this.layoutSeq) return; // 有更新的请求，丢弃
-            this.layout = result;
-            // 让本次 layout 变更先被渲染链消化，再触发 fit，避开渲染撞车
-            queueMicrotask(() => {
-                if (seq === this.layoutSeq) this.requestFit();
-            });
-        } catch (e) {
-            if (seq !== this.layoutSeq) return;
-            console.warn('[flow] ELK layout failed, fallback to dagre:', e);
-            try {
-                this.layout = layoutDagre(g);
-            } catch {
-                this.layout = layoutSimple(g);
-            }
-            this.requestFit();
-        } finally {
-            if (seq === this.layoutSeq) this.layouting = false;
-        }
+        this.positions = layoutDagre(g);
+        this.requestFit();
     }
 
-    /** 切换布局策略（配置项入口） */
-    setLayoutAlgo(algo: LayoutAlgo) {
-        if (this.layoutAlgo === algo) return;
-        this.layoutAlgo = algo;
-        void this.runLayout();
-    }
-
-    /** 重新自动布局：丢弃用户拖拽位置，按当前策略重排 */
+    /** 重新自动布局：丢弃用户拖拽位置，按 dagre 重排 */
     relayout() {
-        void this.runLayout();
+        this.runLayout();
     }
 
     // ─────────────────────────────────────────────────────────
@@ -526,6 +340,7 @@ export class FlowStore {
             }
 
             this.selectedNodeId = null;
+            this.selectedArtifactName = null;
 
             const rootGid = this.resolveRootGraphId(data);
             this.crumbs = rootGid
@@ -534,7 +349,7 @@ export class FlowStore {
 
             this.raw = data; // 触发派生重算
             this.loadedId = this.id;
-            await this.runLayout();
+            this.runLayout();
         } catch (e) {
             this.lastError = e instanceof Error ? e.message : String(e);
         } finally {
@@ -571,7 +386,8 @@ export class FlowStore {
             { graphId: pnode.dag, label: pnode.name || nodeId, fromNodeId: nodeId }
         ];
         this.selectedNodeId = null;
-        void this.runLayout();
+        this.selectedArtifactName = null;
+        this.runLayout();
     }
 
     /** 面包屑跳转到第 index 层（0 = root） */
@@ -580,7 +396,8 @@ export class FlowStore {
         if (index === this.crumbs.length - 1) return;
         this.crumbs = this.crumbs.slice(0, index + 1);
         this.selectedNodeId = null;
-        void this.runLayout();
+        this.selectedArtifactName = null;
+        this.runLayout();
     }
 
     goUp() {
@@ -594,7 +411,30 @@ export class FlowStore {
 
     selectNode(id: string | null) {
         this.selectedNodeId = id;
+        // 切换节点时清空产物详情，避免遗留错位
+        this.selectedArtifactName = null;
     }
+
+    /** 点击 IO Badge：在详情面板打开某产物；再次点击同名则关闭 */
+    selectArtifact(name: string | null, role: ArtifactRole = 'output') {
+        if (name && this.selectedArtifactName === name) {
+            this.selectedArtifactName = null;
+            return;
+        }
+        this.selectedArtifactName = name;
+        this.selectedArtifactRole = role;
+    }
+
+    /** 定位并选中某节点（供产物面板的生产者/消费者跳转） */
+    focusNode(id: string) {
+        const gid = this.currentGraphId;
+        if (!gid) return;
+        const g = this.graphs.get(gid);
+        if (!g || !g.hasNode(id)) return;
+        this.selectedNodeId = id;
+        this.requestFit();
+    }
+
     requestFit() {
         this.fitTrigger++;
     }
@@ -615,7 +455,7 @@ export class FlowStore {
         }
         if (restored.length > 0) {
             this.crumbs = restored;
-            await this.runLayout();
+            this.runLayout();
         }
     }
 }

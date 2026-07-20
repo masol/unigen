@@ -10,7 +10,7 @@
     getBezierPath,
     type EdgeProps,
   } from "@xyflow/svelte";
-  import { type FlowEdgeData, type XY } from "./store.svelte";
+  import { type FlowEdgeData } from "./store.svelte";
 
   let {
     id,
@@ -23,36 +23,8 @@
     data,
   }: EdgeProps & { data?: FlowEdgeData } = $props();
 
-  /** ELK 折线 → 圆角折线 SVG path（拐点处 8px 圆弧过渡） */
-  function roundedPolylinePath(points: XY[], radius = 8): string {
-    if (points.length < 2) return "";
-    let d = `M ${points[0].x},${points[0].y}`;
-    for (let i = 1; i < points.length - 1; i++) {
-      const p0 = points[i - 1];
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      const d1 = Math.hypot(p1.x - p0.x, p1.y - p0.y);
-      const d2 = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-      const r = Math.min(radius, d1 / 2, d2 / 2);
-      if (r < 0.5) {
-        d += ` L ${p1.x},${p1.y}`;
-        continue;
-      }
-      const inX = p1.x - ((p1.x - p0.x) / d1) * r;
-      const inY = p1.y - ((p1.y - p0.y) / d1) * r;
-      const outX = p1.x + ((p2.x - p1.x) / d2) * r;
-      const outY = p1.y + ((p2.y - p1.y) / d2) * r;
-      d += ` L ${inX},${inY} Q ${p1.x},${p1.y} ${outX},${outY}`;
-    }
-    const last = points[points.length - 1];
-    d += ` L ${last.x},${last.y}`;
-    return d;
-  }
-
-  const route = $derived(data?.route ?? null);
-
-  // 有 ELK 路由走折线；否则回退贝塞尔
-  const bezier = $derived(
+  // dagre 不产出折线路径，统一走贝塞尔
+  const [edgePath, labelX, labelY] = $derived(
     getBezierPath({
       sourceX,
       sourceY,
@@ -63,19 +35,13 @@
     }),
   );
 
-  const edgePath = $derived(
-    route ? roundedPolylinePath(route.points) : bezier[0],
-  );
-  const labelX = $derived(route ? route.labelX : bezier[1]);
-  const labelY = $derived(route ? route.labelY : bezier[2]);
-
   const artifact = $derived(data?.artifact ?? null);
   const displayName = $derived(artifact?.name ?? data?.rawName ?? "");
 </script>
 
 <!--╭─────────────────────────────────────────────────────╮ -->
 <!-- │ [可抽取子组件 → ArtifactEdge.svelte]                │ -->
-<!-- │ 职责：产物边（ELK 折线路由/贝塞尔回退）+ hover 详情 │ -->
+<!-- │ 职责：产物边（贝塞尔）+ hover 详情气泡              │ -->
 <!-- ╰─────────────────────────────────────────────────────╯ -->
 <BaseEdge {id} path={edgePath} class="stroke-muted-foreground/40!" />
 

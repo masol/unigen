@@ -26,11 +26,13 @@
           false)
       : false,
   );
+  // 当前正在详情面板查看的产物名，用于高亮激活的 Badge
+  const activeArtifact = $derived(flowStore.selectedArtifactName);
 </script>
 
 <!--╭─────────────────────────────────────────────────────╮ -->
 <!-- │ [可抽取子组件 → SelectedNodePanel.svelte]           │ -->
-<!-- │ 职责：画布右上角固定的选中节点属性浮层               │ -->
+<!-- │ 职责：画布右上角固定的选中节点属性浮层；IO 可点击    │ -->
 <!-- ╰─────────────────────────────────────────────────────╯ -->
 <div use:autoAnimate>
   {#if node}
@@ -66,12 +68,23 @@
         <Separator />
 
         <div class="space-y-2">
-          <p class="text-xs font-medium text-muted-foreground">输入</p>
+          <p class="text-xs font-medium text-muted-foreground">
+            输入（点击查看产物）
+          </p>
           <div class="flex flex-wrap gap-1.5">
             {#each inputs as io (io.name)}
-              <Badge variant="secondary" class="rounded-lg text-[11px]">
-                {io.name}
-              </Badge>
+              <button
+                type="button"
+                onclick={() => flowStore.selectArtifact(io.name, "input")}
+                class="cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
+              >
+                <Badge
+                  variant={activeArtifact === io.name ? "default" : "secondary"}
+                  class="rounded-lg text-[11px] hover:shadow-xl"
+                >
+                  {io.name}
+                </Badge>
+              </button>
             {:else}
               <span class="text-[11px] text-muted-foreground/60">无</span>
             {/each}
@@ -79,10 +92,23 @@
         </div>
 
         <div class="space-y-2">
-          <p class="text-xs font-medium text-muted-foreground">输出</p>
+          <p class="text-xs font-medium text-muted-foreground">
+            输出（点击查看产物）
+          </p>
           <div class="flex flex-wrap gap-1.5">
             {#each outputs as io (io.name)}
-              <Badge class="rounded-lg text-[11px]">{io.name}</Badge>
+              <button
+                type="button"
+                onclick={() => flowStore.selectArtifact(io.name, "output")}
+                class="cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
+              >
+                <Badge
+                  variant={activeArtifact === io.name ? "default" : "secondary"}
+                  class="rounded-lg text-[11px] hover:shadow-xl"
+                >
+                  {io.name}
+                </Badge>
+              </button>
             {:else}
               <span class="text-[11px] text-muted-foreground/60">无</span>
             {/each}

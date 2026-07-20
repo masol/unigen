@@ -51,7 +51,7 @@
         {...props}
         ondblclick={handleDblClick}
         class={[
-          "group relative w-[260px] rounded-2xl border border-border/50 bg-background p-4 text-left shadow-sm transition-all duration-200",
+          "group relative w-65 rounded-2xl border border-border/50 bg-background p-4 text-left shadow-sm transition-all duration-200",
           "hover:-translate-y-0.5 hover:shadow-xl",
           selected ? `ring-2 ${toneRing}` : "",
         ]}
@@ -62,13 +62,13 @@
           type="target"
           position={Position.Left}
           isConnectable={false}
-          class="!size-2.5 !border-2 !border-background !bg-muted-foreground/60"
+          class="size-2.5! border-2! border-background! bg-muted-foreground/60!"
         />
         <Handle
           type="source"
           position={Position.Right}
           isConnectable={false}
-          class="size-2.5! !border-2 !border-background !bg-primary/70"
+          class="size-2.5! border-2! border-background! bg-primary/70!"
         />
 
         <!-- 头部 -->

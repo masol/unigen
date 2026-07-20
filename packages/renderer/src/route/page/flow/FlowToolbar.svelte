@@ -2,31 +2,23 @@
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Separator } from "$lib/components/ui/separator";
-  import { Spinner } from "$lib/components/ui/spinner";
   import { Toggle } from "$lib/components/ui/toggle";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import autoAnimate from "@formkit/auto-animate";
   import {
     IconAlertTriangle,
     IconArrowBackUp,
-    IconCheck,
     IconChevronRight,
     IconHome,
     IconLayout2,
-    IconLayoutGrid,
     IconMap2,
     IconMaximize,
     IconRefresh,
     IconSitemap,
   } from "@tabler/icons-svelte";
-  import {
-    flowStore,
-    LAYOUT_ALGO_LABEL,
-    type LayoutAlgo,
-  } from "./store.svelte";
-  const ALGOS: LayoutAlgo[] = ["elk", "dagre", "simple"];
+  import { flowStore } from "./store.svelte";
+
   const crumbs = $derived(flowStore.crumbs);
   const canUp = $derived(flowStore.depth > 1);
 </script>
@@ -163,64 +155,10 @@
         <Tooltip.Content>重新自动布局</Tooltip.Content>
       </Tooltip.Root>
 
+      <!-- 缩略图开关 -->
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger>
-                {#snippet child({ props })}
-                  <Button {...props} variant="outline" class="gap-2 rounded-xl">
-                    {#if flowStore.layouting}
-                      <Spinner class="size-4" />
-                    {:else}
-                      <IconLayoutGrid size={20} stroke={1.5} />
-                    {/if}
-                    <span class="hidden text-xs xl:inline">
-                      {LAYOUT_ALGO_LABEL[flowStore.layoutAlgo]}
-                    </span>
-                  </Button>
-                {/snippet}
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content class="w-64 rounded-2xl" align="end">
-                <DropdownMenu.Label class="text-xs text-muted-foreground">
-                  布局策略
-                </DropdownMenu.Label>
-                {#each ALGOS as algo (algo)}
-                  <DropdownMenu.Item
-                    class="gap-2 rounded-xl"
-                    onclick={() => flowStore.setLayoutAlgo(algo)}
-                  >
-                    <span class="flex size-4 items-center justify-center">
-                      {#if flowStore.layoutAlgo === algo}
-                        <IconCheck
-                          size={16}
-                          stroke={1.5}
-                          class="text-primary"
-                        />
-                      {/if}
-                    </span>
-                    <div class="flex flex-col">
-                      <span class="text-sm">{LAYOUT_ALGO_LABEL[algo]}</span>
-                      <span class="text-[11px] text-muted-foreground">
-                        {algo === "elk"
-                          ? "正交边路由，保证边不穿节点（默认）"
-                          : algo === "dagre"
-                            ? "交叉最小化，长边可能穿节点"
-                            : "零依赖兜底，仅分层不避让"}
-                      </span>
-                    </div>
-                  </DropdownMenu.Item>
-                {/each}
-                <DropdownMenu.Separator />
-                <DropdownMenu.Item
-                  class="gap-2 rounded-xl"
-                  onclick={() => flowStore.relayout()}
-                >
-                  <IconRefresh size={16} stroke={1.5} />
-                  <span class="text-sm">重新布局（丢弃拖拽位置）</span>
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
             <Toggle
               {...props}
               pressed={flowStore.miniMap}
@@ -234,6 +172,7 @@
         <Tooltip.Content>缩略图</Tooltip.Content>
       </Tooltip.Root>
 
+      <!-- 适应视图 -->
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
