@@ -29,6 +29,8 @@ export const ArtifactSchema = z.object({
         .describe("人类同行如何判断这份成果做得好不好"),
     sizeEstimate: SizeEstimate.default('small')
         .describe("预估规模。small(<1K) / medium(1K-10K) / large(10K-600K) / unbounded(>600K)"),
+    isArray: z.boolean().default(false)
+        .describe("是否为数组形式（多条同构数据,如列表/清单/集合）。false=单一数据,true=多条数据"),
 });
 
 export type Artifact = z.infer<typeof ArtifactSchema>;
@@ -42,7 +44,7 @@ export const DagNodeSchema = z.object({
         .describe("从思维操作目录选一种,不要发明目录外类型"),
     intent: z.string().min(1)
         .describe("人类在这步怎么想:看什么材料、做什么判断/分析/创作、产出什么。" +
-            "若出现'然后/接着/再',说明该拆为两步"),
+            "若出现'然后/接着/再',说明该拆为两步。用陈述句描述,禁止疑问句"),
     inputs: z.array(ArtifactSchema).min(1)
         .describe("这步需要看的材料/成果"),
     outputs: z.array(ArtifactSchema).min(1).max(1)
@@ -88,6 +90,12 @@ export interface PNode extends DagNode {
     synthetic?: boolean;
     guard?: boolean;
     guardKinds?: GuardKind[];
+    /**
+     * 数组语义下的顺序执行标记
+     * true=即使消费 isArray 输入也按顺序串行执行,并自动将前一条输出注入当前输入
+     * 默认 false=并行（map）
+     */
+    sequential?: boolean;
 }
 
 export type Facets = Record<string, TriState>;
@@ -98,6 +106,7 @@ export interface RegArtifact {
     aliases: string[];
     qualityCriteria: string[];
     sizeEstimate: SizeEstimateT;
+    isArray: boolean;
     dataSchema: unknown | null;
 }
 

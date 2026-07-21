@@ -9,7 +9,7 @@ import { PNode } from "$types/index.js";
 import { DagDesignResult, Io } from "$types/shared/plan/nodes.js";
 import { generateText } from "ai";
 import Logger from "electron-log/main.js";
-import { EXPAND_CONCURRENCY, getExpandDepth } from "../config.js";
+import { EXPAND_CONCURRENCY, getExpandDepth, getThinkDepth } from "../config.js";
 import { ConflictSignal, PlanContext } from "../context.js";
 import {
     FacetNames, GDag, getFacet, NodeStatusValue, type WalkEntry,
@@ -18,15 +18,6 @@ import { globalKnowledgeDB, NODE_PRIOR_STRONG_THRESHOLD } from "../knowledge.js"
 import { designDag, makeExpandTask, registerLayer } from "./dag.js";
 import { fetchProcedurePrior } from "./skeleton.js";
 
-/**
- * LEAF/EXPAND 判定提示词
- *
- * 改进要点：
- * 1. 判据按优先级排列：DETERMINISTIC（纯代码）→ LEAF_EMPIRICAL（凭经验）→ EXPAND（有标准工作流）
- *    优先级顺序让 LLM 不再纠结边界 case。
- * 2. 引入"是否有中间可审核交付物"作为 EXPAND 的核心特征——而非"步骤数量"。
- * 3. 反幻觉：禁止 LLM 编造"该领域有标准工作流"，必须基于常识能直接给出步骤。
- */
 const JUDGE_PROMPT = `你是人类工作流复杂度裁判。
 
 以下是一个思维环节，判断它是否有**成熟的人类标准工作流**（即领域从业者都知道的分步做法，且步骤间有**中间可审核交付物**）。
@@ -109,14 +100,40 @@ async function judgeNode(node: PNode, pctx: PlanContext): Promise<Verdict> {
 
 async function fetchNodePrior(node: PNode, _pctx: PlanContext): Promise<string | null> {
     if (!globalKnowledgeDB.searchNodePrior) return null;
-    const hits = await globalKnowledgeDB.searchNodePrior(
-        node.name, node.intent, 1,
-    );
+    const hits = await globalKnowledgeDB.searchNodePrior(node.name, node.intent, 1);
     if (hits.length === 0) return null;
     const top = hits[0];
     if ((top.score ?? 0) < NODE_PRIOR_STRONG_THRESHOLD) return null;
     Logger.debug(`[expand]「${node.name}」RAG 强匹配 (score=${top.score})，直接 EXPAND`);
     return top.procedure;
+}
+
+// ─── 判定决策：结合 think-depth ────────────────────────────────────────────
+
+/**
+ * 综合判定结果与用户期望的思维深度，决定是否展开
+ * - LEAF_DETERMINISTIC → 无条件落叶（即使 think-depth 也无法展开为有意义的工作流）
+ * - LEAF_EMPIRICAL 且 depth < thinkDepth → 强制展开（think-depth 干预）
+ * - LEAF_EMPIRICAL 且 depth >= thinkDepth → 落叶
+ * - EXPAND → 展开
+ */
+function decideExpand(
+    verdict: Verdict, depth: number, thinkDepth: number,
+): { shouldExpand: boolean; reason: string } {
+    if (verdict.kind === 'leaf_det') {
+        return { shouldExpand: false, reason: verdict.reason };
+    }
+    if (verdict.kind === 'leaf_emp') {
+        if (depth < thinkDepth) {
+            return {
+                shouldExpand: true,
+                reason: `think-depth=${thinkDepth} 强制展开（LEAF_EMPIRICAL 但深度 ${depth} < ${thinkDepth}）`,
+            };
+        }
+        return { shouldExpand: false, reason: verdict.reason };
+    }
+    // EXPAND
+    return { shouldExpand: true, reason: verdict.reason };
 }
 
 // ─── 单节点处理 ────────────────────────────────────────────────────────────
@@ -133,23 +150,27 @@ async function expandOne(e: WalkEntry, pctx: PlanContext): Promise<void> {
         return;
     }
 
-    // 节点级 RAG 强匹配
+    const thinkDepth = getThinkDepth(pctx.ctx.cmd.args ?? {});
+
+    // 节点级 RAG 强匹配（直接 EXPAND，跳过判定）
     const ragHit = await fetchNodePrior(node, pctx);
 
-    // 判定
-    let verdict: Verdict;
+    let decision: { shouldExpand: boolean; reason: string };
     if (ragHit) {
-        verdict = { kind: 'expand', reason: `RAG 强匹配：${ragHit.slice(0, 50)}...` };
+        decision = { shouldExpand: true, reason: `RAG 强匹配：${ragHit.slice(0, 50)}...` };
     } else {
-        verdict = await judgeNode(node, pctx);
-        if (verdict.kind !== 'expand') {
+        const verdict = await judgeNode(node, pctx);
+        // 只有原生 LEAF（非 think-depth 干预）才标 facet
+        const isNaturalLeaf = verdict.kind !== 'expand' && depth >= thinkDepth;
+        if (isNaturalLeaf) {
             gdag.setFacet(node.id, FacetNames.simple, 'yes');
         }
+        decision = decideExpand(verdict, depth, thinkDepth);
     }
 
-    if (verdict.kind !== 'expand') {
+    if (!decision.shouldExpand) {
         gdag.updateNode(node.id, { status: 'awaiting_code' });
-        Logger.debug(`[expand]「${node.name}」→ ${verdict.kind.toUpperCase()} (${verdict.reason})`);
+        Logger.debug(`[expand]「${node.name}」→ LEAF（${decision.reason}）`);
         pctx.persist();
         return;
     }
@@ -158,14 +179,14 @@ async function expandOne(e: WalkEntry, pctx: PlanContext): Promise<void> {
     const maxDepth = getExpandDepth(pctx.ctx.cmd.args ?? {});
     if (depth >= maxDepth) {
         const warning =
-            `[expand]「${node.name}」深度 ${depth} 达上限仍判 EXPAND（${verdict.reason}）。` +
+            `[expand]「${node.name}」深度 ${depth} 达上限仍判 EXPAND（${decision.reason}）。` +
             `强制落叶，执行时 LLM 需额外 CoT。`;
         Logger.warn(warning);
         pctx.notify("plan/expand", warning);
         gdag.setFacet(node.id, FacetNames.simple, 'yes');
         gdag.updateNode(node.id, {
             status: 'awaiting_code',
-            forcedNote: `深度熔断：${verdict.reason}`,
+            forcedNote: `深度熔断：${decision.reason}`,
         });
         pctx.persist();
         return;
@@ -176,7 +197,7 @@ async function expandOne(e: WalkEntry, pctx: PlanContext): Promise<void> {
     const prior = ragHit || await fetchProcedurePrior(
         `${node.outputs.map(o => o.name).join(",")} ${node.intent}`, pctx);
     const task = makeExpandTask(node, pool, {
-        expandReason: verdict.reason, procedurePrior: prior,
+        expandReason: decision.reason, procedurePrior: prior,
     });
     let layerId: string | null = null;
 

@@ -9,9 +9,10 @@ export const RAG_TEMPLATE_LIMIT = 3;
 const DEF_DESIGN_ROUNDS = 6;
 const DEF_EXPAND_DEPTH = 3;
 const DEF_DETAIL_LEVELS = 5;
-const DEF_PLAN_ITERATIONS = 3;
+// const DEF_PLAN_ITERATIONS = 3;
+const DEF_THINK_DEPTH = 0;
 
-export const EXPAND_CONCURRENCY = 16;
+export const EXPAND_CONCURRENCY = 4;
 
 export const RAG_DEFAULT_TOPK = 8;
 export const RAG_RERANK_KEEP = 3;
@@ -29,7 +30,7 @@ export const StepNames = {
 function getNumber(args: Record<string, string>, key: string, defValue: number): number {
     if (args[key]) {
         const round = parseInt(args[key]);
-        if (isNumber(round) && round > 0) {
+        if (isNumber(round) && round >= 0) {
             return round;
         }
     }
@@ -48,6 +49,14 @@ export function getDetailLevels(args: Record<string, string>): number {
     return getNumber(args, 'detail-levels', DEF_DETAIL_LEVELS);
 }
 
-export function getPlanIterations(args: Record<string, string>): number {
-    return getNumber(args, 'plan-iterations', DEF_PLAN_ITERATIONS);
+// export function getPlanIterations(args: Record<string, string>): number {
+//     return getNumber(args, 'plan-iterations', DEF_PLAN_ITERATIONS);
+// }
+
+/**
+ * 用户期望的"思维深度"——高于此深度的 LEAF_EMPIRICAL 节点也会被强制展开
+ * 0 = 默认（仅 EXPAND 才展开），>0 = 强制细化到该深度
+ */
+export function getThinkDepth(args: Record<string, string>): number {
+    return getNumber(args, 'think-depth', DEF_THINK_DEPTH);
 }

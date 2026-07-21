@@ -20,7 +20,9 @@ export const chatCommands: ChatCommand[] = [
 --cap: 指定根能力，而不是当前项目类型。new或uuid,new表示新建。
 --rounds: 最大轮次，默认6.
 --expand-depth: 最大展开的层级，默认6.
---llm-pc: 当Rag未给出人类流程时，由LLM生成后，是否校验（procedure check）。默认off，通过设置为on打开。
+--detail-levels: 当模型规划失败时，会在减少节点数量后重试，这里指示分几次减少，5次意味着每次压缩20%数量的节点。
+--think-depth: 当前节点终止条件是无人类明确定工作流，本参数打开随后模拟人类思维树的层级，默认0不开启。
+--no-codegen: 规划完毕即退出，不执行代码生成。
 ` },
     {
         id: "prism", label: "/prism", desc: `使用prism方法回答你的问题--无上下文，支持如下参数：
