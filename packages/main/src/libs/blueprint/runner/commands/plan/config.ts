@@ -1,42 +1,34 @@
-// /**
-//  * ============================================================================
-//  * 【子任务 P-02 · 常量配置】(附 BACKGROUND.md)
-//  * ============================================================================
-//  * 职责:全模块唯一的"改数字的地方"。所有阈值/上限集中于此,其它文件禁止写魔法数。
-//  * 本文件已完成,后续子任务只允许"新增"常量,不允许改语义。
-//  */
-
 import { isNumber } from "radashi";
 
-export const MAX_ITERATIONS = 100;      // 主循环熔断轮次:后续抛出错误，如果是逻辑可回溯问题，需要回溯重新计算。-- 当前版本人工维护，未引入符号跟踪机制。
+export const MAX_ITERATIONS = 100;
 export const TOOL_SEARCH_LIMIT = 8;
-/** Fuse 相似度阈值：score 低于此值视为"疑似相同"，交 LLM 归一裁决 */
 export const ARTIFACT_FUZZY_THRESHOLD = 0.35;
-// /**
-//  * 单一设计循环的最大轮次：起草→评审→提取→图校验 都在这一个循环里，
-//  * 任何一环失败都回喂起草对话重出蓝图。
-//  */
-const DEF_DESIGN_ROUNDS = 6;
+export const RAG_SKELETON_LIMIT = 5;
+export const RAG_TEMPLATE_LIMIT = 3;
 
-/**
- * 递归展开深度上限：根层 depth=0。达到上限仍判 COMPLEX 的节点不再下钻，
- * 警告后强制按 simple 落叶(forcedNote 留痕，转代码时特殊对待)。
- */
+const DEF_DESIGN_ROUNDS = 6;
 const DEF_EXPAND_DEPTH = 6;
 
-/** expand pass 的并行访问器上限(walk 全局闸门，跨层共享，非逐层上限) */
 export const EXPAND_CONCURRENCY = 4;
+export const PHYSICAL_SPLIT_SIZES = ['large', 'unbounded'] as const;
+export const ERRORCHECK_RISK_LEVELS = ['medium', 'high'] as const;
+
+export const RAG_DEFAULT_TOPK = 8;
+export const RAG_RERANK_KEEP = 3;
+
+export const LIBRARY_INTENT_HINTS = {
+    index: ['建库', '索引', '入库', '收集', '汇总', '沉淀'],
+    retrieve: ['检索', '查找', '召回', '查询', '查证', '引用'],
+} as const;
 
 export const StepNames = {
     dag: 'dag',
-    /** PlanContext 整体状态 blob 的落盘名 */
     state: 'state',
 } as const;
 
-
 function getNumber(args: Record<string, string>, key: string, defValue: number): number {
     if (args[key]) {
-        const round = parseInt(args[key])
+        const round = parseInt(args[key]);
         if (isNumber(round) && round > 0) {
             return round;
         }
@@ -45,9 +37,9 @@ function getNumber(args: Record<string, string>, key: string, defValue: number):
 }
 
 export function getExpandDepth(args: Record<string, string>): number {
-    return getNumber(args,'expand-depth',DEF_EXPAND_DEPTH);
+    return getNumber(args, 'expand-depth', DEF_EXPAND_DEPTH);
 }
 
 export function getDesignRounds(args: Record<string, string>): number {
-    return getNumber(args,'rounds',DEF_DESIGN_ROUNDS);
+    return getNumber(args, 'rounds', DEF_DESIGN_ROUNDS);
 }

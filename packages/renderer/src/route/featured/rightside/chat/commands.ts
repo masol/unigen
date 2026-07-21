@@ -20,6 +20,7 @@ export const chatCommands: ChatCommand[] = [
 --cap: 指定根能力，而不是当前项目类型。new或uuid,new表示新建。
 --rounds: 最大轮次，默认6.
 --expand-depth: 最大展开的层级，默认6.
+--llm-pc: 当Rag未给出人类流程时，由LLM生成后，是否校验（procedure check）。默认off，通过设置为on打开。
 ` },
     {
         id: "prism", label: "/prism", desc: `使用prism方法回答你的问题--无上下文，支持如下参数：

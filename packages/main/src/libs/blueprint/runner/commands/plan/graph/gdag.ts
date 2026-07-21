@@ -1,57 +1,31 @@
 /**
  * ============================================================================
- * 【P-graph · GDag：DirectedGraph 数组 + 根 id + 产物注册表】
+ * 【P-graph · GDag:DirectedGraph 数组 + 根 id + 产物注册表(门面)】
  * ============================================================================
- *  - PNode 是 DagNode 的代码级派生：附加 id(uuid)/status/dag(子图指针)/facets。
- *    LLM 不产出也不见这些字段。
- *  - facets = 与 status 生命周期正交的并行判定维度，三态 pending/yes/no。
- *    【为何不用 tag】tag 只能表达"是"，区分不出"未判定"与"判定为否"，
- *    外层重入架构下会导致同一判定被反复重算(LLM 调用不幂等)。
- *    【为何是 Record 而非逐属性字段】新增维度不改 schema；旧存档缺省
- *    读出 'pending'，语义恰好正确("新维度在旧节点上尚未判定")。
- *  - 每一层是一个独立 DirectedGraph：图节点 = PNode(attrs)，
- *    边 = 数据流(producer → consumer，edge attrs 记 artifact 名)。
- *    PNode.dag 指向子层 DirectedGraph 的 id —— 节点即 DAG，递归由此表达。
- *  - 遍历归 GDag：walk(异步访问器/同层 filter/skip/stop/并行度) + topoNodes。
- *    并行度是【全局】闸门(共享信号量)：DFS 递归下逐层限流会按深度相乘，
- *    限不住真实并发。"看到节点做什么"是 pass 的事，不在此出现。
- *  - registerArtifact 内部整体串行(promise 链)：查重→检索→LLM 裁决→写入
- *    是长 async 链，并行 walk 下交错执行会使查重在写入前失效。
- *  - 持久化 = { rootId, graphs: [{id, data}], artifacts }，graphology 自带
- *    export/import，可完整重构。这是自由中间格式，最终转 capabilities 表
- *    是最后一遍的事。
- *  - 产物注册表全局唯一：新名字先 Fuse 找疑似，命中交 LLM 裁决归一，
- *    别名留痕。dataSchema 槽位供后续 pass 以 JSON Schema+description
- *    逐遍细化(含长度判断 → Map-Reduce 拆分)。
  */
-import { getSmartModel } from "$libs/model/index.js";
 import type { IRunnerContext } from '$types/blueprint/context.js';
-import { GDagJSON, Io, PNode, RegArtifact, TriState } from "$types/shared/plan/nodes.js";
-import { generateText } from "ai";
+import {
+    Artifact,
+    GDagJSON, IndexMeta, Io, PNode, RegArtifact, TriState,
+} from "$types/shared/plan/nodes.js";
 import Logger from "electron-log/main.js";
-import Fuse from "fuse.js";
 import { DirectedGraph } from "graphology";
 import { topologicalSort } from "graphology-dag";
 import { NodeStatus } from "../../plan-htn/types.js";
-import { ARTIFACT_FUZZY_THRESHOLD } from "../config.js";
+import { ArtifactCand, ArtifactRegistry } from "./registry.js";
+import { flattenGraphs } from "./rewrite.js";
+import { Semaphore } from "./semaphore.js";
 
-/** facet 名字典。新维度只在此加名字，不改任何结构 */
 export const FacetNames = {
-    /** 弱模型单次调用可胜任 */
     simple: 'simple',
-    /** 确定性代码可直接实现(不需要语义理解) */
     codeable: 'codeable',
-    /** 存在现成库/工具可直接调用(检索当前为空实现，恒 no) */
     lib: 'lib',
-    // 未来：split(需要数据拆分)、quality(需要质量闸)……
 } as const;
 
-/** 三态读取：缺省(旧存档/新维度)即 pending */
 export function getFacet(n: PNode, facet: string): TriState {
     return n.facets?.[facet] ?? 'pending';
 }
 
-/** 叶子可执行判定：任一执行途径成立即可落码 */
 export function isExecutable(n: PNode): boolean {
     return getFacet(n, FacetNames.simple) === 'yes'
         || getFacet(n, FacetNames.codeable) === 'yes'
@@ -65,171 +39,39 @@ export const NodeStatusValue: Record<string, NodeStatus> = {
     awaiting_code: 'awaiting_code' as NodeStatus,
     done: 'done' as NodeStatus,
     conflict: 'conflict' as NodeStatus,
-} as const
+} as const;
 
-// ── 遍历访问器协议 ──────────────────────────────────────────────────────────
-
-export interface WalkEntry {
-    graphId: string;
-    /** 根层为 0 */
-    depth: number;
-    node: PNode;
-}
-/** 'skip' = 不下潜该节点的子图；'stop' = 终止整个遍历；void = 正常继续 */
+export interface WalkEntry { graphId: string; depth: number; node: PNode; }
 export type WalkControl = 'skip' | 'stop' | void;
 export type WalkVisitor = (e: WalkEntry) => Promise<WalkControl> | WalkControl;
 
 export interface WalkOptions {
     startGraphId?: string;
-    /** 同层筛选。只控制"是否调用访问器"，不阻断下潜(被筛掉的已展开节点，其子层照常遍历) */
     filter?: (n: PNode) => boolean;
-    /**
-     * 并行访问器上限，默认 1 = 严格 DFS 顺序、错误即时上抛。
-     * >1 时：访问器并行执行(全局共享闸门，不是逐层上限)；同层访问顺序
-     * 不再保证；'stop' 尽力而为(已在跑的分支会跑完)；任一分支出错
-     * 【不会】中断其余在跑分支——全部落定后统一抛出(单错原样抛，
-     * 多错 AggregateError)。绝不留下遍历结束后仍在后台改图的脱缰任务。
-     */
     concurrency?: number;
 }
 
-interface WalkState {
-    stopped: boolean;
-    errors: unknown[];
-}
-
-/** 极简计数信号量：walk 并行访问器的全局闸门 */
-class Semaphore {
-    #waiters: (() => void)[] = [];
-    #free: number;
-    constructor(n: number) { this.#free = Math.max(1, n); }
-    async acquire(): Promise<void> {
-        if (this.#free > 0) { this.#free--; return; }
-        await new Promise<void>(resolve => this.#waiters.push(resolve));
-    }
-    release(): void {
-        const next = this.#waiters.shift();
-        if (next) next(); else this.#free++;
-    }
-}
+interface WalkState { stopped: boolean; errors: unknown[]; }
 
 export class GDag {
     #graphs = new Map<string, DirectedGraph>();
     rootId: string | null = null;
+    #registry = new ArtifactRegistry();
 
-    #artifacts = new Map<string, RegArtifact>(); // 正式名 → 记录
-    #fuse: Fuse<RegArtifact> | null = null;
-    /** registerArtifact 串行闸门(见 registerArtifact 注释) */
-    #regChain: Promise<unknown> = Promise.resolve();
+    // ── 产物注册表委托 ────────────────────────────────────────────────────
 
-    // ── 产物注册表(Fuse 快筛 + LLM 归一) ───────────────────────────────────
-
-    #rebuildFuse(): void {
-        this.#fuse = new Fuse([...this.#artifacts.values()], {
-            keys: [
-                { name: "name", weight: 0.6 },
-                { name: "intent", weight: 0.3 },
-                { name: "aliases", weight: 0.1 },
-            ],
-            includeScore: true,
-            threshold: 0.6, // 宽召回，精判交给阈值 + LLM
-        });
+    registerArtifact(cand: ArtifactCand, ctx: IRunnerContext): Promise<string> {
+        return this.#registry.register(cand, ctx);
     }
-
-    /** 解析到正式名(含别名命中)；不存在返回 null */
-    resolveName(name: string): string | null {
-        if (this.#artifacts.has(name)) return name;
-        for (const a of this.#artifacts.values())
-            if (a.aliases.includes(name)) return a.name;
-        return null;
-    }
-
-    /**
-     * 登记产物，返回归一后的正式名。
-     * 精确命中直接归一；Fuse 疑似(score ≤ 阈值)交 LLM 裁决；否则新建。
-     *
-     * 【整体串行】"查重→Fuse 检索→LLM 裁决→写入"是长 async 链。并行展开
-     * (walk concurrency>1)下多条链交错执行时，查重/候选名单在写入前就已
-     * 过期(同名双建、裁决对象缺漏)。注册表是全局唯一真相源，此处以
-     * promise 链整体排队；相对 LLM 调用本身，排队代价可忽略。
-     */
-    async registerArtifact(
-        cand: { name: string; intent: string },
-        ctx: IRunnerContext,
-    ): Promise<string> {
-        const run = this.#regChain.then(() => this.#registerArtifactImpl(cand, ctx));
-        this.#regChain = run.then(() => undefined, () => undefined); // 失败不断链
-        return run;
-    }
-
-    async #registerArtifactImpl(
-        cand: { name: string; intent: string },
-        ctx: IRunnerContext,
-    ): Promise<string> {
-        const exact = this.resolveName(cand.name);
-        if (exact) return exact;
-
-        if (!this.#fuse) this.#rebuildFuse();
-        const suspects = this.#fuse!
-            .search(`${cand.name} ${cand.intent}`)
-            .filter(h => (h.score ?? 1) <= ARTIFACT_FUZZY_THRESHOLD)
-            .map(h => h.item);
-
-        if (suspects.length > 0) {
-            const same = await this.#judgeSame(cand, suspects, ctx);
-            if (same) {
-                if (!same.aliases.includes(cand.name)) same.aliases.push(cand.name);
-                Logger.debug(`[gdag] 产物归一：「${cand.name}」→「${same.name}」`);
-                this.#rebuildFuse();
-                return same.name;
-            }
-        }
-
-        this.#artifacts.set(cand.name, {
-            name: cand.name, intent: cand.intent, aliases: [], dataSchema: null,
-        });
-        this.#rebuildFuse();
-        return cand.name;
-    }
-
-    async #judgeSame(
-        cand: { name: string; intent: string },
-        suspects: RegArtifact[],
-        ctx: IRunnerContext,
-    ): Promise<RegArtifact | null> {
-        const list = suspects
-            .map((s, i) => `${i + 1}. name=「${s.name}」 intent=「${s.intent}」`)
-            .join("\n");
-        const { text } = await generateText({
-            model: getSmartModel(undefined, ctx),
-            instructions: `你是数据产物归一裁判。判断"新产物"与候选中的某一项是否指同一份数据。
-判据是数据内容本质相同、仅命名/措辞不同。用途不同、粒度不同、加工阶段不同的，一律视为不同。
-若与第 k 项相同，只输出数字 k；若全都不同，只输出 0。不要输出其他任何内容。`,
-            prompt: `新产物：name=「${cand.name}」 intent=「${cand.intent}」\n候选：\n${list}`,
-        });
-        const k = parseInt(text.trim(), 10);
-        if (Number.isInteger(k) && k >= 1 && k <= suspects.length) {
-            return suspects[k - 1];
-        }
-        return null;
-    }
-
-    getArtifact(name: string): RegArtifact | null {
-        const formal = this.resolveName(name);
-        return formal ? this.#artifacts.get(formal)! : null;
-    }
-    allArtifacts(): RegArtifact[] { return [...this.#artifacts.values()]; }
+    resolveName(name: string): string | null { return this.#registry.resolveName(name); }
+    getArtifact(name: string): RegArtifact | null { return this.#registry.get(name); }
+    allArtifacts(): RegArtifact[] { return this.#registry.all(); }
 
     // ── 图管理 ──────────────────────────────────────────────────────────────
 
-    /**
-     * 用一批 PNode 建一个新层：图节点 = PNode，边由代码按 io 名称匹配连出。
-     * simple graph:同一对节点间的多份数据流合并为一条边，
-     * 边属性 artifacts 记全部数据名。LLM 从不涉足连边。
-     */
     createLayer(nodes: PNode[], asRoot = false): string {
         const g = new DirectedGraph();
-        const producer = new Map<string, string>(); // artifact 正式名 → node.id
+        const producer = new Map<string, string>();
         for (const n of nodes) {
             g.addNode(n.id, { ...n });
             for (const o of n.outputs) producer.set(o.name, n.id);
@@ -238,12 +80,7 @@ export class GDag {
             for (const i of n.inputs) {
                 const from = producer.get(i.name);
                 if (!from || from === n.id) continue;
-                if (g.hasEdge(from, n.id)) {
-                    const prev = g.getEdgeAttribute(from, n.id, 'artifacts') as string[];
-                    g.setEdgeAttribute(from, n.id, 'artifacts', [...prev, i.name]);
-                } else {
-                    g.addEdge(from, n.id, { artifacts: [i.name] });
-                }
+                this.#link(g, from, n.id, [i.name]);
             }
         }
         const id = crypto.randomUUID();
@@ -254,55 +91,36 @@ export class GDag {
 
     getGraph(id: string): DirectedGraph | null { return this.#graphs.get(id) ?? null; }
 
-    /**
-     * 丢弃一个层(展开的边界对账失败回滚用)。根层禁删。
-     * 注意：该层经 registerArtifact 写入注册表的产物/别名【不】回滚——
-     * 注册表是追加式留痕，残留别名无害。@todo 若污染成为实际问题再引入事务。
-     */
     dropGraph(id: string): void {
-        if (id === this.rootId) throw new Error(`[gdag] 根层禁止丢弃：${id}`);
+        if (id === this.rootId) throw new Error(`[gdag] 根层禁止丢弃`);
         this.#graphs.delete(id);
     }
 
-    /** 全局定位节点(跨所有层) */
     findNode(nodeId: string): { graphId: string; node: PNode } | null {
         for (const [gid, g] of this.#graphs) {
-            if (g.hasNode(nodeId)) {
+            if (g.hasNode(nodeId))
                 return { graphId: gid, node: g.getNodeAttributes(nodeId) as PNode };
-            }
         }
         return null;
     }
 
     updateNode(nodeId: string, patch: Partial<PNode>): void {
         const hit = this.findNode(nodeId);
-        if (!hit) throw new Error(`[gdag] 节点不存在：${nodeId}`);
-        const g = this.#graphs.get(hit.graphId)!;
-        g.mergeNodeAttributes(nodeId, patch);
+        if (!hit) throw new Error(`[gdag] 节点不存在:${nodeId}`);
+        this.#graphs.get(hit.graphId)!.mergeNodeAttributes(nodeId, patch);
     }
 
-    /**
-     * facet 专用写入：读-改-写整个 facets 对象，绕开浅合并覆盖问题。
-     * 注意：写入的是新对象，调用方手头的 PNode 快照不会随之更新，
-     * 需要最新值时用 findNode 重读。
-     */
     setFacet(nodeId: string, facet: string, value: TriState): void {
         const hit = this.findNode(nodeId);
-        if (!hit) throw new Error(`[gdag] 节点不存在：${nodeId}`);
-        const g = this.#graphs.get(hit.graphId)!;
-        g.setNodeAttribute(nodeId, 'facets', { ...hit.node.facets, [facet]: value });
+        if (!hit) throw new Error(`[gdag] 节点不存在:${nodeId}`);
+        this.#graphs.get(hit.graphId)!
+            .setNodeAttribute(nodeId, 'facets', { ...hit.node.facets, [facet]: value });
     }
 
-    /**
-     * 展开节点：把子层挂到 node.dag。
-     * 这是递归的全部机制——展开时以该节点的 inputs 为初始数据、
-     * outputs 为交付目标，调用同一套 designDag 得到子节点清单。
-     */
     attachSubDag(nodeId: string, subGraphId: string): void {
         this.updateNode(nodeId, { dag: subGraphId, status: 'expanded' });
     }
 
-    /** harness 扫描：遍历全部层，收集处于指定状态的节点 */
     scan(status: NodeStatus): { graphId: string; node: PNode }[] {
         const out: { graphId: string; node: PNode }[] = [];
         for (const [gid, g] of this.#graphs) {
@@ -314,22 +132,12 @@ export class GDag {
         return out;
     }
 
-    // ── 上游数据池：展开的可用输入集合(代码遍历收集) ────────────────────────
+    // ── 上游数据池 ──────────────────────────────────────────────────────────
 
-    /**
-     * 节点在其层内的可用数据池 = 同层全部祖先节点的 outputs + 本层初始数据，
-     * 再剔除节点自己 inputs 已占用的名字。同名多来源时首见者胜(名字全局
-     * 归一，intent 等价)。
-     *
-     * 【只看同层，不跨层上收】跨层可用会让子层消费父作用域数据 →
-     * 父节点 inputs 级联改写一路传导到根，与"外层重入"架构相性极差。
-     * @todo 跨层数据池需先有依赖追踪，与 plan 工作流化一并考虑。
-     */
     upstreamPool(graphId: string, nodeId: string): Io[] {
         const g = this.#graphs.get(graphId);
         if (!g || !g.hasNode(nodeId)) return [];
 
-        // 同层祖先：反向 BFS
         const ancestors = new Set<string>();
         const queue = [nodeId];
         while (queue.length > 0) {
@@ -350,7 +158,6 @@ export class GDag {
             const a = g.getNodeAttributes(aid) as PNode;
             for (const o of a.outputs) add(o);
         }
-        // 本层初始数据(无层内产出者的 inputs)：从各节点 inputs 捞 intent
         const produced = new Set<string>();
         g.forEachNode((_, attrs) => {
             for (const o of (attrs as PNode).outputs) produced.add(o.name);
@@ -362,51 +169,175 @@ export class GDag {
         return [...pool.values()];
     }
 
-    /**
-     * 展开选用池内数据后的父节点 inputs 增量回写：只加不删，并重连该层的边。
-     * 【只加不删】删除"子层未用到的原 input"会使兄弟节点产物变成悬空终端，
-     * 破坏该层已通过校验的不变式；未用输入的清理属于未来的裁剪 pass。
-     * 新增输入只可能来自同层祖先/初始数据(upstreamPool 保证)，重连不会成环。
-     */
     addNodeInputs(graphId: string, nodeId: string, extra: Io[]): void {
         if (extra.length === 0) return;
         const g = this.#graphs.get(graphId);
-        if (!g || !g.hasNode(nodeId)) throw new Error(`[gdag] 节点不存在：${nodeId}`);
+        if (!g || !g.hasNode(nodeId)) throw new Error(`[gdag] 节点不存在:${nodeId}`);
         const node = g.getNodeAttributes(nodeId) as PNode;
         const have = new Set(node.inputs.map(i => i.name));
         const added = extra.filter(io => !have.has(io.name));
         if (added.length === 0) return;
         g.setNodeAttribute(nodeId, 'inputs', [...node.inputs, ...added]);
 
-        // 重连：找到新增数据的层内产出者，补边(与 createLayer 同一推导规则)
         const producer = new Map<string, string>();
         g.forEachNode((nid, attrs) => {
             for (const o of (attrs as PNode).outputs) producer.set(o.name, nid);
         });
         for (const io of added) {
             const from = producer.get(io.name);
-            if (!from || from === nodeId) continue; // 初始数据/自产，无边
-            if (g.hasEdge(from, nodeId)) {
-                const prev = g.getEdgeAttribute(from, nodeId, 'artifacts') as string[];
-                if (!prev.includes(io.name))
-                    g.setEdgeAttribute(from, nodeId, 'artifacts', [...prev, io.name]);
+            if (!from || from === nodeId) continue;
+            this.#link(g, from, nodeId, [io.name]);
+        }
+    }
+
+    // ── 物理规划:图改写方法 ─────────────────────────────────────────────────
+
+    /** 找某层中消费特定 artifact 的所有节点 */
+    findConsumers(graphId: string, artifactName: string): PNode[] {
+        const g = this.#graphs.get(graphId);
+        if (!g) return [];
+        const out: PNode[] = [];
+        g.forEachNode((_, attrs) => {
+            const n = attrs as PNode;
+            if (n.inputs.some(i => i.name === artifactName)) out.push(n);
+        });
+        return out;
+    }
+
+    /** 替换节点的某个输出 artifact(名称 + 元信息),并更新出边 */
+    replaceNodeOutput(graphId: string, nodeId: string, oldName: string, newArt: Artifact): void {
+        const g = this.#graphs.get(graphId);
+        if (!g || !g.hasNode(nodeId)) throw new Error(`[gdag] 节点不存在:${nodeId}`);
+        const node = g.getNodeAttributes(nodeId) as PNode;
+        const newOutputs = node.outputs.map(o => o.name === oldName ? newArt : o);
+        g.setNodeAttribute(nodeId, 'outputs', newOutputs);
+
+        // 更新出边:oldName → newArt.name
+        for (const eid of g.outEdges(nodeId)) {
+            const arts = g.getEdgeAttribute(eid, 'artifacts') as string[];
+            const updated = arts.map(a => a === oldName ? newArt.name : a);
+            g.setEdgeAttribute(eid, 'artifacts', updated);
+        }
+    }
+
+    /** 替换节点的某个输入 artifact(名称 + 元信息),并更新入边 */
+    replaceNodeInput(graphId: string, nodeId: string, oldName: string, newArt: Artifact): void {
+        const g = this.#graphs.get(graphId);
+        if (!g || !g.hasNode(nodeId)) throw new Error(`[gdag] 节点不存在:${nodeId}`);
+        const node = g.getNodeAttributes(nodeId) as PNode;
+        const newInputs = node.inputs.map(i => i.name === oldName ? newArt : i);
+        g.setNodeAttribute(nodeId, 'inputs', newInputs);
+
+        // 更新入边
+        for (const eid of g.inEdges(nodeId)) {
+            const arts = g.getEdgeAttribute(eid, 'artifacts') as string[];
+            const updated = arts.map(a => a === oldName ? newArt.name : a);
+            g.setEdgeAttribute(eid, 'artifacts', updated);
+        }
+
+        // 如果 newArt 有新的 producer,加边
+        const producer = this.#findProducer(g, newArt.name);
+        if (producer && producer !== nodeId && !g.hasEdge(producer, nodeId)) {
+            g.addEdge(producer, nodeId, { artifacts: [newArt.name] });
+        }
+    }
+
+    /** 在 fromNode 和 toNode 之间插入一个新节点 */
+    insertNodeBetween(graphId: string, fromNodeId: string, toNodeId: string, inject: PNode): void {
+        const g = this.#graphs.get(graphId);
+        if (!g) throw new Error(`[gdag] 层不存在:${graphId}`);
+
+        g.addNode(inject.id, inject);
+
+        // from → inject 边(inject 消费 from 的输出)
+        for (const inp of inject.inputs) {
+            const from = this.#findProducer(g, inp.name);
+            if (from) this.#link(g, from, inject.id, [inp.name]);
+        }
+
+        // inject → to 边(to 消费 inject 的输出)
+        for (const out of inject.outputs) {
+            this.#link(g, inject.id, toNodeId, [out.name]);
+        }
+
+        // 清理 from → to 的直连边中被截断的 artifact
+        if (g.hasEdge(fromNodeId, toNodeId)) {
+            const arts = g.getEdgeAttribute(fromNodeId, toNodeId, 'artifacts') as string[];
+            const intercepted = inject.inputs.map(i => i.name);
+            const remaining = arts.filter(a => !intercepted.includes(a));
+            if (remaining.length === 0) {
+                g.dropEdge(fromNodeId, toNodeId);
             } else {
-                g.addEdge(from, nodeId, { artifacts: [io.name] });
+                g.setEdgeAttribute(fromNodeId, toNodeId, 'artifacts', remaining);
             }
         }
-        Logger.debug(`[gdag] 「${node.name}」inputs 增量回写：${added.map(a => a.name).join("、")}`);
+    }
+
+    /** 在图末尾追加一个终端节点(消费某 artifact,产出最终版) */
+    appendTerminalNode(graphId: string, node: PNode): void {
+        const g = this.#graphs.get(graphId);
+        if (!g) throw new Error(`[gdag] 层不存在:${graphId}`);
+
+        g.addNode(node.id, node);
+        for (const inp of node.inputs) {
+            const from = this.#findProducer(g, inp.name);
+            if (from) this.#link(g, from, node.id, [inp.name]);
+        }
+    }
+
+    /** 在目标节点之前插入一个节点(接管目标的部分入边) */
+    injectBeforeNode(graphId: string, targetNodeId: string, inject: PNode): void {
+        const g = this.#graphs.get(graphId);
+        if (!g || !g.hasNode(targetNodeId))
+            throw new Error(`[gdag] 节点不存在:${targetNodeId}`);
+
+        g.addNode(inject.id, inject);
+
+        // inject 的输入:从上游(现有 producer)拉边
+        for (const inp of inject.inputs) {
+            const from = this.#findProducer(g, inp.name);
+            if (from) this.#link(g, from, inject.id, [inp.name]);
+        }
+
+        // inject 的输出:连到 target
+        for (const out of inject.outputs) {
+            this.#link(g, inject.id, targetNodeId, [out.name]);
+            // 若 target 还没有这个 input,加上
+            const target = g.getNodeAttributes(targetNodeId) as PNode;
+            if (!target.inputs.some(i => i.name === out.name)) {
+                g.setNodeAttribute(targetNodeId, 'inputs', [...target.inputs, out]);
+            }
+        }
+
+        Logger.debug(`[gdag] 前置注入:${inject.name} → ${(g.getNodeAttributes(targetNodeId) as PNode).name}`);
+    }
+
+    /** 在某节点的上游查找最近的 IndexMeta */
+    findUpstreamIndexMeta(graphId: string, nodeId: string): IndexMeta | null {
+        const g = this.#graphs.get(graphId);
+        if (!g || !g.hasNode(nodeId)) return null;
+        const visited = new Set<string>();
+        const queue: string[] = [];
+        g.forEachInNeighbor(nodeId, (nb) => queue.push(nb));
+        while (queue.length > 0) {
+            const cur = queue.shift()!;
+            if (visited.has(cur)) continue;
+            visited.add(cur);
+            const attrs = g.getNodeAttributes(cur) as PNode;
+            if (attrs.indexMeta) return attrs.indexMeta;
+            g.forEachInNeighbor(cur, (nb) => queue.push(nb));
+        }
+        return null;
     }
 
     // ── 遍历 ────────────────────────────────────────────────────────────────
 
-    /** 层内拓扑序节点。层在 attach 前已过无环校验，topologicalSort 不会抛 */
     topoNodes(graphId: string): PNode[] {
         const g = this.#graphs.get(graphId);
         if (!g) return [];
         return topologicalSort(g).map(id => g.getNodeAttributes(id) as PNode);
     }
 
-    /** 层深度表：graphId → depth(根层 0)。沿 node.dag 指针推导，不另存父指针 */
     layerDepths(): Map<string, number> {
         const depths = new Map<string, number>();
         if (!this.rootId) return depths;
@@ -424,15 +355,6 @@ export class GDag {
         return depths;
     }
 
-    /**
-     * 深度优先遍历：每层按拓扑序，逐节点调用异步访问器，然后下潜其子图。
-     * 【关键语义】访问器返回后【重读】node.dag 再决定下潜——访问器若在
-     * 访问中为节点挂上了子图(attachSubDag)，walk 会顺势钻进新层继续。
-     * 递归展开 pass 因此只需一次 walk，不需要外层 while。
-     *
-     * 返回 true = 完整走完；false = 被访问器 'stop' 终止。
-     * 并发语义见 WalkOptions.concurrency。
-     */
     async walk(visitor: WalkVisitor, opts: WalkOptions = {}): Promise<boolean> {
         const start = opts.startGraphId ?? this.rootId;
         if (!start) return true;
@@ -457,7 +379,7 @@ export class GDag {
     ): Promise<void> {
         const g = this.#graphs.get(gid);
         if (!g) return;
-        const order = topologicalSort(g); // 快照：访问中新挂的子图不影响本层迭代
+        const order = topologicalSort(g);
 
         const runNode = async (nid: string): Promise<void> => {
             if (state.stopped) return;
@@ -466,32 +388,23 @@ export class GDag {
                 await sem.acquire();
                 let ctrl: WalkControl;
                 try {
-                    if (state.stopped) return; // 等闸期间可能已停
+                    if (state.stopped) return;
                     ctrl = await visitor({ graphId: gid, depth, node });
-                } finally {
-                    sem.release();
-                }
+                } finally { sem.release(); }
                 if (ctrl === 'stop') { state.stopped = true; return; }
                 if (ctrl === 'skip') return;
             }
-            // 重读：访问器可能刚挂了子图(attachSubDag)
             const fresh = g.getNodeAttributes(nid) as PNode;
             if (fresh.dag)
                 await this.#walkLayer(fresh.dag, depth + 1, visitor, filter, concurrency, sem, state);
         };
 
         if (concurrency <= 1) {
-            // 串行：严格 DFS 顺序，错误直接上抛(不存在需要等待落定的兄弟分支)
             for (const nid of order) {
                 if (state.stopped) return;
                 await runNode(nid);
             }
         } else {
-            /*
-             * 并行：兄弟节点(含各自的下潜链)并发跑，访问器受全局信号量限流。
-             * 单分支出错只记账并阻止新分支启动，绝不提前返回——必须等
-             * 全部在飞分支落定，walk 返回后才能保证没有后台任务还在改图。
-             */
             await Promise.all(order.map(nid =>
                 runNode(nid).catch(err => {
                     state.errors.push(err);
@@ -503,7 +416,6 @@ export class GDag {
 
     // ── 层边界 ──────────────────────────────────────────────────────────────
 
-    /** 层内初始数据：无层内产出者的 input 名(子层者应恰落在父节点 inputs 内) */
     initialArtifacts(graphId: string): string[] {
         const g = this.#graphs.get(graphId);
         if (!g) return [];
@@ -519,7 +431,6 @@ export class GDag {
         return [...out];
     }
 
-    /** 层内终端产物：产出后无人消费的 artifact 名(根层唯一者即最终交付物) */
     terminalArtifacts(graphId: string): string[] {
         const g = this.#graphs.get(graphId);
         if (!g) return [];
@@ -535,15 +446,23 @@ export class GDag {
         return out;
     }
 
-    // ── 持久化：DirectedGraph 数组 + 根 id + 注册表，可完整重构 ────────────
+    // ── 展平 ────────────────────────────────────────────────────────────────
+
+    flatten(): string {
+        if (!this.rootId) throw new Error(`[gdag] 无根层,无法展平`);
+        const flat = flattenGraphs(this.#graphs);
+        const id = crypto.randomUUID();
+        this.#graphs.set(id, flat);
+        return id;
+    }
+
+    // ── 持久化 ──────────────────────────────────────────────────────────────
 
     toJSON(): GDagJSON {
         return {
             rootId: this.rootId,
-            graphs: [...this.#graphs.entries()].map(([id, g]) => ({
-                id, data: g.export(),
-            })),
-            artifacts: [...this.#artifacts.values()],
+            graphs: [...this.#graphs.entries()].map(([id, g]) => ({ id, data: g.export() })),
+            artifacts: this.#registry.all(),
         };
     }
 
@@ -551,20 +470,34 @@ export class GDag {
         const d = new GDag();
         d.rootId = j.rootId;
         for (const { id, data } of j.graphs) {
-            /*
-             * 用 DirectedGraph.from 按序列化数据内嵌的 options 重构，
-             * 不再手工 new + import——正是"手工实例 options 与数据内嵌
-             * options 不一致"触发了 inconsistent multi 异常。
-             * 现在全模块只产 simple graph，options 恒一致。
-             */
             const g = DirectedGraph.from(data);
-            // 旧存档兼容：facets 缺省补空对象(读出即全 pending，语义正确)
             g.forEachNode((nid, attrs) => {
                 if (!(attrs as PNode).facets) g.setNodeAttribute(nid, 'facets', {});
             });
             d.#graphs.set(id, g);
         }
-        for (const a of j.artifacts) d.#artifacts.set(a.name, a);
+        d.#registry.load(j.artifacts);
         return d;
+    }
+
+    // ── 私有工具 ────────────────────────────────────────────────────────────
+
+    #link(g: DirectedGraph, from: string, to: string, arts: string[]): void {
+        if (arts.length === 0) return;
+        if (g.hasEdge(from, to)) {
+            const prev = g.getEdgeAttribute(from, to, 'artifacts') as string[];
+            g.setEdgeAttribute(from, to, 'artifacts', [...new Set([...prev, ...arts])]);
+        } else {
+            g.addEdge(from, to, { artifacts: [...arts] });
+        }
+    }
+
+    #findProducer(g: DirectedGraph, artifactName: string): string | null {
+        let producer: string | null = null;
+        g.forEachNode((nid, attrs) => {
+            const n = attrs as PNode;
+            if (n.outputs.some(o => o.name === artifactName)) producer = nid;
+        });
+        return producer;
     }
 }
