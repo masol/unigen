@@ -7,12 +7,8 @@ export type SizeEstimateT = z.infer<typeof SizeEstimate>;
 export const NodeKind = z.enum([
     'extract', 'classify', 'summarize', 'transform',
     'merge', 'score', 'generate', 'lookup', 'aggregate', 'route',
-    // 物理规划机械插入:
-    'split', 'map', 'reduce', 'validate', 'critique',
-    // 大库适配:
-    'index', 'retrieve',
-    // 目标导向压缩(chunk → 精简版):
-    'compress',
+    // P1 内层由 LLM 主动设计的物理节点：
+    'split', 'map', 'reduce', 'validate', 'critique', 'compress',
 ]);
 export type NodeKindT = z.infer<typeof NodeKind>;
 
@@ -20,12 +16,6 @@ export type NodeKindT = z.infer<typeof NodeKind>;
 export const LOGICAL_NODE_KINDS: NodeKindT[] = [
     'extract', 'classify', 'summarize', 'transform',
     'merge', 'score', 'generate', 'lookup', 'aggregate', 'route',
-];
-
-/** 物理规划合成的机械节点类型(不参与模拟可信度评估) */
-export const SYNTHETIC_KINDS: NodeKindT[] = [
-    'split', 'map', 'reduce', 'validate', 'critique',
-    'index', 'retrieve', 'compress',
 ];
 
 // ─── Artifact ─────────────────────────────────────────────────────────────
@@ -38,8 +28,9 @@ export const ArtifactSchema = z.object({
     qualityCriteria: z.array(z.string()).default([])
         .describe("人类同行如何判断这份成果做得好不好"),
     sizeEstimate: SizeEstimate.default('small')
-        .describe("预估规模。unbounded = 条目数不定或可能超长"),
+        .describe("预估规模。small(<1K) / medium(1K-10K) / large(10K-600K) / unbounded(>600K)"),
 });
+
 export type Artifact = z.infer<typeof ArtifactSchema>;
 
 // ─── Node ─────────────────────────────────────────────────────────────────
@@ -57,6 +48,7 @@ export const DagNodeSchema = z.object({
     outputs: z.array(ArtifactSchema).min(1).max(1)
         .describe("这步产出的成果,恰好一份"),
 });
+
 export type DagNode = z.infer<typeof DagNodeSchema>;
 
 export const NodeListSchema = z.object({
@@ -65,6 +57,7 @@ export const NodeListSchema = z.object({
     nodes: z.array(DagNodeSchema).min(1)
         .describe("思维环节清单。每个环节产出清单中的一份成果"),
 });
+
 export type NodeList = z.infer<typeof NodeListSchema>;
 
 export type Io = Pick<Artifact, 'name' | 'intent'>;
@@ -74,7 +67,6 @@ export type DagDesignResult = NodeList & { text: string; };
 // ── facets ─────────────────────────────────────────────────────────────────
 
 export type TriState = 'pending' | 'yes' | 'no';
-export type Facets = Record<string, TriState>;
 
 export type NodeStatus =
     'pending' | 'expanding' | 'expanded'
@@ -82,26 +74,6 @@ export type NodeStatus =
 
 export type RiskLevel = 'low' | 'medium' | 'high';
 export type GuardKind = 'validate' | 'critique';
-
-/** 并行执行策略 */
-export interface ParallelMeta {
-    /** 针对哪个输入数据做并行 */
-    onInput: string;
-    /** 并行组 id */
-    groupId: string;
-    /** 本节点在并行链中的角色 */
-    role: 'map' | 'reduce' | 'propagate';
-    /** 产出的 chunk 数据名(role=map 时有值) */
-    chunkOutput?: string;
-}
-
-/** 索引元数据 */
-export interface IndexMeta {
-    indexName: string;
-    sizeEstimate: SizeEstimateT;
-    semanticHint: string;
-    mode: 'exact' | 'rag_rerank';
-}
 
 /** 代码级运行时节点 */
 export interface PNode extends DagNode {
@@ -112,14 +84,13 @@ export interface PNode extends DagNode {
     facets: Facets;
     forcedNote?: string;
     risk?: RiskLevel;
+    /** 是否为合成节点（chunk/reduce/validate 等机器插入或 LLM 设计但无需人工展开的） */
     synthetic?: boolean;
     guard?: boolean;
     guardKinds?: GuardKind[];
-    /** 并行执行策略(物理规划标注) */
-    parallel?: ParallelMeta;
-    /** 索引元数据(kind=index 时) */
-    indexMeta?: IndexMeta;
 }
+
+export type Facets = Record<string, TriState>;
 
 export interface RegArtifact {
     name: string;

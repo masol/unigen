@@ -1,14 +1,7 @@
-/**
- * ============================================================================
- * 【P-graph · GDag:DirectedGraph 数组 + 根 id + 产物注册表(门面)】
- * ============================================================================
- */
 import type { IRunnerContext } from '$types/blueprint/context.js';
 import {
-    Artifact,
-    GDagJSON, IndexMeta, Io, PNode, RegArtifact, TriState,
+    GDagJSON, Io, PNode, RegArtifact, TriState,
 } from "$types/shared/plan/nodes.js";
-import Logger from "electron-log/main.js";
 import { DirectedGraph } from "graphology";
 import { topologicalSort } from "graphology-dag";
 import { NodeStatus } from "../../plan-htn/types.js";
@@ -24,12 +17,6 @@ export const FacetNames = {
 
 export function getFacet(n: PNode, facet: string): TriState {
     return n.facets?.[facet] ?? 'pending';
-}
-
-export function isExecutable(n: PNode): boolean {
-    return getFacet(n, FacetNames.simple) === 'yes'
-        || getFacet(n, FacetNames.codeable) === 'yes'
-        || getFacet(n, FacetNames.lib) === 'yes';
 }
 
 export const NodeStatusValue: Record<string, NodeStatus> = {
@@ -117,9 +104,11 @@ export class GDag {
             .setNodeAttribute(nodeId, 'facets', { ...hit.node.facets, [facet]: value });
     }
 
+
     attachSubDag(nodeId: string, subGraphId: string): void {
         this.updateNode(nodeId, { dag: subGraphId, status: 'expanded' });
     }
+
 
     scan(status: NodeStatus): { graphId: string; node: PNode }[] {
         const out: { graphId: string; node: PNode }[] = [];
@@ -188,146 +177,6 @@ export class GDag {
             if (!from || from === nodeId) continue;
             this.#link(g, from, nodeId, [io.name]);
         }
-    }
-
-    // ── 物理规划:图改写方法 ─────────────────────────────────────────────────
-
-    /** 找某层中消费特定 artifact 的所有节点 */
-    findConsumers(graphId: string, artifactName: string): PNode[] {
-        const g = this.#graphs.get(graphId);
-        if (!g) return [];
-        const out: PNode[] = [];
-        g.forEachNode((_, attrs) => {
-            const n = attrs as PNode;
-            if (n.inputs.some(i => i.name === artifactName)) out.push(n);
-        });
-        return out;
-    }
-
-    /** 替换节点的某个输出 artifact(名称 + 元信息),并更新出边 */
-    replaceNodeOutput(graphId: string, nodeId: string, oldName: string, newArt: Artifact): void {
-        const g = this.#graphs.get(graphId);
-        if (!g || !g.hasNode(nodeId)) throw new Error(`[gdag] 节点不存在:${nodeId}`);
-        const node = g.getNodeAttributes(nodeId) as PNode;
-        const newOutputs = node.outputs.map(o => o.name === oldName ? newArt : o);
-        g.setNodeAttribute(nodeId, 'outputs', newOutputs);
-
-        // 更新出边:oldName → newArt.name
-        for (const eid of g.outEdges(nodeId)) {
-            const arts = g.getEdgeAttribute(eid, 'artifacts') as string[];
-            const updated = arts.map(a => a === oldName ? newArt.name : a);
-            g.setEdgeAttribute(eid, 'artifacts', updated);
-        }
-    }
-
-    /** 替换节点的某个输入 artifact(名称 + 元信息),并更新入边 */
-    replaceNodeInput(graphId: string, nodeId: string, oldName: string, newArt: Artifact): void {
-        const g = this.#graphs.get(graphId);
-        if (!g || !g.hasNode(nodeId)) throw new Error(`[gdag] 节点不存在:${nodeId}`);
-        const node = g.getNodeAttributes(nodeId) as PNode;
-        const newInputs = node.inputs.map(i => i.name === oldName ? newArt : i);
-        g.setNodeAttribute(nodeId, 'inputs', newInputs);
-
-        // 更新入边
-        for (const eid of g.inEdges(nodeId)) {
-            const arts = g.getEdgeAttribute(eid, 'artifacts') as string[];
-            const updated = arts.map(a => a === oldName ? newArt.name : a);
-            g.setEdgeAttribute(eid, 'artifacts', updated);
-        }
-
-        // 如果 newArt 有新的 producer,加边
-        const producer = this.#findProducer(g, newArt.name);
-        if (producer && producer !== nodeId && !g.hasEdge(producer, nodeId)) {
-            g.addEdge(producer, nodeId, { artifacts: [newArt.name] });
-        }
-    }
-
-    /** 在 fromNode 和 toNode 之间插入一个新节点 */
-    insertNodeBetween(graphId: string, fromNodeId: string, toNodeId: string, inject: PNode): void {
-        const g = this.#graphs.get(graphId);
-        if (!g) throw new Error(`[gdag] 层不存在:${graphId}`);
-
-        g.addNode(inject.id, inject);
-
-        // from → inject 边(inject 消费 from 的输出)
-        for (const inp of inject.inputs) {
-            const from = this.#findProducer(g, inp.name);
-            if (from) this.#link(g, from, inject.id, [inp.name]);
-        }
-
-        // inject → to 边(to 消费 inject 的输出)
-        for (const out of inject.outputs) {
-            this.#link(g, inject.id, toNodeId, [out.name]);
-        }
-
-        // 清理 from → to 的直连边中被截断的 artifact
-        if (g.hasEdge(fromNodeId, toNodeId)) {
-            const arts = g.getEdgeAttribute(fromNodeId, toNodeId, 'artifacts') as string[];
-            const intercepted = inject.inputs.map(i => i.name);
-            const remaining = arts.filter(a => !intercepted.includes(a));
-            if (remaining.length === 0) {
-                g.dropEdge(fromNodeId, toNodeId);
-            } else {
-                g.setEdgeAttribute(fromNodeId, toNodeId, 'artifacts', remaining);
-            }
-        }
-    }
-
-    /** 在图末尾追加一个终端节点(消费某 artifact,产出最终版) */
-    appendTerminalNode(graphId: string, node: PNode): void {
-        const g = this.#graphs.get(graphId);
-        if (!g) throw new Error(`[gdag] 层不存在:${graphId}`);
-
-        g.addNode(node.id, node);
-        for (const inp of node.inputs) {
-            const from = this.#findProducer(g, inp.name);
-            if (from) this.#link(g, from, node.id, [inp.name]);
-        }
-    }
-
-    /** 在目标节点之前插入一个节点(接管目标的部分入边) */
-    injectBeforeNode(graphId: string, targetNodeId: string, inject: PNode): void {
-        const g = this.#graphs.get(graphId);
-        if (!g || !g.hasNode(targetNodeId))
-            throw new Error(`[gdag] 节点不存在:${targetNodeId}`);
-
-        g.addNode(inject.id, inject);
-
-        // inject 的输入:从上游(现有 producer)拉边
-        for (const inp of inject.inputs) {
-            const from = this.#findProducer(g, inp.name);
-            if (from) this.#link(g, from, inject.id, [inp.name]);
-        }
-
-        // inject 的输出:连到 target
-        for (const out of inject.outputs) {
-            this.#link(g, inject.id, targetNodeId, [out.name]);
-            // 若 target 还没有这个 input,加上
-            const target = g.getNodeAttributes(targetNodeId) as PNode;
-            if (!target.inputs.some(i => i.name === out.name)) {
-                g.setNodeAttribute(targetNodeId, 'inputs', [...target.inputs, out]);
-            }
-        }
-
-        Logger.debug(`[gdag] 前置注入:${inject.name} → ${(g.getNodeAttributes(targetNodeId) as PNode).name}`);
-    }
-
-    /** 在某节点的上游查找最近的 IndexMeta */
-    findUpstreamIndexMeta(graphId: string, nodeId: string): IndexMeta | null {
-        const g = this.#graphs.get(graphId);
-        if (!g || !g.hasNode(nodeId)) return null;
-        const visited = new Set<string>();
-        const queue: string[] = [];
-        g.forEachInNeighbor(nodeId, (nb) => queue.push(nb));
-        while (queue.length > 0) {
-            const cur = queue.shift()!;
-            if (visited.has(cur)) continue;
-            visited.add(cur);
-            const attrs = g.getNodeAttributes(cur) as PNode;
-            if (attrs.indexMeta) return attrs.indexMeta;
-            g.forEachInNeighbor(cur, (nb) => queue.push(nb));
-        }
-        return null;
     }
 
     // ── 遍历 ────────────────────────────────────────────────────────────────
@@ -490,14 +339,5 @@ export class GDag {
         } else {
             g.addEdge(from, to, { artifacts: [...arts] });
         }
-    }
-
-    #findProducer(g: DirectedGraph, artifactName: string): string | null {
-        let producer: string | null = null;
-        g.forEachNode((nid, attrs) => {
-            const n = attrs as PNode;
-            if (n.outputs.some(o => o.name === artifactName)) producer = nid;
-        });
-        return producer;
     }
 }

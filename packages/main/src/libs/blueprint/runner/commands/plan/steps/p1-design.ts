@@ -1,11 +1,10 @@
 /**
  * ============================================================================
- * 【P-Pass2a · designTop:顶层人类工作流拆解】
+ * 【P-Pass1 · designTop:顶层人类工作流拆解】
  * ============================================================================
- * 人类做这件事的第一层思维拆解:从用户需求出发,参考人类流程先验,
- * 产出顶层 DAG。只做拟人化拆解,不做物理规划。
  */
-import { throwNotimplement, throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprcessable } from "$libs/utils/err.js";
+import Logger from "electron-log/main.js";
 import { StepNames } from "../config.js";
 import { PlanContext } from "../context.js";
 import { designDag, makeTopTask, registerLayer } from "./dag.js";
@@ -16,7 +15,9 @@ export async function designTop(pctx: PlanContext): Promise<void> {
 
     if (gdag.rootId && gdag.getGraph(gdag.rootId)) {
         const error = pctx.getNodeError(StepNames.dag);
-        if (error) throwNotimplement("尚未实现顶层工作流的错误恢复。");
+        if (error) {
+            Logger.warn(`[designTop] 重入时发现错误,暂不支持恢复:\n${error}`);
+        }
         return;
     }
 

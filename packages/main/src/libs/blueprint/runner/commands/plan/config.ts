@@ -7,11 +7,11 @@ export const RAG_SKELETON_LIMIT = 5;
 export const RAG_TEMPLATE_LIMIT = 3;
 
 const DEF_DESIGN_ROUNDS = 6;
-const DEF_EXPAND_DEPTH = 6;
+const DEF_EXPAND_DEPTH = 3;
+const DEF_DETAIL_LEVELS = 5;
+const DEF_PLAN_ITERATIONS = 3;
 
-export const EXPAND_CONCURRENCY = 4;
-export const PHYSICAL_SPLIT_SIZES = ['large', 'unbounded'] as const;
-export const ERRORCHECK_RISK_LEVELS = ['medium', 'high'] as const;
+export const EXPAND_CONCURRENCY = 16;
 
 export const RAG_DEFAULT_TOPK = 8;
 export const RAG_RERANK_KEEP = 3;
@@ -42,4 +42,12 @@ export function getExpandDepth(args: Record<string, string>): number {
 
 export function getDesignRounds(args: Record<string, string>): number {
     return getNumber(args, 'rounds', DEF_DESIGN_ROUNDS);
+}
+
+export function getDetailLevels(args: Record<string, string>): number {
+    return getNumber(args, 'detail-levels', DEF_DETAIL_LEVELS);
+}
+
+export function getPlanIterations(args: Record<string, string>): number {
+    return getNumber(args, 'plan-iterations', DEF_PLAN_ITERATIONS);
 }
