@@ -12,7 +12,7 @@ const DEF_DETAIL_LEVELS = 5;
 // const DEF_PLAN_ITERATIONS = 3;
 const DEF_THINK_DEPTH = 0;
 
-export const EXPAND_CONCURRENCY = 16;
+export const EXPAND_CONCURRENCY = 32;
 
 export const RAG_DEFAULT_TOPK = 8;
 export const RAG_RERANK_KEEP = 3;

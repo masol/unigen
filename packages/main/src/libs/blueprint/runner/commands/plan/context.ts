@@ -14,6 +14,18 @@ import validator from 'validator';
 import { StepNames, TOOL_SEARCH_LIMIT } from './config.js';
 import { GDag } from './graph/gdag.js';
 
+export interface PromptPair {
+    system: string;
+    user: string;
+}
+
+export interface GeneratedArtifact {
+    nodeId: string;
+    code: string;
+    /** 与流程 LLM 步骤一一对应的提示词对 */
+    prompts: PromptPair[];
+}
+
 export interface ResolvedTool {
     id: string;
     name: string;
@@ -46,7 +58,23 @@ export class PlanContext {
     private toolCache = new Map<string, ResolvedTool[]>();
     #invalidations: Record<string, string[]> = {};
     #gdag: GDag | null = null;
+    // ── 代码生成产物缓存 ──────────────────────────────────────────────────
+    #generated = new Map<string, GeneratedArtifact>();
 
+    setGeneratedCode(
+        nodeId: string,
+        art: GeneratedArtifact,
+    ): void {
+        this.#generated.set(nodeId, art);
+    }
+
+    getGeneratedCode(nodeId: string) {
+        return this.#generated.get(nodeId) ?? null;
+    }
+
+    allGenerated() {
+        return [...this.#generated.values()];
+    }
     constructor(
         readonly ctx: IRunnerContext,
         readonly prjdb: PrjDB,
