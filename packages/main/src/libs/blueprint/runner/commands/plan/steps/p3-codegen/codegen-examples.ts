@@ -1,44 +1,30 @@
 /**
- * 代码生成器的参考样本（非 few-shot runtime，纯粹教 LLM 输出什么风格的代码）。
- * 一个纯机械操作样本 + 一个含 LLM 调用的 reduce 样本。
+ * 代码生成参考样本（非运行时 few-shot；纯粹教 LLM 输出何种风格的代码）。
+ * 覆盖：mechanical、map（等量）、flatmap（每条 fan-out 扁平化）、
+ *       reduce_concat（逐条后 join，聚合无 LLM）。
+ * 用于纠正两大错误：① 数组只处理第一条；② 并非所有 reduce 都需 LLM；
+ *                 ③ 提取类任务每条 fan-out 出多条，不该塌缩。
  */
 
 export const CODEGEN_EXAMPLES: Array<{
-    flowKind: string;
+    dataFlow: string;
     intent: string;
     inputs: string[];
     outputs: string[];
-    promptPairs: Array<{ system: string; user: string }>;
+    llmStepCount: number;
     code: string;
 }> = [
         {
-            flowKind: "MECHANICAL",
-            intent: "将一段剧本按行拆分为段落数组，每段带 id 与 token 估算",
+            dataFlow: "mechanical",
+            intent: "将一段剧本按行拆分为段落数组，每段带序号与 token 估算",
             inputs: ["剧本"],
             outputs: ["段落清单"],
-            promptPairs: [],
-            code: `function formatId(n) {
-    return \`P\${String(n).padStart(3, '0')}\`;
-}
-
-function isCJKRange(cp) {
-    return (
-        (cp >= 0x4e00 && cp <= 0x9fff) ||
-        (cp >= 0x3400 && cp <= 0x4dbf) ||
-        (cp >= 0x20000 && cp <= 0x2a6df) ||
-        (cp >= 0x3040 && cp <= 0x30ff) ||
-        (cp >= 0xac00 && cp <= 0xd7af) ||
-        (cp >= 0x3000 && cp <= 0x303f) ||
-        (cp >= 0xff00 && cp <= 0xffef) ||
-        (cp >= 0x2e80 && cp <= 0x2eff)
-    );
-}
-
-function estimateTokens(text) {
+            llmStepCount: 0,
+            code: `function estimateTokens(text) {
     let count = 0;
     for (const char of text) {
         const cp = char.codePointAt(0) ?? 0;
-        if (isCJKRange(cp)) count += 1;
+        if (cp >= 0x4e00 && cp <= 0x9fff) count += 1;
         else if (cp <= 0x7f) count += 0.25;
         else count += 2;
     }
@@ -49,69 +35,122 @@ const ioinfo = glossary.getIO(cap);
 if (!ioinfo.expired) return;
 
 const scripts = ioinfo.inputs[0];
-let startId = 0;
 const output = [];
 
+// 遍历全部输入条目，不只处理第一条
 scripts.forEach((s) => {
     if (!util.isString(s.item)) {
         err.throwPrecondition("[split] 传入了非字符串的剧本。");
     }
-    const lines = s.item.split('\\n');
-    const paragraphs = lines.map((text, i) => ({
-        id: formatId(startId + i + 1),
-        index: startId + i,
-        text,
-        ests: estimateTokens(text),
-    }));
-    output.push(...paragraphs);
-    startId += paragraphs.length;
+    s.item.split('\\n').forEach((text) => {
+        output.push(\`P\${String(output.length + 1).padStart(3, '0')} | \${estimateTokens(text)}t | \${text}\`);
+    });
 });
 
+// save 裸值：输出 isArray=true → string[]
 glossary.save(cap.output[0], output);`,
         },
         {
-            flowKind: "ARRAY_TO_SCALAR",
-            intent: "对每条访谈摘要调用 LLM 提炼共性，再聚合为一份洞察报告",
-            inputs: ["访谈摘要清单"],
-            outputs: ["洞察报告"],
-            promptPairs: [
-                {
-                    system: "你是资深访谈分析师，善于从单场访谈中提炼可复用的洞察点。",
-                    user: "你正在处理集合中的一条访谈摘要。请提炼其中最关键的一个客户痛点，以自然语言陈述，不超过 50 字。",
-                },
-                {
-                    system: "你是市场洞察报告撰写者，善于把零散痛点归纳成结构化叙述。",
-                    user: "你正在聚合多条痛点陈述。请归纳共性、按主题聚类，输出一份连贯的 markdown 洞察报告。",
-                },
-            ],
+            dataFlow: "map",
+            intent: "把一批英文句子逐条翻译为中文，产出等量译文",
+            inputs: ["英文句子清单"],
+            outputs: ["中文译文清单"],
+            llmStepCount: 1,
             code: `const ioinfo = glossary.getIO(cap);
 if (!ioinfo.expired) return;
 
 const items = ioinfo.inputs[0];
 
-// 提示词从 kv 动态加载（落盘键：.<nodeId>_step1_system / _user）
 const sys1 = glossary.get(cap.id + '_step1_system');
 const usr1 = glossary.get(cap.id + '_step1_user');
 
-const points = await util.pMap(items, async (it) => {
+// map：遍历数组每一条逐条处理（可并行），N→N 等量
+const results = await util.pMap(items, async (it) => {
     if (!util.isString(it.item)) {
-        err.throwPrecondition("[reduce] 摘要不是字符串");
+        err.throwPrecondition("[map] 句子不是字符串");
     }
     const ret = await llm.generate({
         instructions: sys1,
-        prompt: usr1 + "\\n\\n访谈摘要：\\n" + it.item,
+        prompt: usr1 + "\\n\\n待处理数据：\\n" + it.item,
     });
     return ret.text;
 }, { concurrency: 4 });
 
-const sys2 = glossary.get(cap.id + '_step2_system');
-const usr2 = glossary.get(cap.id + '_step2_user');
+glossary.save(cap.output[0], results);`,
+        },
+        {
+            dataFlow: "flatmap",
+            intent: "从每篇访谈原文中提取多条带标签的反馈语句，汇总为一个大清单",
+            inputs: ["访谈原文集"],
+            outputs: ["反馈语录集"],
+            llmStepCount: 1,
+            code: `const ioinfo = glossary.getIO(cap);
+if (!ioinfo.expired) return;
 
-const report = await llm.generate({
-    instructions: sys2,
-    prompt: usr2 + "\\n\\n痛点清单：\\n" + points.join("\\n---\\n"),
-});
+const docs = ioinfo.inputs[0];
 
-glossary.save(cap.output[0], report.text);`,
+const sys1 = glossary.get(cap.id + '_step1_system');
+const usr1 = glossary.get(cap.id + '_step1_user');
+
+// flatmap：每篇原文可炸出多条语录，逐篇处理后扁平化汇总
+const perDoc = await util.pMap(docs, async (it) => {
+    if (!util.isString(it.item)) {
+        err.throwPrecondition("[flatmap] 原文不是字符串");
+    }
+    const ret = await llm.generate({
+        instructions: sys1,
+        prompt: usr1 + "\\n\\n待分析原文：\\n" + it.item,
+    });
+    // 一条输入 → 多条结果：safefmt 固定用 z.array(z.string()) 提取
+    const fmt = await llm.safefmt(
+        ret.text,
+        llm.Output.object({ schema: z.array(z.string()).describe("从原文提取的每一条反馈语句") }),
+    );
+    if (fmt.success && fmt.value?.output) return fmt.value.output;
+    // 兜底：提取失败不丢数据，保留原文本为单条
+    ctx.warn("[flatmap] 语录提取失败，回退为单条原文");
+    return [ret.text];
+}, { concurrency: 4 });
+
+// 扁平化：把各篇的多条语录合并为一个数组
+const results = perDoc.flat();
+
+glossary.save(cap.output[0], results);`,
+        },
+        {
+            dataFlow: "reduce_concat",
+            intent: "逐章续写小说后，把各章正文按顺序拼接为整本",
+            inputs: ["章节大纲清单"],
+            outputs: ["小说全文"],
+            llmStepCount: 1,
+            code: `const ioinfo = glossary.getIO(cap);
+if (!ioinfo.expired) return;
+
+const outlines = ioinfo.inputs[0];
+
+const sys1 = glossary.get(cap.id + '_step1_system');
+const usr1 = glossary.get(cap.id + '_step1_user');
+
+// sequential：后一章依赖前一章，必须串行 for，传入前序结果作上下文
+const chapters = [];
+let prevContext = "";
+for (const it of outlines) {
+    if (!util.isString(it.item)) {
+        err.throwPrecondition("[reduce] 大纲不是字符串");
+    }
+    const ret = await llm.generate({
+        instructions: sys1,
+        prompt: usr1
+            + "\\n\\n已完成的前序内容（保持连贯）：\\n" + (prevContext || "（无，这是开篇）")
+            + "\\n\\n本章大纲：\\n" + it.item,
+    });
+    chapters.push(ret.text);
+    prevContext = ret.text;
+}
+
+// concat：各章首尾相接即成品，纯代码 join，聚合步不调 LLM
+const novel = chapters.join("\\n\\n");
+
+glossary.save(cap.output[0], novel);`,
         },
     ];

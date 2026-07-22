@@ -43,6 +43,7 @@ export interface TraceEntry {
 
 interface PlanState {
     gdag: GDagJSON | null;
+    user?: string;  // 用户原始输入的内容。
 }
 
 export class ConflictSignal extends Error {
@@ -58,8 +59,14 @@ export class PlanContext {
     private toolCache = new Map<string, ResolvedTool[]>();
     #invalidations: Record<string, string[]> = {};
     #gdag: GDag | null = null;
+    #user: string | null = null;
     // ── 代码生成产物缓存 ──────────────────────────────────────────────────
     #generated = new Map<string, GeneratedArtifact>();
+
+    /** 用户最原始的诉求 / DAG 创作目标（全局锚点，只读） */
+    get user(): string {
+        return this.#user ?? "";
+    }
 
     setGeneratedCode(
         nodeId: string,
@@ -88,7 +95,8 @@ export class PlanContext {
 
     persist(): void {
         const state: PlanState = {
-            gdag: this.#gdag ? this.#gdag.toJSON() : null
+            gdag: this.#gdag ? this.#gdag.toJSON() : null,
+            user: this.#user ?? ""
         };
         this.prjdb.set(this.getJsonName(StepNames.state), state);
     }
@@ -97,6 +105,7 @@ export class PlanContext {
         const state = this.prjdb.get<PlanState>(this.getJsonName(StepNames.state));
         if (!state) return false;
         this.#gdag = state.gdag ? GDag.fromJSON(state.gdag) : null;
+        this.#user = state.user ? state.user : "";
         return true;
     }
 

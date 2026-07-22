@@ -1,15 +1,14 @@
 /**
  * P-Pass3 · codeGen：节点代码生成
- *   - 并行处理所有 awaiting_code 节点
- *   - 每节点：planFlow(规则) + promptGen + codeGen + compile(reAct)
+ *   - 并行处理所有 awaiting_code 节点（Promise.allSettled）
+ *   - 每节点：planNode(规则+轻量LLM) + promptGen + codeGen + compile(reAct)
  *   - 编译通过即合格（沙箱执行留作未来拓展）
+ *   - 单节点失败标记 conflict，不阻塞其他节点状态写入；整体任一失败最终抛出
  *   - 落盘：代码 + 提示词写入 kv（提示词供运行时动态加载）
  */
 
 import type { PNode } from "$types/index.js";
 import Logger from "electron-log/main.js";
-import pMap from 'p-map';
-import { EXPAND_CONCURRENCY } from "../../config.js";
 import type { GeneratedArtifact, PlanContext } from "../../context.js";
 import { NodeStatusValue } from "../../graph/gdag.js";
 import { generateForNode } from "./pipeline.js";
@@ -29,8 +28,8 @@ export class CodeGenFailure extends Error {
  * 落盘（当前为空实现，留作扩展）。
  *
  * 约定的 kv 键（供运行时动态加载）：
- *   - 代码：      `.${nodeId}_code`
- *   - 第 N 步提示词：`.${nodeId}_step${N}_system` / `.${nodeId}_step${N}_user`
+ *   - 代码：           `.${nodeId}_code`
+ *   - 第 N 步提示词：   `.${nodeId}_step${N}_system` / `.${nodeId}_step${N}_user`
  *
  * @TODO 接入 pctx.prjdb / glossary.set 落盘。当前仅缓存到内存 + 日志。
  */
@@ -47,7 +46,7 @@ function persistArtifact(art: GeneratedArtifact, pctx: PlanContext): void {
     // });
 
     Logger.debug(`[codegen] (占位落盘)「${art.nodeId}」code=${art.code.length}c prompts=${art.prompts.length}`);
-    Logger.debug(JSON.stringify(art, null, 2))
+    Logger.debug(JSON.stringify(art, null, 2));
 }
 
 export async function codeGenForNode(node: PNode, pctx: PlanContext): Promise<void> {
@@ -69,40 +68,43 @@ export async function codeGen(pctx: PlanContext): Promise<void> {
 
     const realTargets = DEBUG && targets.length > 0 ? [targets[0]] : targets;
 
-    const results = await pMap(
-        realTargets,
-        async ({ node }) => {
+    // Promise.allSettled：单节点失败不阻塞其他节点状态写入
+    const settled = await Promise.allSettled(
+        realTargets.map(async ({ node }) => {
             try {
+                Logger.debug("generate for node")
+                Logger.debug(JSON.stringify(node, null, 2))
                 await codeGenForNode(node, pctx);
                 if (!DEBUG) {
-                    // 调试模式下不落盘。
                     gdag.updateNode(node.id, { status: 'done' });
                 }
-                return { status: 'fulfilled', value: node.id }; // 模拟 allSettled 的成功结构
+                return node.id;
             } catch (err) {
                 if (err instanceof CodeGenFailure) {
-                    if (!DEBUG) { // 调试模式下不落盘。
+                    if (!DEBUG) {
                         gdag.updateNode(node.id, { status: 'conflict', error: err.reason });
                     }
                     Logger.error(`[codegen]「${node.name}」失败：${err.reason}`);
                 }
-                // 个别任务失败不影响其他任务，
-                return { status: 'rejected', reason: err };
+                throw err;
             }
-        },
-        { concurrency: EXPAND_CONCURRENCY } // 🚀 在这里设置最大并发数（例如：5）
+        }),
     );
 
-    const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    const failures = settled.filter(
+        (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+
     if (failures.length > 0) {
         const first = failures[0].reason;
+        pctx.persist();
         if (first instanceof CodeGenFailure) throw first;
         throw new AggregateError(
             failures.map(f => f.reason),
-            `[codegen] ${failures.length}/${targets.length} 节点失败`,
+            `[codegen] ${failures.length}/${realTargets.length} 节点失败`,
         );
     }
 
     pctx.persist();
-    Logger.debug(`[codegen] 完成：${targets.length} 个节点`);
+    Logger.debug(`[codegen] 完成：${realTargets.length} 个节点`);
 }

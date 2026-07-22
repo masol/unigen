@@ -172,6 +172,46 @@ export class GDag {
         return [...pool.values()];
     }
 
+
+    // ── 邻接语义查询（供 codegen 上下文注入） ──────────────────────────────
+    /**
+     * 找出"产出指定 artifact"的上游节点。
+     * 跨所有图查找（artifact 名全局唯一）。返回节点的精简语义。
+     */
+    getProducersOf(artifactName: string): Array<{ nodeId: string; name: string; intent: string }> {
+        const canonical = this.resolveName(artifactName) ?? artifactName;
+        const out: Array<{ nodeId: string; name: string; intent: string }> = [];
+        for (const g of this.#graphs.values()) {
+            g.forEachNode((nid, attrs) => {
+                const n = attrs as PNode;
+                const outs = n.outputs.map(o => this.resolveName(o) ?? o);
+                if (outs.includes(canonical)) {
+                    out.push({ nodeId: n.id, name: n.name, intent: n.intent });
+                }
+            });
+        }
+        return out;
+    }
+
+    /**
+     * 找出"消费指定 artifact"的下游节点。
+     * 下游 intent 决定本节点输出的合理粒度/结构。
+     */
+    getConsumersOf(artifactName: string): Array<{ nodeId: string; name: string; intent: string }> {
+        const canonical = this.resolveName(artifactName) ?? artifactName;
+        const out: Array<{ nodeId: string; name: string; intent: string }> = [];
+        for (const g of this.#graphs.values()) {
+            g.forEachNode((nid, attrs) => {
+                const n = attrs as PNode;
+                const ins = n.inputs.map(i => this.resolveName(i) ?? i);
+                if (ins.includes(canonical)) {
+                    out.push({ nodeId: n.id, name: n.name, intent: n.intent });
+                }
+            });
+        }
+        return out;
+    }
+
     addNodeInputs(graphId: string, nodeId: string, extraNames: string[]): void {
         if (extraNames.length === 0) return;
         const g = this.#graphs.get(graphId);
