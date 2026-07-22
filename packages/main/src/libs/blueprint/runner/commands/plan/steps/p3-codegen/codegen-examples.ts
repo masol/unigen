@@ -1,9 +1,17 @@
 /**
  * 代码生成参考样本（非运行时 few-shot；纯粹教 LLM 输出何种风格的代码）。
- * 覆盖：mechanical、map（等量）、flatmap（每条 fan-out 扁平化）、
- *       reduce_concat（逐条后 join，聚合无 LLM）。
- * 用于纠正两大错误：① 数组只处理第一条；② 并非所有 reduce 都需 LLM；
- *                 ③ 提取类任务每条 fan-out 出多条，不该塌缩。
+ *
+ * 核心事实：inputs[i] 是裸值（string 或 string[]），数组元素直接就是字符串。
+ *   - 严禁 .item / .updatedAt / JSON.parse。
+ *   - 判数组用 Array.isArray，判字符串用 util.isString。
+ *   - save 传裸值，禁止 {item} 包装。
+ *   - 多条产出用纯字符串切分（空行分隔），不自造对象数组。
+ *   - 提示词键名固定为 '_' + cap.id + '_step<N>_system' / '..._user'，前导下划线不可省。
+ *
+ * 样本覆盖：mechanical、map（等量）、flatmap（每条 fan-out 切分扁平化）、
+ *          reduce_concat（sequential 串行后 join，聚合无 LLM）。
+ *
+ * 样本仅示范正确的数据存取与常见范式，不暗示"必须严格按 dataFlow 生成"。
  */
 
 export const CODEGEN_EXAMPLES: Array<{
@@ -34,20 +42,19 @@ export const CODEGEN_EXAMPLES: Array<{
 const ioinfo = glossary.getIO(cap);
 if (!ioinfo.expired) return;
 
-const scripts = ioinfo.inputs[0];
-const output = [];
+// inputs[0] 是标量字符串，直接使用（不要 .item）
+const script = ioinfo.inputs[0];
+if (!util.isString(script)) {
+    err.throwPrecondition("[split] 剧本不是字符串。");
+}
 
-// 遍历全部输入条目，不只处理第一条
-scripts.forEach((s) => {
-    if (!util.isString(s.item)) {
-        err.throwPrecondition("[split] 传入了非字符串的剧本。");
-    }
-    s.item.split('\\n').forEach((text) => {
-        output.push(\`P\${String(output.length + 1).padStart(3, '0')} | \${estimateTokens(text)}t | \${text}\`);
-    });
+const output = [];
+// 遍历全部行，逐段带序号
+script.split('\\n').forEach((text) => {
+    output.push(\`P\${String(output.length + 1).padStart(3, '0')} | \${estimateTokens(text)}t | \${text}\`);
 });
 
-// save 裸值：输出 isArray=true → string[]
+// save 裸值：输出为数组 → string[]
 glossary.save(cap.output[0], output);`,
         },
         {
@@ -59,21 +66,26 @@ glossary.save(cap.output[0], output);`,
             code: `const ioinfo = glossary.getIO(cap);
 if (!ioinfo.expired) return;
 
+// inputs[0] 是 string[]，元素直接是字符串（不要 .item）
 const items = ioinfo.inputs[0];
+if (!Array.isArray(items)) {
+    err.throwPrecondition("[map] 输入应为字符串数组");
+}
 
-const sys1 = glossary.get(cap.id + '_step1_system');
-const usr1 = glossary.get(cap.id + '_step1_user');
+// 提示词键名带前导 '_'
+const sys1 = glossary.get('_' + cap.id + '_step1_system');
+const usr1 = glossary.get('_' + cap.id + '_step1_user');
 
 // map：遍历数组每一条逐条处理（可并行），N→N 等量
-const results = await util.pMap(items, async (it) => {
-    if (!util.isString(it.item)) {
+const results = await util.pMap(items, async (sentence) => {
+    if (!util.isString(sentence)) {
         err.throwPrecondition("[map] 句子不是字符串");
     }
     const ret = await llm.generate({
         instructions: sys1,
-        prompt: usr1 + "\\n\\n待处理数据：\\n" + it.item,
+        prompt: usr1 + "\\n\\n待处理数据：\\n" + sentence,
     });
-    return ret.text;
+    return ret.text.trim();
 }, { concurrency: 4 });
 
 glossary.save(cap.output[0], results);`,
@@ -87,29 +99,32 @@ glossary.save(cap.output[0], results);`,
             code: `const ioinfo = glossary.getIO(cap);
 if (!ioinfo.expired) return;
 
+// inputs[0] 是 string[]，元素直接是字符串
 const docs = ioinfo.inputs[0];
+if (!Array.isArray(docs)) {
+    err.throwPrecondition("[flatmap] 输入应为字符串数组");
+}
 
-const sys1 = glossary.get(cap.id + '_step1_system');
-const usr1 = glossary.get(cap.id + '_step1_user');
+// 提示词键名带前导 '_'
+const sys1 = glossary.get('_' + cap.id + '_step1_system');
+const usr1 = glossary.get('_' + cap.id + '_step1_user');
 
 // flatmap：每篇原文可炸出多条语录，逐篇处理后扁平化汇总
-const perDoc = await util.pMap(docs, async (it) => {
-    if (!util.isString(it.item)) {
+const perDoc = await util.pMap(docs, async (doc) => {
+    if (!util.isString(doc)) {
         err.throwPrecondition("[flatmap] 原文不是字符串");
     }
     const ret = await llm.generate({
         instructions: sys1,
-        prompt: usr1 + "\\n\\n待分析原文：\\n" + it.item,
+        prompt: usr1 + "\\n\\n待分析原文：\\n" + doc,
     });
-    // 一条输入 → 多条结果：safefmt 固定用 z.array(z.string()) 提取
-    const fmt = await llm.safefmt(
-        ret.text,
-        llm.Output.object({ schema: z.array(z.string()).describe("从原文提取的每一条反馈语句") }),
-    );
-    if (fmt.success && fmt.value?.output) return fmt.value.output;
-    // 兜底：提取失败不丢数据，保留原文本为单条
-    ctx.warn("[flatmap] 语录提取失败，回退为单条原文");
-    return [ret.text];
+    // 提示词约定：每条语录独立成段、空行分隔。纯字符串切分为多条。
+    const pieces = ret.text.split(/\\n{2,}/).map((s) => s.trim()).filter(Boolean);
+    if (pieces.length === 0) {
+        ctx.warn("[flatmap] 未切分出语录，回退为整段文本");
+        return [ret.text.trim()];
+    }
+    return pieces;
 }, { concurrency: 4 });
 
 // 扁平化：把各篇的多条语录合并为一个数组
@@ -126,31 +141,37 @@ glossary.save(cap.output[0], results);`,
             code: `const ioinfo = glossary.getIO(cap);
 if (!ioinfo.expired) return;
 
+// inputs[0] 是 string[]，元素直接是字符串
 const outlines = ioinfo.inputs[0];
+if (!Array.isArray(outlines)) {
+    err.throwPrecondition("[reduce] 输入应为字符串数组");
+}
 
-const sys1 = glossary.get(cap.id + '_step1_system');
-const usr1 = glossary.get(cap.id + '_step1_user');
+// 提示词键名带前导 '_'
+const sys1 = glossary.get('_' + cap.id + '_step1_system');
+const usr1 = glossary.get('_' + cap.id + '_step1_user');
 
 // sequential：后一章依赖前一章，必须串行 for，传入前序结果作上下文
 const chapters = [];
 let prevContext = "";
-for (const it of outlines) {
-    if (!util.isString(it.item)) {
+for (const outline of outlines) {
+    if (!util.isString(outline)) {
         err.throwPrecondition("[reduce] 大纲不是字符串");
     }
     const ret = await llm.generate({
         instructions: sys1,
         prompt: usr1
             + "\\n\\n已完成的前序内容（保持连贯）：\\n" + (prevContext || "（无，这是开篇）")
-            + "\\n\\n本章大纲：\\n" + it.item,
+            + "\\n\\n本章大纲：\\n" + outline,
     });
-    chapters.push(ret.text);
-    prevContext = ret.text;
+    chapters.push(ret.text.trim());
+    prevContext = ret.text.trim();
 }
 
 // concat：各章首尾相接即成品，纯代码 join，聚合步不调 LLM
 const novel = chapters.join("\\n\\n");
 
+// save 裸值：输出为标量 → string
 glossary.save(cap.output[0], novel);`,
         },
     ];

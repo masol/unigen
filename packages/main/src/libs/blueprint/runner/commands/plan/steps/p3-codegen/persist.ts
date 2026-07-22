@@ -43,6 +43,15 @@ export function persistArtifact(art: GeneratedArtifact, pctx: PlanContext): void
         upsertMetagForArtifact(gdag, prjdb, name, visitedMetags);
     }
 
+    // ── 3. 落盘本节点直接关联的 提示词资源 ─────────────────────────────
+
+    // pctx.prjdb.set(`.${art.nodeId}_code`, art.code);
+    art.prompts.forEach((p, i) => {
+        const step = i + 1;
+        pctx.prjdb.set(`_${art.nodeId}_step${step}_system`, p.system);
+        pctx.prjdb.set(`_${art.nodeId}_step${step}_user`, p.user);
+    });
+
     Logger.debug(
         `[codegen] #code 落盘 id=${codeCapaId} node=${art.nodeId} ` +
         `code=${art.code.length}c prompts=${art.prompts.length} metags=${visitedMetags.size}`
