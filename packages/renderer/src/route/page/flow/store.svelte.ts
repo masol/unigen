@@ -5,11 +5,33 @@
 import { safeApi } from '$lib/utils/api';
 import type {
     GDagJSON,
+    GuardKind,
+    NodeKindT,
     NodeStatus,
     PNode,
-    RegArtifact
+    RegArtifact,
+    RiskLevel,
+    SizeEstimateT
 } from '@app/main/types';
 import dagre from '@dagrejs/dagre';
+import {
+    IconArrowMerge,
+    IconArrowsJoin2,
+    IconBlockquote,
+    IconCategory,
+    IconCut,
+    IconFileZip,
+    IconFilter,
+    IconGavel,
+    IconMap2,
+    IconRoute,
+    IconSearch,
+    IconShieldCheck,
+    IconSparkles,
+    IconStar,
+    IconSum,
+    IconTransform
+} from '@tabler/icons-svelte';
 import type { Edge as XYEdge, Node as XYNode } from '@xyflow/svelte';
 import DirectedGraph from 'graphology';
 
@@ -19,11 +41,9 @@ export type { GDagJSON, NodeStatus, PNode, RegArtifact };
 //  本地视图类型
 // ─────────────────────────────────────────────────────────────
 
-/** 面包屑一层：进入的图 id + 触发进入的节点标签 */
 export interface Crumb {
     graphId: string;
     label: string;
-    /** 触发下钻的父节点 id（root 层为 null） */
     fromNodeId: string | null;
 }
 
@@ -32,9 +52,14 @@ export interface XY {
     y: number;
 }
 
+export type MapMode = 'concurrent' | 'sequential' | null;
+
 export interface FlowNodeData extends Record<string, unknown> {
     pnode: PNode;
     hasChildren: boolean;
+    mapMode: MapMode;
+    arrayIn: boolean;
+    arrayOut: boolean;
 }
 
 export interface FlowEdgeData extends Record<string, unknown> {
@@ -45,23 +70,23 @@ export interface FlowEdgeData extends Record<string, unknown> {
 export type DagFlowNode = XYNode<FlowNodeData>;
 export type DagFlowEdge = XYEdge<FlowEdgeData>;
 
-/** 选中产物的来源方向，用于面板标注「作为 X 的输入/输出」 */
 export type ArtifactRole = 'input' | 'output';
 
-/** 选中产物的视图模型：注册信息 + 相对当前节点的角色 */
 export interface SelectedArtifact {
     name: string;
     role: ArtifactRole;
-    /** artifacts 注册表命中项；未登记为 null */
     artifact: RegArtifact | null;
-    /** 该产物的所有生产者节点（在当前图中） */
     producers: { id: string; name: string }[];
-    /** 该产物的所有消费者节点（在当前图中） */
     consumers: { id: string; name: string }[];
 }
 
+export interface ResolvedIo {
+    name: string;
+    artifact: RegArtifact | null;
+}
+
 // ─────────────────────────────────────────────────────────────
-//  语义标签
+//  语义标签与视觉映射
 // ─────────────────────────────────────────────────────────────
 
 export const STATUS_LABEL: Record<NodeStatus, string> = {
@@ -91,15 +116,88 @@ export const TRISTATE_LABEL: Record<string, string> = {
     no: '否'
 };
 
+export const KIND_LABEL: Record<NodeKindT, string> = {
+    extract: '提取',
+    classify: '分类',
+    summarize: '摘要',
+    transform: '转换',
+    merge: '合并',
+    score: '评分',
+    generate: '生成',
+    lookup: '查询',
+    aggregate: '聚合',
+    route: '路由',
+    split: '拆分',
+    map: '映射',
+    reduce: '归约',
+    validate: '校验',
+    critique: '评审',
+    compress: '压缩'
+};
+
+export const KIND_ICON: Record<NodeKindT, typeof IconFilter> = {
+    extract: IconFilter,
+    classify: IconCategory,
+    summarize: IconBlockquote,
+    transform: IconTransform,
+    merge: IconArrowsJoin2,
+    score: IconStar,
+    generate: IconSparkles,
+    lookup: IconSearch,
+    aggregate: IconSum,
+    route: IconRoute,
+    split: IconCut,
+    map: IconMap2,
+    reduce: IconArrowMerge,
+    validate: IconShieldCheck,
+    critique: IconGavel,
+    compress: IconFileZip
+};
+
+export const RISK_LABEL: Record<RiskLevel, string> = {
+    low: '低风险',
+    medium: '中风险',
+    high: '高风险'
+};
+
+export const GUARD_KIND_LABEL: Record<GuardKind, string> = {
+    validate: '校验',
+    critique: '评审'
+};
+
+export const SIZE_LABEL: Record<SizeEstimateT, string> = {
+    small: '小型',
+    medium: '中型',
+    large: '大型',
+    unbounded: '无界'
+};
+
+export const SIZE_DESC: Record<SizeEstimateT, string> = {
+    small: '<1K',
+    medium: '1K–10K',
+    large: '10K–600K',
+    unbounded: '>600K'
+};
+
+export const MAP_MODE_LABEL: Record<'concurrent' | 'sequential', string> = {
+    concurrent: '并发映射',
+    sequential: '顺序映射'
+};
+
+export const MAP_MODE_DESC: Record<'concurrent' | 'sequential', string> = {
+    concurrent: '对数组产物逐条并发执行同一思维操作，条间互不依赖',
+    sequential: '对数组产物逐条顺序执行，前条结果可影响后条'
+};
+
 // ─────────────────────────────────────────────────────────────
 //  布局公共常量
 // ─────────────────────────────────────────────────────────────
 
 const NODE_W = 260;
-const NODE_H = 132;
+const NODE_H = 156;
 
 // ─────────────────────────────────────────────────────────────
-//  唯一布局引擎：dagre（交叉最小化）
+//  唯一布局引擎：dagre
 // ─────────────────────────────────────────────────────────────
 
 function layoutDagre(graph: DirectedGraph): Map<string, XY> {
@@ -107,8 +205,8 @@ function layoutDagre(graph: DirectedGraph): Map<string, XY> {
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({
         rankdir: 'LR',
-        nodesep: 48,
-        ranksep: 110,
+        nodesep: 56,
+        ranksep: 120,
         marginx: 24,
         marginy: 24
     });
@@ -121,54 +219,41 @@ function layoutDagre(graph: DirectedGraph): Map<string, XY> {
     const pos = new Map<string, XY>();
     graph.forEachNode((n) => {
         const { x, y } = g.node(n);
-        pos.set(n, { x: x - NODE_W / 2, y: y - NODE_H / 2 }); // 中心点 → 左上角
+        pos.set(n, { x: x - NODE_W / 2, y: y - NODE_H / 2 });
     });
     return pos;
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Store 主体 —— 全局单例，子组件全部读写它，彼此不直接通信
+//  Store 主体
 // ─────────────────────────────────────────────────────────────
 
 export class FlowStore {
-    // ── 原始数据 ──
     private raw = $state.raw<GDagJSON | null>(null);
-    /** graphId → DirectedGraph 反序列化实例 */
     private graphs = new Map<string, DirectedGraph>();
-    /** name/alias → RegArtifact 快查表 */
     private artifactIndex = new Map<string, RegArtifact>();
 
-    // ── 路由参数 ──
     id = $state<string>('');
 
-    // ── 加载态 ──
     loading = $state<boolean>(false);
     lastError = $state<string | null>(null);
     private loadedId: string | null = null;
 
-    // ── 布局结果（dagre 同步产出） ──
     private positions = $state.raw<Map<string, XY>>(new Map());
 
-    // ── 导航栈（面包屑）──
     crumbs = $state<Crumb[]>([]);
 
-    // ── 交互态 ──
     selectedNodeId = $state<string | null>(null);
-    /** 当前在详情面板查看的产物名（点击 IO Badge 触发） */
     selectedArtifactName = $state<string | null>(null);
-    /** 记录点击来源角色，用于面板文案 */
     selectedArtifactRole = $state<ArtifactRole>('output');
 
-    // ── 视图偏好 ──
     fitTrigger = $state<number>(0);
     miniMap = $state<boolean>(true);
 
-    // ── 派生：当前图 id ──
     currentGraphId = $derived(
         this.crumbs.length > 0 ? this.crumbs[this.crumbs.length - 1].graphId : null
     );
 
-    // ── 派生：当前 xyflow 节点（位置读自 positions 状态）──
     nodes = $derived.by<DagFlowNode[]>(() => {
         void this.raw;
         const gid = this.currentGraphId;
@@ -179,20 +264,23 @@ export class FlowStore {
         const out: DagFlowNode[] = [];
         g.forEachNode((key, attr) => {
             const pnode = attr as unknown as PNode;
+            const { mapMode, arrayIn, arrayOut } = analyzeMapping(pnode, this.artifactIndex);
             out.push({
                 id: key,
                 type: 'dagNode',
                 position: positions.get(key) ?? { x: 0, y: 0 },
                 data: {
                     pnode: { ...pnode, id: key },
-                    hasChildren: !!pnode.dag && this.graphs.has(pnode.dag)
+                    hasChildren: !!pnode.dag && this.graphs.has(pnode.dag),
+                    mapMode,
+                    arrayIn,
+                    arrayOut
                 }
             });
         });
         return out;
     });
 
-    // ── 派生：当前 xyflow 边 ──
     edges = $derived.by<DagFlowEdge[]>(() => {
         void this.raw;
         const gid = this.currentGraphId;
@@ -218,24 +306,33 @@ export class FlowStore {
         return out;
     });
 
-    // ── 派生：统计 ──
     nodeCount = $derived(this.nodes.length);
     edgeCount = $derived(this.edges.length);
     conflictCount = $derived(
         this.nodes.filter((n) => n.data.pnode.status === 'conflict').length
     );
+    mapNodeCount = $derived(
+        this.nodes.filter((n) => n.data.mapMode !== null).length
+    );
+    highRiskCount = $derived(
+        this.nodes.filter((n) => n.data.pnode.risk === 'high').length
+    );
+    guardCount = $derived(
+        this.nodes.filter((n) => n.data.pnode.guard === true).length
+    );
+    drillableCount = $derived(
+        this.nodes.filter((n) => n.data.hasChildren).length
+    );
     depth = $derived(this.crumbs.length);
 
-    // ── 派生：选中节点 —— 直接取自底层图，避开 nodes 派生的中间态 ──
     selectedNode: PNode | null = $derived.by<PNode | null>(() => {
-        void this.raw; // 数据重载时重算
+        void this.raw;
         const id = this.selectedNodeId;
         const gid = this.currentGraphId;
         if (!id || !gid) return null;
         const g = this.graphs.get(gid);
         if (!g || !g.hasNode(id)) return null;
         const pnode = g.getNodeAttributes(id) as unknown as PNode;
-        // 深拷贝关键数组字段并补默认值，交付给 UI 的对象永远字段完整
         return {
             ...pnode,
             id,
@@ -245,7 +342,15 @@ export class FlowStore {
         };
     });
 
-    // ── 派生：当前查看的产物详情（点击 IO 触发）──
+    selectedNodeResolved = $derived.by(() => {
+        const n = this.selectedNode;
+        if (!n) return { inputs: [] as ResolvedIo[], outputs: [] as ResolvedIo[] };
+        return {
+            inputs: this.resolveIOList(n.inputs),
+            outputs: this.resolveIOList(n.outputs)
+        };
+    });
+
     selectedArtifact: SelectedArtifact | null = $derived.by<SelectedArtifact | null>(
         () => {
             void this.raw;
@@ -259,15 +364,13 @@ export class FlowStore {
             const producers: { id: string; name: string }[] = [];
             const consumers: { id: string; name: string }[] = [];
 
-            // 在当前图内扫描：谁产出（output）此产物、谁消费（input）此产物
             g.forEachNode((key, attr) => {
                 const pn = attr as unknown as PNode;
                 const outs = pn.outputs ?? [];
                 const ins = pn.inputs ?? [];
-                const matchName = (io: { name: string }) => {
-                    if (io.name === name) return true;
-                    // 别名归一：产物注册名或其别名命中
-                    const reg = this.artifactIndex.get(io.name);
+                const matchName = (ioName: string) => {
+                    if (ioName === name) return true;
+                    const reg = this.artifactIndex.get(ioName);
                     return reg?.name === (artifact?.name ?? name);
                 };
                 if (outs.some(matchName))
@@ -286,9 +389,27 @@ export class FlowStore {
         }
     );
 
-    // ─────────────────────────────────────────────────────────
-    //  布局调度：图变化后调用（dagre 同步）
-    // ─────────────────────────────────────────────────────────
+    /**
+     * 「真正显示中」的产物名。
+     * 高亮判据必须用它而非裸 selectedArtifactName，
+     * 否则会出现「未显示却高亮、点击不可恢复」的僵尸态。
+     */
+    activeArtifactName = $derived(this.selectedArtifact?.name ?? null);
+
+    // ── 公开查询 ──
+
+    resolveArtifact(name: string): RegArtifact | null {
+        return this.artifactIndex.get(name) ?? null;
+    }
+
+    resolveIOList(names: readonly string[]): ResolvedIo[] {
+        return names.map((n) => ({
+            name: n,
+            artifact: this.artifactIndex.get(n) ?? null
+        }));
+    }
+
+    // ── 布局 ──
 
     private runLayout() {
         const gid = this.currentGraphId;
@@ -299,19 +420,16 @@ export class FlowStore {
         this.requestFit();
     }
 
-    /** 重新自动布局：丢弃用户拖拽位置，按 dagre 重排 */
     relayout() {
         this.runLayout();
     }
 
-    // ─────────────────────────────────────────────────────────
-    //  初始化 / 加载
-    // ─────────────────────────────────────────────────────────
+    // ── 初始化 / 加载 ──
 
     async init(id: string) {
         const trimmed = (id ?? '').trim();
         if (this.loadedId === trimmed && !this.loading && this.raw) {
-            return; // 指纹一致，复用内存数据
+            return;
         }
         this.id = trimmed;
         await this.load();
@@ -324,7 +442,6 @@ export class FlowStore {
             const origData = await safeApi().project.get(`.${this.id}_state`);
             const data = origData.gdag;
 
-            // 反序列化图
             this.graphs.clear();
             for (const { id, data: sg } of data.graphs) {
                 const g = new DirectedGraph();
@@ -332,7 +449,6 @@ export class FlowStore {
                 this.graphs.set(id, g);
             }
 
-            // artifact 索引（正式名 + 别名）
             this.artifactIndex.clear();
             for (const a of data.artifacts) {
                 this.artifactIndex.set(a.name, a);
@@ -347,7 +463,7 @@ export class FlowStore {
                 ? [{ graphId: rootGid, label: '根图', fromNodeId: null }]
                 : [];
 
-            this.raw = data; // 触发派生重算
+            this.raw = data;
             this.loadedId = this.id;
             this.runLayout();
         } catch (e) {
@@ -357,7 +473,6 @@ export class FlowStore {
         }
     }
 
-    /** rootId 是节点 id：找到包含该节点的图；找不到则退回第一张图 */
     private resolveRootGraphId(data: GDagJSON): string | null {
         if (data.graphs.length === 0) return null;
         if (data.rootId) {
@@ -368,11 +483,13 @@ export class FlowStore {
         return data.graphs[0].id;
     }
 
-    // ─────────────────────────────────────────────────────────
-    //  导航：下钻 / 回退 / 跳转 —— 换层后必须重跑布局
-    // ─────────────────────────────────────────────────────────
+    // ── 导航（每次换层都彻底清理交互态，杜绝僵尸高亮）──
 
-    /** 双击节点：进入其子图 */
+    private clearInteraction() {
+        this.selectedNodeId = null;
+        this.selectedArtifactName = null;
+    }
+
     drillInto(nodeId: string) {
         const gid = this.currentGraphId;
         if (!gid) return;
@@ -385,18 +502,15 @@ export class FlowStore {
             ...this.crumbs,
             { graphId: pnode.dag, label: pnode.name || nodeId, fromNodeId: nodeId }
         ];
-        this.selectedNodeId = null;
-        this.selectedArtifactName = null;
+        this.clearInteraction();
         this.runLayout();
     }
 
-    /** 面包屑跳转到第 index 层（0 = root） */
     goToCrumb(index: number) {
         if (index < 0 || index >= this.crumbs.length) return;
         if (index === this.crumbs.length - 1) return;
         this.crumbs = this.crumbs.slice(0, index + 1);
-        this.selectedNodeId = null;
-        this.selectedArtifactName = null;
+        this.clearInteraction();
         this.runLayout();
     }
 
@@ -405,19 +519,25 @@ export class FlowStore {
         this.goToCrumb(this.crumbs.length - 2);
     }
 
-    // ─────────────────────────────────────────────────────────
-    //  交互回写
-    // ─────────────────────────────────────────────────────────
+    // ── 交互回写 ──
 
     selectNode(id: string | null) {
         this.selectedNodeId = id;
-        // 切换节点时清空产物详情，避免遗留错位
         this.selectedArtifactName = null;
     }
 
-    /** 点击 IO Badge：在详情面板打开某产物；再次点击同名则关闭 */
+    /**
+     * 点击 IO：打开/切换产物面板。
+     * toggle 判据用 activeArtifactName（真正显示中的名字），
+     * 彻底避免「未显示却高亮、再点无法关闭」的僵尸态。
+     */
     selectArtifact(name: string | null, role: ArtifactRole = 'output') {
-        if (name && this.selectedArtifactName === name) {
+        if (name === null) {
+            this.selectedArtifactName = null;
+            return;
+        }
+        // 再次点击当前正在显示的同名产物 → 关闭
+        if (this.activeArtifactName === name) {
             this.selectedArtifactName = null;
             return;
         }
@@ -425,7 +545,10 @@ export class FlowStore {
         this.selectedArtifactRole = role;
     }
 
-    /** 定位并选中某节点（供产物面板的生产者/消费者跳转） */
+    clearArtifact() {
+        this.selectedArtifactName = null;
+    }
+
     focusNode(id: string) {
         const gid = this.currentGraphId;
         if (!gid) return;
@@ -438,16 +561,16 @@ export class FlowStore {
     requestFit() {
         this.fitTrigger++;
     }
+
     toggleMiniMap() {
         this.miniMap = !this.miniMap;
     }
 
-    /** 强制刷新：忽略指纹缓存重新拉取；尽力保留当前下钻路径 */
     async refresh() {
         if (this.loading) return;
         const prevCrumbs = this.crumbs;
         this.loadedId = null;
-        await this.load(); // load 会把 crumbs 重置到根图
+        await this.load();
         const restored: Crumb[] = [];
         for (const c of prevCrumbs) {
             if (this.graphs.has(c.graphId)) restored.push(c);
@@ -460,5 +583,23 @@ export class FlowStore {
     }
 }
 
-/** ── 全局唯一实例：所有子组件共用 ── */
+// ─────────────────────────────────────────────────────────────
+//  局部纯函数
+// ─────────────────────────────────────────────────────────────
+
+export function analyzeMapping(
+    pnode: PNode,
+    artifactIndex: ReadonlyMap<string, RegArtifact>
+): { mapMode: MapMode; arrayIn: boolean; arrayOut: boolean } {
+    const isArr = (name: string) => artifactIndex.get(name)?.isArray === true;
+    const arrayIn = pnode.inputs?.some(isArr) ?? false;
+    const arrayOut = pnode.outputs?.some(isArr) ?? false;
+    if (!arrayIn && !arrayOut) return { mapMode: null, arrayIn, arrayOut };
+    return {
+        mapMode: pnode.sequential ? 'sequential' : 'concurrent',
+        arrayIn,
+        arrayOut
+    };
+}
+
 export const flowStore = new FlowStore();

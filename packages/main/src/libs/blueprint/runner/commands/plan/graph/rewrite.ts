@@ -28,17 +28,17 @@ export function flattenGraphs(graphs: Map<string, DirectedGraph>): DirectedGraph
     for (const n of leaves) {
         if (!flat.hasNode(n.id)) flat.addNode(n.id, { ...n });
         for (const o of n.outputs) {
-            const dup = producer.get(o.name);
+            const dup = producer.get(o);
             if (dup && dup !== n.id)
-                throw new Error(`[flatten] 交付物「${o.name}」有多个产出者,无法展平`);
-            producer.set(o.name, n.id);
+                throw new Error(`[flatten] 交付物「${o}」有多个产出者,无法展平`);
+            producer.set(o, n.id);
         }
     }
     for (const n of leaves) {
         for (const i of n.inputs) {
-            const from = producer.get(i.name);
+            const from = producer.get(i);
             if (!from || from === n.id) continue;
-            link(flat, from, n.id, [i.name]);
+            link(flat, from, n.id, [i]);
         }
     }
     return flat;

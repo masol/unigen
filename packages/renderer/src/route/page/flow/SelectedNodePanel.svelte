@@ -1,4 +1,3 @@
-<!-- src/lib/flow/SelectedNodePanel.svelte -->
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
@@ -7,35 +6,50 @@
   import {
     IconAlertTriangle,
     IconBolt,
+    IconPackages,
+    IconShieldCheck,
+    IconSparkles,
     IconStack2,
     IconX,
   } from "@tabler/icons-svelte";
   import StatusDot from "./StatusDot.svelte";
-  import { flowStore, STATUS_LABEL, TRISTATE_LABEL } from "./store.svelte";
+  import {
+    flowStore,
+    GUARD_KIND_LABEL,
+    KIND_ICON,
+    KIND_LABEL,
+    MAP_MODE_DESC,
+    MAP_MODE_LABEL,
+    RISK_LABEL,
+    SIZE_DESC,
+    STATUS_LABEL,
+    TRISTATE_LABEL,
+  } from "./store.svelte";
 
-  // ── 全部经过空值兜底，杜绝中间态 undefined ──
   const node = $derived(flowStore.selectedNode);
-  const inputs = $derived(node?.inputs ?? []);
-  const outputs = $derived(node?.outputs ?? []);
+  const resolved = $derived(flowStore.selectedNodeResolved);
   const facetEntries = $derived(
     node?.facets ? Object.entries(node.facets) : [],
   );
-  const hasChildren = $derived(
-    node
-      ? (flowStore.nodes.find((n) => n.id === node.id)?.data.hasChildren ??
-          false)
-      : false,
+
+  const nodeData = $derived(
+    node ? flowStore.nodes.find((n) => n.id === node.id)?.data : undefined,
   );
-  // 当前正在详情面板查看的产物名，用于高亮激活的 Badge
-  const activeArtifact = $derived(flowStore.selectedArtifactName);
+  const hasChildren = $derived(nodeData?.hasChildren ?? false);
+  const mapMode = $derived(nodeData?.mapMode ?? null);
+
+  // 关键：高亮判据用「真正显示中」的产物名，杜绝僵尸高亮
+  const active = $derived(flowStore.activeArtifactName);
+  const KindIcon = $derived(node ? KIND_ICON[node.kind] : null);
 </script>
 
 <!--╭─────────────────────────────────────────────────────╮ -->
 <!-- │ [可抽取子组件 → SelectedNodePanel.svelte]           │ -->
-<!-- │ 职责：画布右上角固定的选中节点属性浮层；IO 可点击    │ -->
+<!-- │ 职责：右上角选中节点属性浮层；IO 可点击             │ -->
+<!-- │ 修复：高亮判据改用 activeArtifactName              │ -->
 <!-- ╰─────────────────────────────────────────────────────╯ -->
 <div use:autoAnimate>
-  {#if node}
+  {#if node && KindIcon}
     <div
       class="w-72 overflow-hidden rounded-2xl border border-border/50 bg-background/90 shadow-xl backdrop-blur-sm"
     >
@@ -47,7 +61,7 @@
               {node.name}
             </p>
             <p class="text-xs text-muted-foreground">
-              {STATUS_LABEL[node.status]}
+              {KIND_LABEL[node.kind]} · {STATUS_LABEL[node.status]}
             </p>
           </div>
         </div>
@@ -61,9 +75,63 @@
         </Button>
       </div>
 
-      <!-- 原生滚动容器替代 ScrollArea，规避 Panel+motion 时序崩溃 -->
       <div class="max-h-80 space-y-4 overflow-y-auto p-4">
         <p class="text-xs text-muted-foreground">{node.intent}</p>
+
+        <div class="flex flex-wrap items-center gap-1.5">
+          <Badge variant="outline" class="gap-1 rounded-lg text-[11px]">
+            <KindIcon size={12} stroke={1.5} />
+            {KIND_LABEL[node.kind]}
+          </Badge>
+          {#if mapMode}
+            <Badge
+              class={[
+                "gap-1 rounded-lg text-[11px]",
+                mapMode === "sequential"
+                  ? "border border-dashed border-primary/40 bg-transparent text-primary"
+                  : "",
+              ]}
+            >
+              <IconPackages size={12} stroke={1.5} />
+              {MAP_MODE_LABEL[mapMode]}
+            </Badge>
+          {/if}
+          {#if node.risk}
+            <Badge
+              variant={node.risk === "high" ? "destructive" : "outline"}
+              class="rounded-lg text-[11px]"
+            >
+              {RISK_LABEL[node.risk]}
+            </Badge>
+          {/if}
+          {#if node.guard}
+            <Badge
+              variant="outline"
+              class="gap-1 rounded-lg text-[11px] text-accent"
+            >
+              <IconShieldCheck size={12} stroke={1.5} />
+              守护
+              {#if node.guardKinds?.length}
+                · {node.guardKinds.map((k) => GUARD_KIND_LABEL[k]).join("/")}
+              {/if}
+            </Badge>
+          {/if}
+          {#if node.synthetic}
+            <Badge
+              variant="outline"
+              class="gap-1 rounded-lg text-[11px] text-accent"
+            >
+              <IconSparkles size={12} stroke={1.5} />
+              合成
+            </Badge>
+          {/if}
+        </div>
+
+        {#if mapMode}
+          <p class="text-[11px] text-muted-foreground">
+            {MAP_MODE_DESC[mapMode]}
+          </p>
+        {/if}
 
         <Separator />
 
@@ -72,17 +140,29 @@
             输入（点击查看产物）
           </p>
           <div class="flex flex-wrap gap-1.5">
-            {#each inputs as io (io.name)}
+            {#each resolved.inputs as io (io.name)}
               <button
                 type="button"
                 onclick={() => flowStore.selectArtifact(io.name, "input")}
                 class="cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
               >
                 <Badge
-                  variant={activeArtifact === io.name ? "default" : "secondary"}
-                  class="rounded-lg text-[11px] hover:shadow-xl"
+                  variant={active === io.name
+                    ? "default"
+                    : io.artifact?.isArray
+                      ? "default"
+                      : "secondary"}
+                  class="gap-1 rounded-lg text-[11px] hover:shadow-xl"
                 >
+                  {#if io.artifact?.isArray}
+                    <IconPackages size={10} stroke={1.5} />
+                  {/if}
                   {io.name}
+                  {#if io.artifact}
+                    <span class="opacity-60"
+                      >· {SIZE_DESC[io.artifact.sizeEstimate]}</span
+                    >
+                  {/if}
                 </Badge>
               </button>
             {:else}
@@ -96,17 +176,29 @@
             输出（点击查看产物）
           </p>
           <div class="flex flex-wrap gap-1.5">
-            {#each outputs as io (io.name)}
+            {#each resolved.outputs as io (io.name)}
               <button
                 type="button"
                 onclick={() => flowStore.selectArtifact(io.name, "output")}
                 class="cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
               >
                 <Badge
-                  variant={activeArtifact === io.name ? "default" : "secondary"}
-                  class="rounded-lg text-[11px] hover:shadow-xl"
+                  variant={active === io.name
+                    ? "default"
+                    : io.artifact?.isArray
+                      ? "default"
+                      : "secondary"}
+                  class="gap-1 rounded-lg text-[11px] hover:shadow-xl"
                 >
+                  {#if io.artifact?.isArray}
+                    <IconPackages size={10} stroke={1.5} />
+                  {/if}
                   {io.name}
+                  {#if io.artifact}
+                    <span class="opacity-60"
+                      >· {SIZE_DESC[io.artifact.sizeEstimate]}</span
+                    >
+                  {/if}
                 </Badge>
               </button>
             {:else}

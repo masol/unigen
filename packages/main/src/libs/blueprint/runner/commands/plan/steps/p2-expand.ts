@@ -6,7 +6,7 @@
 import { getSmartModel } from "$libs/model/index.js";
 import { throwUnprcessable } from "$libs/utils/err.js";
 import { PNode } from "$types/index.js";
-import { DagDesignResult, Io } from "$types/shared/plan/nodes.js";
+import { DagDesignResult } from "$types/shared/plan/nodes.js";
 import { generateText } from "ai";
 import Logger from "electron-log/main.js";
 import { EXPAND_CONCURRENCY, getExpandDepth, getThinkDepth } from "../config.js";
@@ -68,7 +68,11 @@ interface Verdict {
 }
 
 async function judgeNode(node: PNode, pctx: PlanContext): Promise<Verdict> {
-    const fmtIo = (ios: Io[]): string => ios.map(i => `- ${i.name}:${i.intent}`).join("\n");
+    const fmtIo = (names: string[]): string =>
+        names.map(n => {
+            const io = pctx.gdag.getIo(n);
+            return `- ${n}:${io?.intent ?? ''}`;
+        }).join("\n");
     const instructions = JUDGE_PROMPT
         .replace('{name}', node.name)
         .replace('{intent}', node.intent)
@@ -110,13 +114,6 @@ async function fetchNodePrior(node: PNode, _pctx: PlanContext): Promise<string |
 
 // ─── 判定决策：结合 think-depth ────────────────────────────────────────────
 
-/**
- * 综合判定结果与用户期望的思维深度，决定是否展开
- * - LEAF_DETERMINISTIC → 无条件落叶（即使 think-depth 也无法展开为有意义的工作流）
- * - LEAF_EMPIRICAL 且 depth < thinkDepth → 强制展开（think-depth 干预）
- * - LEAF_EMPIRICAL 且 depth >= thinkDepth → 落叶
- * - EXPAND → 展开
- */
 function decideExpand(
     verdict: Verdict, depth: number, thinkDepth: number,
 ): { shouldExpand: boolean; reason: string } {
@@ -132,8 +129,23 @@ function decideExpand(
         }
         return { shouldExpand: false, reason: verdict.reason };
     }
-    // EXPAND
     return { shouldExpand: true, reason: verdict.reason };
+}
+
+// ─── PNode → DagNode（展开任务用，需含完整 Io） ─────────────────────────────
+
+function nodeToDagNode(node: PNode, gdag: GDag) {
+    return {
+        name: node.name,
+        kind: node.kind,
+        intent: node.intent,
+        inputs: gdag.getIos(node.inputs).map(io => ({
+            ...io, qualityCriteria: [], sizeEstimate: 'small' as const, isArray: false,
+        })),
+        outputs: gdag.getIos(node.outputs).map(io => ({
+            ...io, qualityCriteria: [], sizeEstimate: 'small' as const, isArray: false,
+        })),
+    };
 }
 
 // ─── 单节点处理 ────────────────────────────────────────────────────────────
@@ -152,7 +164,7 @@ async function expandOne(e: WalkEntry, pctx: PlanContext): Promise<void> {
 
     const thinkDepth = getThinkDepth(pctx.ctx.cmd.args ?? {});
 
-    // 节点级 RAG 强匹配（直接 EXPAND，跳过判定）
+    // 节点级 RAG 强匹配
     const ragHit = await fetchNodePrior(node, pctx);
 
     let decision: { shouldExpand: boolean; reason: string };
@@ -160,7 +172,6 @@ async function expandOne(e: WalkEntry, pctx: PlanContext): Promise<void> {
         decision = { shouldExpand: true, reason: `RAG 强匹配：${ragHit.slice(0, 50)}...` };
     } else {
         const verdict = await judgeNode(node, pctx);
-        // 只有原生 LEAF（非 think-depth 干预）才标 facet
         const isNaturalLeaf = verdict.kind !== 'expand' && depth >= thinkDepth;
         if (isNaturalLeaf) {
             gdag.setFacet(node.id, FacetNames.simple, 'yes');
@@ -195,8 +206,8 @@ async function expandOne(e: WalkEntry, pctx: PlanContext): Promise<void> {
     // EXPAND：细化
     const pool = gdag.upstreamPool(graphId, node.id);
     const prior = ragHit || await fetchProcedurePrior(
-        `${node.outputs.map(o => o.name).join(",")} ${node.intent}`, pctx);
-    const task = makeExpandTask(node, pool, {
+        `${node.outputs.join(",")} ${node.intent}`, pctx);
+    const task = makeExpandTask(nodeToDagNode(node, gdag), pool, {
         expandReason: decision.reason, procedurePrior: prior,
     });
     let layerId: string | null = null;
@@ -219,9 +230,11 @@ async function expandOne(e: WalkEntry, pctx: PlanContext): Promise<void> {
     // 增量回写
     const usedInitials = pctx.gdag.getGraph(layerId!)
         ? pctx.gdag.initialArtifacts(layerId!) : [];
-    const have = new Set(node.inputs.map(i => i.name));
-    const extra = pool.filter(io => usedInitials.includes(io.name) && !have.has(io.name));
-    if (extra.length > 0) pctx.gdag.addNodeInputs(graphId, node.id, extra);
+    const have = new Set(node.inputs);
+    const extraNames = pool
+        .filter(io => usedInitials.includes(io.name) && !have.has(io.name))
+        .map(io => io.name);
+    if (extraNames.length > 0) pctx.gdag.addNodeInputs(graphId, node.id, extraNames);
 
     pctx.gdag.attachSubDag(node.id, layerId!);
     pctx.persist();
@@ -230,11 +243,11 @@ async function expandOne(e: WalkEntry, pctx: PlanContext): Promise<void> {
 // ─── 边界复核 ──────────────────────────────────────────────────────────────
 
 function checkLayerBoundary(
-    gdag: GDag, layerId: string, node: PNode, availableInputs: Io[],
+    gdag: GDag, layerId: string, node: PNode, availableInputs: { name: string; intent: string }[],
 ): string[] {
     const errs: string[] = [];
     const avail = new Set(availableInputs.map(i => i.name));
-    const outputs = new Set(node.outputs.map(o => o.name));
+    const outputs = new Set(node.outputs);
 
     for (const a of gdag.initialArtifacts(layerId))
         if (!avail.has(a))

@@ -7,7 +7,6 @@ export type SizeEstimateT = z.infer<typeof SizeEstimate>;
 export const NodeKind = z.enum([
     'extract', 'classify', 'summarize', 'transform',
     'merge', 'score', 'generate', 'lookup', 'aggregate', 'route',
-    // P1 内层由 LLM 主动设计的物理节点：
     'split', 'map', 'reduce', 'validate', 'critique', 'compress',
 ]);
 export type NodeKindT = z.infer<typeof NodeKind>;
@@ -18,7 +17,7 @@ export const LOGICAL_NODE_KINDS: NodeKindT[] = [
     'merge', 'score', 'generate', 'lookup', 'aggregate', 'route',
 ];
 
-// ─── Artifact ─────────────────────────────────────────────────────────────
+// ─── Artifact（LLM 设计阶段的完整定义） ───────────────────────────────────
 
 export const ArtifactSchema = z.object({
     name: z.string().min(1)
@@ -35,7 +34,7 @@ export const ArtifactSchema = z.object({
 
 export type Artifact = z.infer<typeof ArtifactSchema>;
 
-// ─── Node ─────────────────────────────────────────────────────────────────
+// ─── Node（LLM 设计阶段的定义，inputs/outputs 为完整 Artifact） ──────────
 
 export const DagNodeSchema = z.object({
     name: z.string().min(1)
@@ -77,24 +76,28 @@ export type NodeStatus =
 export type RiskLevel = 'low' | 'medium' | 'high';
 export type GuardKind = 'validate' | 'critique';
 
-/** 代码级运行时节点 */
-export interface PNode extends DagNode {
+/**
+ * 代码级运行时节点
+ * inputs/outputs 只存名称引用，完整信息通过 GDag.getArtifact(name) 查询
+ */
+export interface PNode {
     id: string;
+    name: string;
+    kind: NodeKindT;
+    intent: string;
+    /** 输入 artifact 名称列表（通过注册表查询完整信息） */
+    inputs: string[];
+    /** 输出 artifact 名称列表（通过注册表查询完整信息），恰好 1 个 */
+    outputs: string[];
     status: NodeStatus;
     dag: string | null;
     error: string | null;
     facets: Facets;
     forcedNote?: string;
     risk?: RiskLevel;
-    /** 是否为合成节点（chunk/reduce/validate 等机器插入或 LLM 设计但无需人工展开的） */
     synthetic?: boolean;
     guard?: boolean;
     guardKinds?: GuardKind[];
-    /**
-     * 数组语义下的顺序执行标记
-     * true=即使消费 isArray 输入也按顺序串行执行,并自动将前一条输出注入当前输入
-     * 默认 false=并行（map）
-     */
     sequential?: boolean;
 }
 

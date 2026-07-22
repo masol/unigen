@@ -7,7 +7,7 @@ export type { BlueprintKind } from './shared/api/list.js'
 export type { RecentProject } from './shared/api/recents.js'
 export type { FileFilterPreset } from './shared/api/sys.js'
 export type { Model, ModelOption, ModelTags, Provider, ProviderProtocol } from './shared/model.js'
-export type { Facets, GDagJSON, NodeStatus, PNode, RegArtifact, TriState } from './shared/plan/nodes.js'
+export type { Facets, GDagJSON, GuardKind, NodeKindT, NodeStatus, PNode, RegArtifact, RiskLevel, SizeEstimateT, TriState } from './shared/plan/nodes.js'
 export type { ModuleSource, PluginInfo, PluginScope, PluginStatus } from './shared/plugin.js'
 export type { WindowEventPayload, WindowEventType } from './shared/rpcevt.js'
 

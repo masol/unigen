@@ -54,6 +54,19 @@ export class GDag {
     getArtifact(name: string): RegArtifact | null { return this.#registry.get(name); }
     allArtifacts(): RegArtifact[] { return this.#registry.all(); }
 
+    /** 便捷方法：通过名称获取 Io（name + intent） */
+    getIo(name: string): Io | null {
+        const a = this.#registry.get(name);
+        return a ? { name: a.name, intent: a.intent } : null;
+    }
+
+    /** 批量获取 Io */
+    getIos(names: string[]): Io[] {
+        return names
+            .map(n => this.getIo(n))
+            .filter((io): io is Io => io !== null);
+    }
+
     // ── 图管理 ──────────────────────────────────────────────────────────────
 
     createLayer(nodes: PNode[], asRoot = false): string {
@@ -61,13 +74,13 @@ export class GDag {
         const producer = new Map<string, string>();
         for (const n of nodes) {
             g.addNode(n.id, { ...n });
-            for (const o of n.outputs) producer.set(o.name, n.id);
+            for (const o of n.outputs) producer.set(o, n.id);
         }
         for (const n of nodes) {
             for (const i of n.inputs) {
-                const from = producer.get(i.name);
+                const from = producer.get(i);
                 if (!from || from === n.id) continue;
-                this.#link(g, from, n.id, [i.name]);
+                this.#link(g, from, n.id, [i]);
             }
         }
         const id = crypto.randomUUID();
@@ -104,11 +117,9 @@ export class GDag {
             .setNodeAttribute(nodeId, 'facets', { ...hit.node.facets, [facet]: value });
     }
 
-
     attachSubDag(nodeId: string, subGraphId: string): void {
         this.updateNode(nodeId, { dag: subGraphId, status: 'expanded' });
     }
-
 
     scan(status: NodeStatus): { graphId: string; node: PNode }[] {
         const out: { graphId: string; node: PNode }[] = [];
@@ -137,10 +148,13 @@ export class GDag {
         }
 
         const self = g.getNodeAttributes(nodeId) as PNode;
-        const taken = new Set(self.inputs.map(i => i.name));
+        const taken = new Set(self.inputs);
         const pool = new Map<string, Io>();
-        const add = (io: Io): void => {
-            if (!taken.has(io.name) && !pool.has(io.name)) pool.set(io.name, io);
+        const add = (name: string): void => {
+            if (!taken.has(name) && !pool.has(name)) {
+                const io = this.getIo(name);
+                if (io) pool.set(name, io);
+            }
         };
 
         for (const aid of ancestors) {
@@ -149,33 +163,33 @@ export class GDag {
         }
         const produced = new Set<string>();
         g.forEachNode((_, attrs) => {
-            for (const o of (attrs as PNode).outputs) produced.add(o.name);
+            for (const o of (attrs as PNode).outputs) produced.add(o);
         });
         g.forEachNode((_, attrs) => {
             for (const i of (attrs as PNode).inputs)
-                if (!produced.has(i.name)) add(i);
+                if (!produced.has(i)) add(i);
         });
         return [...pool.values()];
     }
 
-    addNodeInputs(graphId: string, nodeId: string, extra: Io[]): void {
-        if (extra.length === 0) return;
+    addNodeInputs(graphId: string, nodeId: string, extraNames: string[]): void {
+        if (extraNames.length === 0) return;
         const g = this.#graphs.get(graphId);
         if (!g || !g.hasNode(nodeId)) throw new Error(`[gdag] 节点不存在:${nodeId}`);
         const node = g.getNodeAttributes(nodeId) as PNode;
-        const have = new Set(node.inputs.map(i => i.name));
-        const added = extra.filter(io => !have.has(io.name));
+        const have = new Set(node.inputs);
+        const added = extraNames.filter(n => !have.has(n));
         if (added.length === 0) return;
         g.setNodeAttribute(nodeId, 'inputs', [...node.inputs, ...added]);
 
         const producer = new Map<string, string>();
         g.forEachNode((nid, attrs) => {
-            for (const o of (attrs as PNode).outputs) producer.set(o.name, nid);
+            for (const o of (attrs as PNode).outputs) producer.set(o, nid);
         });
-        for (const io of added) {
-            const from = producer.get(io.name);
+        for (const name of added) {
+            const from = producer.get(name);
             if (!from || from === nodeId) continue;
-            this.#link(g, from, nodeId, [io.name]);
+            this.#link(g, from, nodeId, [name]);
         }
     }
 
@@ -270,12 +284,12 @@ export class GDag {
         if (!g) return [];
         const produced = new Set<string>();
         g.forEachNode((_, attrs) => {
-            for (const o of (attrs as PNode).outputs) produced.add(o.name);
+            for (const o of (attrs as PNode).outputs) produced.add(o);
         });
         const out = new Set<string>();
         g.forEachNode((_, attrs) => {
             for (const i of (attrs as PNode).inputs)
-                if (!produced.has(i.name)) out.add(i.name);
+                if (!produced.has(i)) out.add(i);
         });
         return [...out];
     }
@@ -285,12 +299,12 @@ export class GDag {
         if (!g) return [];
         const consumed = new Set<string>();
         g.forEachNode((_, attrs) => {
-            for (const i of (attrs as PNode).inputs) consumed.add(i.name);
+            for (const i of (attrs as PNode).inputs) consumed.add(i);
         });
         const out: string[] = [];
         g.forEachNode((_, attrs) => {
             for (const o of (attrs as PNode).outputs)
-                if (!consumed.has(o.name)) out.push(o.name);
+                if (!consumed.has(o)) out.push(o);
         });
         return out;
     }

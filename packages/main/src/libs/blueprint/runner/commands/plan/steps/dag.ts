@@ -680,7 +680,6 @@ export async function designDag(
 }
 
 // ─── 登记 ──────────────────────────────────────────────────────────────────
-
 export async function registerLayer(
     result: DagDesignResult, pctx: PlanContext, asRoot: boolean,
 ): Promise<string> {
@@ -694,16 +693,17 @@ export async function registerLayer(
 
     const pnodes: PNode[] = [];
     for (const n of result.nodes) {
-        const norm = (ios: typeof n.inputs) =>
-            ios.map(io => ({ ...io, name: formalOf.get(io.name) ?? io.name }));
+        const inputNames = n.inputs.map(io => formalOf.get(io.name) ?? io.name);
+        const outputNames = n.outputs.map(io => formalOf.get(io.name) ?? io.name);
 
-        // 检测 sequential 标记：intent 中含"顺序执行"关键词
         const sequential = /顺序执行/.test(n.intent);
 
         pnodes.push({
-            ...n,
-            inputs: norm(n.inputs),
-            outputs: norm(n.outputs),
+            name: n.name,
+            kind: n.kind,
+            intent: n.intent,
+            inputs: inputNames,
+            outputs: outputNames,
             id: crypto.randomUUID(),
             status: 'pending',
             dag: null,

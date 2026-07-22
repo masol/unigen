@@ -1,4 +1,3 @@
-<!-- src/lib/flow/FlowPage.svelte -->
 <script lang="ts">
   import FlowCanvas from "./FlowCanvas.svelte";
   import FlowToolbar from "./FlowToolbar.svelte";

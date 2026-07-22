@@ -14,7 +14,9 @@
   import { safeApi } from "$lib/utils/api";
   import { onMount } from "svelte";
   import EditorStatusBar from "../page/editor/EditorStatusBar.svelte";
+  import FlowStatusBar from "../page/flow/FlowStatusBar.svelte";
   import RunState from "../RunState.svelte";
+
   import Brand from "./header/brand.svelte";
 
   // ═══════════════════════════════════════════════════════════
@@ -35,9 +37,12 @@
   // ═══════════════════════════════════════════════════════════
   const currentLocation = $derived(router.location);
 
-  type StatusCompType = "normal" | "editor";
+  type StatusCompType = "normal" | "editor" | "flow";
 
   const statusComp: StatusCompType = $derived.by(() => {
+    if (currentLocation.startsWith("/flow/view/")) {
+      return "flow";
+    }
     return currentLocation.startsWith("/editor/") ? "editor" : "normal";
   });
 
@@ -75,6 +80,8 @@
 >
   {#if statusComp === "editor"}
     <EditorStatusBar />
+  {:else if statusComp === "flow"}
+    <FlowStatusBar></FlowStatusBar>
   {:else if hasProject}
     <!--╭─────────────────────────────────────────────────────╮ -->
     <!-- │ [可抽取子组件 → StatusBarProject.svelte]            │ -->
