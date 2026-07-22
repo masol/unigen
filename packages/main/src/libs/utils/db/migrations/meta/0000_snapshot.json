@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "620c2979-2577-4022-a77c-4164fa65e26f",
+  "id": "a6f411b2-b44a-4a31-87cc-f697199d7d4e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "kv_store": {
@@ -84,14 +84,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "dims": {
-          "name": "dims",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
         },
         "input": {
           "name": "input",
@@ -180,6 +172,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "dims": {
+          "name": "dims",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
         },
         "schema": {
           "name": "schema",

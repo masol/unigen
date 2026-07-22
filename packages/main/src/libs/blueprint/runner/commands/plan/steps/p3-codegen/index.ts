@@ -9,8 +9,9 @@
 
 import type { PNode } from "$types/index.js";
 import Logger from "electron-log/main.js";
-import type { GeneratedArtifact, PlanContext } from "../../context.js";
+import type { PlanContext } from "../../context.js";
 import { NodeStatusValue } from "../../graph/gdag.js";
+import { persistArtifact, persistDag } from "./persist.js";
 import { generateForNode } from "./pipeline.js";
 
 export class CodeGenFailure extends Error {
@@ -22,31 +23,6 @@ export class CodeGenFailure extends Error {
         super(`[codegen]「${nodeId}」失败：${reason}`);
         this.name = 'CodeGenFailure';
     }
-}
-
-/**
- * 落盘（当前为空实现，留作扩展）。
- *
- * 约定的 kv 键（供运行时动态加载）：
- *   - 代码：           `.${nodeId}_code`
- *   - 第 N 步提示词：   `.${nodeId}_step${N}_system` / `.${nodeId}_step${N}_user`
- *
- * @TODO 接入 pctx.prjdb / glossary.set 落盘。当前仅缓存到内存 + 日志。
- */
-function persistArtifact(art: GeneratedArtifact, pctx: PlanContext): void {
-    // 内存缓存，供 flatten / 后续阶段读取
-    pctx.setGeneratedCode(art.nodeId, art);
-
-    // @TODO 实际落盘：
-    // pctx.prjdb.set(`.${art.nodeId}_code`, art.code);
-    // art.prompts.forEach((p, i) => {
-    //     const step = i + 1;
-    //     pctx.prjdb.set(`.${art.nodeId}_step${step}_system`, p.system);
-    //     pctx.prjdb.set(`.${art.nodeId}_step${step}_user`, p.user);
-    // });
-
-    Logger.debug(`[codegen] (占位落盘)「${art.nodeId}」code=${art.code.length}c prompts=${art.prompts.length}`);
-    Logger.debug(JSON.stringify(art, null, 2));
 }
 
 export async function codeGenForNode(node: PNode, pctx: PlanContext): Promise<void> {
@@ -104,6 +80,8 @@ export async function codeGen(pctx: PlanContext): Promise<void> {
             `[codegen] ${failures.length}/${realTargets.length} 节点失败`,
         );
     }
+
+    persistDag(pctx);
 
     pctx.persist();
     Logger.debug(`[codegen] 完成：${realTargets.length} 个节点`);

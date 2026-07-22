@@ -11,7 +11,6 @@ CREATE TABLE `capabilities` (
 	`goal` text DEFAULT '' NOT NULL,
 	`code` text DEFAULT '' NOT NULL,
 	`chunk` text,
-	`dims` text DEFAULT '[]' NOT NULL,
 	`input` text DEFAULT '[]' NOT NULL,
 	`output` text DEFAULT '[]' NOT NULL,
 	`process` text DEFAULT '' NOT NULL,
@@ -25,6 +24,7 @@ CREATE TABLE `capabilities` (
 CREATE TABLE `metag` (
 	`field_key` text PRIMARY KEY NOT NULL,
 	`intent` text,
+	`dims` text DEFAULT '[]' NOT NULL,
 	`schema` text,
 	`reducer` text,
 	`storage` text,
