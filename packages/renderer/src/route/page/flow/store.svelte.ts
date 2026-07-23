@@ -2,7 +2,9 @@
 
 // src/lib/flow/store.svelte.ts
 
+import { layoutStore } from '$lib/store/ui/layout.svelte';
 import { safeApi } from '$lib/utils/api';
+import { hooks } from '$lib/utils/hook';
 import type {
     GDagJSON,
     GuardKind,
@@ -34,8 +36,18 @@ import {
 } from '@tabler/icons-svelte';
 import type { Edge as XYEdge, Node as XYNode } from '@xyflow/svelte';
 import DirectedGraph from 'graphology';
+import { toast } from 'svelte-sonner';
+import { push } from "svelte-spa-router";
+import { rightPanelStore } from '../../featured/rightside/bar.store.svelte';
+import { messageStore } from '../../featured/rightside/chat/msg.svelte';
 
 export type { GDagJSON, NodeStatus, PNode, RegArtifact };
+
+// ─────────────────────────────────────────────────────────────
+//  运行模式：同一份 store，两种宿主（整页 / 底部面板）
+// ─────────────────────────────────────────────────────────────
+
+export type FlowMode = 'page' | 'panel';
 
 // ─────────────────────────────────────────────────────────────
 //  本地视图类型
@@ -235,6 +247,12 @@ export class FlowStore {
 
     id = $state<string>('');
 
+    /** 宿主运行模式：整页 or 底部面板。默认整页。 */
+    mode = $state<FlowMode>('panel');
+
+    /** 顶层 DAG 名称：面板模式无 status 可依赖，toolbar 左侧显示它。 */
+    dagName = $state<string>('');
+
     loading = $state<boolean>(false);
     lastError = $state<string | null>(null);
     private loadedId: string | null = null;
@@ -250,9 +268,46 @@ export class FlowStore {
     fitTrigger = $state<number>(0);
     miniMap = $state<boolean>(true);
 
+    constructor() {
+        // 项目关闭：清空一切历史数据，恢复到全新状态，等价于从未加载过
+        hooks.hook('project:closed', async () => {
+            this.reset();
+        });
+    }
+
+    /**
+     * 彻底复位：清空图 / 产物 / 交互 / 面包屑 / 布局，id 归零。
+     * 幂等，可安全重复调用。
+     */
+    reset() {
+        this.graphs.clear();
+        this.artifactIndex.clear();
+
+        this.raw = null;
+        this.positions = new Map();
+
+        this.id = '';
+        this.dagName = '';
+        this.loadedId = null;
+
+        this.loading = false;
+        this.lastError = null;
+
+        this.crumbs = [];
+        this.selectedNodeId = null;
+        this.selectedArtifactName = null;
+        this.selectedArtifactRole = 'output';
+
+        // 让订阅 fit 的控制器不残留上一项目的视图状态
+        this.fitTrigger++;
+    }
+
     currentGraphId = $derived(
         this.crumbs.length > 0 ? this.crumbs[this.crumbs.length - 1].graphId : null
     );
+
+    /** toolbar 左侧标题：优先 dagName，兜底 .${id}_state。 */
+    title = $derived(this.dagName || (this.id ? `.${this.id}_state` : '未命名流程图'));
 
     nodes = $derived.by<DagFlowNode[]>(() => {
         void this.raw;
@@ -426,7 +481,8 @@ export class FlowStore {
 
     // ── 初始化 / 加载 ──
 
-    async init(id: string) {
+    async init(id: string, mode: FlowMode = 'panel') {
+        this.mode = mode;
         const trimmed = (id ?? '').trim();
         if (this.loadedId === trimmed && !this.loading && this.raw) {
             return;
@@ -457,6 +513,11 @@ export class FlowStore {
 
             this.selectedNodeId = null;
             this.selectedArtifactName = null;
+
+            // DAG 名称：优先后端字段，兜底文件名
+            this.dagName =
+                (data as unknown as { name?: string }).name?.trim() ||
+                `.${this.id}_state`;
 
             const rootGid = this.resolveRootGraphId(data);
             this.crumbs = rootGid
@@ -564,6 +625,50 @@ export class FlowStore {
 
     toggleMiniMap() {
         this.miniMap = !this.miniMap;
+    }
+
+
+    isRunning = $derived(messageStore.isLoading)
+    // ─────────────────────────────────────────────────────────
+    //  以下动作：预留业务钩子，实现留空由使用方接管
+    // ─────────────────────────────────────────────────────────
+
+    /** 执行整个 DAG。 */
+    async runDag() {
+        if (this.isRunning) {
+            toast.warning("有反思任务执行中")
+            return;
+        }
+        layoutStore.openPanel("right");
+        rightPanelStore.activeTab = "assistant";
+        const content = `/run --plan=${this.id}`;
+        messageStore.addMessage({ role: "user", content });
+        await messageStore.AIResponse(content);
+    }
+
+    // /** 编辑当前 DAG（元信息 / 结构外的编辑入口）。 */
+    // editDag() {
+    //     // TODO: 由使用方实现
+    // }
+
+    // /** 进入 DAG 编辑模式（拓扑编辑）。 */
+    // editDagStructure() {
+    //     // TODO: 由使用方实现
+    // }
+
+    /** 编辑某节点（结构 / 属性）。 */
+    editNode(nodeId: string) {
+        push(`/editor/capa/${nodeId}/`);
+    }
+
+    /** 编辑某节点的内容（产出内容 / prompt 等）。 */
+    editNodeContent(nodeId: string) {
+        push(`/editor/capa/${nodeId}/js`);
+    }
+
+    /** 编辑某产物（IO）。 */
+    editArtifact(_nodeId: string, artifactName: string, _role: ArtifactRole) {
+        push(`/editor/metag/${artifactName}/`);
     }
 
     async refresh() {

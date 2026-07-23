@@ -21,14 +21,14 @@
 
 <!--╭─────────────────────────────────────────────────────╮ -->
 <!-- │ [可抽取子组件 → ArtifactDetailPanel.svelte]         │ -->
-<!-- │ 职责：左上角产物详情浮层；关闭走 clearArtifact      │ -->
+<!-- │ 职责：左上角产物详情浮层；与右侧节点面板等高        │ -->
 <!-- ╰─────────────────────────────────────────────────────╯ -->
 <div use:autoAnimate>
   {#if art}
     <div
-      class="w-72 overflow-hidden rounded-2xl border border-border/50 bg-background/90 shadow-xl backdrop-blur-sm"
+      class="flex max-h-80 w-72 flex-col overflow-hidden rounded-2xl border border-border/50 bg-background/90 shadow-xl backdrop-blur-sm"
     >
-      <div class="flex items-start justify-between gap-2 p-4 pb-0">
+      <div class="flex shrink-0 items-start justify-between gap-2 p-4 pb-3">
         <div class="flex min-w-0 items-center gap-2">
           <div
             class="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
@@ -58,7 +58,7 @@
         </Button>
       </div>
 
-      <div class="max-h-96 space-y-4 overflow-y-auto p-4">
+      <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pt-0">
         {#if art.artifact}
           <p class="text-xs text-muted-foreground">{art.artifact.intent}</p>
 

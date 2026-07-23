@@ -121,6 +121,7 @@ class ProjectStore {
 
     async open(pathName?: string): Promise<boolean> {
         if (this.isBusy) return false;
+        await this.close();
 
         try {
             this.loading = "open";
@@ -154,10 +155,13 @@ class ProjectStore {
                 this.#activity = null;
             }, 10);
         }
+        await hooks.callHook("project:closed");
     }
 
     async create(pathName?: string): Promise<boolean> {
         if (this.isBusy) return false;
+        await this.close();
+
         this.loading = "new";
         try {
             const typeId = await dialogStore.safeShow(

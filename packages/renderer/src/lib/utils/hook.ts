@@ -4,6 +4,7 @@ import { createHooks, type Hookable } from 'hookable';
 interface UnigenHooks {
     // 打开项目时调用插件的hook函数，确保调用之前，插件已经被加载完毕。
     'project:loaded': (payload: { path: string }) => void | Promise<void>;
+    'project:closed': (payload: void) => void | Promise<void>;
 }
 
 export type UnigenHookType = Hookable<UnigenHooks>

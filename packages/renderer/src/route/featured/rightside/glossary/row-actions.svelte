@@ -4,6 +4,7 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { configStore } from "$lib/store/config.svelte.js";
   import { confirmStore } from "$lib/store/ui/confirm.svelte.js";
+  import { layoutStore } from "$lib/store/ui/layout.svelte.js";
   import {
     IconDotsVertical,
     IconEdit,
@@ -12,6 +13,8 @@
     IconTrash,
   } from "@tabler/icons-svelte";
   import { push } from "svelte-spa-router";
+  import { flowStore } from "../../../page/flow/store.svelte.js";
+  import { bottomPanelStore } from "../../bottom/bar.store.svelte.js";
   import { blueprintStore, type BlueprintTerm } from "./store.svelte.js";
 
   let { term }: { term: BlueprintTerm } = $props();
@@ -31,7 +34,12 @@
   }
 
   function handleShowDesign() {
-    if (showDesignUUID) push(`/flow/view/${showDesignUUID}`);
+    if (showDesignUUID) {
+      // push(`/flow/view/${showDesignUUID}`);
+      flowStore.init(showDesignUUID, "panel");
+      layoutStore.openPanel("bottom");
+      bottomPanelStore.setActiveTab("dag");
+    }
   }
 
   async function handleDelete() {
@@ -76,7 +84,7 @@
     {#if showDesignUUID.trim().length > 0}
       <DropdownMenu.Item class="rounded-lg" onclick={handleShowDesign}>
         <IconSparkleHighlight size={20} stroke={1.5} />
-        查看设计
+        面板显示
       </DropdownMenu.Item>
     {/if}
     {#if configStore.rmblueprint}

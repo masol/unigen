@@ -7,6 +7,7 @@
     IconAlertTriangle,
     IconBolt,
     IconPackages,
+    IconPencil,
     IconShieldCheck,
     IconSparkles,
     IconStack2,
@@ -24,6 +25,8 @@
     SIZE_DESC,
     STATUS_LABEL,
     TRISTATE_LABEL,
+    type ArtifactRole,
+    type ResolvedIo,
   } from "./store.svelte";
 
   const node = $derived(flowStore.selectedNode);
@@ -44,16 +47,59 @@
 </script>
 
 <!--╭─────────────────────────────────────────────────────╮ -->
+<!-- │ [可抽取子组件 → NodeIoRow.svelte]                   │ -->
+<!-- │ 职责：单条 IO 行 —— 编辑按钮 + 不换行省略徽章       │ -->
+<!-- ╰─────────────────────────────────────────────────────╯ -->
+{#snippet ioRow(io: ResolvedIo, role: ArtifactRole)}
+  <div class="flex items-center gap-1.5">
+    <Button
+      variant="ghost"
+      size="icon"
+      class="size-6 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
+      title="编辑产物"
+      onclick={() => node && flowStore.editArtifact(node.id, io.name, role)}
+    >
+      <IconPencil size={14} stroke={1.5} />
+    </Button>
+    <button
+      type="button"
+      onclick={() => flowStore.selectArtifact(io.name, role)}
+      class="min-w-0 flex-1 cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
+    >
+      <Badge
+        variant={active === io.name
+          ? "default"
+          : io.artifact?.isArray
+            ? "default"
+            : "secondary"}
+        class="flex w-full items-center gap-1 rounded-lg text-[11px] hover:shadow-xl"
+      >
+        {#if io.artifact?.isArray}
+          <IconPackages size={10} stroke={1.5} class="shrink-0" />
+        {/if}
+        <span class="truncate">{io.name}</span>
+        {#if io.artifact}
+          <span class="shrink-0 opacity-60"
+            >· {SIZE_DESC[io.artifact.sizeEstimate]}</span
+          >
+        {/if}
+      </Badge>
+    </button>
+  </div>
+{/snippet}
+<!-- ╭─── / NodeIoRow ───╮ -->
+
+<!--╭─────────────────────────────────────────────────────╮ -->
 <!-- │ [可抽取子组件 → SelectedNodePanel.svelte]           │ -->
-<!-- │ 职责：右上角选中节点属性浮层；IO 可点击             │ -->
-<!-- │ 修复：高亮判据改用 activeArtifactName              │ -->
+<!-- │ 职责：右上角选中节点属性浮层；IO 可点击/可编辑      │ -->
+<!-- │ 修复：高亮判据改用 activeArtifactName；IO 不换行    │ -->
 <!-- ╰─────────────────────────────────────────────────────╯ -->
 <div use:autoAnimate>
   {#if node && KindIcon}
     <div
-      class="w-72 overflow-hidden rounded-2xl border border-border/50 bg-background/90 shadow-xl backdrop-blur-sm"
+      class="flex max-h-80 w-72 flex-col overflow-hidden rounded-2xl border border-border/50 bg-background/90 shadow-xl backdrop-blur-sm"
     >
-      <div class="flex items-start justify-between gap-2 p-4 pb-0">
+      <div class="flex shrink-0 items-start justify-between gap-2 p-4 pb-3">
         <div class="flex min-w-0 items-start gap-2">
           <div class="mt-1"><StatusDot status={node.status} /></div>
           <div class="min-w-0">
@@ -75,7 +121,7 @@
         </Button>
       </div>
 
-      <div class="max-h-80 space-y-4 overflow-y-auto p-4">
+      <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pt-0">
         <p class="text-xs text-muted-foreground">{node.intent}</p>
 
         <div class="flex flex-wrap items-center gap-1.5">
@@ -137,34 +183,11 @@
 
         <div class="space-y-2">
           <p class="text-xs font-medium text-muted-foreground">
-            输入（点击查看产物）
+            输入（点击查看 · 左侧可编辑）
           </p>
-          <div class="flex flex-wrap gap-1.5">
+          <div class="space-y-1.5">
             {#each resolved.inputs as io (io.name)}
-              <button
-                type="button"
-                onclick={() => flowStore.selectArtifact(io.name, "input")}
-                class="cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
-              >
-                <Badge
-                  variant={active === io.name
-                    ? "default"
-                    : io.artifact?.isArray
-                      ? "default"
-                      : "secondary"}
-                  class="gap-1 rounded-lg text-[11px] hover:shadow-xl"
-                >
-                  {#if io.artifact?.isArray}
-                    <IconPackages size={10} stroke={1.5} />
-                  {/if}
-                  {io.name}
-                  {#if io.artifact}
-                    <span class="opacity-60"
-                      >· {SIZE_DESC[io.artifact.sizeEstimate]}</span
-                    >
-                  {/if}
-                </Badge>
-              </button>
+              {@render ioRow(io, "input")}
             {:else}
               <span class="text-[11px] text-muted-foreground/60">无</span>
             {/each}
@@ -173,34 +196,11 @@
 
         <div class="space-y-2">
           <p class="text-xs font-medium text-muted-foreground">
-            输出（点击查看产物）
+            输出（点击查看 · 左侧可编辑）
           </p>
-          <div class="flex flex-wrap gap-1.5">
+          <div class="space-y-1.5">
             {#each resolved.outputs as io (io.name)}
-              <button
-                type="button"
-                onclick={() => flowStore.selectArtifact(io.name, "output")}
-                class="cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
-              >
-                <Badge
-                  variant={active === io.name
-                    ? "default"
-                    : io.artifact?.isArray
-                      ? "default"
-                      : "secondary"}
-                  class="gap-1 rounded-lg text-[11px] hover:shadow-xl"
-                >
-                  {#if io.artifact?.isArray}
-                    <IconPackages size={10} stroke={1.5} />
-                  {/if}
-                  {io.name}
-                  {#if io.artifact}
-                    <span class="opacity-60"
-                      >· {SIZE_DESC[io.artifact.sizeEstimate]}</span
-                    >
-                  {/if}
-                </Badge>
-              </button>
+              {@render ioRow(io, "output")}
             {:else}
               <span class="text-[11px] text-muted-foreground/60">无</span>
             {/each}

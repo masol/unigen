@@ -22,7 +22,6 @@
   } from "./store.svelte";
 
   // ── 主题跟随：监听 <html class="dark">（Tailwind v4 class 切换）──
-  // SSR 兜底：服务端/无 document 时默认浅色
   function isDark() {
     return (
       typeof document !== "undefined" &&
@@ -32,7 +31,6 @@
 
   let dark = $state(false);
   $effect(() => {
-    // 仅在浏览器运行后初始化
     dark = isDark();
     const observer = new MutationObserver(() => {
       dark = isDark();
@@ -41,7 +39,7 @@
       attributes: true,
       attributeFilter: ["class"],
     });
-    return () => observer.disconnect(); // 页面关闭/组件销毁时断开
+    return () => observer.disconnect();
   });
 
   // ── xyflow 镜像：store 是唯一真源 ──
@@ -101,7 +99,7 @@
         onnodeclick={({ node }) => flowStore.selectNode(node.id)}
         onpaneclick={() => {
           flowStore.selectNode(null);
-          flowStore.selectArtifact(null); // 点空白同时关闭产物面板
+          flowStore.selectArtifact(null);
         }}
       >
         <FitController />
@@ -111,7 +109,7 @@
           <MiniMap pannable zoomable />
         {/if}
 
-        <!-- 左：产物详情（点击 IO 打开） -->
+        <!-- 左：产物详情（点击 IO 打开）—— 与右侧节点面板统一等高 -->
         <Panel position="top-left" class="z-10!">
           <ArtifactDetailPanel />
         </Panel>

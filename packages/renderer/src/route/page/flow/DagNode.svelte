@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
   import * as HoverCard from "$lib/components/ui/hover-card";
   import { Separator } from "$lib/components/ui/separator";
   import * as Tooltip from "$lib/components/ui/tooltip";
@@ -7,6 +8,8 @@
     IconAlertTriangle,
     IconBolt,
     IconChevronRight,
+    IconEdit,
+    IconFileText,
     IconLogin2,
     IconLogout2,
     IconPackages,
@@ -65,7 +68,7 @@
 <!--╭─────────────────────────────────────────────────────╮ -->
 <!-- │ [可抽取子组件 → DagNode.svelte]                     │ -->
 <!-- │ 职责：DAG 节点卡片 + hover 详情 + 双击下钻          │ -->
-<!-- │ 强化：可下钻节点常驻醒目标识（角标 + 底部提示条）   │ -->
+<!-- │ 强化：hover 浮窗底部提供「编辑 / 编辑内容」入口     │ -->
 <!-- ╰─────────────────────────────────────────────────────╯ -->
 <HoverCard.Root openDelay={260} closeDelay={80}>
   <HoverCard.Trigger>
@@ -78,13 +81,11 @@
           "hover:-translate-y-0.5 hover:shadow-xl",
           data.mapMode ? mapRing : "",
           selected ? `ring-2 ${toneRing}` : "",
-          // 可下钻节点整体降沉一层「纸叠」质感：左上主色竖条
           data.hasChildren ? "cursor-pointer" : "",
         ]}
         role="button"
         tabindex="0"
       >
-        <!-- 可下钻：卡片左沿主色竖条（常驻，扫一眼就能识别）-->
         {#if data.hasChildren}
           <span
             class="pointer-events-none absolute left-0 top-3 bottom-3 w-1 rounded-full bg-primary/70"
@@ -105,7 +106,6 @@
         />
 
         <div class="p-4">
-          <!-- 头部 -->
           <div class="flex items-start justify-between gap-2">
             <div class="flex min-w-0 items-center gap-2">
               <StatusDot status={pnode.status} />
@@ -132,7 +132,6 @@
             {/if}
           </div>
 
-          <!-- 类型标签行 -->
           <div class="mt-2 flex items-center gap-1.5">
             <div
               class="flex size-5 items-center justify-center rounded-md bg-muted text-muted-foreground"
@@ -154,12 +153,10 @@
             </Badge>
           </div>
 
-          <!-- 意图 -->
           <p class="mt-2 line-clamp-2 text-xs text-muted-foreground">
             {pnode.intent}
           </p>
 
-          <!-- IO 计数 + 映射/风险 -->
           <div class="mt-3 flex flex-wrap items-center gap-1.5 text-[10px]">
             <span class="flex items-center gap-0.5 text-muted-foreground">
               <IconLogin2 size={12} stroke={1.5} />
@@ -206,7 +203,6 @@
             {/if}
           </div>
 
-          <!-- 守护 / 合成 / 强制 -->
           {#if pnode.guard || pnode.synthetic || pnode.forcedNote}
             <div class="mt-2 flex flex-wrap items-center gap-1">
               {#if pnode.guard}
@@ -240,7 +236,6 @@
           {/if}
         </div>
 
-        <!-- 底部常驻「下钻」提示条：可下钻节点专属，一目了然 -->
         {#if data.hasChildren}
           <div
             class="flex items-center justify-between gap-1 rounded-b-2xl border-t border-primary/20 bg-primary/5 px-4 py-1.5 text-[10px] font-medium text-primary"
@@ -424,6 +419,33 @@
           双击节点可下钻进入其子图
         </div>
       {/if}
+
+      <!--╭─────────────────────────────────────────────────────╮ -->
+      <!-- │ [可抽取子组件 → NodeHoverActions.svelte]            │ -->
+      <!-- │ 职责：节点悬浮功能区（编辑 / 编辑内容），实现留空   │ -->
+      <!-- ╰─────────────────────────────────────────────────────╯ -->
+      <Separator />
+      <div class="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          class="flex-1 gap-1.5 rounded-xl"
+          onclick={() => flowStore.editNode(id)}
+        >
+          <IconEdit size={16} stroke={1.5} />
+          编辑
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          class="flex-1 gap-1.5 rounded-xl"
+          onclick={() => flowStore.editNodeContent(id)}
+        >
+          <IconFileText size={16} stroke={1.5} />
+          编辑代码
+        </Button>
+      </div>
+      <!-- ╭─── / NodeHoverActions ───╮ -->
     </div>
   </HoverCard.Content>
 </HoverCard.Root>

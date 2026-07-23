@@ -3,16 +3,14 @@
 
   import {
     IconAlertTriangle,
-    IconNote,
-    IconTerminal2,
+    IconSparkleHighlight,
   } from "@tabler/icons-svelte";
-  import { bottomPanelStore } from "./bar.store.svelte";
   import type { Component } from "svelte";
+  import { bottomPanelStore } from "./bar.store.svelte";
 
   const iconMap: Record<string, Component<any>> = {
     logger: IconAlertTriangle as unknown as Component<any>,
-    output: IconNote as unknown as Component<any>,
-    terminal: IconTerminal2 as unknown as Component<any>,
+    dag: IconSparkleHighlight as unknown as Component<any>,
   };
 </script>
 
