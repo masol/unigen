@@ -1,13 +1,24 @@
 import type { IRunnerContext } from '$types/blueprint/context.js';
 import {
-    GDagJSON, Io, PNode, RegArtifact, TriState,
+    GDagJSON, Io, NodeStatus, PNode, RegArtifact, TriState,
 } from "$types/shared/plan/nodes.js";
 import { DirectedGraph } from "graphology";
 import { topologicalSort } from "graphology-dag";
-import { NodeStatus } from "../../plan-htn/types.js";
+import {
+    ancestorsOf,
+    criticalPathNodes,
+    initialArtifacts as gInitialArtifacts,
+    structuralSignal as gStructuralSignal,
+    terminalArtifacts as gTerminalArtifacts,
+    producedNames,
+    terminalNodeIds,
+    type NodeStructuralSignal,
+} from "./graph-ops.js";
 import { ArtifactCand, ArtifactRegistry } from "./registry.js";
 import { flattenGraphs } from "./rewrite.js";
 import { Semaphore } from "./semaphore.js";
+
+export type { NodeStructuralSignal } from "./graph-ops.js";
 
 export const FacetNames = {
     simple: 'simple',
@@ -121,6 +132,7 @@ export class GDag {
         this.updateNode(nodeId, { dag: subGraphId, status: 'expanded' });
     }
 
+    //已是全量、无需递归
     scan(status: NodeStatus): { graphId: string; node: PNode }[] {
         const out: { graphId: string; node: PNode }[] = [];
         for (const [gid, g] of this.#graphs) {
@@ -132,20 +144,27 @@ export class GDag {
         return out;
     }
 
+    // ── 结构信号（供展开价值判断） ─────────────────────────────────────────
+
+    /**
+     * 计算某节点在其所在层 DAG 中的结构地位（客观图属性）。
+     * 用于 P2 展开的价值判断：越承重（消费者多/近终端/在关键路径）越值得展开。
+     */
+    structuralSignal(graphId: string, nodeId: string): NodeStructuralSignal {
+        const g = this.#graphs.get(graphId);
+        if (!g || !g.hasNode(nodeId)) {
+            return { directConsumers: 0, totalDescendants: 0, distanceToTerminal: -1, onCriticalPath: false };
+        }
+        return gStructuralSignal(g, nodeId, terminalNodeIds(g), criticalPathNodes(g));
+    }
+
     // ── 上游数据池 ──────────────────────────────────────────────────────────
 
     upstreamPool(graphId: string, nodeId: string): Io[] {
         const g = this.#graphs.get(graphId);
         if (!g || !g.hasNode(nodeId)) return [];
 
-        const ancestors = new Set<string>();
-        const queue = [nodeId];
-        while (queue.length > 0) {
-            const cur = queue.shift()!;
-            g.forEachInNeighbor(cur, (nb) => {
-                if (!ancestors.has(nb)) { ancestors.add(nb); queue.push(nb); }
-            });
-        }
+        const ancestors = ancestorsOf(g, nodeId);
 
         const self = g.getNodeAttributes(nodeId) as PNode;
         const taken = new Set(self.inputs);
@@ -161,10 +180,7 @@ export class GDag {
             const a = g.getNodeAttributes(aid) as PNode;
             for (const o of a.outputs) add(o);
         }
-        const produced = new Set<string>();
-        g.forEachNode((_, attrs) => {
-            for (const o of (attrs as PNode).outputs) produced.add(o);
-        });
+        const produced = producedNames(g);
         g.forEachNode((_, attrs) => {
             for (const i of (attrs as PNode).inputs)
                 if (!produced.has(i)) add(i);
@@ -322,31 +338,13 @@ export class GDag {
     initialArtifacts(graphId: string): string[] {
         const g = this.#graphs.get(graphId);
         if (!g) return [];
-        const produced = new Set<string>();
-        g.forEachNode((_, attrs) => {
-            for (const o of (attrs as PNode).outputs) produced.add(o);
-        });
-        const out = new Set<string>();
-        g.forEachNode((_, attrs) => {
-            for (const i of (attrs as PNode).inputs)
-                if (!produced.has(i)) out.add(i);
-        });
-        return [...out];
+        return gInitialArtifacts(g);
     }
 
     terminalArtifacts(graphId: string): string[] {
         const g = this.#graphs.get(graphId);
         if (!g) return [];
-        const consumed = new Set<string>();
-        g.forEachNode((_, attrs) => {
-            for (const i of (attrs as PNode).inputs) consumed.add(i);
-        });
-        const out: string[] = [];
-        g.forEachNode((_, attrs) => {
-            for (const o of (attrs as PNode).outputs)
-                if (!consumed.has(o)) out.push(o);
-        });
-        return out;
+        return gTerminalArtifacts(g);
     }
 
     // ── 展平 ────────────────────────────────────────────────────────────────

@@ -41,7 +41,10 @@ export function isNotfoundError(err: unknown): boolean {
 }
 
 
-export function throwPrecondition(message: string): never {
+export function throwPrecondition(message: string, blogger = false): never {
+    if (blogger) {
+        Logger.error(message);
+    }
     throw new ORPCError(COMMON_ORPC_ERROR_DEFS.PRECONDITION_FAILED.message, {
         status: COMMON_ORPC_ERROR_DEFS.PRECONDITION_FAILED.status,
         message

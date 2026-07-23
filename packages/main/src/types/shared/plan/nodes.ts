@@ -8,14 +8,18 @@ export const NodeKind = z.enum([
     'extract', 'classify', 'summarize', 'transform',
     'merge', 'score', 'generate', 'lookup', 'aggregate', 'route',
     'split', 'map', 'reduce', 'validate', 'critique', 'compress',
+    'plan',
 ]);
 export type NodeKindT = z.infer<typeof NodeKind>;
 
 /** LLM 在逻辑设计阶段可选的思维操作类型 */
 export const LOGICAL_NODE_KINDS: NodeKindT[] = [
     'extract', 'classify', 'summarize', 'transform',
-    'merge', 'score', 'generate', 'lookup', 'aggregate', 'route',
+    'merge', 'score', 'generate', 'lookup', 'aggregate', 'route', 'plan',
 ];
+
+/** 全部合法枚举值（供抽取阶段 describe 归一使用） */
+const ALL_KIND_VALUES = NodeKind.options.join(' / ');
 
 // ─── Artifact（LLM 设计阶段的完整定义） ───────────────────────────────────
 
@@ -40,7 +44,15 @@ export const DagNodeSchema = z.object({
     name: z.string().min(1)
         .describe("环节名(动宾结构):人类在这步做什么思维活动"),
     kind: NodeKind
-        .describe("从思维操作目录选一种,不要发明目录外类型"),
+        .describe(
+            `思维操作类型。【只能取以下之一，不得发明目录外的值】：${ALL_KIND_VALUES}。` +
+            `若某环节的动作与上述某个词不完全吻合，请选择语义最接近的一个：` +
+            `规划/搭结构/排大纲/设计骨架→plan；` +
+            `重写/改写/转换/风格化/排版→transform；` +
+            `撰写/创作/生成新内容→generate；` +
+            `挑选/评分/择优→score；提取/抽取→extract；分类/贴标签→classify；` +
+            `拼接/组合/合并多份→merge；归纳/综合多条为一→summarize 或 aggregate。` +
+            `严禁输出上述清单之外的任何字符串（如 plan 之外的自造词）。`),
     intent: z.string().min(1)
         .describe("人类在这步怎么想:看什么材料、做什么判断/分析/创作、产出什么。" +
             "若出现'然后/接着/再',说明该拆为两步。用陈述句描述,禁止疑问句"),

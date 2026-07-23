@@ -68,6 +68,10 @@ export class PlanContext {
         return this.#user ?? "";
     }
 
+    setUser(body: string) {
+        this.#user = body;
+    }
+
     setGeneratedCode(
         nodeId: string,
         art: GeneratedArtifact,

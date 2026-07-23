@@ -3,7 +3,8 @@
  *
  * 核心事实：inputs[i] 是裸值（string 或 string[]），数组元素直接就是字符串。
  *   - 严禁 .item / .updatedAt / JSON.parse。
- *   - 判数组用 Array.isArray，判字符串用 util.isString。
+ *   - 需要字符串用 util.toStrSafe(x)，需要字符串数组用 util.toStrArraySafe(x)；
+ *     二者在类型不符时自行抛异常，无需再手写 Array.isArray / util.isString 校验。
  *   - save 传裸值，禁止 {item} 包装。
  *   - 多条产出用纯字符串切分（空行分隔），不自造对象数组。
  *   - 提示词键名固定为 '_' + cap.id + '_step<N>_system' / '..._user'，前导下划线不可省。
@@ -42,11 +43,8 @@ export const CODEGEN_EXAMPLES: Array<{
 const ioinfo = glossary.getIO(cap);
 if (!ioinfo.expired) return;
 
-// inputs[0] 是标量字符串，直接使用（不要 .item）
-const script = ioinfo.inputs[0];
-if (!util.isString(script)) {
-    err.throwPrecondition("[split] 剧本不是字符串。");
-}
+// inputs[0] 是标量字符串：toStrSafe 取裸值，类型不符自动抛异常
+const script = util.toStrSafe(ioinfo.inputs[0]);
 
 const output = [];
 // 遍历全部行，逐段带序号
@@ -66,11 +64,8 @@ glossary.save(cap.output[0], output);`,
             code: `const ioinfo = glossary.getIO(cap);
 if (!ioinfo.expired) return;
 
-// inputs[0] 是 string[]，元素直接是字符串（不要 .item）
-const items = ioinfo.inputs[0];
-if (!Array.isArray(items)) {
-    err.throwPrecondition("[map] 输入应为字符串数组");
-}
+// inputs[0] 应为 string[]：toStrArraySafe 取裸数组，类型不符自动抛异常
+const items = util.toStrArraySafe(ioinfo.inputs[0]);
 
 // 提示词键名带前导 '_'
 const sys1 = glossary.get('_' + cap.id + '_step1_system');
@@ -78,12 +73,10 @@ const usr1 = glossary.get('_' + cap.id + '_step1_user');
 
 // map：遍历数组每一条逐条处理（可并行），N→N 等量
 const results = await util.pMap(items, async (sentence) => {
-    if (!util.isString(sentence)) {
-        err.throwPrecondition("[map] 句子不是字符串");
-    }
+    const text = util.toStrSafe(sentence);
     const ret = await llm.generate({
         instructions: sys1,
-        prompt: usr1 + "\\n\\n待处理数据：\\n" + sentence,
+        prompt: usr1 + "\\n\\n待处理数据：\\n" + text,
     });
     return ret.text.trim();
 }, { concurrency: 4 });
@@ -99,11 +92,8 @@ glossary.save(cap.output[0], results);`,
             code: `const ioinfo = glossary.getIO(cap);
 if (!ioinfo.expired) return;
 
-// inputs[0] 是 string[]，元素直接是字符串
-const docs = ioinfo.inputs[0];
-if (!Array.isArray(docs)) {
-    err.throwPrecondition("[flatmap] 输入应为字符串数组");
-}
+// inputs[0] 应为 string[]：toStrArraySafe 取裸数组
+const docs = util.toStrArraySafe(ioinfo.inputs[0]);
 
 // 提示词键名带前导 '_'
 const sys1 = glossary.get('_' + cap.id + '_step1_system');
@@ -111,12 +101,10 @@ const usr1 = glossary.get('_' + cap.id + '_step1_user');
 
 // flatmap：每篇原文可炸出多条语录，逐篇处理后扁平化汇总
 const perDoc = await util.pMap(docs, async (doc) => {
-    if (!util.isString(doc)) {
-        err.throwPrecondition("[flatmap] 原文不是字符串");
-    }
+    const text = util.toStrSafe(doc);
     const ret = await llm.generate({
         instructions: sys1,
-        prompt: usr1 + "\\n\\n待分析原文：\\n" + doc,
+        prompt: usr1 + "\\n\\n待分析原文：\\n" + text,
     });
     // 提示词约定：每条语录独立成段、空行分隔。纯字符串切分为多条。
     const pieces = ret.text.split(/\\n{2,}/).map((s) => s.trim()).filter(Boolean);
@@ -141,11 +129,8 @@ glossary.save(cap.output[0], results);`,
             code: `const ioinfo = glossary.getIO(cap);
 if (!ioinfo.expired) return;
 
-// inputs[0] 是 string[]，元素直接是字符串
-const outlines = ioinfo.inputs[0];
-if (!Array.isArray(outlines)) {
-    err.throwPrecondition("[reduce] 输入应为字符串数组");
-}
+// inputs[0] 应为 string[]：toStrArraySafe 取裸数组
+const outlines = util.toStrArraySafe(ioinfo.inputs[0]);
 
 // 提示词键名带前导 '_'
 const sys1 = glossary.get('_' + cap.id + '_step1_system');
@@ -155,14 +140,12 @@ const usr1 = glossary.get('_' + cap.id + '_step1_user');
 const chapters = [];
 let prevContext = "";
 for (const outline of outlines) {
-    if (!util.isString(outline)) {
-        err.throwPrecondition("[reduce] 大纲不是字符串");
-    }
+    const text = util.toStrSafe(outline);
     const ret = await llm.generate({
         instructions: sys1,
         prompt: usr1
             + "\\n\\n已完成的前序内容（保持连贯）：\\n" + (prevContext || "（无，这是开篇）")
-            + "\\n\\n本章大纲：\\n" + outline,
+            + "\\n\\n本章大纲：\\n" + text,
     });
     chapters.push(ret.text.trim());
     prevContext = ret.text.trim();

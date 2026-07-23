@@ -12,7 +12,6 @@ import { throwUnprcessable } from '$libs/utils/err.js';
 import type { IRunnerContext } from '$types/blueprint/context.js';
 import { MAX_ITERATIONS } from './config.js';
 import { ConflictSignal, createPlanContext } from './context.js';
-import { flatten } from './steps/flatten.js';
 import { designTop } from './steps/p1-design.js';
 import { logicalExpand } from './steps/p2-expand.js';
 import { codeGen } from './steps/p3-codegen/index.js';
@@ -24,11 +23,11 @@ export async function runCmd(ctx: IRunnerContext): Promise<void> {
         try {
             await designTop(pctx);        // P1: 双层 reAct 设计顶层 DAG
             await logicalExpand(pctx);    // P2: 递归展开
-            const flatId = await flatten(pctx); // 展平
+            // const flatId = await flatten(pctx); // 展平
             await codeGen(pctx);          // P3: 占位
 
             ctx.notify("", "```json\n" +
-                JSON.stringify(pctx.gdag.getGraph(flatId)?.export(), null, 2) + "\n```");
+                JSON.stringify(pctx.gdag.getGraph(pctx.gdag.rootId!)?.export(), null, 2) + "\n```");
             return;
         } catch (e) {
             if (e instanceof ConflictSignal) continue;

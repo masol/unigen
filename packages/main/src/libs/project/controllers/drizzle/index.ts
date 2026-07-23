@@ -264,7 +264,7 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
             case 'capa': {
                 const capa = this.getCapaById(id);
                 if (!capa) {
-                    throwNotfound(`没有id为${id}的能力。`)
+                    throwNotfound(`没有id为“${id}”的能力。`)
                 }
                 // 如果 content 为 true，返回完整的 code
                 if (content) {
@@ -280,7 +280,7 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
                 {
                     const value = this.get<string>(id);
                     if (value === null) {
-                        throwNotfound(`没有key为${id}的术语。`)
+                        throwNotfound(`没有key为“${id}”的术语。`)
                     }
                     // 资源类的不做JSON化，直接默认其是字符串。content为true，在export时发出，方便存储。
                     if (content || id.startsWith('_')) {
@@ -292,7 +292,7 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
                 {
                     const value = this.getMetag(id)[0];
                     if (value === null) {
-                        throwNotfound(`没有fieldKey为${id}的元术语。`)
+                        throwNotfound(`没有fieldKey为“${id}”的元术语。`)
                     }
                     // 使用解构剔除不需要的字段，保留其余属性
                     const { updatedAt, createdAt, ...jsonValue } = metagToJson(value)!

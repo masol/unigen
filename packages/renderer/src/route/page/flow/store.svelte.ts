@@ -17,6 +17,7 @@ import type {
 } from '@app/main/types';
 import dagre from '@dagrejs/dagre';
 import {
+    IconAdjustmentsCog,
     IconArrowMerge,
     IconArrowsJoin2,
     IconBlockquote,
@@ -144,7 +145,8 @@ export const KIND_LABEL: Record<NodeKindT, string> = {
     reduce: '归约',
     validate: '校验',
     critique: '评审',
-    compress: '压缩'
+    compress: '压缩',
+    plan: "规划"
 };
 
 export const KIND_ICON: Record<NodeKindT, typeof IconFilter> = {
@@ -163,7 +165,8 @@ export const KIND_ICON: Record<NodeKindT, typeof IconFilter> = {
     reduce: IconArrowMerge,
     validate: IconShieldCheck,
     critique: IconGavel,
-    compress: IconFileZip
+    compress: IconFileZip,
+    plan: IconAdjustmentsCog
 };
 
 export const RISK_LABEL: Record<RiskLevel, string> = {

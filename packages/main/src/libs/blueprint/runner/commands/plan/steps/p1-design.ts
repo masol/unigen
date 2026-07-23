@@ -24,6 +24,8 @@ export async function designTop(pctx: PlanContext): Promise<void> {
     const body = (pctx.ctx.cmd.body ?? '').trim();
     if (!body) throwUnprcessable("[plan]:未提供任何要求。", true);
 
+    pctx.setUser(body);
+
     const prior = await fetchProcedurePrior(body, pctx);
     const result = await designDag(makeTopTask(body, prior), pctx);
     await registerLayer(result, pctx, true);

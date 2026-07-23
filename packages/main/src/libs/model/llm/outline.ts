@@ -50,7 +50,29 @@ export function isRetryableExtractionError(e: unknown): boolean {
 }
 
 /**
- * 尽力从错误中提取结构化的校验失败详情（字段路径 + 原因）。
+ * 从单个校验 issue 中尽力提取"合法候选值清单"。
+ * 兼容 zod v4（issue.values）与 zod v3（issue.options），以及 keys/expected 等常见承载字段。
+ * 这是与具体业务 schema 无关的通用能力：任何 enum / literal 联合类型的校验失败，
+ * 都能借此把"应该取哪些值"明确回灌给模型，显著提升重试成功率。
+ */
+function extractAllowedValues(issue: Record<string, unknown>): string[] {
+    const pick = (v: unknown): string[] | null => {
+        if (Array.isArray(v) && v.length > 0) {
+            return v.map((x) =>
+                isPlainObject(x) ? JSON.stringify(x) : String(x));
+        }
+        return null;
+    };
+    // 按常见字段名依次尝试；不同 schema 库/版本承载合法值的键不同。
+    return (
+        pick(issue.values) ??   // zod v4 invalid_value
+        pick(issue.keys) ??     // unrecognized_keys 等
+        []
+    );
+}
+
+/**
+ * 尽力从错误中提取结构化的校验失败详情（字段路径 + 原因 + 合法候选值）。
  * 注意：本函数只负责"提取详情"，不承担"判定是否可重试"的职责。
  * 提取不到详情时返回空数组，由调用方兜底使用 getErrorMessage。
  */
@@ -81,7 +103,18 @@ export function extractErrmsg(error: unknown): string[] {
             const message =
                 typeof issue.message === 'string' ? issue.message : JSON.stringify(issue);
 
-            errMsg.push(path ? `字段路径: ${path}, 原因: ${message}` : `原因: ${message}`);
+            // 通用增强：若该 issue 携带"合法候选值集合"（enum/literal 联合类型等），
+            // 显式、清晰地列出，避免其被埋没在转义后的 message 字符串里，
+            // 让（可能较弱的）抽取模型能稳定地把非法值归一到某个合法值。
+            const allowed = extractAllowedValues(issue);
+            const allowedText = allowed.length > 0
+                ? `，该字段只能取以下值之一（请从中选择语义最接近的一个，禁止使用其它值）: ${allowed.join(' | ')}`
+                : '';
+
+            const line = path
+                ? `字段路径: ${path}, 原因: ${message}${allowedText}`
+                : `原因: ${message}${allowedText}`;
+            errMsg.push(line);
         }
     };
 
@@ -142,6 +175,7 @@ export async function safefmtUsePrompt(nl: string, output: any, ctx?: IRunnerCon
 - You MUST generate all required fields specified in the schema.
 - If the user input does not provide data for a required field, you MUST populate it with an appropriate schema-compliant default value (e.g., "", 0, [], false, or a logical fallback inferred from context).
 - Strictly maintain the exact keys and data types (string, number, boolean, array, object) defined in the schema. Do not create unexpected fields.
+- For enum / fixed-value fields, you MUST pick one of the exact allowed values defined in the schema. Never invent a value outside the allowed set; if the source text uses a synonym, map it to the closest allowed value.
 
 [FORMATTING RULES]
 - Output the raw JSON string matching the schema.
@@ -161,6 +195,10 @@ Process the user input and generate the schema-compliant JSON now:`;
     ];
 
     let lastErr: unknown;
+    // 重试时逐步升温：首发确定性抽取，失败后升温以跳出复读式错误。
+    // 步进 0.3，并对 MAX_EXTRACT_ATTEMPTS 做上限保护（封顶 0.9）。
+    const tempFor = (attempt: number): number =>
+        Math.min(0.9, (attempt - 1) * 0.3);
     for (let attempt = 1; attempt <= MAX_EXTRACT_ATTEMPTS; attempt++) {
         try {
             const result = await generateText({
@@ -171,7 +209,7 @@ Process the user input and generate the schema-compliant JSON now:`;
                 }), // 弱模型优先。
                 instructions,
                 messages,
-                temperature: 0,
+                temperature: tempFor(attempt),
                 output: Output.text(),
             });
 
@@ -266,9 +304,17 @@ export async function safefmt(nl: string, output: any, ctx?: IRunnerContext): Pr
             value: result
         }
     } catch (e) {
-        if (NoObjectGeneratedError.isInstance(e) || isNotfoundError(e) || APICallError.isInstance(e)) {
-            // 无对象生成（含 schema 校验失败）或 responseFormat 不受支持，
-            // 降级为使用提示词 + ReAct 重试来提取 JSON。
+        // 降级到"提示词 + ReAct 重试"仅对以下情况有意义：
+        //  1. NoObjectGeneratedError：含 schema 校验失败，换一条路径重新抽取可能成功；
+        //  2. isNotfoundError：当前能力/模型缺失，尝试其它模型；
+        //  3. 不可重试的 APICallError：通常是 responseFormat / 结构化输出不被该模型支持
+        //     （4xx 参数类），退化为纯文本 + 提示词约束可绕开。
+        // 而"可重试的 APICallError"（429 限流、5xx、鉴权/网络类）降级毫无意义，
+        // 只会用弱模型再撞一次同样的墙、消耗配额并延迟真实错误暴露，故排除。
+        const isDegradableApiError =
+            APICallError.isInstance(e) && e.isRetryable === false;
+
+        if (NoObjectGeneratedError.isInstance(e) || isNotfoundError(e) || isDegradableApiError) {
             return safefmtUsePrompt(nl, output, ctx);
         }
         return {

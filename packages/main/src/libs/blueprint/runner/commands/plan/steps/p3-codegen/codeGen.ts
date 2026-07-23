@@ -2,6 +2,8 @@
  * 代码生成器：独立上下文，带代码生成参考样本。
  * 接收 (node, plan, promptPairs) → 生成可编译的 JS 代码。
  * code-generation 模型优先，失败在代码层回退通用文本模型。
+ *
+ * 扩展点：按 node.kind 追加业务语义指引，见 kindGuidance.ts。
  */
 
 import { getSmartModel } from "$libs/model/index.js";
@@ -12,6 +14,7 @@ import { generateText } from "ai";
 import Logger from "electron-log/main.js";
 import { PlanContext, PromptPair } from "../../context.js";
 import { CODEGEN_EXAMPLES } from "./codegen-examples.js";
+import { getKindGuidance } from "./kindGuidance.js";
 import type { NodePlan } from "./plan.js";
 
 const CODEGEN_INSTRUCTIONS = `你是数据处理代码生成器。
@@ -32,7 +35,7 @@ const CODEGEN_INSTRUCTIONS = `你是数据处理代码生成器。
 - validator —— validator.js
 - z —— zod
 - delay(ms) —— 异步休眠
-- util —— { randomUUID, pMap, ...radashi（isString/isArray/isObject/group/... 全部导出） }
+- util —— { randomUUID, pMap, toStrSafe, toStrArraySafe, ...radashi（isString/isArray/isObject/group/... 全部导出） }
 - err —— { throwPrecondition, throwNotfound, throwNotimplement, throwUnprcessable, throwCancel }，均 (msg:string)=>never
 - glossary —— { getIO(cap), save(key, value), set(key, value, opt?), get(key) }
 - llm —— { generate({instructions, prompt, messages?})→Promise<{text}>, Output.object({schema}), safefmt(nl, output)→Promise<{success, value?}> }
@@ -50,11 +53,12 @@ const CODEGEN_INSTRUCTIONS = `你是数据处理代码生成器。
 \`\`\`
 const ioinfo = glossary.getIO(cap);
 if (!ioinfo.expired) return;
-const a = ioinfo.inputs[0];   // cap.input[0] 的裸值：string 或 string[]
-const b = ioinfo.inputs[1];   // 多输入按序读，不得只读 inputs[0]
+const a = util.toStrSafe(ioinfo.inputs[0]);        // 期望标量字符串时
+const b = util.toStrArraySafe(ioinfo.inputs[1]);   // 期望字符串数组时
 \`\`\`
-- inputs[i] 已是裸值；数组元素直接就是字符串（**不要写 x.item**）。
-- 判断是否数组用 **Array.isArray(x)**；判断字符串用 util.isString(x)。
+- **需要字符串用 util.toStrSafe(x)，需要字符串数组用 util.toStrArraySafe(x)。二者在类型不符时会自行抛异常，无需再手写 Array.isArray / util.isString 校验，也不要再写 err.throwPrecondition 做形态检查。**
+- 数组元素直接就是字符串（**不要写 x.item**）；对数组元素若仍需当字符串用，直接用或再 util.toStrSafe。
+- 多输入按序读，不得只读 inputs[0]。
 - expired === false 直接 return。
 
 ### 写输出
@@ -101,7 +105,7 @@ const usr1 = glossary.get('_' + cap.id + '_step1_user');
 - 数组输入必须遍历**全部**元素，不只取 [0]。
 - sequential=true：用 for 串行，把前一条结果拼入下一条 prompt。**禁止 pMap**。
 - sequential=false：数组处理用 util.pMap。
-- 校验非法输入用 err.throwPrecondition(msg)，而非 throw new Error。
+- 校验非法输入用 err.throwPrecondition(msg)，而非 throw new Error（但形态校验交给 toStrSafe/toStrArraySafe）。
 - 入口惯例：\`const ioinfo = glossary.getIO(cap); if (!ioinfo.expired) return;\`。
 - 纯函数提到代码顶层，不要内联。不写 TS 类型注解。禁止 console.log 占位。
 - 文本交流用自然语言。llm.generate 取 .text。
@@ -110,6 +114,7 @@ const usr1 = glossary.get('_' + cap.id + '_step1_user');
 ## 本任务的参考信息
 dataFlow 参考标签：{DATA_FLOW}
 处理流程摘要（参考）：{FLOW_SUMMARY}
+任务类别（kind）指引（参考）：{KIND_HINT}
 
 生成代码的 LLM 调用点数量、顺序，应与提供的提示词对数一致；但真实拓扑以你的综合判断为准。`;
 
@@ -157,7 +162,9 @@ async function callModel(
 function describeInputs(node: PNode, pctx: PlanContext): string {
     return node.inputs.map((n, i) => {
         const a = pctx.gdag.getArtifact(n);
-        const shape = a?.isArray ? "数组 string[]（元素直接是字符串）" : "标量 string";
+        const shape = a?.isArray
+            ? "数组 string[]（元素直接是字符串，用 util.toStrArraySafe 取）"
+            : "标量 string（用 util.toStrSafe 取）";
         const producers = pctx.gdag.getProducersOf(n)
             .filter(p => p.nodeId !== node.id)
             .map(p => p.name);
@@ -183,10 +190,15 @@ export async function genCodeForNode(
 ): Promise<string> {
     const ctx = pctx.ctx;
 
+    // 按 node.kind 取业务语义指引（未注册 kind 走默认空指引，行为不变）
+    const kg = getKindGuidance(node.kind);
+    const kindHint = kg.codeHint || "（无该类别的额外指引）";
+
     const instructions = [
         CODEGEN_INSTRUCTIONS
             .replace("{DATA_FLOW}", plan.dataFlow)
-            .replace("{FLOW_SUMMARY}", plan.summary),
+            .replace("{FLOW_SUMMARY}", plan.summary)
+            .replace("{KIND_HINT}", kindHint),
         "",
         "## 代码生成参考样本",
         buildExampleSection(),
@@ -210,12 +222,13 @@ export async function genCodeForNode(
         `名称：${node.name}`,
         `意图：${node.intent}`,
         `任务 id：${node.id}`,
+        `任务类别（kind）：${node.kind}`,
         ``,
         `### 形态参考标签：${plan.dataFlow}（仅参考，以你对下方输入/输出实际形态的综合判断为准）`,
         plan.summary,
         parallelHint,
         ``,
-        `### 输入（按 cap.input 顺序，可能多个；inputs[i] 是裸值，数组元素直接是字符串，务必全部读取并遍历数组全部元素）`,
+        `### 输入（按 cap.input 顺序，可能多个；标量用 util.toStrSafe 取，数组用 util.toStrArraySafe 取，务必全部读取并遍历数组全部元素）`,
         describeInputs(node, pctx),
         ``,
         `### 输出（save 裸值，禁止 {item} 包装）`,
