@@ -12,9 +12,10 @@ import {
     SpanExporter,
 } from "@opentelemetry/sdk-trace-base";
 
+import { OpenTelemetry } from "@ai-sdk/otel";
+import { registerTelemetry } from "ai";
 import Logger from "electron-log";
 import { appLife } from "../tapable/applife.js";
-
 /**
  * ============================================================
  * 动态代理 Exporter（中间代理人模式）
@@ -110,6 +111,7 @@ export class TelemetryService extends BaseTelemetryService {
     private sdk: NodeSDK | null = null;
     private proxyExporter: DynamicProxyExporter | null = null;
     private started = false;
+    private aiTelemetryRegistered = false;
 
     /** 防止 shutdown 并发重入（beforeQuit 可能与手动调用竞争） */
     private shuttingDown: Promise<void> | null = null;
@@ -140,10 +142,32 @@ export class TelemetryService extends BaseTelemetryService {
         this.sdk.start();
         this.started = true;
 
+        // 必须在 sdk.start() 之后，此时全局 TracerProvider 已就绪
+        this.registerAiTelemetry();
+
         Logger.info(
             `[Telemetry] 已初始化。当前端点: ${this.dynamicConfig.endpoint ?? "(未配置，Noop 模式)"
             }`
         );
+    }
+
+    /**
+     * 注册 Vercel AI SDK 遥测整合。
+     * 注册后，所有 generateText / streamText 默认自动上报
+     * （走 GenAI 语义规范的 invoke_agent / chat / execute_tool spans）。
+     * 全局只需注册一次。
+     */
+    private registerAiTelemetry(): void {
+        if (this.aiTelemetryRegistered) return;
+        this.aiTelemetryRegistered = true;
+        registerTelemetry(
+            new OpenTelemetry({
+                // 可选：补充 AI SDK 特有属性（默认全关，按需开启）
+                usage: true,            // token 用量细节
+                providerMetadata: true, // provider 元数据
+            })
+        );
+        Logger.info("[Telemetry] Vercel AI SDK 遥测整合已注册");
     }
 
     reconfigure(endpoint?: string): void {
