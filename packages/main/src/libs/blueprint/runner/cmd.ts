@@ -10,6 +10,7 @@ import { runCmd as doExport } from './commands/export/runCmd.js';
 import { runCmd as doPlan } from './commands/plan/index.js';
 import { runCmd as doPreprism } from './commands/preprism.js';
 import { runCmd as doPrism } from './commands/prism.js';
+import { runCmd as doRun } from './commands/run.js';
 
 
 /**
@@ -107,6 +108,9 @@ export class CmdRunner extends BaseRunner {
                 break;
             case 'preprism':
                 await doPreprism(ctx);
+                break;
+            case 'run':
+                await doRun(ctx);
                 break;
             case 'test':
                 await delay(10000, ctx.signal);

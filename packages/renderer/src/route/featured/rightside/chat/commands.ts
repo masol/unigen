@@ -25,6 +25,11 @@ export const chatCommands: ChatCommand[] = [
 --no-codegen: 规划完毕即退出，不执行代码生成。
 ` },
     {
+        id: "run", label: "/run", desc: `执行指定ID的capa，默认直接执行当前任务的入口：
+--plan: 执行规划结果.
+--cap: 执行指定的能力.
+` },
+    {
         id: "prism", label: "/prism", desc: `使用prism方法回答你的问题--无上下文，支持如下参数：
 --facets: 最大视角数，默认5.
 --rounds: 最大轮次，默认2.
