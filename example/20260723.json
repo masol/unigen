@@ -1,0 +1,1588 @@
+{
+    "gdag": {
+        "rootId": "5b8128ec-9f14-4670-88a4-72c6b3a23199",
+        "graphs": [
+            {
+                "id": "5b8128ec-9f14-4670-88a4-72c6b3a23199",
+                "data": {
+                    "options": {
+                        "type": "directed",
+                        "multi": false,
+                        "allowSelfLoops": true
+                    },
+                    "attributes": {},
+                    "nodes": [
+                        {
+                            "key": "f4499809-185e-4936-a032-8b9f62164f2f",
+                            "attributes": {
+                                "name": "整理与提取事实",
+                                "kind": "extract",
+                                "intent": "清洗原始资料并提取可验证的关键事实信息",
+                                "inputs": [
+                                    "初始产品与企业资料"
+                                ],
+                                "outputs": [
+                                    "产品事实整合单"
+                                ],
+                                "id": "f4499809-185e-4936-a032-8b9f62164f2f",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "7617c4f0-f406-4d0a-aef0-c6a9d158a78d",
+                            "attributes": {
+                                "name": "转化价值卖点",
+                                "kind": "transform",
+                                "intent": "将技术语言重构为用户可感知的价值陈述",
+                                "inputs": [
+                                    "产品事实整合单"
+                                ],
+                                "outputs": [
+                                    "产品核心价值点清单"
+                                ],
+                                "id": "7617c4f0-f406-4d0a-aef0-c6a9d158a78d",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "e298b22e-d00a-4782-8704-31067f0bf134",
+                            "attributes": {
+                                "name": "推导用户画像",
+                                "kind": "classify",
+                                "intent": "基于卖点特征推导最匹配的潜在消费群体画像",
+                                "inputs": [
+                                    "产品核心价值点清单"
+                                ],
+                                "outputs": [
+                                    "目标受众画像卡"
+                                ],
+                                "id": "e298b22e-d00a-4782-8704-31067f0bf134",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "deb553d0-2ada-4c03-a793-8f4ba980e942",
+                            "attributes": {
+                                "name": "确立文风规范",
+                                "kind": "generate",
+                                "intent": "根据企业调性与受众偏好设定全文写作风格标准",
+                                "inputs": [
+                                    "产品事实整合单",
+                                    "目标受众画像卡"
+                                ],
+                                "outputs": [
+                                    "品牌写作指南"
+                                ],
+                                "id": "deb553d0-2ada-4c03-a793-8f4ba980e942",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "ce35375b-3939-439d-831b-422e6fda5f8a",
+                            "attributes": {
+                                "name": "搭建逻辑框架",
+                                "kind": "generate",
+                                "intent": "依据痛点与卖点规划文章的段落结构与论据分布",
+                                "inputs": [
+                                    "产品核心价值点清单",
+                                    "目标受众画像卡",
+                                    "产品事实整合单",
+                                    "初始产品与企业资料"
+                                ],
+                                "outputs": [
+                                    "文章逻辑结构大纲"
+                                ],
+                                "id": "ce35375b-3939-439d-831b-422e6fda5f8a",
+                                "status": "expanded",
+                                "dag": "5cb73e5d-726f-4916-b430-7397e2883f55",
+                                "error": null,
+                                "facets": {}
+                            }
+                        },
+                        {
+                            "key": "3265d5b0-4295-4929-8d72-2c8a3b000244",
+                            "attributes": {
+                                "name": "构思标题方案",
+                                "kind": "generate",
+                                "intent": "围绕核心卖点构思多个具备高点击潜力的标题选项",
+                                "inputs": [
+                                    "文章逻辑结构大纲",
+                                    "产品核心价值点清单"
+                                ],
+                                "outputs": [
+                                    "推文标题候选集"
+                                ],
+                                "id": "3265d5b0-4295-4929-8d72-2c8a3b000244",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "beb91c18-7a48-4468-81eb-90aa2586598f",
+                            "attributes": {
+                                "name": "选定最优标题",
+                                "kind": "score",
+                                "intent": "从候选列表中筛选出综合表现最佳的唯一主标题",
+                                "inputs": [
+                                    "推文标题候选集"
+                                ],
+                                "outputs": [
+                                    "最终确认标题"
+                                ],
+                                "id": "beb91c18-7a48-4468-81eb-90aa2586598f",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "dc4da37b-ec23-43d9-8ca1-c11a7e5b837b",
+                            "attributes": {
+                                "name": "撰写开头引言",
+                                "kind": "generate",
+                                "intent": "根据大纲指引与用户痛点撰写能够迅速抓住注意力的开头段落",
+                                "inputs": [
+                                    "文章逻辑结构大纲",
+                                    "目标受众画像卡"
+                                ],
+                                "outputs": [
+                                    "开篇钩子段草稿"
+                                ],
+                                "id": "dc4da37b-ec23-43d9-8ca1-c11a7e5b837b",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "9510a27d-25ea-4ff7-a574-821eda8ca573",
+                            "attributes": {
+                                "name": "扩写主体内容",
+                                "kind": "generate",
+                                "intent": "依据大纲填充详细内容并落实产品的解决方案与价值论证",
+                                "inputs": [
+                                    "文章逻辑结构大纲",
+                                    "产品核心价值点清单",
+                                    "品牌写作指南",
+                                    "目标受众画像卡",
+                                    "产品事实整合单",
+                                    "初始产品与企业资料"
+                                ],
+                                "outputs": [
+                                    "主体论证正文草稿"
+                                ],
+                                "id": "9510a27d-25ea-4ff7-a574-821eda8ca573",
+                                "status": "expanded",
+                                "dag": "bef05ecb-3835-4563-aa6b-0302fa7f7d59",
+                                "error": null,
+                                "facets": {}
+                            }
+                        },
+                        {
+                            "key": "05e842b0-6fb3-4dd5-9537-32febe0d415f",
+                            "attributes": {
+                                "name": "编写结尾转化",
+                                "kind": "generate",
+                                "intent": "依据大纲要求总结价值并设计明确的行动召唤语句",
+                                "inputs": [
+                                    "文章逻辑结构大纲",
+                                    "品牌写作指南"
+                                ],
+                                "outputs": [
+                                    "行动号召结尾草稿"
+                                ],
+                                "id": "05e842b0-6fb3-4dd5-9537-32febe0d415f",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "846e27f5-8f1f-4b92-b43b-bea87e8bc9b7",
+                            "attributes": {
+                                "name": "合成整体初稿",
+                                "kind": "merge",
+                                "intent": "将分段的草稿内容与选定标题按结构拼接成完整的文章初稿",
+                                "inputs": [
+                                    "开篇钩子段草稿",
+                                    "主体论证正文草稿",
+                                    "行动号召结尾草稿",
+                                    "最终确认标题"
+                                ],
+                                "outputs": [
+                                    "全篇内容初稿"
+                                ],
+                                "id": "846e27f5-8f1f-4b92-b43b-bea87e8bc9b7",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "d24b7ecd-8e7a-429d-9594-6010b8e773f0",
+                            "attributes": {
+                                "name": "终审与排版优化",
+                                "kind": "transform",
+                                "intent": "校准事实准确性并对初稿进行适配移动端的视觉排版优化",
+                                "inputs": [
+                                    "全篇内容初稿",
+                                    "产品事实整合单"
+                                ],
+                                "outputs": [
+                                    "终版发布推文稿"
+                                ],
+                                "id": "d24b7ecd-8e7a-429d-9594-6010b8e773f0",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        }
+                    ],
+                    "edges": [
+                        {
+                            "key": "geid_221_0",
+                            "source": "f4499809-185e-4936-a032-8b9f62164f2f",
+                            "target": "7617c4f0-f406-4d0a-aef0-c6a9d158a78d",
+                            "attributes": {
+                                "artifacts": [
+                                    "产品事实整合单"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_1",
+                            "source": "7617c4f0-f406-4d0a-aef0-c6a9d158a78d",
+                            "target": "e298b22e-d00a-4782-8704-31067f0bf134",
+                            "attributes": {
+                                "artifacts": [
+                                    "产品核心价值点清单"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_2",
+                            "source": "f4499809-185e-4936-a032-8b9f62164f2f",
+                            "target": "deb553d0-2ada-4c03-a793-8f4ba980e942",
+                            "attributes": {
+                                "artifacts": [
+                                    "产品事实整合单"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_3",
+                            "source": "e298b22e-d00a-4782-8704-31067f0bf134",
+                            "target": "deb553d0-2ada-4c03-a793-8f4ba980e942",
+                            "attributes": {
+                                "artifacts": [
+                                    "目标受众画像卡"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_4",
+                            "source": "7617c4f0-f406-4d0a-aef0-c6a9d158a78d",
+                            "target": "ce35375b-3939-439d-831b-422e6fda5f8a",
+                            "attributes": {
+                                "artifacts": [
+                                    "产品核心价值点清单"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_5",
+                            "source": "e298b22e-d00a-4782-8704-31067f0bf134",
+                            "target": "ce35375b-3939-439d-831b-422e6fda5f8a",
+                            "attributes": {
+                                "artifacts": [
+                                    "目标受众画像卡"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_6",
+                            "source": "ce35375b-3939-439d-831b-422e6fda5f8a",
+                            "target": "3265d5b0-4295-4929-8d72-2c8a3b000244",
+                            "attributes": {
+                                "artifacts": [
+                                    "文章逻辑结构大纲"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_7",
+                            "source": "7617c4f0-f406-4d0a-aef0-c6a9d158a78d",
+                            "target": "3265d5b0-4295-4929-8d72-2c8a3b000244",
+                            "attributes": {
+                                "artifacts": [
+                                    "产品核心价值点清单"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_8",
+                            "source": "3265d5b0-4295-4929-8d72-2c8a3b000244",
+                            "target": "beb91c18-7a48-4468-81eb-90aa2586598f",
+                            "attributes": {
+                                "artifacts": [
+                                    "推文标题候选集"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_9",
+                            "source": "ce35375b-3939-439d-831b-422e6fda5f8a",
+                            "target": "dc4da37b-ec23-43d9-8ca1-c11a7e5b837b",
+                            "attributes": {
+                                "artifacts": [
+                                    "文章逻辑结构大纲"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_10",
+                            "source": "e298b22e-d00a-4782-8704-31067f0bf134",
+                            "target": "dc4da37b-ec23-43d9-8ca1-c11a7e5b837b",
+                            "attributes": {
+                                "artifacts": [
+                                    "目标受众画像卡"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_11",
+                            "source": "ce35375b-3939-439d-831b-422e6fda5f8a",
+                            "target": "9510a27d-25ea-4ff7-a574-821eda8ca573",
+                            "attributes": {
+                                "artifacts": [
+                                    "文章逻辑结构大纲"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_12",
+                            "source": "7617c4f0-f406-4d0a-aef0-c6a9d158a78d",
+                            "target": "9510a27d-25ea-4ff7-a574-821eda8ca573",
+                            "attributes": {
+                                "artifacts": [
+                                    "产品核心价值点清单"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_13",
+                            "source": "deb553d0-2ada-4c03-a793-8f4ba980e942",
+                            "target": "9510a27d-25ea-4ff7-a574-821eda8ca573",
+                            "attributes": {
+                                "artifacts": [
+                                    "品牌写作指南"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_14",
+                            "source": "ce35375b-3939-439d-831b-422e6fda5f8a",
+                            "target": "05e842b0-6fb3-4dd5-9537-32febe0d415f",
+                            "attributes": {
+                                "artifacts": [
+                                    "文章逻辑结构大纲"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_15",
+                            "source": "deb553d0-2ada-4c03-a793-8f4ba980e942",
+                            "target": "05e842b0-6fb3-4dd5-9537-32febe0d415f",
+                            "attributes": {
+                                "artifacts": [
+                                    "品牌写作指南"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_16",
+                            "source": "dc4da37b-ec23-43d9-8ca1-c11a7e5b837b",
+                            "target": "846e27f5-8f1f-4b92-b43b-bea87e8bc9b7",
+                            "attributes": {
+                                "artifacts": [
+                                    "开篇钩子段草稿"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_17",
+                            "source": "9510a27d-25ea-4ff7-a574-821eda8ca573",
+                            "target": "846e27f5-8f1f-4b92-b43b-bea87e8bc9b7",
+                            "attributes": {
+                                "artifacts": [
+                                    "主体论证正文草稿"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_18",
+                            "source": "05e842b0-6fb3-4dd5-9537-32febe0d415f",
+                            "target": "846e27f5-8f1f-4b92-b43b-bea87e8bc9b7",
+                            "attributes": {
+                                "artifacts": [
+                                    "行动号召结尾草稿"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_19",
+                            "source": "beb91c18-7a48-4468-81eb-90aa2586598f",
+                            "target": "846e27f5-8f1f-4b92-b43b-bea87e8bc9b7",
+                            "attributes": {
+                                "artifacts": [
+                                    "最终确认标题"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_20",
+                            "source": "846e27f5-8f1f-4b92-b43b-bea87e8bc9b7",
+                            "target": "d24b7ecd-8e7a-429d-9594-6010b8e773f0",
+                            "attributes": {
+                                "artifacts": [
+                                    "全篇内容初稿"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_21",
+                            "source": "f4499809-185e-4936-a032-8b9f62164f2f",
+                            "target": "d24b7ecd-8e7a-429d-9594-6010b8e773f0",
+                            "attributes": {
+                                "artifacts": [
+                                    "产品事实整合单"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_22",
+                            "source": "f4499809-185e-4936-a032-8b9f62164f2f",
+                            "target": "ce35375b-3939-439d-831b-422e6fda5f8a",
+                            "attributes": {
+                                "artifacts": [
+                                    "产品事实整合单"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_23",
+                            "source": "e298b22e-d00a-4782-8704-31067f0bf134",
+                            "target": "9510a27d-25ea-4ff7-a574-821eda8ca573",
+                            "attributes": {
+                                "artifacts": [
+                                    "目标受众画像卡"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_221_24",
+                            "source": "f4499809-185e-4936-a032-8b9f62164f2f",
+                            "target": "9510a27d-25ea-4ff7-a574-821eda8ca573",
+                            "attributes": {
+                                "artifacts": [
+                                    "产品事实整合单"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "5cb73e5d-726f-4916-b430-7397e2883f55",
+                "data": {
+                    "options": {
+                        "type": "directed",
+                        "multi": false,
+                        "allowSelfLoops": true
+                    },
+                    "attributes": {},
+                    "nodes": [
+                        {
+                            "key": "74d63215-7467-4bc5-8472-bdfa98c7b37b",
+                            "attributes": {
+                                "name": "筛选高优先级痛点",
+                                "kind": "classify",
+                                "intent": "基于受众画像筛选出最具说服力的核心问题",
+                                "inputs": [
+                                    "目标受众画像卡"
+                                ],
+                                "outputs": [
+                                    "核心痛点优先级列表"
+                                ],
+                                "id": "74d63215-7467-4bc5-8472-bdfa98c7b37b",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "33c6ecf2-e33d-4593-a91e-bf46bbec26e8",
+                            "attributes": {
+                                "name": "构建痛点解决方案对应关系",
+                                "kind": "transform",
+                                "intent": "将筛选后的痛点与产品价值进行一一对应配对",
+                                "inputs": [
+                                    "核心痛点优先级列表",
+                                    "产品核心价值点清单"
+                                ],
+                                "outputs": [
+                                    "痛点与价值匹配图"
+                                ],
+                                "id": "33c6ecf2-e33d-4593-a91e-bf46bbec26e8",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "3f1f3c78-842c-4751-9206-8cfbfd3bd369",
+                            "attributes": {
+                                "name": "设计段落流转与证据分配",
+                                "kind": "generate",
+                                "intent": "规划文章段落顺序并将论据落实到具体章节",
+                                "inputs": [
+                                    "痛点与价值匹配图",
+                                    "产品事实整合单",
+                                    "核心痛点优先级列表",
+                                    "目标受众画像卡",
+                                    "产品核心价值点清单"
+                                ],
+                                "outputs": [
+                                    "段落功能映射表"
+                                ],
+                                "id": "3f1f3c78-842c-4751-9206-8cfbfd3bd369",
+                                "status": "expanded",
+                                "dag": "e0ab9841-3c23-4450-aff7-39cb1b64096c",
+                                "error": null,
+                                "facets": {}
+                            }
+                        },
+                        {
+                            "key": "8fdca21e-b51f-467a-9609-d915a80e95fa",
+                            "attributes": {
+                                "name": "编制最终结构大纲",
+                                "kind": "summarize",
+                                "intent": "整合段落规划与品牌素材编写最终写作指南",
+                                "inputs": [
+                                    "段落功能映射表",
+                                    "初始产品与企业资料"
+                                ],
+                                "outputs": [
+                                    "文章逻辑结构大纲"
+                                ],
+                                "id": "8fdca21e-b51f-467a-9609-d915a80e95fa",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        }
+                    ],
+                    "edges": [
+                        {
+                            "key": "geid_223_0",
+                            "source": "74d63215-7467-4bc5-8472-bdfa98c7b37b",
+                            "target": "33c6ecf2-e33d-4593-a91e-bf46bbec26e8",
+                            "attributes": {
+                                "artifacts": [
+                                    "核心痛点优先级列表"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_223_1",
+                            "source": "33c6ecf2-e33d-4593-a91e-bf46bbec26e8",
+                            "target": "3f1f3c78-842c-4751-9206-8cfbfd3bd369",
+                            "attributes": {
+                                "artifacts": [
+                                    "痛点与价值匹配图"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_223_2",
+                            "source": "3f1f3c78-842c-4751-9206-8cfbfd3bd369",
+                            "target": "8fdca21e-b51f-467a-9609-d915a80e95fa",
+                            "attributes": {
+                                "artifacts": [
+                                    "段落功能映射表"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_223_3",
+                            "source": "74d63215-7467-4bc5-8472-bdfa98c7b37b",
+                            "target": "3f1f3c78-842c-4751-9206-8cfbfd3bd369",
+                            "attributes": {
+                                "artifacts": [
+                                    "核心痛点优先级列表"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "bef05ecb-3835-4563-aa6b-0302fa7f7d59",
+                "data": {
+                    "options": {
+                        "type": "directed",
+                        "multi": false,
+                        "allowSelfLoops": true
+                    },
+                    "attributes": {},
+                    "nodes": [
+                        {
+                            "key": "9f3fb0d4-1138-47bd-b443-19d5c471ace7",
+                            "attributes": {
+                                "name": "解析大纲生成任务清单",
+                                "kind": "transform",
+                                "intent": "将结构化大纲转换为带优先级和执行要点的章节任务列表。",
+                                "inputs": [
+                                    "文章逻辑结构大纲"
+                                ],
+                                "outputs": [
+                                    "章节写作任务清单"
+                                ],
+                                "id": "9f3fb0d4-1138-47bd-b443-19d5c471ace7",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "9bb888b9-ce2b-4543-91fd-52c911b4ea63",
+                            "attributes": {
+                                "name": "提炼核心主张一致性声明",
+                                "kind": "summarize",
+                                "intent": "基于用户特征凝练贯穿全文的核心价值主张语句。",
+                                "inputs": [
+                                    "产品核心价值点清单",
+                                    "目标受众画像卡"
+                                ],
+                                "outputs": [
+                                    "核心主张一致性声明"
+                                ],
+                                "id": "9bb888b9-ce2b-4543-91fd-52c911b4ea63",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "42249935-8e00-4b3e-aa53-a08de9706bc3",
+                            "attributes": {
+                                "name": "按章节撰写内容草案",
+                                "kind": "generate",
+                                "intent": "依据任务清单逐一撰写对应章节的详细内容，确保事实准确且语气合规。",
+                                "inputs": [
+                                    "章节写作任务清单",
+                                    "核心主张一致性声明",
+                                    "产品事实整合单",
+                                    "品牌写作指南"
+                                ],
+                                "outputs": [
+                                    "分章内容草案集"
+                                ],
+                                "id": "42249935-8e00-4b3e-aa53-a08de9706bc3",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "564d33cc-bdc9-450f-b3dd-6c3da9a2f3e9",
+                            "attributes": {
+                                "name": "整合章节形成正式草稿",
+                                "kind": "merge",
+                                "intent": "将各章节草案按逻辑顺序拼接并添加过渡衔接内容。",
+                                "inputs": [
+                                    "分章内容草案集",
+                                    "初始产品与企业资料"
+                                ],
+                                "outputs": [
+                                    "主体论证正文草稿"
+                                ],
+                                "id": "564d33cc-bdc9-450f-b3dd-6c3da9a2f3e9",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        }
+                    ],
+                    "edges": [
+                        {
+                            "key": "geid_225_0",
+                            "source": "9f3fb0d4-1138-47bd-b443-19d5c471ace7",
+                            "target": "42249935-8e00-4b3e-aa53-a08de9706bc3",
+                            "attributes": {
+                                "artifacts": [
+                                    "章节写作任务清单"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_225_1",
+                            "source": "9bb888b9-ce2b-4543-91fd-52c911b4ea63",
+                            "target": "42249935-8e00-4b3e-aa53-a08de9706bc3",
+                            "attributes": {
+                                "artifacts": [
+                                    "核心主张一致性声明"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_225_2",
+                            "source": "42249935-8e00-4b3e-aa53-a08de9706bc3",
+                            "target": "564d33cc-bdc9-450f-b3dd-6c3da9a2f3e9",
+                            "attributes": {
+                                "artifacts": [
+                                    "分章内容草案集"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "e0ab9841-3c23-4450-aff7-39cb1b64096c",
+                "data": {
+                    "options": {
+                        "type": "directed",
+                        "multi": false,
+                        "allowSelfLoops": true
+                    },
+                    "attributes": {},
+                    "nodes": [
+                        {
+                            "key": "938924f9-c1f1-4ee0-9c1c-d8546e9e56ef",
+                            "attributes": {
+                                "name": "构建叙事逻辑骨架",
+                                "kind": "generate",
+                                "intent": "根据痛点优先级与受众心理特征规划文章段落顺序与主题分布。",
+                                "inputs": [
+                                    "核心痛点优先级列表",
+                                    "目标受众画像卡",
+                                    "痛点与价值匹配图",
+                                    "产品事实整合单",
+                                    "产品核心价值点清单"
+                                ],
+                                "outputs": [
+                                    "叙事流程规划单"
+                                ],
+                                "id": "938924f9-c1f1-4ee0-9c1c-d8546e9e56ef",
+                                "status": "expanded",
+                                "dag": "76d48eec-bb68-4222-97dc-cb9bfd5d677d",
+                                "error": null,
+                                "facets": {}
+                            }
+                        },
+                        {
+                            "key": "284167fe-401c-4cec-a3d0-0e9394adbaaf",
+                            "attributes": {
+                                "name": "匹配痛点价值至段落",
+                                "kind": "route",
+                                "intent": "将具体的痛点价值解决对分配至已规划的叙事段落中。",
+                                "inputs": [
+                                    "痛点与价值匹配图",
+                                    "叙事流程规划单"
+                                ],
+                                "outputs": [
+                                    "痛点价值段落定位表"
+                                ],
+                                "id": "284167fe-401c-4cec-a3d0-0e9394adbaaf",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "0e257fd6-cc16-453e-bf23-88508b806ed3",
+                            "attributes": {
+                                "name": "制定数据规格并汇总成表",
+                                "kind": "transform",
+                                "intent": "整合定位结果与事实资源，转换为包含数据类型要求的最终执行映射表。",
+                                "inputs": [
+                                    "痛点价值段落定位表",
+                                    "产品事实整合单",
+                                    "产品核心价值点清单"
+                                ],
+                                "outputs": [
+                                    "段落功能映射表"
+                                ],
+                                "id": "0e257fd6-cc16-453e-bf23-88508b806ed3",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        }
+                    ],
+                    "edges": [
+                        {
+                            "key": "geid_227_0",
+                            "source": "938924f9-c1f1-4ee0-9c1c-d8546e9e56ef",
+                            "target": "284167fe-401c-4cec-a3d0-0e9394adbaaf",
+                            "attributes": {
+                                "artifacts": [
+                                    "叙事流程规划单"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_227_1",
+                            "source": "284167fe-401c-4cec-a3d0-0e9394adbaaf",
+                            "target": "0e257fd6-cc16-453e-bf23-88508b806ed3",
+                            "attributes": {
+                                "artifacts": [
+                                    "痛点价值段落定位表"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "76d48eec-bb68-4222-97dc-cb9bfd5d677d",
+                "data": {
+                    "options": {
+                        "type": "directed",
+                        "multi": false,
+                        "allowSelfLoops": true
+                    },
+                    "attributes": {},
+                    "nodes": [
+                        {
+                            "key": "590de33c-aa7a-4280-b5c6-ee79aa9b49a9",
+                            "attributes": {
+                                "name": "从受众画像归纳心理特征标签",
+                                "kind": "extract",
+                                "intent": "从目标受众画像中抽象和归纳出受众的核心心理驱动力与情绪触发点标签。",
+                                "inputs": [
+                                    "目标受众画像卡"
+                                ],
+                                "outputs": [
+                                    "受众心理特征卡片"
+                                ],
+                                "id": "590de33c-aa7a-4280-b5c6-ee79aa9b49a9",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "4745aeb4-75f6-4c11-81f5-27923b1d7214",
+                            "attributes": {
+                                "name": "筛选适配心理的高价值论点",
+                                "kind": "classify",
+                                "intent": "从产品价值点清单中筛选出与目标受众心理特征高度匹配的核心论点。",
+                                "inputs": [
+                                    "受众心理特征卡片",
+                                    "产品核心价值点清单"
+                                ],
+                                "outputs": [
+                                    "高价值论点筛选表"
+                                ],
+                                "id": "4745aeb4-75f6-4c11-81f5-27923b1d7214",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "1491b3e4-7db8-4c0c-9f3b-7cd17caf02d3",
+                            "attributes": {
+                                "name": "建立论点与痛点的因果逻辑关系",
+                                "kind": "merge",
+                                "intent": "将高价值论点、其解决的核心痛点以及说服逻辑路径整合为结构化的矩阵。",
+                                "inputs": [
+                                    "高价值论点筛选表",
+                                    "痛点与价值匹配图",
+                                    "核心痛点优先级列表"
+                                ],
+                                "outputs": [
+                                    "痛点响应逻辑矩阵"
+                                ],
+                                "id": "1491b3e4-7db8-4c0c-9f3b-7cd17caf02d3",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                },
+                                "forcedNote": "深度熔断：基于受众画像构建初版逻辑链草案，经说服力评审优化后，输出最终的痛点响应逻辑矩阵"
+                            }
+                        },
+                        {
+                            "key": "0809183f-727d-44fa-a50c-b6d384d31158",
+                            "attributes": {
+                                "name": "规划说服链的情绪递进路径",
+                                "kind": "aggregate",
+                                "intent": "根据痛点优先级和逻辑路径，规划文章整体的情绪递进阶段和顺序。",
+                                "inputs": [
+                                    "痛点响应逻辑矩阵",
+                                    "核心痛点优先级列表"
+                                ],
+                                "outputs": [
+                                    "段落情绪序列表"
+                                ],
+                                "id": "0809183f-727d-44fa-a50c-b6d384d31158",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                },
+                                "forcedNote": "深度熔断：先匹配痛点至情绪原型生成情感草图，再经逻辑连贯性审查后定稿为情绪序列表"
+                            }
+                        },
+                        {
+                            "key": "7ed1c0f6-e2d8-40c9-b6e2-d2e224b808db",
+                            "attributes": {
+                                "name": "设计每段落的论证要素与功能",
+                                "kind": "generate",
+                                "intent": "为每个情绪阶段下的段落设计具体功能、核心论点和所需的事实论据。",
+                                "inputs": [
+                                    "段落情绪序列表",
+                                    "痛点响应逻辑矩阵",
+                                    "产品事实整合单"
+                                ],
+                                "outputs": [
+                                    "段落功能与论证要素映射表"
+                                ],
+                                "id": "7ed1c0f6-e2d8-40c9-b6e2-d2e224b808db",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                },
+                                "forcedNote": "深度熔断：遵循“事实匹配 - 逻辑校验 - 功能确认”的规划工作流，产出《段落论证草案》作为中间审核交付物。"
+                            }
+                        },
+                        {
+                            "key": "cd300868-dcfc-4c2f-bbfc-303f4d3664d6",
+                            "attributes": {
+                                "name": "规划段落顺序与主题分布",
+                                "kind": "transform",
+                                "intent": "根据情绪顺序和内容映射，将段落规划转化为含有主题、功能和素材来源的详细清单。",
+                                "inputs": [
+                                    "段落功能与论证要素映射表",
+                                    "段落情绪序列表"
+                                ],
+                                "outputs": [
+                                    "段落详细规划清单"
+                                ],
+                                "id": "cd300868-dcfc-4c2f-bbfc-303f4d3664d6",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                }
+                            }
+                        },
+                        {
+                            "key": "36aeaae7-3154-4dda-89e6-9464de96df16",
+                            "attributes": {
+                                "name": "合成最终叙事流程文档",
+                                "kind": "generate",
+                                "intent": "将所有中间规划成果整合为一份结构清晰、逻辑完整的最终叙事流程规划文档。",
+                                "inputs": [
+                                    "段落详细规划清单",
+                                    "痛点响应逻辑矩阵"
+                                ],
+                                "outputs": [
+                                    "叙事流程规划单"
+                                ],
+                                "id": "36aeaae7-3154-4dda-89e6-9464de96df16",
+                                "status": "awaiting_code",
+                                "dag": null,
+                                "error": null,
+                                "facets": {
+                                    "simple": "yes"
+                                },
+                                "forcedNote": "深度熔断：该环节属于文案策划核心工作流，需经“逻辑流向初稿”编排与“论点 - 痛点闭环校验”两轮审计以确保说服有效性。"
+                            }
+                        }
+                    ],
+                    "edges": [
+                        {
+                            "key": "geid_229_0",
+                            "source": "590de33c-aa7a-4280-b5c6-ee79aa9b49a9",
+                            "target": "4745aeb4-75f6-4c11-81f5-27923b1d7214",
+                            "attributes": {
+                                "artifacts": [
+                                    "受众心理特征卡片"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_229_1",
+                            "source": "4745aeb4-75f6-4c11-81f5-27923b1d7214",
+                            "target": "1491b3e4-7db8-4c0c-9f3b-7cd17caf02d3",
+                            "attributes": {
+                                "artifacts": [
+                                    "高价值论点筛选表"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_229_2",
+                            "source": "1491b3e4-7db8-4c0c-9f3b-7cd17caf02d3",
+                            "target": "0809183f-727d-44fa-a50c-b6d384d31158",
+                            "attributes": {
+                                "artifacts": [
+                                    "痛点响应逻辑矩阵"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_229_3",
+                            "source": "0809183f-727d-44fa-a50c-b6d384d31158",
+                            "target": "7ed1c0f6-e2d8-40c9-b6e2-d2e224b808db",
+                            "attributes": {
+                                "artifacts": [
+                                    "段落情绪序列表"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_229_4",
+                            "source": "1491b3e4-7db8-4c0c-9f3b-7cd17caf02d3",
+                            "target": "7ed1c0f6-e2d8-40c9-b6e2-d2e224b808db",
+                            "attributes": {
+                                "artifacts": [
+                                    "痛点响应逻辑矩阵"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_229_5",
+                            "source": "7ed1c0f6-e2d8-40c9-b6e2-d2e224b808db",
+                            "target": "cd300868-dcfc-4c2f-bbfc-303f4d3664d6",
+                            "attributes": {
+                                "artifacts": [
+                                    "段落功能与论证要素映射表"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_229_6",
+                            "source": "0809183f-727d-44fa-a50c-b6d384d31158",
+                            "target": "cd300868-dcfc-4c2f-bbfc-303f4d3664d6",
+                            "attributes": {
+                                "artifacts": [
+                                    "段落情绪序列表"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_229_7",
+                            "source": "cd300868-dcfc-4c2f-bbfc-303f4d3664d6",
+                            "target": "36aeaae7-3154-4dda-89e6-9464de96df16",
+                            "attributes": {
+                                "artifacts": [
+                                    "段落详细规划清单"
+                                ]
+                            }
+                        },
+                        {
+                            "key": "geid_229_8",
+                            "source": "1491b3e4-7db8-4c0c-9f3b-7cd17caf02d3",
+                            "target": "36aeaae7-3154-4dda-89e6-9464de96df16",
+                            "attributes": {
+                                "artifacts": [
+                                    "痛点响应逻辑矩阵"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "artifacts": [
+            {
+                "name": "初始产品与企业资料",
+                "intent": "用户提供的原始产品功能介绍、参数及可选的企业背景信息集合",
+                "aliases": [],
+                "qualityCriteria": [
+                    "完整性",
+                    "准确性",
+                    "信息完整",
+                    "可作为品牌背书素材",
+                    "信息完整性",
+                    "来源可信度",
+                    "格式规范性",
+                    "时效性",
+                    "相关性"
+                ],
+                "sizeEstimate": "medium",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "产品事实整合单",
+                "intent": "经过清洗和结构化后的关键事实摘要，去除了冗余噪声，保留了可用于文案创作的核心数据",
+                "aliases": [],
+                "qualityCriteria": [
+                    "无遗漏",
+                    "无虚构",
+                    "数据准确无误",
+                    "来源可溯",
+                    "相关性强",
+                    "数据准确性",
+                    "信息时效性",
+                    "引用可行性",
+                    "数据真实性",
+                    "信息密度",
+                    "可用性",
+                    "相关性",
+                    "事实的有用性"
+                ],
+                "sizeEstimate": "small",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "产品核心价值点清单",
+                "intent": "将技术术语转化为用户语言的优势列表，包含痛点解决与利益点陈述",
+                "aliases": [],
+                "qualityCriteria": [
+                    "吸引力",
+                    "相关性",
+                    "表述清晰",
+                    "用户视角",
+                    "无技术黑话",
+                    "用户视角强",
+                    "优势差异度",
+                    "语言转化准确度",
+                    "用户语言易懂性",
+                    "利益点明确性",
+                    "无夸大",
+                    "转化后的可读性",
+                    "对痛点的针对性",
+                    "价值差异点突出"
+                ],
+                "sizeEstimate": "small",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "目标受众画像卡",
+                "intent": "基于核心价值推导出的典型客户特征描述，包含场景、痛点与心理诉求",
+                "aliases": [],
+                "qualityCriteria": [
+                    "精准度",
+                    "共情力",
+                    "人群定位准确",
+                    "需求描述具体",
+                    "人群代表性",
+                    "需求真实性",
+                    "场景代入感",
+                    "画像颗粒度",
+                    "场景真实感",
+                    "行为动机清晰性",
+                    "特征典型性",
+                    "痛点紧迫性",
+                    "心理诉求明确性"
+                ],
+                "sizeEstimate": "small",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "品牌写作指南",
+                "intent": "规定全文语气、用词习惯、标点风格及表情符号使用规则的指导文档",
+                "aliases": [],
+                "qualityCriteria": [
+                    "一致性",
+                    "调性匹配",
+                    "规则明确度",
+                    "约束具体性",
+                    "适用广泛性"
+                ],
+                "sizeEstimate": "small",
+                "isArray": false,
+                "dataSchema": null
+            },
+            {
+                "name": "文章逻辑结构大纲",
+                "intent": "规划好的分段标题、论述重点与情感曲线骨架，用于引导正文写作",
+                "aliases": [],
+                "qualityCriteria": [
+                    "逻辑流畅",
+                    "覆盖全面",
+                    "结构连贯",
+                    "情绪引导顺畅",
+                    "可直接指导撰写",
+                    "逻辑连贯性",
+                    "重点覆盖率",
+                    "结构清晰度"
+                ],
+                "sizeEstimate": "medium",
+                "isArray": false,
+                "dataSchema": null
+            },
+            {
+                "name": "推文标题候选集",
+                "intent": "基于卖点和痛点构思的多个备选题目列表",
+                "aliases": [],
+                "qualityCriteria": [
+                    "点击率潜力",
+                    "真实性"
+                ],
+                "sizeEstimate": "small",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "最终确认标题",
+                "intent": "从候选集中选定的唯一作为封面显示的最终主标题",
+                "aliases": [],
+                "qualityCriteria": [
+                    "最佳匹配度"
+                ],
+                "sizeEstimate": "small",
+                "isArray": false,
+                "dataSchema": null
+            },
+            {
+                "name": "开篇钩子段草稿",
+                "intent": "文章第一段的具体文本，负责在移动端快速吸引注意力并引出主题",
+                "aliases": [],
+                "qualityCriteria": [
+                    "冲击力",
+                    "代入感"
+                ],
+                "sizeEstimate": "medium",
+                "isArray": false,
+                "dataSchema": null
+            },
+            {
+                "name": "主体论证正文草稿",
+                "intent": "文章核心部分，详细阐述产品解决方案与价值的长文本",
+                "aliases": [],
+                "qualityCriteria": [
+                    "说服力",
+                    "详尽度",
+                    "整体流畅性",
+                    "结构完整性",
+                    "说服力强弱"
+                ],
+                "sizeEstimate": "large",
+                "isArray": false,
+                "dataSchema": null
+            },
+            {
+                "name": "行动号召结尾草稿",
+                "intent": "文章结束段落，负责总结并引导用户扫码或咨询的具体语句",
+                "aliases": [],
+                "qualityCriteria": [
+                    "引导清晰",
+                    "不突兀"
+                ],
+                "sizeEstimate": "medium",
+                "isArray": false,
+                "dataSchema": null
+            },
+            {
+                "name": "全篇内容初稿",
+                "intent": "将开首、主体、结尾及最终标题组合成的完整文章版本",
+                "aliases": [],
+                "qualityCriteria": [
+                    "连贯性",
+                    "格式规范"
+                ],
+                "sizeEstimate": "large",
+                "isArray": false,
+                "dataSchema": null
+            },
+            {
+                "name": "终版发布推文稿",
+                "intent": "经事实复核与排版优化（如加粗、换行）后可直接发布的最终内容",
+                "aliases": [],
+                "qualityCriteria": [
+                    "零错误",
+                    "阅读体验佳"
+                ],
+                "sizeEstimate": "large",
+                "isArray": false,
+                "dataSchema": null
+            },
+            {
+                "name": "核心痛点优先级列表",
+                "intent": "从受众画像中筛选出的高频、高紧迫感问题列表，决定文章的切入点",
+                "aliases": [],
+                "qualityCriteria": [
+                    "痛点覆盖核心目标人群",
+                    "排序依据明确（紧急程度或发生频率）",
+                    "紧迫度排序正确性",
+                    "代表性",
+                    "无遗漏",
+                    "排序准确性",
+                    "痛点的代表性"
+                ],
+                "sizeEstimate": "small",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "痛点与价值匹配图",
+                "intent": "展示核心痛点如何被特定产品价值点一一解决的对应关系表",
+                "aliases": [],
+                "qualityCriteria": [
+                    "逻辑闭环",
+                    "每个痛点都有对应的解决方案支撑",
+                    "逻辑自洽性",
+                    "覆盖全面性",
+                    "准确性",
+                    "匹配逻辑清晰",
+                    "关系一一对应",
+                    "说服力强"
+                ],
+                "sizeEstimate": "medium",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "段落功能映射表",
+                "intent": "将痛点和价值对分配到具体的文章段落（如开头、论证、结尾），并指定该段落需使用的数据类型",
+                "aliases": [],
+                "qualityCriteria": [
+                    "符合营销逻辑流（如 FABE 法则）",
+                    "证据分配合理",
+                    "指令可执行性",
+                    "内容完整性",
+                    "格式规范"
+                ],
+                "sizeEstimate": "medium",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "章节写作任务清单",
+                "intent": "一份将原始大纲转化为可执行写作任务的表格或列表，包含章节名、字数预估、数据来源要求；被后续步骤消费。",
+                "aliases": [],
+                "qualityCriteria": [
+                    "任务颗粒度适中",
+                    "责任边界清晰",
+                    "资源分配合理"
+                ],
+                "sizeEstimate": "small",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "核心主张一致性声明",
+                "intent": "一句话或短段落形式总结的核心产品卖点，用于确保后续文案的一致性；被后续步骤消费。",
+                "aliases": [],
+                "qualityCriteria": [
+                    "提炼精准度",
+                    "记忆点强度",
+                    "情感共鸣力"
+                ],
+                "sizeEstimate": "small",
+                "isArray": false,
+                "dataSchema": null
+            },
+            {
+                "name": "分章内容草案集",
+                "intent": "根据章节任务单独撰写的各部分详细内容文本集合，包含具体的场景、方案与利益论证。",
+                "aliases": [],
+                "qualityCriteria": [
+                    "事实支撑度",
+                    "逻辑自洽性",
+                    "品牌语调符合度"
+                ],
+                "sizeEstimate": "medium",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "叙事流程规划单",
+                "intent": "按照逻辑顺序排列的文章段落计划，定义了每一段落的主题范围及在说服链中的位置，不包含具体文字细节",
+                "aliases": [],
+                "qualityCriteria": [
+                    "逻辑递进顺畅性",
+                    "重心分布合理性",
+                    "符合受众阅读心理",
+                    "逻辑清晰严谨",
+                    "说服路径闭环",
+                    "主题分布均匀",
+                    "节奏合理"
+                ],
+                "sizeEstimate": "small",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "痛点价值段落定位表",
+                "intent": "记录核心痛点与价值点对应落入的叙事流程单具体段落编号，确立内容与结构的归属关系",
+                "aliases": [],
+                "qualityCriteria": [
+                    "映射无歧义",
+                    "重点段落覆盖",
+                    "逻辑闭环"
+                ],
+                "sizeEstimate": "medium",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "受众心理特征卡片",
+                "intent": "总结目标受众在决策时的核心心理驱动力模型和情绪触发点，如“焦虑驱动”、“成本敏感”等。",
+                "aliases": [],
+                "qualityCriteria": [
+                    "标签的精准度",
+                    "心理画像的立体性",
+                    "可指导内容策略"
+                ],
+                "sizeEstimate": "small",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "高价值论点筛选表",
+                "intent": "从产品核心价值点清单中筛选出能直接回应受众心理特征卡片所列心理需求的核心论点。",
+                "aliases": [],
+                "qualityCriteria": [
+                    "论点与心理特征的匹配度",
+                    "转化潜力高"
+                ],
+                "sizeEstimate": "small",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "痛点响应逻辑矩阵",
+                "intent": "建立每个高价值论点与其所解决的特定核心痛点之间的因果逻辑对照表，明确论点依靠何种逻辑路径（如“因为解决A问题，所以...”）来缓解痛点。",
+                "aliases": [],
+                "qualityCriteria": [
+                    "因果链条完整清晰",
+                    "逻辑路径具有说服力",
+                    "覆盖主要痛点"
+                ],
+                "sizeEstimate": "medium",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "段落情绪序列表",
+                "intent": "依据痛点紧迫性和说服逻辑，规划出的文章情绪递进顺序（如：激发焦虑-建立信任-提供解决方案-引导行动）。每一条定义了此情绪阶段的核心目标。",
+                "aliases": [],
+                "qualityCriteria": [
+                    "情绪递进的逻辑性",
+                    "与受众心理的匹配度",
+                    "节奏感自然"
+                ],
+                "sizeEstimate": "small",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "段落功能与论证要素映射表",
+                "intent": "定义了每个段落的具体说服功能、其对应的核心主题、以及在该段落中应使用的关键论证要素（如引用事实、展示价值点、进行对比）。",
+                "aliases": [],
+                "qualityCriteria": [
+                    "功能定位清晰",
+                    "论证要素恰当",
+                    "段落间衔接顺畅"
+                ],
+                "sizeEstimate": "medium",
+                "isArray": true,
+                "dataSchema": null
+            },
+            {
+                "name": "段落详细规划清单",
+                "intent": "确定了每一具体段落的主题标题、功能定位（如引入、论证、说服）及内容来源素材（对应匹配图、事实整合单中的条目），可直接指导写作。",
+                "aliases": [],
+                "qualityCriteria": [
+                    "主题覆盖全面",
+                    "顺序逻辑连贯",
+                    "功能定位与内容匹配",
+                    "素材引用具体"
+                ],
+                "sizeEstimate": "medium",
+                "isArray": true,
+                "dataSchema": null
+            }
+        ]
+    },
+    "user": "给出产品信息及可选的企业信息，撰写一份用于市场推广的微信软长文。"
+}
