@@ -41,6 +41,7 @@ import { toast } from 'svelte-sonner';
 import { push } from "svelte-spa-router";
 import { rightPanelStore } from '../../featured/rightside/bar.store.svelte';
 import { messageStore } from '../../featured/rightside/chat/msg.svelte';
+import { pureInput } from './storeHelper';
 
 export type { GDagJSON, NodeStatus, PNode, RegArtifact };
 
@@ -96,6 +97,26 @@ export interface SelectedArtifact {
 export interface ResolvedIo {
     name: string;
     artifact: RegArtifact | null;
+}
+
+/**
+ * 纯输入交付物：全 DAG 树（含递归子图）范围内，
+ * 「有节点消费、无任何节点生产」的产物。
+ * 是整套流程真正需要外部录入数据的入口。
+ */
+export interface PureInputArtifact {
+    /** 图内出现的原始名（可能是别名） */
+    name: string;
+    /** 归一后的规范名（若在注册表内） */
+    canonicalName: string;
+    /** 注册表中的完整产物定义，未登记则为 null */
+    artifact: RegArtifact | null;
+    /** 是否数组产物（需录入多条同构数据） */
+    isArray: boolean;
+    /** 尺寸估计（未登记则为 null） */
+    sizeEstimate: SizeEstimateT | null;
+    /** 消费此产物的节点（跨所有层级） */
+    consumers: { graphId: string; nodeId: string; nodeName: string }[];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -383,6 +404,85 @@ export class FlowStore {
     );
     depth = $derived(this.crumbs.length);
 
+    // ─────────────────────────────────────────────────────────
+    //  纯输入交付物：递归扫描全 DAG 树（含子图）后聚合
+    //  判据：某规范产物「被任意节点消费」且「无任意节点生产」
+    // ─────────────────────────────────────────────────────────
+    pureInputArtifacts: PureInputArtifact[] = $derived.by<PureInputArtifact[]>(() => {
+        void this.raw;
+        if (this.graphs.size === 0) return [];
+
+        // 以规范名为键做归一聚合
+        const canonicalOf = (name: string): string =>
+            this.artifactIndex.get(name)?.name ?? name;
+
+        // 每个规范名：是否被生产 / 消费；消费者集合；出现过的原始名
+        interface Acc {
+            produced: boolean;
+            consumed: boolean;
+            consumers: { graphId: string; nodeId: string; nodeName: string }[];
+            rawNames: Set<string>;
+        }
+        const acc = new Map<string, Acc>();
+
+        const ensure = (canon: string): Acc => {
+            let a = acc.get(canon);
+            if (!a) {
+                a = { produced: false, consumed: false, consumers: [], rawNames: new Set() };
+                acc.set(canon, a);
+            }
+            return a;
+        };
+
+        // 递归遍历所有已导入的子图（graphs 已是全树的扁平集合）
+        for (const [gid, g] of this.graphs.entries()) {
+            g.forEachNode((nodeId, attr) => {
+                const pn = attr as unknown as PNode;
+                const nodeName = pn.name || nodeId;
+
+                for (const outName of pn.outputs ?? []) {
+                    const canon = canonicalOf(outName);
+                    const a = ensure(canon);
+                    a.produced = true;
+                    a.rawNames.add(outName);
+                }
+                for (const inName of pn.inputs ?? []) {
+                    const canon = canonicalOf(inName);
+                    const a = ensure(canon);
+                    a.consumed = true;
+                    a.rawNames.add(inName);
+                    a.consumers.push({ graphId: gid, nodeId, nodeName });
+                }
+            });
+        }
+
+        const out: PureInputArtifact[] = [];
+        for (const [canon, a] of acc.entries()) {
+            if (a.consumed && !a.produced) {
+                const artifact = this.artifactIndex.get(canon) ?? null;
+                // 优先展示注册规范名，兜底任一原始名
+                const displayName = artifact?.name ?? [...a.rawNames][0] ?? canon;
+                out.push({
+                    name: displayName,
+                    canonicalName: canon,
+                    artifact,
+                    isArray: artifact?.isArray ?? false,
+                    sizeEstimate: artifact?.sizeEstimate ?? null,
+                    consumers: a.consumers
+                });
+            }
+        }
+
+        // 稳定排序：数组产物优先，其次按名字
+        out.sort((x, y) => {
+            if (x.isArray !== y.isArray) return x.isArray ? -1 : 1;
+            return x.name.localeCompare(y.name);
+        });
+        return out;
+    });
+
+    pureInputCount = $derived(this.pureInputArtifacts.length);
+
     selectedNode: PNode | null = $derived.by<PNode | null>(() => {
         void this.raw;
         const id = this.selectedNodeId;
@@ -448,11 +548,27 @@ export class FlowStore {
     );
 
     /**
-     * 「真正显示中」的产物名。
-     * 高亮判据必须用它而非裸 selectedArtifactName，
-     * 否则会出现「未显示却高亮、点击不可恢复」的僵尸态。
+     * 「真正显示中」的产物——直接暴露正在被面板渲染的原始选中名。
+     * 只有当 selectedArtifact 非空（即面板确实显示）时才有值，
+     * 否则为 null。高亮/toggle 全部以它为唯一真源，杜绝僵尸态。
      */
-    activeArtifactName = $derived(this.selectedArtifact?.name ?? null);
+    activeArtifactName = $derived(
+        this.selectedArtifact ? this.selectedArtifactName : null
+    );
+
+    /**
+     * 判断某个 IO 名是否是「当前正在显示的产物」。
+     * 通过规范名归一比较：同一 artifact 的别名/规范名都算命中。
+     * 仅当面板真正显示（selectedArtifact 非空）时才可能返回 true。
+     */
+    isArtifactActive(ioName: string): boolean {
+        if (!this.selectedArtifact) return false;
+        const active = this.selectedArtifactName;
+        if (!active) return false;
+        if (active === ioName) return true;
+        const canonOf = (n: string) => this.artifactIndex.get(n)?.name ?? n;
+        return canonOf(active) === canonOf(ioName);
+    }
 
     // ── 公开查询 ──
 
@@ -592,7 +708,7 @@ export class FlowStore {
 
     /**
      * 点击 IO：打开/切换产物面板。
-     * toggle 判据用 activeArtifactName（真正显示中的名字），
+     * toggle 判据用 isArtifactActive（真正显示中的产物、按规范名归一），
      * 彻底避免「未显示却高亮、再点无法关闭」的僵尸态。
      */
     selectArtifact(name: string | null, role: ArtifactRole = 'output') {
@@ -600,8 +716,8 @@ export class FlowStore {
             this.selectedArtifactName = null;
             return;
         }
-        // 再次点击当前正在显示的同名产物 → 关闭
-        if (this.activeArtifactName === name) {
+        // 再次点击当前正在显示的同一产物（含别名归一）→ 关闭
+        if (this.isArtifactActive(name)) {
             this.selectedArtifactName = null;
             return;
         }
@@ -649,15 +765,14 @@ export class FlowStore {
         await messageStore.AIResponse(content);
     }
 
-    // /** 编辑当前 DAG（元信息 / 结构外的编辑入口）。 */
-    // editDag() {
-    //     // TODO: 由使用方实现
-    // }
-
-    // /** 进入 DAG 编辑模式（拓扑编辑）。 */
-    // editDagStructure() {
-    //     // TODO: 由使用方实现
-    // }
+    /**
+     * 为某个「纯输入交付物」录入数据。
+     * 传入完整的 PureInputArtifact 结构，调用方可据此清楚地知道
+     * 正在为「哪个产物 / 单一还是数组 / 何种尺寸 / 被谁消费」录入。
+    */
+    async enterPureInput(_target: PureInputArtifact) {
+        await pureInput(_target);
+    }
 
     /** 编辑某节点（结构 / 属性）。 */
     editNode(nodeId: string) {

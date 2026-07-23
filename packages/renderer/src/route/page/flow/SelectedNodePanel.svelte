@@ -41,16 +41,16 @@
   const hasChildren = $derived(nodeData?.hasChildren ?? false);
   const mapMode = $derived(nodeData?.mapMode ?? null);
 
-  // 关键：高亮判据用「真正显示中」的产物名，杜绝僵尸高亮
-  const active = $derived(flowStore.activeArtifactName);
   const KindIcon = $derived(node ? KIND_ICON[node.kind] : null);
 </script>
 
 <!--╭─────────────────────────────────────────────────────╮ -->
 <!-- │ [可抽取子组件 → NodeIoRow.svelte]                   │ -->
 <!-- │ 职责：单条 IO 行 —— 编辑按钮 + 不换行省略徽章       │ -->
+<!-- │ 修复：高亮改用 store.isArtifactActive（真源判据）   │ -->
 <!-- ╰─────────────────────────────────────────────────────╯ -->
 {#snippet ioRow(io: ResolvedIo, role: ArtifactRole)}
+  {@const isActive = flowStore.isArtifactActive(io.name)}
   <div class="flex items-center gap-1.5">
     <Button
       variant="ghost"
@@ -67,12 +67,15 @@
       class="min-w-0 flex-1 cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
     >
       <Badge
-        variant={active === io.name
+        variant={isActive
           ? "default"
           : io.artifact?.isArray
             ? "default"
             : "secondary"}
-        class="flex w-full items-center gap-1 rounded-lg text-[11px] hover:shadow-xl"
+        class={[
+          "flex w-full items-center gap-1 rounded-lg text-[11px] hover:shadow-xl",
+          isActive ? "ring-2 ring-primary/40" : "",
+        ]}
       >
         {#if io.artifact?.isArray}
           <IconPackages size={10} stroke={1.5} class="shrink-0" />
@@ -92,7 +95,7 @@
 <!--╭─────────────────────────────────────────────────────╮ -->
 <!-- │ [可抽取子组件 → SelectedNodePanel.svelte]           │ -->
 <!-- │ 职责：右上角选中节点属性浮层；IO 可点击/可编辑      │ -->
-<!-- │ 修复：高亮判据改用 activeArtifactName；IO 不换行    │ -->
+<!-- │ 修复：高亮判据改用 store.isArtifactActive；不换行   │ -->
 <!-- ╰─────────────────────────────────────────────────────╯ -->
 <div use:autoAnimate>
   {#if node && KindIcon}

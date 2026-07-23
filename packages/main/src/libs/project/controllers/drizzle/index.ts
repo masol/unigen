@@ -326,7 +326,7 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
             }
             case 'glossary':
                 {
-                    if (id.startsWith('_')) {
+                    if (id.startsWith('_') || code) {
                         this.set(id, content);
                     } else {
                         const cntJson = JSON.parse(content);

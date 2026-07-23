@@ -166,7 +166,7 @@ declare global {
     /**
      * 直接获取原始数据(无更新时间).
      */
-    get<T = unknown>(key: string): T | null;
+    get<T = string>(key: string): T | null;
 
     /**
      * 直接保存到原始数据(自动更新更新时间).
@@ -227,6 +227,10 @@ declare global {
   const z: any;
 
   const util: IRadashi & {
+    // 确保输入值转换为字符串
+    toStrSafe(val: string | string[] | unknown): string;
+    // 确保输入值转换为字符串数组
+    toStrArraySafe(val: string | string[] | unknown): string[];
     /**
    * 能限制同时执行任务数、支持流式数据、且自带过滤功能的加强版 Promise.all。
    * @param input 包含 Promise 或普通值的可迭代对象（如数组）

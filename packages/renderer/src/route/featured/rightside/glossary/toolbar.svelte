@@ -5,6 +5,7 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
   import { IconPlus, IconRefresh, IconSearch } from "@tabler/icons-svelte";
+  import Logger from "electron-log/renderer";
   import { debounce } from "radashi";
   import { push } from "svelte-spa-router";
   import BlueprintSwitcher from "./blueprint-switcher.svelte";
@@ -38,7 +39,7 @@
       await blueprintStore.doLoad();
     } catch (err) {
       // 失败提示走全局对话框，避免静默失败。
-      console.error("[glossary-toolbar] 刷新失败：", err);
+      Logger.error("[glossary-toolbar] 刷新失败：", err);
       await dialogStore.safeShow(
         PromptDialog,
         {
