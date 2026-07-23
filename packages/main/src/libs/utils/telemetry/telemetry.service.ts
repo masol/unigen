@@ -4,7 +4,7 @@ import {
 } from "./telemetry.interface.js";
 
 import { ExportResult, ExportResultCode } from "@opentelemetry/core";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
     BatchSpanProcessor,
@@ -115,6 +115,9 @@ export class TelemetryService extends BaseTelemetryService {
     private shuttingDown: Promise<void> | null = null;
 
     async initialize(endpoint?: string): Promise<void> {
+        // 打开调试。@todo:为了方便用户接入，是否可配置？
+        // diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
+
         if (this.started) {
             Logger.warn("[Telemetry] 已初始化，忽略重复 initialize 调用");
             return;

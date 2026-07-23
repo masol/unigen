@@ -3,9 +3,10 @@ import { ProjectDbKeys } from '$libs/utils/db/dbkeys.js';
 import { throwPrecondition } from '$libs/utils/err.js';
 import { delay } from '$libs/utils/promise.js';
 import type { CommandInfo, IRunnerContext } from '$types/blueprint/context.js';
+import { SpanStatusCode } from '@opentelemetry/api';
 import { parse, ParseEntry } from 'shell-quote';
 import yargsParser from 'yargs-parser';
-import { BaseRunner } from './base.js';
+import { BaseRunner, withSpan } from './base.js';
 import { runCmd as doExport } from './commands/export/runCmd.js';
 import { runCmd as doPlan } from './commands/plan/index.js';
 import { runCmd as doPreprism } from './commands/preprism.js';
@@ -131,6 +132,12 @@ export class CmdRunner extends BaseRunner {
             }
             return await this.runCap(capId, ctx);
         }
-        return await this.dispatch(ctx);
+        return withSpan(`CmdRunner.run`, async (span) => {
+            span.setAttribute("command.userInput", userInput);
+            span.addEvent("task_started", { message: `开始分遣命令: ${ctx.cmd.command}` });
+            await this.dispatch(ctx);
+            span.addEvent("command_run_success");
+            span.setStatus({ code: SpanStatusCode.OK });
+        });
     }
 }
