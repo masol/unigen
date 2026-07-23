@@ -47,6 +47,10 @@ export const configSchema: Schema<AppConfig> = {
         type: 'string',
         default: ""
     },
+    telemetry: {
+        type: 'string',
+        default: ""
+    },
     local_model: {
         type: "string",
         default: ""

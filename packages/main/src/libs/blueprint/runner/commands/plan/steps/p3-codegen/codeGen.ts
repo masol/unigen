@@ -132,9 +132,39 @@ ${ex.code}
     ).join("\n\n");
 }
 
+/**
+ * 从模型输出中提取 javascript/js 代码块，尽量健壮：
+ *   1. 优先匹配带 javascript/js 语言标注的围栏块，容忍：
+ *      - 语言标注后紧跟内容（无换行）或有换行；
+ *      - 闭合反引号前无换行（内容紧贴 ```）；
+ *      - 首尾多余空白。
+ *   2. 退化 1：任意语言标注（甚至无标注）的围栏块。
+ *   3. 退化 2：整段无围栏时，若看起来就是裸代码，直接返回。
+ * 返回 null 表示确实取不到代码。
+ */
 function extractCodeBlock(text: string): string | null {
-    const m = text.match(/```(?:javascript|js)\s*\n([\s\S]*?)\n```/);
-    return m ? m[1] : null;
+    if (!text) return null;
+
+    // 1. 带 javascript/js 标注的围栏：语言标注与内容之间、内容与闭合之间的换行均可选
+    const jsFence = /```(?:javascript|js)\b[^\S\r\n]*\r?\n?([\s\S]*?)```/i;
+    const m1 = text.match(jsFence);
+    if (m1 && m1[1].trim()) return m1[1].trim();
+
+    // 2. 退化：任意语言标注（或无标注）的围栏块，取第一个非空块
+    const anyFence = /```[^\r\n`]*\r?\n?([\s\S]*?)```/g;
+    let m: RegExpExecArray | null;
+    while ((m = anyFence.exec(text)) !== null) {
+        const body = m[1].trim();
+        if (body) return body;
+    }
+
+    // 3. 退化：整段无围栏，但看起来就是代码（含常见沙箱符号），直接采用
+    const stripped = text.trim();
+    if (stripped && /\b(glossary|cap|llm|util|err)\b/.test(stripped) && !stripped.includes("```")) {
+        return stripped;
+    }
+
+    return null;
 }
 
 async function callModel(

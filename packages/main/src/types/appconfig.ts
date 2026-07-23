@@ -13,6 +13,7 @@ export interface AppConfig {
     autoupdate: boolean;
     parallelRun: boolean;
     models: Provider[];
+    telemetry: string; // COLLECTOR_URL配置。
     disableHA: boolean; // 禁用硬件加速。 disableHardwareAcceleration 
     itemsPerPage: number;
     fontSize: number;

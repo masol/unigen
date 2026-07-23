@@ -1,12 +1,16 @@
 // electron/store/configStore.ts
-import Store from 'electron-store';
-import { AppConfig } from '$types/appconfig.js';
-import { configSchema } from './schema.js';
-import { broadcast } from '$libs/utils/rpcevt.js';
 import { getCurrentProject } from '$libs/utils/api.js';
+import { broadcast } from '$libs/utils/rpcevt.js';
+import type { ITelemetryService } from '$libs/utils/telemetry/telemetry.interface.js';
+import { AppConfig } from '$types/appconfig.js';
+import Store from 'electron-store';
+import { configSchema } from './schema.js';
 
 class ConfigService {
     private store: Store<AppConfig>;
+
+    // 只为ITelemetryService服务，用于解耦循环依赖。
+    oTel: ITelemetryService | null = null;
 
     constructor(store: Store<AppConfig>) {
         this.store = store;
@@ -59,6 +63,9 @@ class ConfigService {
      */
     set<K extends keyof AppConfig>(key: K, value: AppConfig[K]): void {
         this.store.set(key, value);
+        if (this.oTel && key === "telemetry") {
+            this.oTel.reconfigure(value as string);
+        }
         const prj = getCurrentProject();
         broadcast({
             name: "cfg:set",
