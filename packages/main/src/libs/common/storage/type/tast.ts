@@ -1,5 +1,4 @@
 import z from "zod";
-import type { CommonContext } from "../context.js";
 
 export const execOutputSchema = z.object({
     status: z.enum(['success', 'fail']).describe('执行状态，成功或失败'),
@@ -23,16 +22,5 @@ export const execInputSchema = z.object({
     ),
 });
 
-// 保留旧名称以兼容，但建议使用 execInputSchema
-export const execIniputSchema = execInputSchema;
-
 export type ExecOutput = z.infer<typeof execOutputSchema>;
 export type ExecInput = z.infer<typeof execInputSchema>;
-
-export async function doTask(input: ExecInput, cctx: CommonContext): Promise<ExecOutput> {
-    cctx.ctx.info("进入doTask:", JSON.stringify(input, null, 2));
-    return {
-        status: "fail",
-        error: "未实现"
-    };
-}

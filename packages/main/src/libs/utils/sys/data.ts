@@ -6,6 +6,7 @@ import { pathExists } from 'fs-extra';
 import { readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { throwUnprcessable } from '../err.js';
 
 const DataDirName = 'data';
 const TplMetasDirName = 'plugins';
@@ -46,6 +47,23 @@ class DataCenter {
         return join(this.dataPath, TplMetasDirName, ...args);
     }
 
+    public async readPrompt(...args: string[]): Promise<string | null> {
+        const parts = [...args];
+        if (parts.length > 0) {
+            const lastIndex = parts.length - 1;
+            parts[lastIndex] = parts[lastIndex] + '.md';
+        }
+        return await this.readFile('prompt', ...parts);
+    }
+
+
+    public async ensurePrompt(...args: string[]): Promise<string> {
+        const prompt = await this.readPrompt(...args);
+        if (!prompt) {
+            throwUnprcessable(`未找到系统提示文件: ${args.join('/')}.md`);
+        }
+        return prompt;
+    }
     /**
      * 以文本形式读取 data 目录下的文件。
      * - 优先读取 userData/data 下的同名文件；

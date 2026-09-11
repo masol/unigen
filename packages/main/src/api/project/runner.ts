@@ -1,5 +1,5 @@
 
-import { userClarifyTool } from '$libs/innerflow/common/clarify/index.js';
+import { userClarifyTool } from '$libs/common/clarify/index.js';
 import { PrjRunner } from '$libs/project/controllers/runner.js';
 import { os } from "@orpc/server";
 import Logger from 'electron-log/main.js';

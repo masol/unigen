@@ -133,7 +133,7 @@
                             {
                                 "type": "field",
                                 "binding": {
-                                    "key": "maxTargetRounds"
+                                    "key": "#common:config:maxSteps"
                                 },
                                 "label": "主循环最大循环次数",
                                 "editor": "inline",
@@ -143,32 +143,50 @@
                             {
                                 "type": "field",
                                 "binding": {
-                                    "key": "maxUserTimeout"
+                                    "key": "#common:config:maxUserTimeout"
                                 },
                                 "label": "等待用户澄清最大时长",
                                 "editor": "inline",
                                 "placeholder": "1h",
                                 "inputType": "string"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "select",
+                        "binding": {
+                            "key": "config:detailLevel"
+                        },
+                        "label": "自作主张",
+                        "icon": "IconGauge",
+                        "fallback": "24",
+                        "options": [
+                            {
+                                "value": "1",
+                                "label": "部分细节",
+                                "sub": "AI自动推断部分细节",
+                                "badge": {
+                                    "text": "细",
+                                    "className": "bg-foreground/10 text-foreground"
+                                }
                             },
                             {
-                                "type": "field",
-                                "binding": {
-                                    "key": "maxPathsPerNode"
-                                },
-                                "label": "DAG最大路径长度",
-                                "editor": "inline",
-                                "placeholder": "50",
-                                "inputType": "number"
+                                "value": "2",
+                                "label": "全部细节",
+                                "sub": "AI自动推断全部细节",
+                                "badge": {
+                                    "text": "细",
+                                    "className": "bg-foreground/10 text-foreground"
+                                }
                             },
                             {
-                                "type": "field",
-                                "binding": {
-                                    "key": "maxReactRounds"
-                                },
-                                "label": "转标准格式最大收敛次数",
-                                "editor": "inline",
-                                "placeholder": "4",
-                                "inputType": "number"
+                                "value": "0",
+                                "label": "不补充细节",
+                                "sub": "通过微信/UI，请用户澄清细节",
+                                "badge": {
+                                    "text": "细",
+                                    "className": "bg-foreground/10 text-foreground"
+                                }
                             }
                         ]
                     }
