@@ -3,11 +3,13 @@
  * 缺省值由各调用方在读取时自行提供——本类只负责 KV 存取。
  */
 
-import { throwNotfound } from "$libs/utils/err.js";
+import { throwNotfound, throwUnprcessable } from "$libs/utils/err.js";
 import { BaseStorage } from "./base.js";
+import { DocumentSplitConstitution } from "./type/ontology.js";
 import { ExecInput } from "./type/tast.js";
 
 export type SubOntology = "terminology" | "reader_assumptions" | "writing_style" | "format_rules" | "prohibitions" | "logic_relations" | "methodology" | "method-unit";
+
 
 export class GoalStorage extends BaseStorage {
     protected NS = "#common:goal:";
@@ -42,6 +44,19 @@ export class GoalStorage extends BaseStorage {
 
     setOntologyAnalysis(value: string): void {
         this.set("ontology_analysis", value);
+    }
+
+
+    getOntology(): DocumentSplitConstitution {
+        const result = this.get<DocumentSplitConstitution>("ontology");
+        if (!result) {
+            throwUnprcessable("未找到文档拆分宪法，请先创建文档拆分宪法。");
+        }
+        return result;
+    }
+
+    setOntology(value: DocumentSplitConstitution): void {
+        this.set("ontology", value);
     }
 
     getOntologySub(subName: SubOntology, defaultValue = ""): string {

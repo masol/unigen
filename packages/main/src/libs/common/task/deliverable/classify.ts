@@ -13,7 +13,6 @@ import { doMarkdown } from "./markdown.js";
 
 export async function doClassify(input: ExecInput, cctx: CommonContext): Promise<ExecOutput> {
 
-    // const maxSteps = cctx.storage.config.getMaxSteps();
     const builder = new XMLBuilder({
         format: true,        // 美化输出（缩进）
         indentBy: '  ',      // 缩进字符，默认是两个空格
@@ -42,9 +41,9 @@ export async function doClassify(input: ExecInput, cctx: CommonContext): Promise
     // 这里针对不同的交付物类型，选择不同的工作流进行处理。
 
     if (classifyResult.output.workMode === "standalone") {
-        // 处理文档类型的交付物
-        cctx.ctx.info("处理文档类型的交付物:", JSON.stringify(classifyResult.output, null, 2));
-        throwNotimplement("文档类型的交付物处理尚未实现");
+        // 处理单体类型的交付物
+        cctx.ctx.info("处理单体类型的交付物:", JSON.stringify(classifyResult.output, null, 2));
+        throwNotimplement("单体类型的交付物处理尚未实现");
     } else if (classifyResult.output.workMode === "project") {
         // 处理代码类型的交付物
         cctx.ctx.info("处理代码类型的交付物:", JSON.stringify(classifyResult.output, null, 2));

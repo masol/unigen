@@ -13,13 +13,5 @@ export async function doTask(input: ExecInput, cctx: CommonContext): Promise<Exe
         return deliverable;
     }
 
-    // const maxSteps = cctx.storage.config.getMaxSteps();
-    // for (let i = 0; i < maxSteps; i++) {
-    //     // 首先执行交付物处理。判断交付物类别。搜索并判定是否有已经存在的交付物工作流来处理此问题。
-    // }
-
-    return {
-        status: "fail",
-        error: "未实现"
-    };
+    return deliverable;
 }

@@ -24,3 +24,14 @@ export const execInputSchema = z.object({
 
 export type ExecOutput = z.infer<typeof execOutputSchema>;
 export type ExecInput = z.infer<typeof execInputSchema>;
+
+export const execInputListSchema = z.array(execInputSchema).describe(
+    '子任务列表。严格按照顺序提取每个子任务，不得遗漏、合并或调整顺序。数组中的每一项对应一个独立子任务，索引顺序即为执行顺序。'
+);
+export type ExecInputList = z.infer<typeof execInputListSchema>;
+
+export type TaskWithKey = {
+    key: string; // 当前任务在 TasksStorage 中的键（根为 taskId，子节点为 `${key}.${index}`）
+    task: ExecInput;
+}
+export type TaskWithKeyList = TaskWithKey[];
