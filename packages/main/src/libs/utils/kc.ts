@@ -3,6 +3,7 @@ import { isMetagJson, metagFromJson } from '$libs/blueprint/metag/is.js';
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { IProjectContext } from '$libs/project/type.js';
 import { configService } from '$libs/store/index.js';
+import { type ProjectType, projectTypeSchema } from '$types/shared/template/prjtype.js';
 import { app } from 'electron';
 import Logger from 'electron-log/main.js';
 import fg from 'fast-glob';
@@ -29,6 +30,7 @@ type Category = 'mg' | 'capa' | 'kv' | 'other';
 type OtherFilesHandler = (files: CollectedFile[]) => Promise<void> | void;
 
 const KnowlegeDirName = 'knowledge';
+
 /**
  * 全局知识中心。支持从训练好的项目中导出知识，下次新建此类项目时，自动初始化其知识中心。
  * @todo: 项目隔离，是对逻辑向AI自学习能力信心不足，如果有稳定收敛判定机制，项目可以直接使用全局知识中心，无需每项隔离。
@@ -38,6 +40,9 @@ class KnowledgeCenter {
     public readonly kcPath: string;
     /** 发行包自带的只读资源根目录，优先级低 */
     public readonly resourcePath: string;
+
+    /** 插件缓存，null 表示尚未加载 */
+    private plugins: ProjectType[] | null = null;
 
     constructor() {
         this.kcPath = join(app.getPath('userData'), KnowlegeDirName);
@@ -66,7 +71,6 @@ class KnowledgeCenter {
      * @param onOtherFiles other 类别（第四类）的处理回调
      */
     public async initProject(prj: IProjectContext, subDir: string, onOtherFiles?: OtherFilesHandler): Promise<void> {
-
         const files: CollectedFile[] = await this.collectFiles(subDir);
 
         // 分类
@@ -104,20 +108,18 @@ class KnowledgeCenter {
         await writeFile(fullPath, content, 'utf-8');
     }
 
-
     // 按照优先级次序，获取文件，返回全路径，如果文件不存在，则返回null.
-    public async getFile(subDir: string, relativePath: string): Promise<string | null> {
-        const fullPath: string = join(this.kcPath, subDir, relativePath);
+    public async getFile(...subPaths: string[]): Promise<string | null> {
+        const fullPath: string = join(this.kcPath, ...subPaths);
         if (await pathExists(fullPath)) {
             return fullPath;
         }
-        const resPath = join(this.resourcePath, subDir, relativePath);
+        const resPath = join(this.resourcePath, ...subPaths);
         if (await pathExists(resPath)) {
             return resPath;
         }
         return null;
     }
-
 
     public async readJSON<T = unknown>(subDir: string, relativePath: string): Promise<T | null> {
         const filePath = await this.getFile(subDir, relativePath);
@@ -134,6 +136,89 @@ class KnowledgeCenter {
         }
     }
 
+    /**
+     * 加载 knowledge 目录下的全部插件（同时具有 type.json 和 entry.json 的子目录）。
+     *
+     * 流程：
+     * 1. 扫描 resourcePath 与 kcPath 下的所有一级子目录；
+     * 2. 对每个子目录检查是否同时存在 type.json 和 entry.json；
+     * 3. 读取 entry.json，用 zod 校验为 ProjectType，不合法则报警废弃；
+     * 4. 以 id 去重，kcPath 覆盖 resourcePath（后者优先级低）；
+     *    同一目录内 id 重复则报警并随机（后扫描到的）覆盖。
+     *
+     * @param bForce 为 false 且缓存有效时直接返回缓存；为 true 强制重新加载
+     * @returns 去重后的 ProjectType 数组
+     */
+    public async loadPlugins(bForce: boolean = false): Promise<ProjectType[]> {
+        if (!bForce && this.plugins !== null) {
+            return this.plugins;
+        }
+
+        // id -> { meta, root }；后写入的覆盖先写入的
+        const merged = new Map<string, { meta: ProjectType; root: string }>();
+
+        // 顺序即优先级：resource 低，kcPath 高（后者覆盖前者）
+        const roots: string[] = [this.resourcePath, this.kcPath];
+
+        for (const root of roots) {
+            if (!(await pathExists(root))) {
+                Logger.warn('[KnowledgeCenter] 知识目录不存在，跳过', root);
+                continue;
+            }
+
+            // 扫描一级子目录
+            const subDirs: string[] = await fg('*', {
+                cwd: root,
+                onlyDirectories: true,
+                dot: false,
+            });
+
+            for (const subDir of subDirs) {
+                const subDirPath = join(root, subDir);
+                const typeJsonPath = join(subDirPath, 'type.json');
+                const entryJsonPath = join(subDirPath, 'entry.json');
+
+                // 检查是否同时存在 type.json 和 entry.json
+                const hasType = await pathExists(typeJsonPath);
+                const hasEntry = await pathExists(entryJsonPath);
+
+                if (!hasType || !hasEntry) {
+                    continue; // 不是插件，跳过
+                }
+
+                // 读取并解析 entry.json
+                let raw: unknown;
+                try {
+                    raw = JSON.parse(await readFile(entryJsonPath, 'utf-8'));
+                } catch (error) {
+                    Logger.warn('[KnowledgeCenter] 插件 entry.json 读取或解析失败，废弃', entryJsonPath, error);
+                    continue;
+                }
+
+                const parsed = projectTypeSchema.safeParse(raw);
+                if (!parsed.success) {
+                    Logger.warn('[KnowledgeCenter] 插件 entry.json 格式非法，废弃', entryJsonPath, parsed.error.issues);
+                    continue;
+                }
+                const meta = parsed.data;
+
+                // 同一 root 内 id 重复：报警并随机（后扫描到的）覆盖
+                const existing = merged.get(meta.id);
+                if (existing && existing.root === root) {
+                    Logger.warn(`[KnowledgeCenter] 同目录下插件 id 重复，随机覆盖: id=${meta.id}`, entryJsonPath);
+                }
+
+                merged.set(meta.id, { meta, root });
+            }
+        }
+
+        this.plugins = [...merged.values()].map(({ meta }) => meta);
+
+        Logger.log(`[KnowledgeCenter] loadPlugins：共加载 ${this.plugins.length} 个插件`);
+
+        return this.plugins;
+    }
+
     // ────────────────────────── 收集 & 分类 ──────────────────────────
 
     /**
@@ -147,6 +232,8 @@ class KnowledgeCenter {
         // 顺序即优先级：resource 低，fullPath 高（后者覆盖前者）
         const roots: string[] = [join(this.resourcePath, subDir), join(this.kcPath, subDir)];
 
+        // 忽略任意层级的 pac 目录（`pac/**` 覆盖顶层，`**/pac/**` 覆盖深层）
+        const IGNORE_PAC = ['pac/**', '**/pac/**'];
         for (const root of roots) {
             if (!(await pathExists(root))) {
                 Logger.warn('[KnowledgeCenter] 目录不存在，跳过', root);
@@ -157,6 +244,7 @@ class KnowledgeCenter {
                 cwd: root,
                 onlyFiles: true,
                 dot: true,
+                ignore: IGNORE_PAC,
             });
 
             for (const relativePath of relatives) {
@@ -215,23 +303,22 @@ class KnowledgeCenter {
                 }
             }
             if (!added) {
-                Logger.warn(`忽略错误格式的元术语定义:${JSON.stringify(data, null, 2)}`)
+                Logger.warn(`忽略错误格式的元术语定义:${JSON.stringify(data, null, 2)}`);
             }
-        }
+        };
         await pMap(
             files,
             async (file) => {
                 const data = await this.internalReadJson(file);
-                // TODO(自行实现): 处理解析后的 mg 数据（prj / data / file.relativePath / file.fullPath）
                 if (Array.isArray(data)) {
-                    data.forEach(d => {
-                        upcertMetag(d)
-                    })
+                    data.forEach((d) => {
+                        upcertMetag(d);
+                    });
                 } else {
                     upcertMetag(data);
                 }
             },
-            { concurrency: configService().get("concurrency") },
+            { concurrency: configService().get('concurrency') },
         );
     }
 
@@ -265,7 +352,7 @@ class KnowledgeCenter {
                 }
                 prjDB.upcertCapa(data);
             },
-            { concurrency: configService().get("concurrency") },
+            { concurrency: configService().get('concurrency') },
         );
     }
 
@@ -274,7 +361,7 @@ class KnowledgeCenter {
             const jsonVal = JSON.parse(value);
             prjDB.set(key, jsonVal);
         } catch (e) {
-            Logger.warn(`读取${key}时，其值不是一个合法的JSON,当作字符串存入kv-store:${getErrorMessage(e)}`)
+            Logger.warn(`读取${key}时，其值不是一个合法的JSON,当作字符串存入kv-store:${getErrorMessage(e)}`);
             prjDB.set(key, value);
         }
     }
@@ -288,14 +375,14 @@ class KnowledgeCenter {
             async (file) => {
                 const key = basename(file.fullPath, extname(file.fullPath));
                 const value = await this.readText(file);
-                if (key.startsWith("_") || key.startsWith("entry_")) {
+                if (key.startsWith('_') || key.startsWith('entry_')) {
                     // 明确是字符串类型的，直接写入。
                     prjDB.set(key, value);
                 } else {
                     this.tryWriteJSON(key, value, prjDB);
                 }
             },
-            { concurrency: configService().get("concurrency") },
+            { concurrency: configService().get('concurrency') },
         );
     }
 }

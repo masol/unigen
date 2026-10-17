@@ -1,6 +1,6 @@
 // 处理capability的内存态--一旦capability加载进入内容，相当于传统的functor.
 
-import { type Capability, getInternalName, isCode, isWorkflow } from "$libs/blueprint/capability/is.js";
+import { type Capability, getInternalName, getLocalType, isCode, isWorkflow } from "$libs/blueprint/capability/is.js";
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import { throwNotimplement } from "$libs/utils/err.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
@@ -8,6 +8,7 @@ import { DirectedGraph } from "graphology";
 import { VmCapaFunctor } from "./code/index.js";
 import { DagFunctor } from "./dag.js";
 import { intereg } from "./intereg.js";
+import { PACFunctor } from "./local/index.js";
 import { ICapaFunctor } from "./type.js";
 // import memoize from 'memoize';
 
@@ -31,13 +32,20 @@ function loadCode(capa: Capability): ICapaFunctor | null {
     return new VmCapaFunctor(capa);
 }
 
+function loadLocaltype(type: string): ICapaFunctor | null {
+    return new PACFunctor(type);
+}
+
 function loadLLMNode(capa: Capability): ICapaFunctor | null {
     throwNotimplement(`尚未实现通用LLM调用:${capa}`)
 }
 
 export function loadFunctor(ctx: IRunnerContext, capaId: string): ICapaFunctor | null {
     const prjdb = PrjDB.ensure(ctx.prj);
-
+    const localType = getLocalType(capaId);
+    if (localType) {
+        return loadLocaltype(localType);
+    }
     const capa = prjdb.getCapaById(capaId);
     if (!capa) return null;
     if (isWorkflow(capa.name)) {

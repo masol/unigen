@@ -22,6 +22,22 @@ export function isWorkflow(name: CapaNameType): boolean {
     return name.startsWith("#workflow");
 }
 
+const localTypePrefix = "#localtype::"
+export function getLocalType(name: CapaNameType): string | null {
+    if (!name) {
+        return null;
+    }
+    if (name.startsWith(localTypePrefix)) {
+        return name.slice(localTypePrefix.length);
+    }
+    return null;
+}
+
+export function localTypeName(name: CapaNameType): string {
+    return `${localTypePrefix}${name}`;
+}
+
+
 export function isCode(name: CapaNameType): boolean {
     if (!name) {
         return false;

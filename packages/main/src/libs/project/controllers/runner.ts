@@ -1,3 +1,4 @@
+import { localTypeName } from "$libs/blueprint/capability/is.js";
 import { RunnerContext } from "$libs/blueprint/context.js";
 import { CapaRunner, CmdRunner } from "$libs/blueprint/runner/index.js";
 import { configService } from "$libs/store/index.js";
@@ -88,9 +89,11 @@ ${getErrorMessage(e)}`;
         if (!entry) {
             const defEntry = prjdb.get<string>(ProjectDbKeys.entry_capa);
             if (!defEntry) {
-                throwPrecondition("项目未指定默认启动的能力ID，也没有给出能力ID.")
+                entry = localTypeName(this.ctx.type);
+                // throwPrecondition("项目未指定默认启动的能力ID，也没有给出能力ID.")
+            } else {
+                entry = defEntry;
             }
-            entry = defEntry;
         }
 
         const ctx = new RunnerContext(this.ctx, null, seq);

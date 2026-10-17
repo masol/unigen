@@ -9,6 +9,7 @@ import { projectActivityDataSchema } from "$types/shared/template/project.js";
 import { BrowserWindow } from "electron";
 import Logger from "electron-log/main.js";
 import fsExtra from 'fs-extra';
+import fs from 'node:fs/promises';
 import { join } from "node:path";
 import { z } from "zod";
 import { closeProject, createProject, openProject } from "./helper/create.js";
@@ -19,6 +20,7 @@ import { type IProjectContext, type IProjectController, metaDirName, ServiceToke
 export class ProjectContainer implements IProjectContext {
     // 项目根目录。
     #path = "";
+    #type = "";
     #plugin: IProjectPlugin | null = null; // plugin type.
     #wid = -1;
     #prjId = -1; // used for ProjectMananger(not for controller).
@@ -52,6 +54,9 @@ export class ProjectContainer implements IProjectContext {
     }
     get wid() {
         return this.#wid;
+    }
+    get type() {
+        return this.#type;
     }
 
     // 1. 严格限制 Map 的键只能是符合约束的构造函数，值是对应的实例
@@ -115,6 +120,11 @@ export class ProjectContainer implements IProjectContext {
             await this.close();
             this.#path = path;
             const prjdata = await this.loadUI();
+            const type = await fs.readFile(this.getPath("type.txt"), "utf-8");
+            if (!type) {
+                throwUnprcessable(`项目类型文件${this.getPath("type.txt")}不存在或为空。`)
+            }
+            this.#type = type;
             // if (meta && meta.type) {
             //     // 提前加载插件，才能注册tapable事件响应点。
             //     this.#plugin = await pluginManager.load(configService().get("plugin"), this)
@@ -137,6 +147,7 @@ export class ProjectContainer implements IProjectContext {
         try {
             await this.close();
             this.#path = path;
+            this.#type = type;
             // 提前加载插件，才能注册tapable事件响应点。支持无插件运行。
             // this.#plugin = await pluginManager.load(type, this)
             const typePath = await knowledgeCenter.getFile(type, "type.json");
@@ -148,7 +159,8 @@ export class ProjectContainer implements IProjectContext {
             await createProject(this, type, prjdata.icon, bForce);
             await Promise.all([
                 // this.saveMeta(type),
-                fsExtra.copyFile(typePath, this.getPath("type.json"))
+                fsExtra.copyFile(typePath, this.getPath("type.json")),
+                fs.writeFile(this.getPath("type.txt"), type)
             ])
             // Logger.debug(`copy from ${typePath} to ${this.getPath("type.json")}`)
             return prjdata;
@@ -167,6 +179,7 @@ export class ProjectContainer implements IProjectContext {
             await closeProject(this);
         } finally {
             this.#path = ""
+            this.#type = ""
         }
     }
 }

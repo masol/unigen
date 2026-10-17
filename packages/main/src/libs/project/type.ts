@@ -1,6 +1,7 @@
 // type.ts
 export interface IProjectContext {
     readonly path: string;
+    readonly type: string;
     readonly wid: number;
     getPath(partName: string | string[], root?: boolean): string;
     notify(evtName: string, payload: unknown, srcId?: number): boolean;
