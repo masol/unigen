@@ -54,6 +54,8 @@ export class GlobalToolDB {
     #mcpClients = new Map<string, McpClient>();
     #mcpConfigs = new Map<string, string>();   // id -> cfg json(无变化短路)
     #opened = false;
+    #readyResolve!: () => void;
+    #ready = new Promise<void>((r) => { this.#readyResolve = r; });
 
     /** 重排序钩子,默认直通截断;后续接入 rerank 模型时整体替换 */
     reranker: Reranker = defaultReranker;
@@ -101,6 +103,7 @@ export class GlobalToolDB {
             }
 
             Logger.debug(`[ToolDB] 全局工具库已就绪,共 ${this.#registry.size} 个工具。`);
+            this.#readyResolve();
             return { mcpFailed };
         });
     }
@@ -112,8 +115,24 @@ export class GlobalToolDB {
             this.#mcpConfigs.clear();
             this.#registry.clear();
             this.#opened = false;
+            this.#ready = new Promise<void>((r) => { this.#readyResolve = r; });
             Logger.log("[ToolDB] 全局工具库已关闭。");
         });
+    }
+
+    /**
+         * 等待 init 完成,且此刻已排队的变更(MCP upsert/remove 等)全部落定。
+         * 超时返回 false,不抛错。
+         */
+    async whenReady(timeoutMs = 15_000): Promise<boolean> {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<false>((r) => { timer = setTimeout(() => r(false), timeoutMs); });
+        const settled = this.#ready.then(() => this.#enqueue(async () => true as const));
+        try {
+            return await Promise.race([settled, timeout]);
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     // ---------- 注册面 ----------

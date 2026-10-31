@@ -6,12 +6,18 @@ import fs from "node:fs/promises";
 import { basename, dirname, isAbsolute, normalize, relative, resolve, sep } from "node:path";
 import { loadExternalTools } from "./loader.js";
 import { buildToolDoc, jsonSchemaToZod, renderOutputSemantics } from "./schema.js";
+import {
+    LOAD_SKILL_TOOL, READ_SKILL_FILE_TOOL,
+    buildSkillDoc, buildSkillTools, discoverSkills, type DiscoveredSkill,
+} from "./skill.js";
 import { scanTemplateVars } from "./template.js";
 import type {
     CompileCache, CompiledPacAgent, JsonValue,
     PacFrontMatter, PacToolConfig, ToolRef,
 } from "./type.js";
-import { INPUT_VAR, TOOL_DOC_VAR, classifyVars, resolveOwnDefaults } from "./vars.js";
+import {
+    INPUT_VAR, SKILL_DOC_VAR, TOOL_DOC_VAR, classifyVars, resolveOwnDefaults,
+} from "./vars.js";
 
 function sanitizeToolKey(name: string): string {
     return name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64) || "_tool";
@@ -29,33 +35,26 @@ function uniqueKey(candidate: string, taken: Set<string>): string {
 }
 
 /**
- * PAC 路径解析 —— 语义与代码模块的 import 一致:
- *   "./sub/x.md" | "sub/x.md" | "../x.md"  → 相对当前文件
- *   "/sub/x.md"                             → 相对 PAC 根目录
- *   ".md" 后缀可省略
- * 越界检查:禁止逃逸出 PAC 根目录。
+ * PAC 路径解析,语义与 import 一致:
+ *   "./sub/x" | "sub/x" | "../x" → 相对当前文件
+ *   "/sub/x"                     → 相对 PAC 根目录
+ * ext 非空时自动补后缀(默认 ".md");解析目录时传 null。
+ * 禁止逃逸出 PAC 根目录。
  */
 export function resolvePacPath(
     rootPath: string,
     currentDir: string,
     p: string,
+    ext: string | null = ".md",
 ): string {
     const normalized = p.replace(/[\\/]+/g, sep);
     const rootAnchored = normalized.startsWith(sep);
-    let abs: string;
+    const rel = rootAnchored ? normalized.slice(1) : normalized;
+    const withExt = ext && !rel.endsWith(ext) ? `${rel}${ext}` : rel;
+    const abs = normalize(resolve(rootAnchored ? rootPath : currentDir, withExt));
 
-    if (rootAnchored) {
-        const rel = normalized.slice(1);
-        const withExt = rel.endsWith(".md") ? rel : `${rel}.md`;
-        abs = resolve(rootPath, withExt);
-    } else {
-        const withExt = normalized.endsWith(".md") ? normalized : `${normalized}.md`;
-        abs = resolve(currentDir, withExt);
-    }
-
-    abs = normalize(abs);
     const relToRoot = relative(rootPath, abs);
-    if (relToRoot.startsWith(`..${sep}`) || isAbsolute(relToRoot)) {
+    if (relToRoot === ".." || relToRoot.startsWith(`..${sep}`) || isAbsolute(relToRoot)) {
         throwPrecondition(`[PAC] 路径越界,不允许逃出 pac 根目录: ${p}`);
     }
     return abs;
@@ -74,8 +73,9 @@ async function locateEntry(prjType: string): Promise<{ entry: string; root: stri
 }
 
 /**
- * 递归编译 PAC Agent。编译期纯结构构建,与 ctx 无关;
- * cache 保证同一文件只编译一次,并检测循环引用。
+ * 递归编译 PAC Agent。纯结构构建,与 ctx 无关。
+ * 同一 cache 内同一文件只编译一次,并检测循环引用;
+ * 不传 cache 时每次调用都是一次全新编译(会重新读盘)。
  */
 export async function compilePacAgent(
     prjType: string,
@@ -115,10 +115,10 @@ export async function compilePacAgent(
 async function compileOne(cc: CompileCache, sourcePath: string): Promise<CompiledPacAgent> {
     const raw = await fs.readFile(sourcePath, "utf-8");
     const parsed = matter(raw) as { data: Record<string, unknown>; content: string };
-    const { data, content: body } = parsed;
-    const fm = (data ?? {}) as PacFrontMatter;
+    // gray-matter 按原文缓存解析结果,data 是共享引用;深拷贝后使用
+    const fm = structuredClone(parsed.data ?? {}) as PacFrontMatter;
 
-    let systemTemplate = (body ?? "").trim();
+    let systemTemplate = (parsed.content ?? "").trim();
     if (systemTemplate.length === 0) {
         throwPrecondition(`[PAC] 正文(系统提示词)为空: ${sourcePath}`);
     }
@@ -135,32 +135,53 @@ async function compileOne(cc: CompileCache, sourcePath: string): Promise<Compile
         ? jsonSchemaToZod(fm.outputs, "outputs", sourcePath)
         : null;
 
-    const toolRefs = await loadToolRefs(fm.tools ?? [], cc, basePath, sourcePath);
-    const toolDoc = buildToolDoc(toolRefs);
+    const taken = new Set<string>();
+    const toolRefs = await loadToolRefs(fm.tools ?? [], cc, basePath, sourcePath, taken);
+
+    // 技能:声明的 tools 并入工具列表,再追加 load_skill / read_skill_file
+    const skills = await loadSkills(fm.skills, cc, basePath, sourcePath);
+    let skillDoc = "";
+    if (skills.length > 0) {
+        for (const s of skills) {
+            if (s.tools.length === 0) continue;
+            toolRefs.push(...(await loadToolRefs(s.tools, cc, s.dir, s.entry, taken)));
+        }
+        const loadKey = uniqueKey(LOAD_SKILL_TOOL, taken);
+        taken.add(loadKey);
+        const readKey = uniqueKey(READ_SKILL_FILE_TOOL, taken);
+        taken.add(readKey);
+        const keys = { load: loadKey, read: readKey };
+
+        const st = buildSkillTools(skills, keys);
+        toolRefs.push(
+            { key: keys.load, origin: "skill", meta: null, agent: null, local: st.load },
+            { key: keys.read, origin: "skill", meta: null, agent: null, local: st.read },
+        );
+        skillDoc = buildSkillDoc(skills, keys);
+    }
+
+    const toolDoc = await buildToolDoc(toolRefs);
 
     // 用户提示词模板:显式内联 > 外部文件 > 默认 "{{_BI_input}}"。
     const { template: userTemplate, extraDefaults: utExtraDefaults } =
         await resolveUserTemplate(fm, cc.rootPath, basePath, sourcePath);
 
-    if (Object.keys(utExtraDefaults).length > 0) {
-        const main = resolveOwnDefaults(fm);
-        const merged: Record<string, JsonValue> = { ...utExtraDefaults };
-        for (const [k, v] of Object.entries(main)) {
-            if (k in utExtraDefaults) {
-                Logger.warn(
-                    `[PAC] ${relative(cc.rootPath, sourcePath)}: ` +
-                    `用户模板 setDefault.${k} 被主 agent setDefault.${k} 覆盖`,
-                );
-            }
-            merged[k] = v;
+    // 主 agent setDefault 优先于用户模板 setDefault
+    const mainDefaults = resolveOwnDefaults(fm);
+    for (const k of Object.keys(utExtraDefaults)) {
+        if (k in mainDefaults) {
+            Logger.warn(
+                `[PAC] ${relative(cc.rootPath, sourcePath)}: ` +
+                `用户模板 setDefault.${k} 被主 agent setDefault.${k} 覆盖`,
+            );
         }
-        fm.setDefault = merged;
     }
+    const ownDefaults: Readonly<Record<string, JsonValue>> = Object.freeze({
+        ...utExtraDefaults,
+        ...mainDefaults,
+    });
 
-    const ownDefaults = Object.freeze(resolveOwnDefaults(fm));
-
-    // 合并扫描:系统 + 用户两份模板共享渲染上下文,必须一起分桶,
-    // 否则只在用户模板中出现的 _T_ / _BI_ 会漏加载。
+    // 系统 + 用户两份模板共享渲染上下文,必须一起分桶
     const scanAll = () =>
         classifyVars([
             ...scanTemplateVars(systemTemplate),
@@ -169,28 +190,25 @@ async function compileOne(cc: CompileCache, sourcePath: string): Promise<Compile
 
     let vars = scanAll();
 
-    // 工具目录自动追加:仅在有工具且两份模板都未显式引用 {{_BI_tool}} 时触发
     if (toolRefs.length > 0 && !vars.bi.includes(TOOL_DOC_VAR)) {
         Logger.debug(`[PAC] ${name}: 模板未引用 {{${TOOL_DOC_VAR}}},自动追加工具目录`);
         systemTemplate = `${systemTemplate}\n\n## 可用工具\n\n{{${TOOL_DOC_VAR}}}\n`;
         vars = scanAll();
     }
 
-    // 把 outputs 转为"最终回复要点"追加到系统提示词末尾。
-    //
-    // 核心设计:子 agent **不强制**返回 JSON——以要点清单引导自然语言覆盖
-    // 关键信息,比强制结构化更稳(实证反复表明强制 JSON 会拖累 LLM 推理)。
-    // 父 agent 的 LLM 直接阅读文本理解即可,运行期不解析不校验(见 agent.ts)。
-    //
-    // 刻意柔性:只说"应覆盖以下要点",不加"不要 JSON"硬约束,以便与现存
-    // PAC 模板里"**强制约束:只返回 JSON**"的老指令兼容。模板清理后可考虑收紧。
+    if (skills.length > 0 && !vars.bi.includes(SKILL_DOC_VAR)) {
+        Logger.debug(`[PAC] ${name}: 模板未引用 {{${SKILL_DOC_VAR}}},自动追加技能清单`);
+        systemTemplate = `${systemTemplate}\n\n## 可用技能\n\n{{${SKILL_DOC_VAR}}}\n`;
+        vars = scanAll();
+    }
+
+    // outputs → "最终回复要点"。不强制 JSON,原因见 agent.ts。
     if (outputSchema) {
-        const semantics = renderOutputSemantics(outputSchema);
+        const semantics = await renderOutputSemantics(outputSchema);
         if (semantics) {
             systemTemplate =
                 `${systemTemplate}\n\n## 最终回复要点\n\n` +
                 `你的最终回复应清楚覆盖以下要点,供上游读者直接理解:\n\n${semantics}\n`;
-            // semantics 是编译期字面量,不含模板变量;重扫一次保险
             vars = scanAll();
         }
     }
@@ -205,12 +223,31 @@ async function compileOne(cc: CompileCache, sourcePath: string): Promise<Compile
         outputSchema,
         toolRefs,
         toolDoc,
+        skills: skills.map((s) => ({
+            name: s.name, description: s.description, dir: s.dir, entry: s.entry,
+        })),
+        skillDoc,
         vars,
         ownDefaults,
         basePath,
         rootPath: cc.rootPath,
         sourcePath,
     };
+}
+
+async function loadSkills(
+    raw: unknown,
+    cc: CompileCache,
+    currentDir: string,
+    sourcePath: string,
+): Promise<DiscoveredSkill[]> {
+    if (raw === undefined || raw === null) return [];
+    const list = typeof raw === "string" ? [raw] : raw;
+    if (!Array.isArray(list) || list.some((p) => typeof p !== "string")) {
+        throwPrecondition(`[PAC] front matter.skills 必须是字符串或字符串数组 (${sourcePath})`);
+    }
+    const dirs = (list as string[]).map((p) => resolvePacPath(cc.rootPath, currentDir, p, null));
+    return discoverSkills(dirs);
 }
 
 /** 用户模板文件允许在 front matter 中声明的字段。 */
@@ -252,7 +289,7 @@ async function resolveUserTemplate(
         }
 
         const parsed = matter(raw) as { data: Record<string, unknown>; content: string };
-        const utFm = parsed.data ?? {};
+        const utFm = structuredClone(parsed.data ?? {});
         const extraDefaults: Record<string, JsonValue> = {};
         const relAbs = relative(rootPath, abs);
 
@@ -290,9 +327,9 @@ async function loadToolRefs(
     cc: CompileCache,
     currentDir: string,
     sourcePath: string,
+    taken: Set<string>,
 ): Promise<ToolRef[]> {
     const refs: ToolRef[] = [];
-    const taken = new Set<string>();
 
     for (const cfg of configs) {
         try {
@@ -302,13 +339,35 @@ async function loadToolRefs(
                 const key = uniqueKey(cfg.alias ?? sub.name, taken);
                 taken.add(key);
                 refs.push({ key, origin: "agent", meta: null, agent: sub, declaredAs: cfg });
-            } else {
-                const loaded = await loadExternalTools(cfg);
-                for (const [rawKey, meta] of Object.entries(loaded)) {
-                    const key = uniqueKey(rawKey, taken);
+                continue;
+            }
+
+            const loaded = await loadExternalTools(cfg);
+
+            if (loaded.kind === "mcp_local") {
+                // 局部 MCP:每个工具一个 ref,运行期按 config 重连
+                const prefix = loaded.config.alias ? `${loaded.config.alias}_` : "";
+                for (const info of loaded.tools) {
+                    const key = uniqueKey(`${prefix}${info.name}`, taken);
                     taken.add(key);
-                    refs.push({ key, origin: cfg.type, meta, agent: null, declaredAs: cfg });
+                    refs.push({
+                        key,
+                        origin: "mcp_local",
+                        meta: null,
+                        agent: null,
+                        mcpLocal: { config: loaded.config, tool: info },
+                        declaredAs: cfg,
+                    });
                 }
+                continue;
+            }
+
+            // builtin / search / 全局 mcp
+            const origin = cfg.type === "mcp" ? "mcp_global" : cfg.type;
+            for (const [rawKey, meta] of Object.entries(loaded.tools)) {
+                const key = uniqueKey(rawKey, taken);
+                taken.add(key);
+                refs.push({ key, origin, meta, agent: null, declaredAs: cfg });
             }
         } catch (e) {
             Logger.error(

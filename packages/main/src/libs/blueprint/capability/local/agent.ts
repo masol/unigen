@@ -1,9 +1,11 @@
 import { getSmartModel } from "$libs/model/index.js";
+import { globalToolDB } from "$libs/tooldb/index.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { ToolLoopAgent, isStepCount, tool, type Tool } from "ai";
 import Logger from "electron-log/main.js";
+import { connectLocalMcp, type LocalMcpClient } from "./mcp.js";
 import { buildUserPrompt, renderSystemPrompt } from "./template.js";
-import type { CompiledPacAgent, IPacAgent, JsonValue } from "./type.js";
+import type { CompiledPacAgent, IPacAgent, JsonValue, LocalMcpConfig } from "./type.js";
 
 /**
  * PAC Agent 运行时。
@@ -43,33 +45,48 @@ import type { CompiledPacAgent, IPacAgent, JsonValue } from "./type.js";
  *
  * **_T_ 变量默认值继承:**
  *  effectiveDefaults = { ...inheritedDefaults, ...ownDefaults }
+ *
+ * **局部 MCP 连接管理:**
+ *  按 transport 配置对象分组,同一配置只连接一次;运行结束后统一关闭。
+ *  mcpClients 用 Map<config, client> 管理,保证资源不泄漏。
  */
 export class PacAgent implements IPacAgent {
     constructor(private readonly compiled: CompiledPacAgent) { }
+
     getCompiled(): CompiledPacAgent {
         return this.compiled;
     }
+
     /** 顶层入口:标记 isRoot,允许 _BI_input 回退到 ctx.cmd.body。 */
     async run(ctx: IRunnerContext): Promise<string> {
-        return this.runWithInputs(
-            ctx,
-            this.inputsFromCtx(ctx),
-            {},
-            { validateInputs: false, isRoot: true },
-        );
+        const mcpClients = new Map<LocalMcpConfig, LocalMcpClient>();
+        try {
+            return await this.runWithInputs(
+                ctx,
+                this.inputsFromCtx(ctx),
+                {},
+                { validateInputs: false, isRoot: true },
+                mcpClients,
+            );
+        } finally {
+            await this.closeLocalMcpClients(mcpClients);
+        }
     }
+
     /**
      * 以显式 inputs + 可选 inheritedDefaults 运行。
      *
      * @param options.isRoot 仅由 run() 自身传 true;父 agent 把当前 agent 作为
      *   子工具调用时(buildAgentTool.execute → 本方法)**不要**传,保持默认 false,
      *   以避免 _BI_input 错位回退到根上下文的 body。
+     * @param mcpClients 局部 MCP 连接池,由顶层 run() 创建并传递,保证资源统一清理。
      */
     async runWithInputs(
         ctx: IRunnerContext,
         rawInputs: Record<string, unknown>,
         inheritedDefaults: Record<string, JsonValue> = {},
         options: { validateInputs?: boolean; isRoot?: boolean } = {},
+        mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
     ): Promise<string> {
         if (ctx.isAborted) return "";
         const validateInputs = options.validateInputs ?? true;
@@ -96,7 +113,7 @@ export class PacAgent implements IPacAgent {
             ...inheritedDefaults,
             ...this.compiled.ownDefaults,
         };
-        const tools = this.materializeTools(ctx, effectiveDefaults);
+        const tools = await this.materializeTools(ctx, effectiveDefaults, mcpClients);
         const system = await renderSystemPrompt(
             this.compiled, ctx, inputs, effectiveDefaults, isRoot,
         );
@@ -121,26 +138,79 @@ export class PacAgent implements IPacAgent {
         const result = await agent.generate({ prompt });
         return result.text ?? "";
     }
+
     /**
      * 物化 ToolSet:
-     *  - 外部工具直取 meta.tool(编译期已预物化,与 ctx 无关)。
-     *  - 子 agent 用当前 ctx + 当前 effectiveDefaults 现场包成 Tool:
-     *    父的 effective 即是子的 inherited,实现默认值跨层继承。
+     *  - 外部工具(builtin/search/mcp_global):运行期按 id 从 globalToolDB 取最新实例
+     *  - 局部 MCP:按 config 分组连接,同一 config 只连接一次,client 存入 mcpClients
+     *  - 子 agent:用当前 ctx + 当前 effectiveDefaults 现场包成 Tool,传递 mcpClients
+     *  - 技能工具(load_skill/read_skill_file):直接取编译期物化的 tool
      */
-    private materializeTools(
+    private async materializeTools(
         ctx: IRunnerContext,
         parentDefaults: Record<string, JsonValue>,
-    ): Record<string, Tool> {
+        mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
+    ): Promise<Record<string, Tool>> {
         const out: Record<string, Tool> = {};
         for (const ref of this.compiled.toolRefs) {
-            if (ref.origin === "agent" && ref.agent) {
-                out[ref.key] = buildAgentTool(ref.agent, ctx, parentDefaults);
+            if (ref.agent) {
+                out[ref.key] = buildAgentTool(ref.agent, ctx, parentDefaults, mcpClients);
+            } else if (ref.local) {
+                out[ref.key] = ref.local.tool;
+            } else if (ref.mcpLocal) {
+                // 局部 MCP:按 config 分组,同一配置只连一次
+                const { config, tool: info } = ref.mcpLocal;
+                let client = mcpClients.get(config);
+                if (!client) {
+                    try {
+                        client = await connectLocalMcp(config);
+                        mcpClients.set(config, client);
+                    } catch (e) {
+                        Logger.error(
+                            `[PAC] ${this.compiled.name}: 局部 MCP 连接失败，跳过工具 ${ref.key}`,
+                            e,
+                        );
+                        continue;
+                    }
+                }
+                const tools = (await client.tools()) as Record<string, Tool>;
+                const t = tools[info.name];
+                if (t) {
+                    out[ref.key] = t;
+                } else {
+                    Logger.warn(
+                        `[PAC] ${this.compiled.name}: 局部 MCP 工具 ${info.name} 未找到，跳过`,
+                    );
+                }
             } else if (ref.meta) {
-                out[ref.key] = ref.meta.tool;
+                // 全局工具:运行期取最新实例
+                const live = globalToolDB.getToolMeta(ref.meta.id);
+                if (live) {
+                    out[ref.key] = live.tool;
+                } else {
+                    Logger.warn(
+                        `[PAC] ${this.compiled.name}: 工具 ${ref.meta.id} 已不在工具库中` +
+                        `(MCP server 断开或被移除?),本次运行跳过`,
+                    );
+                }
             }
         }
         return out;
     }
+
+    private async closeLocalMcpClients(
+        mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
+    ): Promise<void> {
+        for (const [, client] of mcpClients) {
+            try {
+                await client.close();
+            } catch (e) {
+                Logger.warn(`[PAC] 关闭局部 MCP 连接失败:`, e);
+            }
+        }
+        mcpClients.clear();
+    }
+
     /**
      * 顶层入口的入参装配。只透传 ctx.cmd.args(来自 UI 的结构化参数)。
      * 用户原始文本 ctx.cmd.body 不在这里注入 —— 它由默认 userTemplate
@@ -162,11 +232,15 @@ export class PacAgent implements IPacAgent {
  *
  * 若未来需要给某类子 agent 的返回文本做"后处理"(如摘录某段),
  * 应在模板层做,不要回到这里加包装 —— 包装层越薄,行为越可预测。
+ *
+ * mcpClients 由顶层 run() 创建并传递,子 agent 的局部 MCP 连接会复用同一 Map,
+ * 保证资源统一清理且不泄漏。
  */
 export function buildAgentTool(
     compiled: CompiledPacAgent,
     ctx: IRunnerContext,
     inheritedDefaults: Record<string, JsonValue> = {},
+    mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
 ): Tool {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const execute = async (input: any): Promise<string> => {
@@ -175,6 +249,8 @@ export function buildAgentTool(
             ctx,
             (input ?? {}) as Record<string, unknown>,
             inheritedDefaults,
+            {},
+            mcpClients,
         );
     };
     return tool({

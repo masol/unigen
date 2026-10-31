@@ -10,6 +10,7 @@ import type { JsonValue, PacFrontMatter, VarBuckets } from "./type.js";
  * {{_BI_xxx}}  内置变量。编译期/运行期由框架生成。
  *              目前提供:
  *                _BI_tool  —— 工具目录(编译期静态)
+ *                _BI_skill —— 技能清单(编译期静态)
  *                _BI_input —— 用户原始录入信息(运行期由 loadInputVar 提供)
  * {{_T_xxx}}   内部存储变量。运行期由 loadStorageVars() 提供值,
  *              可在 front matter 的 setDefault 中声明默认值。
@@ -21,6 +22,8 @@ export const STORAGE_PREFIX = "_T_";
 
 /** 工具目录变量名 */
 export const TOOL_DOC_VAR = `${BI_PREFIX}tool`;
+/** 技能清单变量名 */
+export const SKILL_DOC_VAR = `${BI_PREFIX}skill`;
 /** 用户原始输入变量名 */
 export const INPUT_VAR = `${BI_PREFIX}input`;
 

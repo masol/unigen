@@ -62,8 +62,8 @@ export function jsonSchemaToZod(
  *
  * @returns markdown 列表(不含标题);若 schema 为空或非 object,返回 null
  */
-export function renderOutputSemantics(outputSchema: unknown): string | null {
-    const json = normalizeToJsonSchema(outputSchema);
+export async function renderOutputSemantics(outputSchema: unknown): Promise<string | null> {
+    const json = await normalizeToJsonSchema(outputSchema);
     const lines = renderObjectFields(json, 0, "output");
     if (lines.length === 0) return null;
     return lines.join("\n");
@@ -79,7 +79,7 @@ export function renderOutputSemantics(outputSchema: unknown): string | null {
  *   - 子 agent(LLM-backed):以"覆盖以下要点"方式列字段,返回是一段文本;
  *   - 非 LLM 工具(builtin / MCP / search):按字段列表展示,返回是结构化对象。
  */
-export function buildToolDoc(refs: ToolRef[]): string {
+export async function buildToolDoc(refs: ToolRef[]): Promise<string> {
     if (refs.length === 0) {
         return "_当前 agent 未声明任何工具。_";
     }
@@ -87,25 +87,30 @@ export function buildToolDoc(refs: ToolRef[]): string {
     const sections: string[] = [TOOL_DOC_PREAMBLE];
 
     for (const ref of refs) {
-        const extTool: Tool | null = ref.meta?.tool ?? null;
+        const extTool: Tool | null = ref.meta?.tool ?? ref.local?.tool ?? null;
         const isAgent = !!ref.agent;
+        const mcpInfo = ref.mcpLocal?.tool;
 
-        const description =
-            (ref.agent?.description ?? "").trim() ||
+        const description = ref.mcpLocal
+            ? (mcpInfo?.description ?? "").trim() || "_未提供描述_"
+            : (ref.agent?.description ?? ref.local?.description ?? "").trim() ||
             (readToolDescription(extTool) ?? "").trim() ||
             "_未提供描述_";
 
-        const inRaw =
-            ref.agent?.inputSchema ??
-            (ref.meta as { inputSchema?: unknown } | null | undefined)?.inputSchema ??
-            (extTool as { inputSchema?: unknown } | null)?.inputSchema;
-        const inJson = normalizeToJsonSchema(inRaw);
+        // 局部 MCP 编译期探测失败时没有 inputSchema
+        const probeFailed = !!ref.mcpLocal && mcpInfo?.inputSchema === undefined;
 
-        const outRaw =
+        const inSchema: unknown = ref.mcpLocal
+            ? mcpInfo?.inputSchema
+            : ref.agent?.inputSchema ??
+            ref.local?.inputSchema ??
+            ref.meta?.inputSchema ??
+            (extTool as { inputSchema?: unknown } | null)?.inputSchema;
+
+        const outSchema: unknown =
             ref.agent?.outputSchema ??
-            (ref.meta as { outputSchema?: unknown } | null | undefined)?.outputSchema ??
+            ref.meta?.outputSchema ??
             (extTool as { outputSchema?: unknown } | null)?.outputSchema;
-        const outJson = normalizeToJsonSchema(outRaw);
 
         const lines: string[] = [];
         lines.push(`### \`${ref.key}\``);
@@ -113,16 +118,20 @@ export function buildToolDoc(refs: ToolRef[]): string {
         lines.push(description);
         lines.push("");
 
-        const paramLines = renderObjectFields(inJson, 0, "input");
-        if (paramLines.length > 0) {
-            lines.push("**调用参数**(作为单一对象传入,字段如下):");
-            lines.push("");
-            lines.push(paramLines.join("\n"));
+        if (probeFailed) {
+            lines.push("**调用参数**:参数定义未知(编译期连接失败)。调用前请先尝试无参数调用或查阅外部文档。");
         } else {
-            lines.push("**调用参数**:无字段,传入空对象 `{}` 即可。");
+            const paramLines = renderObjectFields(await normalizeToJsonSchema(inSchema), 0, "input");
+            if (paramLines.length > 0) {
+                lines.push("**调用参数**(作为单一对象传入,字段如下):");
+                lines.push("");
+                lines.push(paramLines.join("\n"));
+            } else {
+                lines.push("**调用参数**:无字段,传入空对象 `{}` 即可。");
+            }
         }
 
-        const retLines = renderObjectFields(outJson, 0, "output");
+        const retLines = renderObjectFields(await normalizeToJsonSchema(outSchema), 0, "output");
         if (isAgent) {
             lines.push("");
             if (retLines.length > 0) {
@@ -171,19 +180,18 @@ interface SchemaNode {
     description?: string;
     anyOf?: SchemaNode[];
     oneOf?: SchemaNode[];
-    jsonSchema?: SchemaNode;
+    jsonSchema?: SchemaNode | PromiseLike<SchemaNode>;
     [key: string]: unknown;
 }
 
 /** Zod → 普通 JSON Schema 对象;失败返回 null */
-function zodToJsonSchema(schema: unknown): SchemaNode | null {
-    if (!schema) return null;
+function zodToJsonSchema(schema: z.ZodType): SchemaNode | null {
     if (typeof z.toJSONSchema !== "function") {
         Logger.warn("[PAC] z.toJSONSchema 不可用,工具目录将省略 schema");
         return null;
     }
     try {
-        const r = z.toJSONSchema(schema as z.ZodType, { io: "input" });
+        const r = z.toJSONSchema(schema, { io: "input" });
         return r && typeof r === "object" ? (r as SchemaNode) : null;
     } catch (e) {
         Logger.warn(`[PAC] schema 转 JSON Schema 失败(工具目录将省略):`, e);
@@ -194,20 +202,27 @@ function zodToJsonSchema(schema: unknown): SchemaNode | null {
 /**
  * 把"可能是 Zod,也可能是 JSON Schema,也可能是 AI SDK jsonSchema() 包装"
  * 的值规范化为普通 JSON Schema 对象,供渲染器消费。
+ * AI SDK 包装的 .jsonSchema 可能是对象,也可能是 PromiseLike(惰性 schema)。
  */
-function normalizeToJsonSchema(schema: unknown): SchemaNode | null {
+async function normalizeToJsonSchema(schema: unknown): Promise<SchemaNode | null> {
     if (!schema) return null;
     if (schema instanceof z.ZodType) {
         return zodToJsonSchema(schema);
     }
-    if (typeof schema === "object") {
-        const obj = schema as SchemaNode;
-        if (obj.jsonSchema && typeof obj.jsonSchema === "object") {
-            return obj.jsonSchema;
+    if (typeof schema !== "object") return null;
+
+    const obj = schema as SchemaNode;
+    if ("jsonSchema" in obj) {
+        try {
+            const js = await Promise.resolve(obj.jsonSchema);
+            return js && typeof js === "object" ? js : null;
+        } catch (e) {
+            Logger.warn("[PAC] 读取工具 JSON Schema 失败(工具目录将省略参数):", e);
+            return null;
         }
-        if ("type" in obj || "properties" in obj || "anyOf" in obj || "oneOf" in obj) {
-            return obj;
-        }
+    }
+    if ("type" in obj || "properties" in obj || "anyOf" in obj || "oneOf" in obj) {
+        return obj;
     }
     return null;
 }

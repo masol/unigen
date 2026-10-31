@@ -1,53 +1,77 @@
-import { globalToolDB, type ToolMeta } from "$libs/tooldb/index.js";
+import { globalToolDB, mcpId, type ToolMeta } from "$libs/tooldb/index.js";
 import { throwNotfound } from "$libs/utils/err.js";
 import Logger from "electron-log/main.js";
-import type { PacToolConfig } from "./type.js";
+import { probeMcpMetadata } from "./mcp.js";
+import type { LocalMcpConfig, LocalMcpToolInfo, PacToolConfig } from "./type.js";
 
 /**
- * 外部工具加载:builtin / search / mcp。
- *
- * 全部在编译期完成,与 ctx 无关。
+ * 外部工具加载结果,以 kind 区分:
+ * - meta:      全局工具库中的工具(builtin / search / 全局 mcp)
+ * - mcp_local: 局部 MCP,编译期只拿元数据,运行期再连接
+ */
+export type LoadResult =
+    | { kind: "meta"; tools: Record<string, ToolMeta> }
+    | { kind: "mcp_local"; config: LocalMcpConfig; tools: LocalMcpToolInfo[] };
+
+/**
+ * 外部工具加载:builtin / search / mcp / mcp_local。
  * agent 类型由 compiler 递归处理,不在此处。
- *
- * 统一返回 ToolMeta 而非裸 Tool,好处:
- *  - MCP 工具的 inputSchema/outputSchema 通常只以 JSON Schema 形式挂在
- *    meta.tool.inputSchema.jsonSchema 上,拿着 meta 才能在生成工具目录
- *    (buildToolDoc)时取到结构化参数描述;
- *  - meta.llmName 已由 Registry 保证唯一且合法,直接作为 ToolSet key;
- *  - meta.source / meta.serverId 便于下游诊断。
  */
 export async function loadExternalTools(
     cfg: Exclude<PacToolConfig, { type: "agent" }>,
-): Promise<Record<string, ToolMeta>> {
+): Promise<LoadResult> {
     switch (cfg.type) {
         case "builtin": {
+            await waitToolDB();
             const meta = globalToolDB.getToolMeta(cfg.id);
             if (!meta) throwNotfound(`[PAC] builtin 工具不存在: ${cfg.id}`);
-            const key = cfg.alias ?? meta.llmName;
-            return { [key]: meta };
+            return { kind: "meta", tools: { [cfg.alias ?? meta.llmName]: meta } };
         }
         case "search": {
-            const hits = await globalToolDB.searchTools(cfg.query, {
-                limit: cfg.limit ?? 5,
-            });
+            await waitToolDB();
+            const hits = await globalToolDB.searchTools(cfg.query, { limit: cfg.limit ?? 5 });
             if (hits.length === 0) {
                 Logger.warn(`[PAC] search 未命中任何工具: "${cfg.query}"`);
-                return {};
+                return { kind: "meta", tools: {} };
             }
-            // ToolSearchResult 继承自 ToolMeta,原样回传
             const out: Record<string, ToolMeta> = {};
-            for (const hit of hits) {
-                out[hit.llmName] = hit;
-            }
-            return out;
+            for (const hit of hits) out[hit.llmName] = hit;
+            return { kind: "meta", tools: out };
         }
         case "mcp": {
-            // 保持与 tooldb/naming.ts::mcpId 相同的格式
-            const id = `mcp::${cfg.serverId}::${cfg.name}`;
+            // 全局 MCP:引用 globalToolDB 中已配置的 server
+            await waitToolDB();
+            const id = mcpId(cfg.server, cfg.tool);
             const meta = globalToolDB.getToolMeta(id);
-            if (!meta) throwNotfound(`[PAC] MCP 工具不存在: ${id}`);
-            const key = cfg.alias ?? meta.llmName;
-            return { [key]: meta };
+            if (!meta) {
+                const available = globalToolDB
+                    .listTools("mcp")
+                    .filter((t) => t.serverId === cfg.server)
+                    .map((t) => t.name);
+                throwNotfound(
+                    available.length > 0
+                        ? `[PAC] MCP 工具不存在: ${id}。该 server 可用工具: ${available.join(", ")}`
+                        : `[PAC] MCP server 未配置、未启用或连接失败: ${cfg.server}`,
+                );
+            }
+            return { kind: "meta", tools: { [cfg.alias ?? meta.llmName]: meta } };
         }
+        case "mcp_local": {
+            // 局部 MCP:不依赖全局工具库,编译期探测元数据
+            const config: LocalMcpConfig = {
+                transport: cfg.transport,
+                include: cfg.include,
+                alias: cfg.alias,
+            };
+            const tools = await probeMcpMetadata(config);
+            return { kind: "mcp_local", config, tools };
+        }
+    }
+}
+
+/** 项目加载期编译可能早于工具库 init / 全局 MCP 连接完成 */
+async function waitToolDB(): Promise<void> {
+    if (!(await globalToolDB.whenReady())) {
+        Logger.warn("[PAC] 工具库未在超时内就绪,按当前已注册的工具继续编译");
     }
 }

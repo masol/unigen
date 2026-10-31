@@ -4,6 +4,7 @@ import Handlebars, { type TemplateDelegate } from "handlebars";
 import type { CompiledPacAgent, JsonValue } from "./type.js";
 import {
     INPUT_VAR,
+    SKILL_DOC_VAR,
     TOOL_DOC_VAR,
     loadInputVar,
     loadStorageVars,
@@ -59,7 +60,7 @@ function getDelegates(c: CompiledPacAgent) {
 
 const RESERVED = new Set([
     "name", "description", "inputs", "outputs",
-    "tools", "maxSteps",
+    "tools", "maxSteps", "skills",
     "userTemplate", "userTemplatePath",
     "setDefault",
 ]);
@@ -111,6 +112,8 @@ async function buildContext(
     for (const name of c.vars.bi) {
         if (name === TOOL_DOC_VAR) {
             biVars[name] = c.toolDoc;
+        } else if (name === SKILL_DOC_VAR) {
+            biVars[name] = c.skillDoc;
         } else if (name === INPUT_VAR) {
             biVars[name] = await loadInputVar(ctx, inputs, allowBodyFallback);
         } else {

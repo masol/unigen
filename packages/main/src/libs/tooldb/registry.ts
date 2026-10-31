@@ -78,9 +78,6 @@ export class ToolRegistry {
 
     /** 按 id / llmName / 原始 name 取回 */
     get(idOrName: string): ToolMeta | null {
-        Logger.debug("getToolMeta:", idOrName);
-        Logger.debug("map keys:", [...this.#map.keys()]);
-
         const byId = this.#map.get(idOrName);
         if (byId) return byId;
         const id = this.#llmNameIndex.get(idOrName) ?? this.#nameIndex.get(idOrName);
