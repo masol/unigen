@@ -3,7 +3,6 @@ import { IProjectContext } from '$libs/project/type.js';
 import { CommandInfo, IRunnerContext } from '$types/blueprint/context.js';
 import log from 'electron-log/main.js';
 import { loadFunctor } from './capability/index.js';
-import type { Capability } from './capability/is.js';
 import { ICapaFunctor } from './capability/type.js';
 
 let runSeq: number = -1;
@@ -17,7 +16,7 @@ export class RunnerContext implements IRunnerContext {
 
     cmd: CommandInfo = { isCommand: false, body: "" };
     fnNotify: ((title: string, detail: string) => void) | null = null;
-    #stack: Capability[] = [];
+    // #stack: Capability[] = [];
 
     private readonly abortController: AbortController | null = null;
     #isForceKilled: boolean = false;
@@ -40,16 +39,16 @@ export class RunnerContext implements IRunnerContext {
         log.scope(`workflow-${this.prj.path}`);
     }
 
-    push(cap: Capability): void {
-        this.#stack.push(cap);
-    }
+    // push(cap: Capability): void {
+    //     this.#stack.push(cap);
+    // }
 
-    pop(): Capability | null {
-        if (this.#stack.length === 0) {
-            return null;
-        }
-        return this.#stack.pop() ?? null;
-    }
+    // pop(): Capability | null {
+    //     if (this.#stack.length === 0) {
+    //         return null;
+    //     }
+    //     return this.#stack.pop() ?? null;
+    // }
 
     // ==========================================
     // 🚦 状态检查点
@@ -60,9 +59,9 @@ export class RunnerContext implements IRunnerContext {
         return this.signal.aborted;
     }
 
-    get stack(): Capability[] {
-        return this.#stack;
-    }
+    // get stack(): Capability[] {
+    //     return this.#stack;
+    // }
 
     /** 快照检查点：判断是否属于“强制杀死”状态 */
     get isForceKilled(): boolean {

@@ -9,6 +9,7 @@ import { projectActivityDataSchema } from "$types/shared/template/project.js";
 import { BrowserWindow } from "electron";
 import Logger from "electron-log/main.js";
 import fsExtra from 'fs-extra';
+import fs from 'node:fs/promises';
 import { join } from "node:path";
 import { z } from "zod";
 import { closeProject, createProject, openProject } from "./helper/create.js";
@@ -19,6 +20,8 @@ import { type IProjectContext, type IProjectController, metaDirName, ServiceToke
 export class ProjectContainer implements IProjectContext {
     // 项目根目录。
     #path = "";
+    #type = "";
+    #inputName = "";
     #plugin: IProjectPlugin | null = null; // plugin type.
     #wid = -1;
     #prjId = -1; // used for ProjectMananger(not for controller).
@@ -53,6 +56,12 @@ export class ProjectContainer implements IProjectContext {
     get wid() {
         return this.#wid;
     }
+    get type() {
+        return this.#type;
+    }
+    get inputName() {
+        return this.#inputName;
+    }
 
     // 1. 严格限制 Map 的键只能是符合约束的构造函数，值是对应的实例
     private registry = new Map<symbol, IProjectController>();
@@ -73,7 +82,7 @@ export class ProjectContainer implements IProjectContext {
     getPath(partName: string | string[], root = false): string {
         // 保留原有特殊逻辑：直接返回 meta 目录名（忽略 root 参数）
         if (partName === 'meta') {
-            return metaDirName;
+            return join(this.#path, metaDirName);
         }
 
         // 统一转为数组，方便后续处理
@@ -102,10 +111,15 @@ export class ProjectContainer implements IProjectContext {
         throwUnprcessable(msg)
     }
 
+    private setInputName(prjData: ProjectActivityData): void {
+        this.#inputName = prjData.inputName ?? "script";
+    }
+
     async loadUI(): Promise<ProjectActivityData> {
         const uiFile = this.getPath("type.json");
         const uiJSOn = await fsExtra.readJSON(uiFile);
         const prjdata = this.validatePrjData(uiFile, uiJSOn);
+        this.setInputName(prjdata);
         return prjdata;
     }
 
@@ -115,6 +129,11 @@ export class ProjectContainer implements IProjectContext {
             await this.close();
             this.#path = path;
             const prjdata = await this.loadUI();
+            const type = await fs.readFile(this.getPath("type.txt"), "utf-8");
+            if (!type) {
+                throwUnprcessable(`项目类型文件${this.getPath("type.txt")}不存在或为空。`)
+            }
+            this.#type = type;
             // if (meta && meta.type) {
             //     // 提前加载插件，才能注册tapable事件响应点。
             //     this.#plugin = await pluginManager.load(configService().get("plugin"), this)
@@ -129,14 +148,12 @@ export class ProjectContainer implements IProjectContext {
         }
     }
 
-    // private async saveMeta(type: string): Promise<void> {
-    //     return await fsExtra.writeJSON(this.getPath('meta.json'), { type })
-    // }
 
     async create(path: string, type: string, bForce = false): Promise<ProjectActivityData> {
         try {
             await this.close();
             this.#path = path;
+            this.#type = type;
             // 提前加载插件，才能注册tapable事件响应点。支持无插件运行。
             // this.#plugin = await pluginManager.load(type, this)
             const typePath = await knowledgeCenter.getFile(type, "type.json");
@@ -148,8 +165,10 @@ export class ProjectContainer implements IProjectContext {
             await createProject(this, type, prjdata.icon, bForce);
             await Promise.all([
                 // this.saveMeta(type),
-                fsExtra.copyFile(typePath, this.getPath("type.json"))
+                fsExtra.copyFile(typePath, this.getPath("type.json")),
+                fs.writeFile(this.getPath("type.txt"), type)
             ])
+            this.setInputName(prjdata);
             // Logger.debug(`copy from ${typePath} to ${this.getPath("type.json")}`)
             return prjdata;
         } catch (e) {
@@ -167,6 +186,10 @@ export class ProjectContainer implements IProjectContext {
             await closeProject(this);
         } finally {
             this.#path = ""
+            this.#type = ""
+            this.#inputName = ""
+            // @todo: 只在容器真正销毁时清
+            // this.registry.clear();
         }
     }
 }

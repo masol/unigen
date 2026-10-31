@@ -1,0 +1,461 @@
+{
+    "icon": "IconShoppingBag",
+    "statusText": "生成广告图",
+    "header": {
+        "title": "电商广告图工作台",
+        "detail": "输入产品 · 输出广告图 · 全流程自动编排"
+    },
+    "hints": {
+        "idle": "点击下方按钮，让AI根据产品信息，生成电商广告图。"
+    },
+    "checkInput": {
+        "title": "没有产品信息",
+        "description": "点击这里打开产品管理，添加产品后，开始运行"
+    },
+    "targets": [
+        {
+            "label": "产品解析",
+            "desc": "完成产品信息提取与分类后停止",
+            "icon": "IconPackage"
+        },
+        {
+            "label": "风格定义",
+            "desc": "完成广告图风格与色调选择后停止",
+            "icon": "IconPalette"
+        },
+        {
+            "label": "文案生成",
+            "desc": "完成广告标题、卖点与促销语文案后停止",
+            "icon": "IconWriting"
+        },
+        {
+            "label": "布局设计",
+            "desc": "完成多尺寸布局与文案位置规划后停止",
+            "icon": "IconLayoutBoard"
+        },
+        {
+            "label": "参考图生成",
+            "desc": "完成背景/装饰元素参考图提示词生成后停止",
+            "icon": "IconPhotoStar"
+        },
+        {
+            "label": "图片渲染",
+            "desc": "完成所有素材图片渲染后停止",
+            "icon": "IconPhoto"
+        },
+        {
+            "label": "广告图合成",
+            "desc": "完成全流程，输出最终多尺寸广告图",
+            "icon": "IconAdCircle"
+        }
+    ],
+    "activities": [
+        {
+            "id": "input-manager",
+            "label": "产品管理",
+            "icon": "IconPackage",
+            "panel": {
+                "type": "panel",
+                "children": [
+                    {
+                        "type": "accordion-section",
+                        "title": "产品列表",
+                        "icon": "IconBoxMultiple",
+                        "defaultOpen": true,
+                        "badge": "count",
+                        "children": [
+                            {
+                                "type": "text-list",
+                                "binding": {
+                                    "key": "script"
+                                },
+                                "addLabel": "添加产品",
+                                "emptyTitle": "还没有产品",
+                                "emptyIcon": "IconPackage",
+                                "addDialogTitle": "添加产品",
+                                "editDialogTitle": "编辑产品",
+                                "editDialogDescription": "产品描述变动后，需要重新生成广告文案与布局。",
+                                "editAlert": true,
+                                "confirmTitle": "删除产品",
+                                "confirmMessage": "确定要删除这个产品吗？相关广告图也会被删除。"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "accordion-section",
+                        "title": "基础信息",
+                        "icon": "IconInfoCircle",
+                        "children": [
+                            {
+                                "type": "field",
+                                "binding": {
+                                    "key": "product_name"
+                                },
+                                "label": "产品名称",
+                                "editor": "inline",
+                                "placeholder": "输入产品名称",
+                                "emptyHint": "未命名产品"
+                            },
+                            {
+                                "type": "field",
+                                "binding": {
+                                    "key": "product_category"
+                                },
+                                "label": "产品类目",
+                                "editor": "inline",
+                                "placeholder": "例如：服装、数码、美妆",
+                                "emptyHint": "未分类"
+                            },
+                            {
+                                "type": "field",
+                                "binding": {
+                                    "key": "selling_points"
+                                },
+                                "label": "核心卖点",
+                                "editor": "dialog",
+                                "dialogTitle": "编辑核心卖点",
+                                "dialogDescription": "用简短语句描述产品主要优势，每行一个。用于生成文案。",
+                                "placeholder": "例如：\n- 防水防刮\n- 24小时续航",
+                                "emptyHint": "点击添加卖点"
+                            },
+                            {
+                                "type": "field",
+                                "binding": {
+                                    "key": "promo_text"
+                                },
+                                "label": "促销信息",
+                                "editor": "dialog",
+                                "dialogTitle": "编辑促销信息",
+                                "dialogDescription": "折扣、满减、限时活动等。可为空。",
+                                "placeholder": "例如：限时8折，满300减50",
+                                "emptyHint": "点击添加促销信息"
+                            },
+                            {
+                                "type": "field",
+                                "binding": {
+                                    "key": "usage_scene"
+                                },
+                                "label": "使用场合",
+                                "editor": "dialog",
+                                "dialogTitle": "产品使用场合",
+                                "dialogDescription": "描述几个主要的使用场合，广告图将优先使用这里描述的场合",
+                                "placeholder": "例如：为户外直播提供电源。",
+                                "emptyHint": "点击添加使用场合"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "accordion-section",
+                        "title": "产品图片",
+                        "icon": "IconPhoto",
+                        "badge": "count",
+                        "children": [
+                            {
+                                "dir": "product_img",
+                                "type": "image-grid",
+                                "binding": {
+                                    "key": "productImages"
+                                },
+                                "addLabel": "选择产品图",
+                                "emptyTitle": "还没有产品图",
+                                "emptyIcon": "IconPhotoOff",
+                                "emptyHint": "建议上传白底或透明底产品图。可多角度、多颜色。",
+                                "confirmTitle": "确认删除",
+                                "confirmMessage": "确定要删除这张产品图吗？"
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "id": "spec-setting",
+            "label": "广告规格与风格",
+            "icon": "IconSettings",
+            "panel": {
+                "type": "panel",
+                "children": [
+                    {
+                        "type": "accordion-section",
+                        "title": "输出尺寸",
+                        "icon": "IconRuler",
+                        "defaultOpen": true,
+                        "children": [
+                            {
+                                "type": "select",
+                                "binding": {
+                                    "key": "config:size_preset"
+                                },
+                                "label": "尺寸预设",
+                                "icon": "IconAspectRatio",
+                                "fallback": "1200x1200",
+                                "options": [
+                                    {
+                                        "value": "1200x1200",
+                                        "label": "1:1 主图 / 淘宝白底图",
+                                        "sub": "1200×1200"
+                                    },
+                                    {
+                                        "value": "1920x800",
+                                        "label": "天猫/京东 PC 端横幅",
+                                        "sub": "1920×800"
+                                    },
+                                    {
+                                        "value": "1080x1920",
+                                        "label": "抖音 / 快手 竖版信息流",
+                                        "sub": "1080×1920"
+                                    },
+                                    {
+                                        "value": "800x800",
+                                        "label": "拼多多 / 小红书 商品图",
+                                        "sub": "800×800"
+                                    },
+                                    {
+                                        "value": "1200x628",
+                                        "label": "朋友圈 / 公众号封面",
+                                        "sub": "1200×628"
+                                    },
+                                    {
+                                        "value": "750x1334",
+                                        "label": "淘宝 竖版详情图",
+                                        "sub": "750×1334"
+                                    },
+                                    {
+                                        "value": "1080x1080",
+                                        "label": "Instagram 方形",
+                                        "sub": "1080×1080"
+                                    },
+                                    {
+                                        "value": "custom",
+                                        "label": "自定义尺寸",
+                                        "sub": "在下方输入宽高"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "field",
+                                "binding": {
+                                    "key": "config:custom_width"
+                                },
+                                "label": "自定义宽度",
+                                "editor": "inline",
+                                "placeholder": "仅当选择自定义时生效"
+                            },
+                            {
+                                "type": "field",
+                                "binding": {
+                                    "key": "config:custom_height"
+                                },
+                                "label": "自定义高度",
+                                "editor": "inline",
+                                "placeholder": "仅当选择自定义时生效"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "accordion-section",
+                        "title": "风格与色调",
+                        "icon": "IconPalette",
+                        "children": [
+                            {
+                                "type": "select",
+                                "binding": {
+                                    "key": "config:ad_style"
+                                },
+                                "label": "广告图风格",
+                                "icon": "IconBrush",
+                                "fallback": "clean",
+                                "options": [
+                                    {
+                                        "value": "clean",
+                                        "label": "简约白底",
+                                        "sub": "纯白背景，突出产品"
+                                    },
+                                    {
+                                        "value": "lifestyle",
+                                        "label": "场景化生活",
+                                        "sub": "模拟真实使用环境"
+                                    },
+                                    {
+                                        "value": "festival",
+                                        "label": "大促/节日",
+                                        "sub": "红金配色，氛围浓烈"
+                                    },
+                                    {
+                                        "value": "tech",
+                                        "label": "科技冷光",
+                                        "sub": "暗色背景，光效线条"
+                                    },
+                                    {
+                                        "value": "natural",
+                                        "label": "自然小清新",
+                                        "sub": "柔和光影，植物配景"
+                                    },
+                                    {
+                                        "value": "luxury",
+                                        "label": "轻奢时尚",
+                                        "sub": "大理石纹理，高级灰"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "select",
+                                "binding": {
+                                    "key": "config:color_scheme"
+                                },
+                                "label": "主辅色方案",
+                                "icon": "IconColorSwatch",
+                                "fallback": "brand",
+                                "options": [
+                                    {
+                                        "value": "brand",
+                                        "label": "品牌色自动提取",
+                                        "sub": "从产品图或品牌素材中提取"
+                                    },
+                                    {
+                                        "value": "warm",
+                                        "label": "暖色系",
+                                        "sub": "橙/红/黄 为主"
+                                    },
+                                    {
+                                        "value": "cool",
+                                        "label": "冷色系",
+                                        "sub": "蓝/青/紫 为主"
+                                    },
+                                    {
+                                        "value": "neutral",
+                                        "label": "中性灰",
+                                        "sub": "黑白灰为主，高级感"
+                                    },
+                                    {
+                                        "value": "high_contrast",
+                                        "label": "高对比撞色",
+                                        "sub": "互补色，视觉冲击"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "select",
+                                "binding": {
+                                    "key": "config:font_style"
+                                },
+                                "label": "字体风格",
+                                "icon": "IconTypography",
+                                "fallback": "modern_sans",
+                                "options": [
+                                    {
+                                        "value": "modern_sans",
+                                        "label": "现代无衬线",
+                                        "sub": "简洁、通用、高可读性"
+                                    },
+                                    {
+                                        "value": "bold_serif",
+                                        "label": "粗衬线 / 大促",
+                                        "sub": "强调、促销感、权威"
+                                    },
+                                    {
+                                        "value": "handwritten",
+                                        "label": "手写 / 文艺",
+                                        "sub": "自然、亲切、美食美妆"
+                                    },
+                                    {
+                                        "value": "futuristic",
+                                        "label": "科技 / 硬朗",
+                                        "sub": "未来感、数码产品"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    ],
+    "blueprintFilters": {
+        "glossary": [
+            {
+                "value": "#prod:output:render_overview",
+                "desc": "广告图生成总览（人类可读：产品认知/人群/文案/已生成图汇总）"
+            },
+            {
+                "value": "#prod:output:copywriting",
+                "desc": "广告文案（每个触发场景一套：主标题/副标题/卖点/CTA/促销/信任徽章）"
+            },
+            {
+                "value": "#prod:render:result_%",
+                "desc": "渲染结果（按 task_id 含文件路径/尺寸/风格/seed）"
+            },
+            {
+                "value": "#prod:render:prompt_%",
+                "desc": "发给图像模型的最终 prompt（按 task_id）"
+            },
+            {
+                "value": "#prod:idx:rendered",
+                "desc": "已渲染任务 ID 列表（索引）"
+            },
+            {
+                "value": "#prod:state:visual_%",
+                "desc": "视觉设计（按尺寸×场景：场景背景 + 文字布局 + 图像 prompt）"
+            },
+            {
+                "value": "#prod:idx:visuals",
+                "desc": "已生成视觉设计索引"
+            },
+            {
+                "value": "#prod:state:audience_scenarios",
+                "desc": "人群与触发场景 NL 报告（含自检与溯源）"
+            },
+            {
+                "value": "#prod:state:audience_report",
+                "desc": "结构化人群与场景报告（audiences/scenarios，程序消费）"
+            },
+            {
+                "value": "#prod:state:product_profile",
+                "desc": "产品事实报告（剥离噪声后的名称/类目/规格/卖点/价格）"
+            },
+            {
+                "value": "#prod:render:seed_%",
+                "desc": "渲染 seed（删除可重随机；调试一致性问题用）"
+            },
+            {
+                "value": "config:size_preset",
+                "desc": "尺寸预设（可逗号分隔多选，如 1200x1200,1080x1920）"
+            },
+            {
+                "value": "config:custom_width",
+                "desc": "自定义宽度（像素，配合 size_preset=custom 使用）"
+            },
+            {
+                "value": "config:custom_height",
+                "desc": "自定义高度（像素，配合 size_preset=custom 使用）"
+            },
+            {
+                "value": "config:ad_style",
+                "desc": "广告图视觉风格（clean / lifestyle / festival / tech / natural / luxury）"
+            },
+            {
+                "value": "config:color_scheme",
+                "desc": "主辅色方案（brand / warm / cool / neutral / high_contrast）"
+            },
+            {
+                "value": "config:font_style",
+                "desc": "字体风格（modern_sans / bold_serif / handwritten / futuristic）"
+            },
+            {
+                "value": "product",
+                "desc": "产品输入（string[]：产品简介原文，可重新触发整条流水线）"
+            },
+            {
+                "value": "productImages",
+                "desc": "产品参考图路径列表（string[]，可选）"
+            }
+        ],
+        "metag": [],
+        "capa": []
+    },
+    "mediaFields": [
+        "file_path",
+        "bg_image_path",
+        "output_image_path"
+    ]
+}

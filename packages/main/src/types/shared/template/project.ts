@@ -94,6 +94,10 @@ export const projectActivityDataSchema = z.object({
      * 顶部渲染为"素材"下拉。不设置或空数组 = 不渲染。
      */
     mediaFields: z.array(z.string()).optional(),
+    /**
+     * 输入的keyName。不设置时默认为 "script"。
+     */
+    inputName: z.string().optional().default("script"),
 });
 
 export type ProjectActivityData = z.infer<typeof projectActivityDataSchema>;

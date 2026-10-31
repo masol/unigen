@@ -1,7 +1,9 @@
 // type.ts
 export interface IProjectContext {
     readonly path: string;
+    readonly type: string;
     readonly wid: number;
+    readonly inputName: string;
     getPath(partName: string | string[], root?: boolean): string;
     notify(evtName: string, payload: unknown, srcId?: number): boolean;
     register<T extends IProjectController>(token: ServiceToken<T>): void;

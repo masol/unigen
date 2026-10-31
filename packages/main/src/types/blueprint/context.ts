@@ -1,6 +1,5 @@
 import { ICapaFunctor } from "$libs/blueprint/capability/type.js";
 import type { IProjectContext } from "$libs/project/type.js";
-import type { Capability } from "./capability.js";
 
 
 export interface CommandInfo {
@@ -26,10 +25,10 @@ export interface IRunnerContext {
     readonly isForceKilled: boolean;
     readonly prj: IProjectContext;
     cmd: CommandInfo;
-    readonly stack: Capability[]; // 指示当前调用栈--主要服务于目标跟踪及拆解。
+    // readonly stack: Capability[]; // 指示当前调用栈--主要服务于目标跟踪及拆解。
 
-    push(cap: Capability): void;
-    pop(): Capability | null;
+    // push(cap: Capability): void;
+    // pop(): Capability | null;
     /**
      * 内部或外部触发取消的方法（配合宿主环境使用）
      * @param force 是否属于强制杀死

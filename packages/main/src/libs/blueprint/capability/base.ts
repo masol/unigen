@@ -40,10 +40,10 @@ export abstract class BaseFunctor implements ICapaFunctor {
             if (ctx.isAborted) {
                 return;
             }
-            ctx.push(this.capa)
+            // ctx.push(this.capa)
             await this.doTask(ctx);
         } finally {
-            ctx.pop();
+            // ctx.pop();
         }
     }
 }

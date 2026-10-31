@@ -1,9 +1,12 @@
+import { localTypeName } from "$libs/blueprint/capability/is.js";
 import { RunnerContext } from "$libs/blueprint/context.js";
 import { CapaRunner, CmdRunner } from "$libs/blueprint/runner/index.js";
 import { configService } from "$libs/store/index.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import { appLife } from "$libs/utils/tapable/applife.js";
+import type { IRunnerContext } from "$types/blueprint/context.js";
 import type { RunState } from "$types/index.js";
+import { AsyncLocalStorage } from "async_hooks";
 import Logger from "electron-log/main.js";
 import { getErrorMessage } from "radashi";
 import { ProjectDbKeys } from "../../utils/db/dbkeys.js";
@@ -12,6 +15,19 @@ import { BaseProjectController } from "./base.js";
 import { PrjDB } from "./drizzle/index.js";
 
 
+const runnerContextTLS = new AsyncLocalStorage<IRunnerContext>();
+
+export function getRunnerContextWithNull(): IRunnerContext | null {
+    return runnerContextTLS.getStore() ?? null;
+}
+
+export function getRunnerContext(): IRunnerContext {
+    const ctx = getRunnerContextWithNull();
+    if (!ctx) {
+        throwPrecondition("getRunnerContext()无法获取 IRunnerContext");
+    }
+    return ctx;
+}
 
 
 export class PrjRunner extends BaseProjectController {
@@ -61,20 +77,25 @@ export class PrjRunner extends BaseProjectController {
             throwPrecondition("已经有一个命令在执行中，每个项目只能并行执行一个命令。并行命令，请自行撰写代码能力，并执行之。")
         }
         const ctx = new RunnerContext(this.ctx, signal);
-        ctx.fnNotify = fnNotify;
-        try {
-            this.#cmdrunner = new CmdRunner();
-            await this.#cmdrunner.run(command, ctx)
-        } catch (e) {
-            const msg = `## 命令执行错误： 
+
+        // 使用 run 方法包裹，将 store 注入到这一层以及后续所有的同步/异步调用链中
+        await runnerContextTLS.run(ctx, async () => {
+            ctx.fnNotify = fnNotify;
+            try {
+                this.#cmdrunner = new CmdRunner();
+
+                await this.#cmdrunner.run(command, ctx)
+            } catch (e) {
+                const msg = `## 命令执行错误： 
 ${getErrorMessage(e)}`;
-            if (fnNotify) {
-                fnNotify("error", msg);
+                if (fnNotify) {
+                    fnNotify("error", msg);
+                }
+            } finally {
+                this.#cmdrunner = null;
+                ctx.fnNotify = null;
             }
-        } finally {
-            this.#cmdrunner = null;
-            ctx.fnNotify = null;
-        }
+        });
     }
 
     start(entry?: string, seq?: number): void {
@@ -88,13 +109,19 @@ ${getErrorMessage(e)}`;
         if (!entry) {
             const defEntry = prjdb.get<string>(ProjectDbKeys.entry_capa);
             if (!defEntry) {
-                throwPrecondition("项目未指定默认启动的能力ID，也没有给出能力ID.")
+                entry = localTypeName(this.ctx.type);
+                // throwPrecondition("项目未指定默认启动的能力ID，也没有给出能力ID.")
+            } else {
+                entry = defEntry;
             }
-            entry = defEntry;
         }
 
         const ctx = new RunnerContext(this.ctx, null, seq);
-        this.#runner.start(entry, ctx);
+
+        // 使用 run 方法包裹，将 store 注入到这一层以及后续所有的同步/异步调用链中
+        runnerContextTLS.run(ctx, async () => {
+            this.#runner.start(entry, ctx);
+        });
     }
 
     stop(bForce: boolean): void {

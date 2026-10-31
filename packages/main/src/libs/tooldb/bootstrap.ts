@@ -5,25 +5,31 @@ import { globalToolDB } from "./globaltooldb.js";
 import type { McpServerConfig } from "./type.js";
 
 let initialized = false;
-let unregisterBeforeQuit: (() => void) | null = null;
-void (unregisterBeforeQuit)
 
+/**
+ * 应用启动期的一次性入口。
+ * - 注入 builtins / 目录加载(目录由调用方决定);
+ * - 对齐 MCP 到当前持久化配置;
+ * - 注册 beforeQuit 清理钩子。
+ */
 export async function initGlobalToolDB(
     mcpServers?: McpServerConfig[],
+    toolDirs?: string[],
 ): Promise<{ failed: string[] }> {
     if (initialized) return { failed: [] };
     initialized = true;
 
-    await globalToolDB.open(getBuiltinTools());
+    const { mcpFailed } = await globalToolDB.init({
+        builtins: getBuiltinTools(),
+        toolDirs,
+        mcpServers,
+    });
 
-    unregisterBeforeQuit = appLife.beforeQuit.tapPromise("GlobalToolDB", async () => {
+    appLife.beforeQuit.tapPromise("GlobalToolDB", async () => {
         Logger.debug("[ToolDB] 正在清理资源...");
         await globalToolDB.close();
         Logger.debug("[ToolDB] 清理资源完成。");
     });
 
-    if (mcpServers && mcpServers.length > 0) {
-        return globalToolDB.setMcpServers(mcpServers);
-    }
-    return { failed: [] };
+    return { failed: mcpFailed };
 }

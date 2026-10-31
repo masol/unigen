@@ -1,4 +1,3 @@
-import { runInnerFlow } from '$libs/innerflow/index.js';
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { ProjectDbKeys } from '$libs/utils/db/dbkeys.js';
 import { throwPrecondition } from '$libs/utils/err.js';
@@ -7,6 +6,7 @@ import type { CommandInfo, IRunnerContext } from '$types/blueprint/context.js';
 import { SpanStatusCode } from '@opentelemetry/api';
 import { parse, ParseEntry } from 'shell-quote';
 import yargsParser from 'yargs-parser';
+import { localTypeName } from '../capability/is.js';
 import { BaseRunner, withSpan } from './base.js';
 import { runCmd as doAIGC } from './commands/aigc/index.js';
 import { runCmd as doExport } from './commands/export/runCmd.js';
@@ -137,7 +137,8 @@ export class CmdRunner extends BaseRunner {
         if (!cmdInfo.isCommand) {
             const capId = prjdb.get<string>(ProjectDbKeys.entry_common);
             if (!capId) {
-                return await runInnerFlow(ctx,"common")
+                return await this.runCap(localTypeName(ctx.prj.type), ctx);
+                // return await runInnerFlow(ctx,"common")
             }
             return await this.runCap(capId, ctx);
         }
