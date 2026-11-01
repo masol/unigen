@@ -2,6 +2,7 @@
 import { api } from '$lib/utils/api';
 import { KeybindConfig } from '$lib/utils/commands/config.svelte';
 import evtbus from '$lib/utils/evtbus';
+import { ModelTags } from '$lib/utils/model/base_models';
 import type { AppConfig, Model, Provider } from '@app/main/types';
 import log from 'electron-log/renderer';
 import { setMode } from "mode-watcher";
@@ -90,6 +91,18 @@ class ConfigStore {
     readonly totalModelCount = $derived.by(() =>
         this.#providers.reduce((sum, p) => sum + p.models.length, 0),
     )
+
+    /** 所有 Provider 下 TextGeneration 能力的 Model 总数 */
+    readonly llmModelCount = $derived.by(() =>
+        this.#providers.reduce(
+            (sum, p) =>
+                p.disabled === true
+                    ? sum
+                    : sum +
+                    p.models.filter((m) => m.abilities.includes(ModelTags.TextGeneration)).length,
+            0,
+        ),
+    );
 
     /** embed_model 是否指向外部服务 */
     readonly isExternalEmbed = $derived(this.#embedModel.startsWith('external:'))
@@ -394,7 +407,7 @@ class ConfigStore {
         }
     }
 
-    /** 设置本地模型名称 */
+    /** 设置本地模型名称--被解释为嵌入模型。 */
     async setLocalModel(value: string): Promise<void> {
         log.debug(`[ConfigStore] setLocalModel() called, value=${value}`)
         this.#savingCount++

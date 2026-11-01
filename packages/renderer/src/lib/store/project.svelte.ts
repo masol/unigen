@@ -236,13 +236,13 @@ class ProjectStore {
         await hooks.callHook("project:closed");
     }
 
-    async create(pathName?: string): Promise<boolean> {
+    async create(): Promise<boolean> {
         if (this.isBusy) return false;
         await this.close();
 
         this.loading = "new";
         try {
-            const typeId = await dialogStore.safeShow(
+            const prjInfo = await dialogStore.safeShow(
                 SelectProjectTypeDialog,
                 {
                     // onManage 留给你实现内部路由跳转（非新窗口）
@@ -250,8 +250,8 @@ class ProjectStore {
                 },
                 { size: "xl" }, // 宽屏网格，选用 xl
             );
-            if (typeId === null) return false; // 用户取消
-            await this.createImpl(typeId, pathName);
+            if (prjInfo === null) return false; // 用户取消
+            await this.createImpl(prjInfo.typeId, prjInfo.name);
             return true;
         } finally {
             this.loading = null;

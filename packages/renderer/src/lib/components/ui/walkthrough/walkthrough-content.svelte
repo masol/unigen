@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
-	import { computePosition, autoUpdate, offset, shift, arrow, flip } from '@floating-ui/dom';
-	import { fade } from 'svelte/transition';
-	import { getWalkthroughContext } from './ctx';
 	import { Button } from '$lib/components/ui/button';
+	import { arrow, autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
 	import { X } from '@lucide/svelte';
 	import type { Snippet } from 'svelte';
+	import { onDestroy } from 'svelte';
+	import { fade } from 'svelte/transition';
+	import { getWalkthroughContext } from './ctx';
 
 	let {
 		targetId,

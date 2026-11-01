@@ -34,14 +34,11 @@
   <!-- ══════════════════════════════════════════════════════ -->
   <!-- Scrollable Settings Body                              -->
   <!-- ══════════════════════════════════════════════════════ -->
-  <div class="flex-1 min-h-0">
+  <div class="flex-1 min-h-0" id="settings-check-embeding">
     <ScrollArea class="h-full">
       <div class="px-8 lg:px-12 py-8 space-y-8">
         <GeneralSection></GeneralSection>
-        <!-- ╭─── / GeneralSection ───╮ -->
         <LocalModel></LocalModel>
-        <!-- ╭─── / DataSection ───╮ -->
-
         <AutoUpdator></AutoUpdator>
 
         <!-- ╭─── / UpdateSection ───╮ -->

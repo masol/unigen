@@ -8,6 +8,14 @@ export const BLANK_PROJECT_TYPE_ID = 'blank';
 export const BLANK_PROJECT_TYPE: ProjectType = {
     id: BLANK_PROJECT_TYPE_ID,
     name: '通用任务',
-    description: '聊天窗里说一句话（比如“整理上周销售数据”），配置里细化具体步骤（可填可不填）。两者一起，一键生成干活流程并执行。',
+    description: '透传给模型的原始对话任务，适合自定义工作流或直接与模型交互。',
     icon: 'IconSquarePlus',
 };
+
+/** 「新建任务」对话框的返回值 */
+export interface CreateProjectResult {
+    /** 用户最终选中的任务类型 id */
+    typeId: string;
+    /** 用户填写的任务名称（已 trim，非空） */
+    name: string;
+}

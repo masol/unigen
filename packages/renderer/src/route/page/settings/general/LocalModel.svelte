@@ -177,6 +177,7 @@
 <section class="space-y-4">
   <h2 class="text-lg font-medium text-foreground px-1">模型配置</h2>
   <div
+    id="settings-check-embeding"
     class="rounded-2xl border border-border/50 bg-card shadow-sm overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-border"
   >
     <!-- ── Row: 本地嵌入模型 ── -->

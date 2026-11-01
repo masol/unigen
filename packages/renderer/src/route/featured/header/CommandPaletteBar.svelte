@@ -452,6 +452,7 @@
   <!-- 回到主控台按钮（不变） -->
   <button
     type="button"
+    id="headerbar-goHome"
     onclick={goHome}
     disabled={!isNotHome}
     class="flex size-6 shrink-0 items-center justify-center rounded-md transition-all duration-200 {isNotHome

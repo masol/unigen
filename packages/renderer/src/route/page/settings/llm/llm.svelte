@@ -323,7 +323,7 @@
       </div>
     {/if}
 
-    <div class="space-y-6" use:autoAnimate>
+    <div id="settings-aigc-details" class="space-y-6" use:autoAnimate>
       {#each filteredProviders as provider (provider.id)}
         <ProviderCard
           {provider}
