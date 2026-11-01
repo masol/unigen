@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { ToolDefinition } from "../type.js";
 
 /**
- * 把用户给出的相对路径解析为绝对路径(基于当前项目目录);
+ * 把用户给出的相对路径解析为绝对路径(基于当前任务目录);
  * 已是绝对路径的原样返回。
  * TODO: 用 ctx.prj.path 拼接,留待补充。
  */
@@ -33,7 +33,7 @@ const inputSchema = z.object({
         .string()
         .min(1)
         .describe(
-            "图片保存路径,可以是绝对路径,也可以是当前项目的相对路径(例如 'imgs/hero.jpg')。" +
+            "图片保存路径,可以是绝对路径,也可以是当前任务的相对路径(例如 'imgs/hero.jpg')。" +
             "父目录不存在会自动创建;扩展名建议使用 .jpg 或 .png。",
         ),
     width: z

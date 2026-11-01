@@ -87,7 +87,7 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
         const exists = await pathExists(dbPath);
         if (!exists) {
             if (!bCreate) {
-                throwNotfound(`项目"${this.ctx.path}"的数据库不存在！`)
+                throwNotfound(`任务"${this.ctx.path}"的数据库不存在！`)
             }
             await ensureDir(join(this.ctx.path, metaDirName));
         }
@@ -116,7 +116,7 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
 
     private getInitedDB(): DrizzleDBType {
         if (!this.db) {
-            throw new Error("项目数据库未初始化");
+            throw new Error("任务数据库未初始化");
         }
         return this.db;
     }

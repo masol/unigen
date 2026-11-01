@@ -75,7 +75,7 @@
   <Menubar.Trigger
     class="cursor-default select-none h-9 rounded-none px-2.5 text-xs font-normal data-[state=open]:bg-accent/80 hover:bg-accent/80"
   >
-    项目
+    窗口
   </Menubar.Trigger>
   <Menubar.Content align="start" class="select-none z-200 min-w-52">
     <Menubar.Item disabled={isBusy} onSelect={newWindow}>
@@ -92,7 +92,7 @@
 
     <Menubar.Item disabled={isBusy} onSelect={newProject}>
       <IconFilePlus size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
-      新建项目
+      新建任务
       <MenuShortcut command="project.create" />
     </Menubar.Item>
     <Menubar.Item disabled={isBusy} onSelect={openProject}>
@@ -101,7 +101,7 @@
         stroke={1.5}
         class="mr-2 text-muted-foreground"
       />
-      打开项目...
+      打开任务...
       <MenuShortcut command="project.open" />
     </Menubar.Item>
 
@@ -161,7 +161,7 @@
 
     <Menubar.Item disabled={!canClose} onSelect={closeProject}>
       <IconFolderX size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
-      关闭项目
+      关闭任务
       <MenuShortcut command="project.close" />
     </Menubar.Item>
 

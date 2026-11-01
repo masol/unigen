@@ -72,7 +72,7 @@ export class Storage {
     }
 
     /**
-     * 产品参考图读取 —— 优先项目托管目录 `product_img/`；不存在或为空时回退 input KV。
+     * 产品参考图读取 —— 优先任务托管目录 `product_img/`；不存在或为空时回退 input KV。
      *
      * 关键：路径必须走 ctx.project.getPath("product_img") 解析托管目录，
      * 不能用 ctx.prj.path 手工拼接（那是另一个位置，会读不到图）。

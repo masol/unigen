@@ -3,7 +3,7 @@ import type { IProjectContext, IProjectController, ServiceToken } from "../type.
 
 
 /**
- * 统一的项目控制器抽象基类
+ * 统一的任务控制器抽象基类
  */
 export abstract class BaseProjectController implements IProjectController {
     constructor(protected readonly ctx: IProjectContext) { }

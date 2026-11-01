@@ -104,7 +104,7 @@
 
 //     /**
 //      * 优雅停机（Graceful Shutdown）
-//      * 适用于：用户主动切换项目、应用常规关闭
+//      * 适用于：用户主动切换任务、应用常规关闭
 //      */
 //     async gracefulShutdown(): Promise<void> {
 //         Logger.debug('⏳ [ProjectJob] 正在优雅关闭任务管理子系统...');

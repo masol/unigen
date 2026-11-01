@@ -114,8 +114,8 @@ export class LanceDB extends BaseProjectController implements ILanceDB {
 
             const embedReady = await this.initEmbed();
             if (!embedReady) {
-                // 向量模型未配置或初始化失败：LanceDB 整体不可用，但不让项目打开失败
-                Logger.warn('[LanceDB] 向量模型未就绪，LanceDB 与 RAG 功能将不可用，项目将以降级模式运行。');
+                // 向量模型未配置或初始化失败：LanceDB 整体不可用，但不让任务打开失败
+                Logger.warn('[LanceDB] 向量模型未就绪，LanceDB 与 RAG 功能将不可用，任务将以降级模式运行。');
                 this.#opened = false;
                 return;
             }
@@ -131,7 +131,7 @@ export class LanceDB extends BaseProjectController implements ILanceDB {
         } catch (error) {
             Logger.error('[LanceDB] 本地数据库连接失败:', error);
             this.#opened = false;
-            // 不抛出异常，允许项目以无 LanceDB 模式打开
+            // 不抛出异常，允许任务以无 LanceDB 模式打开
         }
     }
 

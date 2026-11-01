@@ -29,7 +29,7 @@ export function buildNodeCode(
     lines.push("async function run() {");
     lines.push("  // inputs 构造");
     lines.push("  // - 工作流级输入（外部材料）：glossary.getInput('#<name>')");
-    lines.push("  // - 前置步骤产出（项目级 KV）：glossary.get('#<name>')");
+    lines.push("  // - 前置步骤产出（任务级 KV）：glossary.get('#<name>')");
     lines.push("  // - 配置项（Config）：glossary.get(safeNameMap 中 cfg:<name> 的值，无 # 前缀）");
     lines.push("  const inputs = {");
     for (const name of node.inputs) {

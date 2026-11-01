@@ -1,8 +1,8 @@
 <script lang="ts">
   import { IconSourceCode } from "@tabler/icons-svelte";
   import ModelAlerts from "./ModelAlerts.svelte";
-  import WelcomeActions from "./WelcomeActions.svelte";
   import RecentProjects from "./RecentProjects.svelte";
+  import WelcomeActions from "./WelcomeActions.svelte";
 </script>
 
 <div class="mx-auto flex h-full w-full max-w-2xl flex-col gap-10 p-8 md:p-12">
@@ -15,7 +15,7 @@
         欢迎
       </h2>
       <p class="text-sm text-muted-foreground">
-        打开已有项目或创建新项目以开始
+        打开已有任务或创建新任务以开始
       </p>
     </div>
     <WelcomeActions />

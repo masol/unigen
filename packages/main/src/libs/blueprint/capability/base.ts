@@ -32,6 +32,10 @@ export function fillCapa(capa: NewCapability): Capability {
 
 export abstract class BaseFunctor implements ICapaFunctor {
 
+    get id() {
+        return this.capa.name;
+    }
+
     constructor(readonly capa: Capability) { }
     // 由run实现方主动调用基类的getInput/saveOutput方法来获取输入和保存输出。
     protected abstract doTask(ctx: IRunnerContext): Promise<void>;

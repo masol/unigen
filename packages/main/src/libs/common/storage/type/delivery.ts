@@ -6,7 +6,7 @@ import { z } from "zod";
 export enum WorkMode {
     /** 二进制文件 - Binary files requiring specific software (PDF, Word, Excel, PPT, video, audio, images) */
     Binary = "binary",
-    /** 多文件项目 - Multi-file engineering projects (websites, APIs, applications, systems, plugins) */
+    /** 多文件任务 - Multi-file engineering projects (websites, APIs, applications, systems, plugins) */
     Project = "project",
     /** 纯文档 - Pure text documents saved as Markdown */
     Document = "document",
@@ -35,7 +35,7 @@ export const DeliverableClassifierSchema = z.object({
      * 
      * Maps from Chinese values:
      * - "二进制文件" → WorkMode.Binary
-     * - "多文件项目" → WorkMode.Project
+     * - "多文件任务" → WorkMode.Project
      * - "纯文档" → WorkMode.Document
      * 
      * Classification logic:
@@ -46,7 +46,7 @@ export const DeliverableClassifierSchema = z.object({
      * Extraction pattern: /工作模式[：:]\s*(.+)/
      */
     workMode: z.nativeEnum(WorkMode).describe(
-        "Working mode extracted from '工作模式：' line. Must be one of: binary (二进制文件), project (多文件项目), document (纯文档)"
+        "Working mode extracted from '工作模式：' line. Must be one of: binary (二进制文件), project (多文件任务), document (纯文档)"
     ),
 
     /**

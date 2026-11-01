@@ -2,6 +2,8 @@ import { IRunnerContext } from "$types/blueprint/context.js";
 import type { ICapaRunner } from "$types/blueprint/runner.js";
 import { Span, SpanStatusCode, trace } from "@opentelemetry/api";
 import Logger from "electron-log";
+import { isString } from "radashi";
+import { ICapaFunctor } from "../capability/type.js";
 
 const tracer = trace.getTracer("capability-runner");
 
@@ -26,12 +28,13 @@ export async function withSpan(
 export abstract class BaseRunner implements ICapaRunner {
     abstract run(capaId: string, ctx: IRunnerContext): Promise<void>;
 
-    protected async runCap(capaId: string, ctx: IRunnerContext): Promise<void> {
+    protected async runCap(capa: string | ICapaFunctor, ctx: IRunnerContext): Promise<void> {
+        const capaId = isString(capa) ? capa : "functor"
         return withSpan(`CapabilityRunner.run:${capaId}`, async (span) => {
             span.setAttribute("capability.id", capaId);
             span.addEvent("task_started", { message: `开始执行能力: ${capaId}` });
 
-            const capafunctor = ctx.loadFunctor(capaId);
+            const capafunctor = isString(capa) ? ctx.loadFunctor(capa) : capa;
 
             if (!capafunctor) {
                 const reason = `无法创建${capaId}对应的Runner`;

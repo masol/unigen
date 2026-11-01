@@ -31,7 +31,7 @@ class DataCenter {
             this.resourcePath = join(process.resourcesPath, DataDirName);
         } else {
             // 开发环境：直接指向源码目录，二者一致，方便动态更新
-            // 当前文件位于 dist，向上一级到项目根目录
+            // 当前文件位于 dist，向上一级到任务根目录
             const __dirname = dirname(fileURLToPath(import.meta.url));
             this.resourcePath = join(__dirname, '..', DataDirName);
         }

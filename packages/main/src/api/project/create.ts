@@ -21,8 +21,8 @@ const open = os
         if (!pathName) {
             const { canceled, filePaths } = await WindowService.instance.withModalWindow(context, (parent) => {
                 return dialog.showOpenDialog(parent, {
-                    title: "打开项目",
-                    message: "打开合法的Unigen项目。",
+                    title: "打开任务",
+                    message: "打开合法的Unigen任务。",
                     properties: ['openDirectory'],
                 });
             })
@@ -43,7 +43,7 @@ const open = os
             window?.focus();
             throw new ORPCError(COMMON_ORPC_ERROR_DEFS.TOO_MANY_REQUESTS.message, {
                 status: COMMON_ORPC_ERROR_DEFS.TOO_MANY_REQUESTS.status,
-                message: "项目已被打开。"
+                message: "任务已被打开。"
             })
             // } else { // 已经被自身打开了。
             //     return true;
@@ -62,7 +62,7 @@ const loadUI = os
         if (prj && prj.wid >= 0) {
             return await prj.loadUI();
         }
-        throwUnprcessable("无法定位项目对象。")
+        throwUnprcessable("无法定位任务对象。")
     })
 
 const create = os
@@ -79,8 +79,8 @@ const create = os
         if (!pathName) {
             const { canceled, filePaths } = await WindowService.instance.withModalWindow(context, (parent) => {
                 return dialog.showOpenDialog(parent, {
-                    title: "新建项目",
-                    message: "新建合法的Unigen项目。",
+                    title: "新建任务",
+                    message: "新建合法的Unigen任务。",
                     properties: ['openDirectory', 'createDirectory'],
                 });
             })
@@ -101,7 +101,7 @@ const create = os
             window?.focus();
             throw new ORPCError(COMMON_ORPC_ERROR_DEFS.TOO_MANY_REQUESTS.message, {
                 status: COMMON_ORPC_ERROR_DEFS.TOO_MANY_REQUESTS.status,
-                message: "项目已被打开。"
+                message: "任务已被打开。"
             })
             // } else { // 已经被自身打开了。
             //     return true;

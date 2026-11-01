@@ -74,7 +74,7 @@ export function resolveOwnDefaults(fm: PacFrontMatter): Record<string, JsonValue
  * ======================================================================
  *
  * 查找优先级:
- *   1. 项目 KV 存储(PrjDB)—— 用户/运行时写入的真实值
+ *   1. 任务 KV 存储(PrjDB)—— 用户/运行时写入的真实值
  *   2. defaults —— 由 setDefault 继承 + 自身声明合并而来的默认值
  *   3. 空串
  */

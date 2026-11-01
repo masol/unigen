@@ -63,21 +63,21 @@ export const builtins: CommandDescriptor[] = [
     // ---任务执行---
     {
         id: 'project.open',
-        label: '打开项目',
+        label: '打开任务',
         category: 'Project',
         handler: () =>
             projectStore.open(),
     },
     {
         id: 'project.create',
-        label: '新建项目',
+        label: '新建任务',
         category: 'Project',
         handler: () =>
             projectStore.create(),
     },
     {
         id: 'project.close',
-        label: '关闭项目',
+        label: '关闭任务',
         category: 'Project',
         handler: () =>
             projectStore.close(),

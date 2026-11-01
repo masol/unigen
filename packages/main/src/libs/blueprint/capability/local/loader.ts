@@ -69,7 +69,7 @@ export async function loadExternalTools(
     }
 }
 
-/** 项目加载期编译可能早于工具库 init / 全局 MCP 连接完成 */
+/** 任务加载期编译可能早于工具库 init / 全局 MCP 连接完成 */
 async function waitToolDB(): Promise<void> {
     if (!(await globalToolDB.whenReady())) {
         Logger.warn("[PAC] 工具库未在超时内就绪,按当前已注册的工具继续编译");

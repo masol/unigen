@@ -98,7 +98,7 @@ describe('GDag:层构建与整体序列化重构', () => {
 describe.skipIf(!process.env.PLAN_LLM_TEST)('designDag:顶层生成(LLM)', () => {
 
     it('从用户描述得到合法顶层 DAG', async () => {
-        const pctx = makeTestPctx(); // @TODO: 对齐项目现有的测试上下文构造器
+        const pctx = makeTestPctx(); // @TODO: 对齐任务现有的测试上下文构造器
         const desc = `我有一批客户访谈的录音转写文本(每场一个txt)。
 我想得到一份市场洞察报告:归纳客户的共性痛点、按主题聚类、
 每个主题给出典型原话引用,最后输出一份markdown报告。`;

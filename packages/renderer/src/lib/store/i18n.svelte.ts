@@ -71,7 +71,7 @@ function isValidLocale(str: string): str is Locale {
 }
 
 /**
- * 把任何 BCP 47 tag 折叠成最接近的、项目里实际拥有的语言。
+ * 把任何 BCP 47 tag 折叠成最接近的、任务里实际拥有的语言。
  */
 export function nearestLocale(wanted: string): Locale | undefined {
     try {

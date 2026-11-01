@@ -88,7 +88,7 @@ class ProjectStore {
     async start(seq: number, bThrow?: boolean): Promise<void> {
         try {
             if (this.#path.trim().length === 0) {
-                toast.error("尚未打开项目")
+                toast.error("尚未打开任务")
                 return
             }
             await api().project.start(seq);
@@ -211,7 +211,7 @@ class ProjectStore {
                 await pluginStore.ensurePlugins(this.#depPlugins);
             }
             await hooks.callHook("project:loaded", { path: this.#path });
-            Logger.debug("项目打开成功", this.#path)
+            Logger.debug("任务打开成功", this.#path)
             return true;
         } catch (e) {
             return this.procError(e);

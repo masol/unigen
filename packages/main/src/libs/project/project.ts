@@ -1,5 +1,7 @@
 // 轻量DI容器，未使用轻量DI框架(如awilix)，因为其还是太重，本DI不涉及外部扩展代码的问题。
 
+import { PACFunctor } from "$libs/blueprint/capability/local/index.js";
+import type { ICapaFunctor } from "$libs/blueprint/capability/type.js";
 import { secondConfig } from "$libs/store/second.js";
 import { throwUnprcessable } from "$libs/utils/err.js";
 import { knowledgeCenter } from "$libs/utils/kc.js";
@@ -18,13 +20,14 @@ import { registProjectBuildin } from "./register.js";
 import { type IProjectContext, type IProjectController, metaDirName, ServiceToken } from "./type.js";
 
 export class ProjectContainer implements IProjectContext {
-    // 项目根目录。
+    // 任务根目录。
     #path = "";
     #type = "";
     #inputName = "";
     #plugin: IProjectPlugin | null = null; // plugin type.
     #wid = -1;
     #prjId = -1; // used for ProjectMananger(not for controller).
+    #agent: PACFunctor | null = null;  // 本地Agent,在任务打开或新建时创建，可以随时刷新。
 
     // 在构造容器时初始化全部IProjectController(某个具体的剖面)
     constructor(wid: number, prjId: number) {
@@ -61,6 +64,27 @@ export class ProjectContainer implements IProjectContext {
     }
     get inputName() {
         return this.#inputName;
+    }
+
+    get agent() {
+        return this.#agent?.hasAgent ? this.#agent : null;
+    }
+
+    async reloadAgent(): Promise<void>  // 重新加载本地Agent.
+    {
+        if (!this.#agent) {
+            this.#agent = new PACFunctor(this.#type);
+        }
+        return await this.#agent.compile(this);
+    }
+
+    getCmd(cmdName: string): ICapaFunctor | null {
+        void (cmdName);
+        return null;
+    }
+
+    async reloadCmd(cmdName?: string): Promise<void> {
+        void (cmdName);
     }
 
     // 1. 严格限制 Map 的键只能是符合约束的构造函数，值是对应的实例
@@ -106,7 +130,7 @@ export class ProjectContainer implements IProjectContext {
             return type as ProjectActivityData;
         }
         const formattedErrors = z.prettifyError(result.error);
-        const msg = `项目UI文件${file}加载失败，详情查看日志。`
+        const msg = `任务UI文件${file}加载失败，详情查看日志。`
         Logger.error(msg, formattedErrors);
         throwUnprcessable(msg)
     }
@@ -131,7 +155,7 @@ export class ProjectContainer implements IProjectContext {
             const prjdata = await this.loadUI();
             const type = await fs.readFile(this.getPath("type.txt"), "utf-8");
             if (!type) {
-                throwUnprcessable(`项目类型文件${this.getPath("type.txt")}不存在或为空。`)
+                throwUnprcessable(`任务类型文件${this.getPath("type.txt")}不存在或为空。`)
             }
             this.#type = type;
             // if (meta && meta.type) {
@@ -140,6 +164,7 @@ export class ProjectContainer implements IProjectContext {
             // }
 
             await openProject(this, prjdata.icon);
+            await this.reloadAgent();
             return prjdata
         } catch (e) {
             secondConfig().removeProject(path)
@@ -169,6 +194,7 @@ export class ProjectContainer implements IProjectContext {
                 fs.writeFile(this.getPath("type.txt"), type)
             ])
             this.setInputName(prjdata);
+            await this.reloadAgent();
             // Logger.debug(`copy from ${typePath} to ${this.getPath("type.json")}`)
             return prjdata;
         } catch (e) {

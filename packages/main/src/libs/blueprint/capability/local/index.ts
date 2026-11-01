@@ -49,8 +49,12 @@ export class PACFunctor implements ICapaFunctor {
 
     constructor(readonly type: string) { }
 
+    get id() {
+        return `localAgent:${this.type}`;
+    }
+
     /**
-     * 项目加载期调用,可能多次。
+     * 任务加载期调用,可能多次。
      * - 每次从磁盘重新编译,拿到最新的 md / skill 文件;
      * - 并发调用合并为同一次编译;
      * - 失败不抛出:清空 agent、记录错误,由 run 报告。
@@ -61,6 +65,10 @@ export class PACFunctor implements ICapaFunctor {
             this.inflight = null;
         });
         return this.inflight;
+    }
+
+    get hasAgent() {
+        return this.agent !== null;
     }
 
     private async doCompile(): Promise<void> {
@@ -125,3 +133,4 @@ export {
     BI_PREFIX, classifyVars, INPUT_VAR, loadInputVar, loadStorageVars,
     SKILL_DOC_VAR, STORAGE_PREFIX, TOOL_DOC_VAR
 } from "./vars.js";
+

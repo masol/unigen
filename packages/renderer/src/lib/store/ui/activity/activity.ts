@@ -34,7 +34,7 @@ function mergeInfocards(data: ProjectActivityData): InfoCardView[] {
             icon: "IconFileTextFilled",
             title: "输出",
             subtitle: "查看结果",
-            summary: "查看AI 处理结果，点击打开项目目录。",
+            summary: "查看AI 处理结果，点击打开任务目录。",
             activity: "",
             hint: "点击查看结果",
             ...data.infocards?.output

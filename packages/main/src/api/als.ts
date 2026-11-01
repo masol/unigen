@@ -43,7 +43,7 @@ export function ensureCurrentPrj(): ProjectContainer {
     if (!prj) {
         throw new ORPCError(COMMON_ORPC_ERROR_DEFS.NOT_FOUND.message, {
             status: COMMON_ORPC_ERROR_DEFS.TOO_MANY_REQUESTS.status,
-            message: "无法获取到当前活动项目，没有通过Orpc接口驱动？"
+            message: "无法获取到当前活动任务，没有通过Orpc接口驱动？"
         })
     }
     return prj

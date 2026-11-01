@@ -59,7 +59,7 @@ class ConfigService {
 
     get recents() {
         // quick-lru 内部的迭代器是从“最老”到“最新”
-        // 用 reverse() 反转，让最新打开的项目排在最前面
+        // 用 reverse() 反转，让最新打开的任务排在最前面
         // return Array.from(this.lru.values()).reverse();
         // 1. 将 LRU 缓存的值转换为数组
         const projects = Array.from(this.lru.values());

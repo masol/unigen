@@ -55,7 +55,7 @@ export class AsyncParallelHook<P extends any[] = any[]> {
      */
     untap(name: string): void {
         // 注意：hookable 的 hook() 返回的 unregister 函数已经处理了清理，
-        // 调用方应优先使用该返回值。此方法作为补充，提供基于项目级清理的批量注销。
+        // 调用方应优先使用该返回值。此方法作为补充，提供基于任务级清理的批量注销。
         const unregister = (this as any)[`__unreg_${name}`] as (() => void) | undefined;
         if (unregister) {
             unregister();

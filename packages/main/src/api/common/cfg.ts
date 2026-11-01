@@ -61,7 +61,7 @@ const set = os
 
 
 /**
- * 获取最近项目列表
+ * 获取最近任务列表
  * schema 校验失败时异常直接上抛，由调用者处理
  */
 const recents = os

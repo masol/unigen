@@ -27,7 +27,7 @@
     {:else}
       <IconFolderOpen class="size-4" stroke={1.5} />
     {/if}
-    打开项目
+    打开任务
   </Button>
 
   <Button
@@ -41,6 +41,6 @@
     {:else}
       <IconFolderPlus class="size-4" stroke={1.5} />
     {/if}
-    新建项目
+    新建任务
   </Button>
 </div>

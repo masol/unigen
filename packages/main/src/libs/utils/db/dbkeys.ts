@@ -5,12 +5,12 @@ export const ProjectDbKeys = {
     embedingModelName: 'vecModelName',
     embedingSize: 'embdingSize',
     embedingFrom: 'embeding_from',
-    depplugins: "dep", //项目依赖的插件数组
+    depplugins: "dep", //任务依赖的插件数组
     entry_capa: "entry_capa", // 入口的capability.(主任务默认执行的capability)
     entry_common: "entry_common", // 执行命令时，如果未指定命令，这是默认入口，执行意图识别+命令路由。
     //entry_commandstr // 动态拼接的command_str
-    imported: "imported", // 指示项目是否已导入了初始知识库。
-    projectType: "project-type", // 指示项目类型。
+    imported: "imported", // 指示任务是否已导入了初始知识库。
+    projectType: "project-type", // 指示任务类型。
     extract_json_prompt: "_extract_json",
 
     /// 下面是video插件定义的keys，先写这里了，应该移入video plugin.

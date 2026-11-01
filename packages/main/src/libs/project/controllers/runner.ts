@@ -39,7 +39,7 @@ export class PrjRunner extends BaseProjectController {
     constructor(ctx: IProjectContext) {
         super(ctx)
         this.#runner = new CapaRunner();
-        // 通过 tapPromise 注册，保存 unregister 函数以便项目级注销
+        // 通过 tapPromise 注册，保存 unregister 函数以便任务级注销
         this.#unregisterBeforeQuit = appLife.beforeQuit.tapPromise('PrjRunner', async () => {
             Logger.debug('[PrjRunner] 正在停止运行中的任务...');
             if (this.#runner.state === 'running' || this.#runner.state === 'terminating') {
@@ -51,7 +51,7 @@ export class PrjRunner extends BaseProjectController {
     }
 
     /**
-     * 项目销毁时调用，注销 beforeQuit 钩子，释放内存。
+     * 任务销毁时调用，注销 beforeQuit 钩子，释放内存。
      */
     dispose(): void {
         this.#unregisterBeforeQuit?.();
@@ -74,7 +74,7 @@ export class PrjRunner extends BaseProjectController {
 
     async runCommand(command: string, fnNotify: ((title: string, detail: string) => void) | null, signal?: AbortSignal | null): Promise<void> {
         if (this.#cmdrunner) {
-            throwPrecondition("已经有一个命令在执行中，每个项目只能并行执行一个命令。并行命令，请自行撰写代码能力，并执行之。")
+            throwPrecondition("已经有一个命令在执行中，每个任务只能并行执行一个命令。并行命令，请自行撰写代码能力，并执行之。")
         }
         const ctx = new RunnerContext(this.ctx, signal);
 
@@ -109,8 +109,10 @@ ${getErrorMessage(e)}`;
         if (!entry) {
             const defEntry = prjdb.get<string>(ProjectDbKeys.entry_capa);
             if (!defEntry) {
-                entry = localTypeName(this.ctx.type);
-                // throwPrecondition("项目未指定默认启动的能力ID，也没有给出能力ID.")
+                if (this.ctx.agent) {
+                    entry = localTypeName(this.ctx.type);
+                }
+                throwPrecondition("任务未指定默认启动的能力ID，也没有给出能力ID.")
             } else {
                 entry = defEntry;
             }

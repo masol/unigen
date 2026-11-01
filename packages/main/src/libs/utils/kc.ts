@@ -32,8 +32,8 @@ type OtherFilesHandler = (files: CollectedFile[]) => Promise<void> | void;
 const KnowlegeDirName = 'knowledge';
 
 /**
- * 全局知识中心。支持从训练好的项目中导出知识，下次新建此类项目时，自动初始化其知识中心。
- * @todo: 项目隔离，是对逻辑向AI自学习能力信心不足，如果有稳定收敛判定机制，项目可以直接使用全局知识中心，无需每项隔离。
+ * 全局知识中心。支持从训练好的任务中导出知识，下次新建此类任务时，自动初始化其知识中心。
+ * @todo: 任务隔离，是对逻辑向AI自学习能力信心不足，如果有稳定收敛判定机制，任务可以直接使用全局知识中心，无需每项隔离。
  */
 class KnowledgeCenter {
     /** 可写扩展的知识中心根目录（对外暴露），优先级高，覆盖 resource 同名文件 */
@@ -52,14 +52,14 @@ class KnowledgeCenter {
             this.resourcePath = join(process.resourcesPath, KnowlegeDirName);
         } else {
             // 开发环境：直接指向源码目录，二者一致，方便动态更新
-            // 当前文件位于 dist，向上一级到项目根目录
+            // 当前文件位于 dist，向上一级到任务根目录
             const __dirname = dirname(fileURLToPath(import.meta.url));
             this.resourcePath = join(__dirname, '..', KnowlegeDirName);
         }
     }
 
     /**
-     * 初始化某个子目录下的项目知识。
+     * 初始化某个子目录下的任务知识。
      *
      * 流程：
      * 1. 扫描 resourcePath/subDir 收集全部文件；

@@ -85,13 +85,13 @@ const GLOBALS: ApiMemberDoc[] = [
     },
     {
         signature: "randomUUID()",
-        description: "生成 UUID v4。与本项目无关时一般不必调用。",
+        description: "生成 UUID v4。与本任务无关时一般不必调用。",
     },
     {
         signature: "pMap(items, mapper, opts)",
         description:
             "并发 map。items 是可迭代对象；mapper 是 async 函数；opts 形如 `{ concurrency: number, stopOnError?: boolean }`。" +
-            "本项目并发数显式设为 8。",
+            "本任务并发数显式设为 8。",
         example:
             "const results = await pMap(items, async (item) => {\n" +
             "  return await 处理一个(item);\n" +

@@ -11,7 +11,7 @@ import { extname, join } from 'path';
 import { z } from 'zod';
 import { RpcContext } from '../type.js';
 
-// 项目参考图相关： @todo: 这属于video专有，应该使用tapable(hookable)将其改为插件实现！
+// 任务参考图相关： @todo: 这属于video专有，应该使用tapable(hookable)将其改为插件实现！
 
 const listMetaRes = os
     .input(z.string())
@@ -69,7 +69,7 @@ const rmMetaRes = os
                         force: true
                     });
                 } else {
-                    Logger.error(`[Project VisualRef] 请求删除参考图${src},但是它不位于项目素材目录${visualrefDir}中，忽略请求。`)
+                    Logger.error(`[Project VisualRef] 请求删除参考图${src},但是它不位于任务素材目录${visualrefDir}中，忽略请求。`)
                 }
             },
             { concurrency: configService().get("concurrency") }
