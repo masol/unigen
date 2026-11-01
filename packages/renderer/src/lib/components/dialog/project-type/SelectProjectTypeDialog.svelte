@@ -1,260 +1,272 @@
 <script lang="ts">
-    import { RuntimeIcon } from '$lib/components/runtimeicon';
-    import { Button } from '$lib/components/ui/button';
-    import {
-      DialogFooter,
-      DialogHeader,
-      DialogTitle,
-    } from '$lib/components/ui/dialog';
-    import { Input } from '$lib/components/ui/input';
-    import * as Pagination from '$lib/components/ui/pagination';
-    import { Separator } from '$lib/components/ui/separator';
-    import { Skeleton } from '$lib/components/ui/skeleton';
-    import type { DialogComponentProps } from '$lib/types/dialog';
-    import { PinyinFuseSearch } from '$lib/utils/fuse';
-    import {
-      IconFolderSearch,
-      IconMoodEmpty,
-      IconSearch,
-    } from '@tabler/icons-svelte';
-    import { debounce } from 'radashi';
-    import { onMount } from 'svelte';
-    import { cubicInOut } from 'svelte/easing';
-    import { fade } from 'svelte/transition';
-    import ProjectTypeCard from './ProjectTypeCard.svelte';
-    import {
-      fetchDefaultProjectName,
-      fetchInstalledProjectTypes,
-    } from './service';
-    import type { CreateProjectResult, ProjectType } from './types';
-    import { BLANK_PROJECT_TYPE, BLANK_PROJECT_TYPE_ID } from './types';
+  import { RuntimeIcon } from "$lib/components/runtimeicon";
+  import { BlockUi } from "$lib/components/ui/block-ui";
+  import { Button } from "$lib/components/ui/button";
+  import {
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+  } from "$lib/components/ui/dialog";
+  import { Input } from "$lib/components/ui/input";
+  import * as Pagination from "$lib/components/ui/pagination";
+  import { Separator } from "$lib/components/ui/separator";
+  import { Skeleton } from "$lib/components/ui/skeleton";
+  import type { DialogComponentProps } from "$lib/types/dialog";
+  import { PinyinFuseSearch } from "$lib/utils/fuse";
+  import {
+    IconFolderSearch,
+    IconMoodEmpty,
+    IconSearch,
+  } from "@tabler/icons-svelte";
+  import { debounce } from "radashi";
+  import { onMount } from "svelte";
+  import { cubicInOut } from "svelte/easing";
+  import { fade } from "svelte/transition";
+  import ProjectTypeCard from "./ProjectTypeCard.svelte";
+  import {
+    fetchDefaultProjectName,
+    fetchInstalledProjectTypes,
+  } from "./service";
+  import type { CreateProjectResult, ProjectType } from "./types";
+  import { BLANK_PROJECT_TYPE, BLANK_PROJECT_TYPE_ID } from "./types";
 
-    const PAGE_SIZE = 6;
-    const DUR = 180; // 交叉淡变时长
+  const PAGE_SIZE = 6;
+  const DUR = 180; // 交叉淡变时长
 
-    type Props = {
-        title?: string;
-    } & DialogComponentProps<CreateProjectResult>;
+  type Props = {
+    title?: string;
+    onCreate: (type: string, path: string) => Promise<boolean>;
+  } & DialogComponentProps<CreateProjectResult>;
 
-    let { title = '新建任务', onClose, onCancel }: Props = $props();
+  let { title = "新建任务", onCreate, onClose, onCancel }: Props = $props();
 
-    let isLoading = $state(true);
-    let installed = $state<ProjectType[]>([]);
-    let selectedId = $state<string>(BLANK_PROJECT_TYPE_ID);
-    let searchTerm = $state(''); // 输入框实时值
-    let query = $state(''); // 防抖后用于过滤的值
-    let currentPage = $state(1); // shadcn Pagination 从 1 开始
+  let isLoading = $state(true);
+  let installed = $state<ProjectType[]>([]);
+  let selectedId = $state<string>(BLANK_PROJECT_TYPE_ID);
+  let searchTerm = $state(""); // 输入框实时值
+  let query = $state(""); // 防抖后用于过滤的值
+  let currentPage = $state(1); // shadcn Pagination 从 1 开始
 
-    // 项目名：异步默认值初始填充；用户编辑后不再被覆盖
-    let projectName = $state('');
-    let nameTouched = $state(false);
+  // 项目名：异步默认值初始填充；用户编辑后不再被覆盖
+  let projectName = $state("");
+  let nameTouched = $state(false);
+  let creating = $state(false); // 创建中，阻塞 UI
 
-    // 搜索防抖 300ms：输入即时回显，过滤延迟触发，避免每次按键重算+重渲染
-    const applySearch = debounce({ delay: 300 }, (v: string) => {
-        query = v.trim();
-        currentPage = 1; // 新搜索回到首页
-    });
+  // 搜索防抖 300ms：输入即时回显，过滤延迟触发，避免每次按键重算+重渲染
+  const applySearch = debounce({ delay: 300 }, (v: string) => {
+    query = v.trim();
+    currentPage = 1; // 新搜索回到首页
+  });
 
-    /** 点击「管理任务类型」时触发 */
-    function onManage() {}
+  /** 点击「管理任务类型」时触发 */
+  // function onManage() {}
 
-    /** 点击左下浏览按钮：选择本地目录后可回填 projectName，由上层实现 */
-    function handleBrowse() {
-        // TODO: 唤起本地目录选择器，选择后设置 projectName & nameTouched = true
+  /** 点击左下浏览按钮：选择本地目录后可回填 projectName，由上层实现 */
+  function handleBrowse() {
+    // TODO: 唤起本地目录选择器，选择后设置 projectName & nameTouched = true
+  }
+
+  // 空白类型始终置顶，无条件存在
+  const allTypes = $derived<ProjectType[]>([BLANK_PROJECT_TYPE, ...installed]);
+
+  const searcher = $derived(
+    new PinyinFuseSearch(
+      allTypes.map((t) => ({ id: t.id, text: `${t.name} ${t.description}` })),
+    ),
+  );
+
+  const filtered = $derived.by<ProjectType[]>(() => {
+    if (!query) return allTypes;
+    const ids = new Set(searcher.search(query) as Array<string | number>);
+    return allTypes.filter((t) => ids.has(t.id));
+  });
+
+  const pageCount = $derived(
+    Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)),
+  );
+  const safePage = $derived(Math.min(currentPage, pageCount));
+  const pageItems = $derived(
+    filtered.slice(
+      (safePage - 1) * PAGE_SIZE,
+      (safePage - 1) * PAGE_SIZE + PAGE_SIZE,
+    ),
+  );
+
+  // key 同时随「搜索内容」与「页码」变化 → 搜索/翻页都触发交叉淡变
+  const viewKey = $derived(`${query}#${safePage}`);
+  const trimmedName = $derived(projectName.trim());
+  const canConfirm = $derived(selectedId.length > 0 && trimmedName.length > 0);
+  // 当前选中的类型对象，用于标题栏展示；始终可见，不受翻页/搜索影响
+  const selectedType = $derived(allTypes.find((t) => t.id === selectedId));
+
+  async function load() {
+    isLoading = true;
+    const [typesResult, nameResult] = await Promise.allSettled([
+      fetchInstalledProjectTypes(),
+      fetchDefaultProjectName(),
+    ]);
+    installed = typesResult.status === "fulfilled" ? typesResult.value : [];
+    if (nameResult.status === "fulfilled" && !nameTouched) {
+      projectName = nameResult.value;
     }
+    isLoading = false;
+  }
 
-    // 空白类型始终置顶，无条件存在
-    const allTypes = $derived<ProjectType[]>([BLANK_PROJECT_TYPE, ...installed]);
+  function handleSelect(id: string) {
+    selectedId = id;
+  }
 
-    const searcher = $derived(
-        new PinyinFuseSearch(
-            allTypes.map((t) => ({ id: t.id, text: `${t.name} ${t.description}` })),
-        ),
-    );
+  /** 卡片双击：选中并直接创建，但需名称已填 */
+  function handleConfirmFromCard(id: string) {
+    if (!trimmedName) return;
+    selectedId = id;
+    onClose({ typeId: id, name: trimmedName });
+  }
 
-    const filtered = $derived.by<ProjectType[]>(() => {
-        if (!query) return allTypes;
-        const ids = new Set(searcher.search(query) as Array<string | number>);
-        return allTypes.filter((t) => ids.has(t.id));
-    });
-
-    const pageCount = $derived(
-        Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)),
-    );
-    const safePage = $derived(Math.min(currentPage, pageCount));
-    const pageItems = $derived(
-        filtered.slice(
-            (safePage - 1) * PAGE_SIZE,
-            (safePage - 1) * PAGE_SIZE + PAGE_SIZE,
-        ),
-    );
-
-    // key 同时随「搜索内容」与「页码」变化 → 搜索/翻页都触发交叉淡变
-    const viewKey = $derived(`${query}#${safePage}`);
-    const trimmedName = $derived(projectName.trim());
-    const canConfirm = $derived(
-        selectedId.length > 0 && trimmedName.length > 0,
-    );
-    // 当前选中的类型对象，用于标题栏展示；始终可见，不受翻页/搜索影响
-    const selectedType = $derived(allTypes.find((t) => t.id === selectedId));
-
-    async function load() {
-        isLoading = true;
-        const [typesResult, nameResult] = await Promise.allSettled([
-            fetchInstalledProjectTypes(),
-            fetchDefaultProjectName(),
-        ]);
-        installed = typesResult.status === 'fulfilled' ? typesResult.value : [];
-        if (nameResult.status === 'fulfilled' && !nameTouched) {
-            projectName = nameResult.value;
-        }
-        isLoading = false;
+  async function handleCreate() {
+    if (!canConfirm) return;
+    creating = true;
+    try {
+      await onCreate?.(selectedId, trimmedName);
+    } catch (error) {
+      console.error("创建项目失败", error);
+    } finally {
+      creating = false;
     }
+    onClose({ typeId: selectedId, name: trimmedName });
+  }
 
-    function handleSelect(id: string) {
-        selectedId = id;
+  function handleNameKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter" && canConfirm) {
+      e.preventDefault();
+      handleCreate();
     }
+  }
 
-    /** 卡片双击：选中并直接创建，但需名称已填 */
-    function handleConfirmFromCard(id: string) {
-        if (!trimmedName) return;
-        selectedId = id;
-        onClose({ typeId: id, name: trimmedName });
-    }
-
-    function handleCreate() {
-        if (!canConfirm) return;
-        onClose({ typeId: selectedId, name: trimmedName });
-    }
-
-    function handleNameKeydown(e: KeyboardEvent) {
-        if (e.key === 'Enter' && canConfirm) {
-            e.preventDefault();
-            handleCreate();
-        }
-    }
-
-    onMount(load);
+  onMount(load);
 </script>
 
-<DialogHeader>
+<BlockUi bind:value={creating} message="正在创建任务…">
+  <DialogHeader>
     <div class="flex items-center gap-3">
-        <DialogTitle class="shrink-0">{title}</DialogTitle>
-        {#if selectedType}
-            {#key selectedType.id}
-                <span
-                    in:fade={{ duration: 150 }}
-                    class="flex min-w-0 items-center gap-1.5 rounded-lg border border-primary/20
+      <DialogTitle class="shrink-0">{title}</DialogTitle>
+      {#if selectedType}
+        {#key selectedType.id}
+          <span
+            in:fade={{ duration: 150 }}
+            class="flex min-w-0 items-center gap-1.5 rounded-lg border border-primary/20
                            bg-primary/5 py-1 pl-1.5 pr-2.5 text-sm"
-                >
-                    <span
-                        class="flex size-5 shrink-0 items-center justify-center rounded-md
+          >
+            <span
+              class="flex size-5 shrink-0 items-center justify-center rounded-md
                                bg-primary text-primary-foreground"
-                    >
-                        <RuntimeIcon name={selectedType.icon} size={14} />
-                    </span>
-                    <span class="truncate font-medium text-foreground">
-                        {selectedType.name}
-                    </span>
-                </span>
-            {/key}
-        {/if}
+            >
+              <RuntimeIcon name={selectedType.icon} size={14} />
+            </span>
+            <span class="truncate font-medium text-foreground">
+              {selectedType.name}
+            </span>
+          </span>
+        {/key}
+      {/if}
     </div>
-</DialogHeader>
+  </DialogHeader>
 
-<div class="space-y-4 py-4">
+  <div class="space-y-4 py-4">
     <!-- 搜索框：占位符即引导，双击卡片直接创建 -->
     <div class="relative">
-        <IconSearch
-            class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-            bind:value={searchTerm}
-            oninput={() => applySearch(searchTerm)}
-            placeholder="选择一个任务类型，或搜索…"
-            class="rounded-xl pl-9"
-            disabled={isLoading}
-        />
+      <IconSearch
+        class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+      />
+      <Input
+        bind:value={searchTerm}
+        oninput={() => applySearch(searchTerm)}
+        placeholder="选择一个任务类型，或搜索…"
+        class="rounded-xl pl-9"
+        disabled={isLoading}
+      />
     </div>
 
     <!-- 网格区：单元格叠层。新旧页占同一 grid cell，在流内交叉淡变；容器随内容撑高，绝不溢出压住分页器 -->
     <div class="grid min-h-80">
-        {#if isLoading}
-            <div class="col-start-1 row-start-1 grid grid-cols-3 content-start gap-4">
-                {#each Array(PAGE_SIZE) as _, i (i)}
-                    <Skeleton class="h-40 rounded-2xl" />
-                {/each}
-            </div>
-        {:else if pageItems.length === 0}
-            <div
-                class="col-start-1 row-start-1 flex flex-col items-center justify-center gap-2 text-center"
-                in:fade={{ duration: DUR, easing: cubicInOut }}
-            >
-                <IconMoodEmpty class="size-8 text-muted-foreground" />
-                <p class="text-sm text-foreground">没有匹配的任务类型</p>
-                <p class="text-xs text-muted-foreground">换个关键词试试。</p>
-            </div>
-        {:else}
-            {#key viewKey}
-                <div
-                    class="col-start-1 row-start-1 grid grid-cols-3 content-start gap-4"
-                    in:fade={{ duration: DUR, easing: cubicInOut }}
-                    out:fade={{ duration: DUR, easing: cubicInOut }}
-                >
-                    {#each pageItems as type (type.id)}
-                        <ProjectTypeCard
-                            {type}
-                            selected={selectedId === type.id}
-                            onSelect={handleSelect}
-                            onConfirm={handleConfirmFromCard}
-                        />
-                    {/each}
-                </div>
-            {/key}
-        {/if}
+      {#if isLoading}
+        <div
+          class="col-start-1 row-start-1 grid grid-cols-3 content-start gap-4"
+        >
+          {#each Array(PAGE_SIZE) as _, i (i)}
+            <Skeleton class="h-40 rounded-2xl" />
+          {/each}
+        </div>
+      {:else if pageItems.length === 0}
+        <div
+          class="col-start-1 row-start-1 flex flex-col items-center justify-center gap-2 text-center"
+          in:fade={{ duration: DUR, easing: cubicInOut }}
+        >
+          <IconMoodEmpty class="size-8 text-muted-foreground" />
+          <p class="text-sm text-foreground">没有匹配的任务类型</p>
+          <p class="text-xs text-muted-foreground">换个关键词试试。</p>
+        </div>
+      {:else}
+        {#key viewKey}
+          <div
+            class="col-start-1 row-start-1 grid grid-cols-3 content-start gap-4"
+            in:fade={{ duration: DUR, easing: cubicInOut }}
+            out:fade={{ duration: DUR, easing: cubicInOut }}
+          >
+            {#each pageItems as type (type.id)}
+              <ProjectTypeCard
+                {type}
+                selected={selectedId === type.id}
+                onSelect={handleSelect}
+                onConfirm={handleConfirmFromCard}
+              />
+            {/each}
+          </div>
+        {/key}
+      {/if}
     </div>
 
     <!-- 分页器：可直接跳页，仅多页时显示 -->
     {#if !isLoading && pageCount > 1}
-        <Pagination.Root
-            count={filtered.length}
-            perPage={PAGE_SIZE}
-            bind:page={currentPage}
-        >
-            {#snippet children({ pages, currentPage: cp })}
-                <Pagination.Content>
-                    <Pagination.Item>
-                        <Pagination.PrevButton class="rounded-xl" />
-                    </Pagination.Item>
-                    {#each pages as p (p.key)}
-                        {#if p.type === 'ellipsis'}
-                            <Pagination.Item>
-                                <Pagination.Ellipsis />
-                            </Pagination.Item>
-                        {:else}
-                            <Pagination.Item>
-                                <Pagination.Link
-                                    page={p}
-                                    isActive={cp === p.value}
-                                    class="rounded-xl"
-                                >
-                                    {p.value}
-                                </Pagination.Link>
-                            </Pagination.Item>
-                        {/if}
-                    {/each}
-                    <Pagination.Item>
-                        <Pagination.NextButton class="rounded-xl" />
-                    </Pagination.Item>
-                </Pagination.Content>
-            {/snippet}
-        </Pagination.Root>
+      <Pagination.Root
+        count={filtered.length}
+        perPage={PAGE_SIZE}
+        bind:page={currentPage}
+      >
+        {#snippet children({ pages, currentPage: cp })}
+          <Pagination.Content>
+            <Pagination.Item>
+              <Pagination.PrevButton class="rounded-xl" />
+            </Pagination.Item>
+            {#each pages as p (p.key)}
+              {#if p.type === "ellipsis"}
+                <Pagination.Item>
+                  <Pagination.Ellipsis />
+                </Pagination.Item>
+              {:else}
+                <Pagination.Item>
+                  <Pagination.Link
+                    page={p}
+                    isActive={cp === p.value}
+                    class="rounded-xl"
+                  >
+                    {p.value}
+                  </Pagination.Link>
+                </Pagination.Item>
+              {/if}
+            {/each}
+            <Pagination.Item>
+              <Pagination.NextButton class="rounded-xl" />
+            </Pagination.Item>
+          </Pagination.Content>
+        {/snippet}
+      </Pagination.Root>
     {/if}
-</div>
+  </div>
 
-<!-- 辅助信息：安静地存在，不抢焦点 -->
-<Separator />
-<div class="flex items-center justify-between pt-3">
+  <!-- 辅助信息：安静地存在，不抢焦点 -->
+  <Separator />
+  <!-- <div class="flex items-center justify-between pt-3">
     <p class="text-xs text-muted-foreground">
         本机已安装的任务类型。可在
         <button
@@ -267,45 +279,44 @@
         </button>
         中安装更多。
     </p>
-</div>
+</div> -->
 
-<!--
+  <!--
   Footer：左侧「浏览 + 名称输入」低调占位，右侧确认/取消；
   sm:justify-between 让两组在流内自然分列，手机折行时也符合预期。
 -->
-<DialogFooter class="mt-4 gap-2 sm:justify-between">
+  <DialogFooter class="mt-4 gap-2 sm:justify-between">
     <!-- ╭─────────────────────────────────────────────────────╮ -->
     <!-- │ [名称输入组]                                           │ -->
     <!-- │ 浏览按钮使用 ghost + muted 色，刻意低调，不与主按钮竞争   │ -->
     <!-- ╰─────────────────────────────────────────────────────╯ -->
     <div class="flex min-w-0 flex-1 items-center gap-1.5 sm:max-w-sm">
-        <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onclick={handleBrowse}
-            disabled={isLoading}
-            aria-label="浏览本地文件夹"
-            class="shrink-0 rounded-xl text-muted-foreground
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onclick={handleBrowse}
+        disabled={isLoading}
+        aria-label="浏览本地文件夹"
+        class="shrink-0 rounded-xl text-muted-foreground
                    hover:bg-muted hover:text-foreground"
-        >
-            <IconFolderSearch class="size-4" />
-        </Button>
-        <Input
-            bind:value={projectName}
-            oninput={() => (nameTouched = true)}
-            onkeydown={handleNameKeydown}
-            placeholder="任务名称"
-            aria-label="任务名称"
-            disabled={isLoading}
-            class="rounded-xl"
-        />
+      >
+        <IconFolderSearch class="size-4" />
+      </Button>
+      <Input
+        bind:value={projectName}
+        oninput={() => (nameTouched = true)}
+        onkeydown={handleNameKeydown}
+        placeholder="任务名称"
+        aria-label="任务名称"
+        disabled={isLoading}
+        class="rounded-xl"
+      />
     </div>
 
     <div class="flex shrink-0 items-center gap-2">
-        <Button variant="outline" onclick={() => onCancel()}>取消</Button>
-        <Button disabled={!canConfirm} onclick={handleCreate}>
-            创建任务
-        </Button>
+      <Button variant="outline" onclick={() => onCancel()}>取消</Button>
+      <Button disabled={!canConfirm} onclick={handleCreate}>创建任务</Button>
     </div>
-</DialogFooter>
+  </DialogFooter>
+</BlockUi>

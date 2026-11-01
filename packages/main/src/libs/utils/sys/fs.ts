@@ -1,4 +1,3 @@
-import Logger from 'electron-log/main.js';
 import { access, opendir } from 'node:fs/promises';
 import { join } from 'node:path';
 /**
@@ -44,7 +43,6 @@ export async function nextIncrementalName(
     prefix = 'untitled'
 ): Promise<string> {
 
-    Logger.debug(`nextIncrementalName: dir=${dir}, prefix=${prefix}`);
     // 1. 流式读取目录，收集所有已存在的序号
     const used = new Set<number>();
     const prefixLower = prefix.toLowerCase();
@@ -79,7 +77,6 @@ export async function nextIncrementalName(
             // 已存在，继续下一个
         } catch (err: unknown) {
             if (isErrnoException(err) && err.code === 'ENOENT') {
-                Logger.debug(`nextIncrementalName: found available name=${candidateName}`);
                 return candidateName;
             }
             throw err;

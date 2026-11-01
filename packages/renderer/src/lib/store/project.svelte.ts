@@ -247,11 +247,14 @@ class ProjectStore {
                 {
                     // onManage 留给你实现内部路由跳转（非新窗口）
                     onManage: () => alert("/settings/project-types"),
+                    onCreate: async (typeId: string, pathName: string) => {
+                        return await this.createImpl(typeId, pathName);
+                    }
                 },
                 { size: "xl" }, // 宽屏网格，选用 xl
             );
             if (prjInfo === null) return false; // 用户取消
-            await this.createImpl(prjInfo.typeId, prjInfo.name);
+            // await this.createImpl(prjInfo.typeId, prjInfo.name);
             return true;
         } finally {
             this.loading = null;
