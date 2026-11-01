@@ -77,6 +77,10 @@ export const configSchema: Schema<AppConfig> = {
         type: "boolean",
         default: false,
     },
+    task_dir: {
+        type: "string",
+        default: "",
+    },
     models: {
         type: 'array',
         default: [],

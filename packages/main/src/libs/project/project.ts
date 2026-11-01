@@ -2,6 +2,7 @@
 
 import { PACFunctor } from "$libs/blueprint/capability/local/index.js";
 import type { ICapaFunctor } from "$libs/blueprint/capability/type.js";
+import { configService } from "$libs/store/index.js";
 import { secondConfig } from "$libs/store/second.js";
 import { throwUnprcessable } from "$libs/utils/err.js";
 import { knowledgeCenter } from "$libs/utils/kc.js";
@@ -10,9 +11,10 @@ import type { ProjectActivityData } from "$types/index.js";
 import { projectActivityDataSchema } from "$types/shared/template/project.js";
 import { BrowserWindow } from "electron";
 import Logger from "electron-log/main.js";
+import { filenamifyPath } from "filenamify";
 import fsExtra from 'fs-extra';
 import fs from 'node:fs/promises';
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 import { closeProject, createProject, openProject } from "./helper/create.js";
 import type { IProjectPlugin } from "./plugin.js";
@@ -35,10 +37,6 @@ export class ProjectContainer implements IProjectContext {
         this.#prjId = prjId;
         registProjectBuildin(this);
     }
-
-    // async init(projectPath: string): Promise<void> {
-    //     this.#path = projectPath;
-    // }
 
     notify(evtName: string, payload: unknown, srcId = -1): boolean {
         const win: BrowserWindow | null = BrowserWindow.fromId(this.#wid);
@@ -123,6 +121,21 @@ export class ProjectContainer implements IProjectContext {
         return join(this.#path, ...base, ...normalizedParts);
     }
 
+    /**
+     * 将用户输入的路径解析为可用的绝对路径：
+     * 1. 相对路径基于 configService().get("task_dir") 解析为绝对路径；
+     *    绝对路径保持不变。
+     * 2. 使用 filenamifyPath 对最后一段文件名做安全化（去除非法字符），
+     *    中间目录段不动，前缀 task_dir 视为受信任路径。
+     */
+    #resolveAndSanitizePath(inputPath: string): string {
+        const trimmed = inputPath?.trim();
+        if (!trimmed) {
+            throwUnprcessable("任务路径不能为空。");
+        }
+        const absolute = isAbsolute(trimmed) ? trimmed : resolve(configService().get("task_dir"), trimmed);
+        return filenamifyPath(absolute);
+    }
 
     private validatePrjData(file: string, type: unknown): ProjectActivityData {
         const result = projectActivityDataSchema.safeParse(type);
@@ -141,33 +154,31 @@ export class ProjectContainer implements IProjectContext {
 
     async loadUI(): Promise<ProjectActivityData> {
         const uiFile = this.getPath("type.json");
-        const uiJSOn = await fsExtra.readJSON(uiFile);
-        const prjdata = this.validatePrjData(uiFile, uiJSOn);
+        const uiJSON = await fsExtra.readJSON(uiFile);
+        const prjdata = this.validatePrjData(uiFile, uiJSON);
         this.setInputName(prjdata);
         return prjdata;
     }
 
     // 创建失败，返回错误信息。成功返回空字符串。
     async open(path: string): Promise<ProjectActivityData> {
+        const resolvedPath = this.#resolveAndSanitizePath(path);
         try {
             await this.close();
-            this.#path = path;
+            this.#path = resolvedPath;
             const prjdata = await this.loadUI();
             const type = await fs.readFile(this.getPath("type.txt"), "utf-8");
             if (!type) {
                 throwUnprcessable(`任务类型文件${this.getPath("type.txt")}不存在或为空。`)
             }
             this.#type = type;
-            // if (meta && meta.type) {
-            //     // 提前加载插件，才能注册tapable事件响应点。
-            //     this.#plugin = await pluginManager.load(configService().get("plugin"), this)
-            // }
 
             await openProject(this, prjdata.icon);
             await this.reloadAgent();
             return prjdata
         } catch (e) {
-            secondConfig().removeProject(path)
+            // 使用解析后的路径，确保与存储时使用的 key 一致
+            secondConfig().removeProject(resolvedPath)
             this.#path = "";
             throw e;
         }
@@ -175,9 +186,10 @@ export class ProjectContainer implements IProjectContext {
 
 
     async create(path: string, type: string, bForce = false): Promise<ProjectActivityData> {
+        const resolvedPath = this.#resolveAndSanitizePath(path);
         try {
             await this.close();
-            this.#path = path;
+            this.#path = resolvedPath;
             this.#type = type;
             // 提前加载插件，才能注册tapable事件响应点。支持无插件运行。
             // this.#plugin = await pluginManager.load(type, this)
@@ -185,17 +197,15 @@ export class ProjectContainer implements IProjectContext {
             if (!typePath) {
                 throwUnprcessable(`请求的类型${type}未提供UI界面定义。`)
             }
-            const typejson = await fsExtra.readJSON(typePath, "utf-8");
+            const typejson = await fsExtra.readJSON(typePath);
             const prjdata = this.validatePrjData(typePath, typejson);
             await createProject(this, type, prjdata.icon, bForce);
             await Promise.all([
-                // this.saveMeta(type),
                 fsExtra.copyFile(typePath, this.getPath("type.json")),
                 fs.writeFile(this.getPath("type.txt"), type)
             ])
             this.setInputName(prjdata);
             await this.reloadAgent();
-            // Logger.debug(`copy from ${typePath} to ${this.getPath("type.json")}`)
             return prjdata;
         } catch (e) {
             this.#path = "";

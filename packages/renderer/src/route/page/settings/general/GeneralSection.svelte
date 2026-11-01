@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { Button } from "$lib/components/ui/button";
   import * as Popover from "$lib/components/ui/popover";
   import { Separator } from "$lib/components/ui/separator";
   import { Switch } from "$lib/components/ui/switch";
   import { configStore } from "$lib/store/config.svelte";
+  import { api } from "$lib/utils/api";
   import type { AppConfig } from "@app/main/types";
   import autoAnimate from "@formkit/auto-animate";
   import {
@@ -10,10 +12,13 @@
     IconCheck,
     IconChevronDown,
     IconDeviceSim,
+    IconFolder,
+    IconFolderOpen,
     IconLanguage,
     IconPalette,
     IconWorldSearch,
   } from "@tabler/icons-svelte";
+  import { toast } from "svelte-sonner";
 
   let langOpen = $state(false);
   let themeOpen = $state(false);
@@ -30,7 +35,7 @@
     { value: "system", label: "跟随系统" },
   ];
 
-  // 常见 OTel 兼容收集器端点（本地版优先）
+  // 常见 OTel 兼容收集器端点(本地版优先)
   type Endpoint = { url: string; label: string };
   const TELEMETRY_ENDPOINTS: Endpoint[] = [
     {
@@ -70,7 +75,7 @@
       configStore.theme,
   );
 
-  // 硬件加速：读写定向
+  // 硬件加速:读写定向
   const disableHAProxy = {
     get value() {
       return configStore.disableHA;
@@ -80,7 +85,7 @@
     },
   };
 
-  // 收集器地址：读只读 store，写 setConfig
+  // 收集器地址:读只读 store,写 setConfig
   const telemetryProxy = {
     get value(): string {
       return configStore.telemetry ?? "";
@@ -92,6 +97,41 @@
     },
   };
 
+  // ───────────────────────────────────────────────────────────
+  // 任务基础目录:通过主进程原生对话框选择
+  // ───────────────────────────────────────────────────────────
+  const taskDirProxy = {
+    get value(): string {
+      return configStore.task_dir ?? "";
+    },
+    set value(newValue: string) {
+      const trimmed = newValue.trim();
+      if (trimmed === (configStore.task_dir ?? "")) return;
+      void configStore.setConfig("task_dir", trimmed);
+    },
+  };
+
+  async function pickTaskDir() {
+    try {
+      const result = await api().system.selectDirectory({
+        title: "选择任务基础目录",
+        defaultPath: taskDirProxy.value || undefined,
+      });
+      if (result.canceled || !result.path) return;
+      taskDirProxy.value = result.path;
+      toast.success("任务基础目录已更新");
+    } catch (e) {
+      toast.error(
+        `选择目录失败: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
+  // async function revealTaskDir() {
+  //   if (!taskDirProxy.value) return;
+  //   await api().system.showItemInFolder({ path: taskDirProxy.value });
+  // }
+
   let telemetryOpen = $state(false);
   let telemetryDraft = $state("");
   let activeIndex = $state(-1);
@@ -102,7 +142,6 @@
       telemetryDraft = telemetryProxy.value;
       activeIndex = -1;
     } else {
-      // 关闭即提交草稿（自由输入也生效）
       telemetryProxy.value = telemetryDraft;
     }
   }
@@ -149,10 +188,6 @@
   <div
     class="rounded-2xl border border-border/50 bg-card shadow-sm overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-border"
   >
-    <!--╭─────────────────────────────────────────────────────╮ -->
-    <!-- │ [可抽取子组件 → SettingSelectRow.svelte]              │ -->
-    <!-- │ 职责：图标+标题+描述 与 Popover 下拉选择组合的设置行  │ -->
-    <!-- ╰─────────────────────────────────────────────────────╯ -->
     <!-- Row: 界面语言 -->
     <div
       class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-8 p-6"
@@ -276,7 +311,6 @@
         </Popover.Content>
       </Popover.Root>
     </div>
-    <!-- ╭─── / SettingSelectRow ───╮ -->
 
     <Separator class="bg-border/30" />
 
@@ -302,10 +336,40 @@
 
     <Separator class="bg-border/30" />
 
-    <!--╭─────────────────────────────────────────────────────╮ -->
-    <!-- │ [可抽取子组件 → TelemetryEndpointRow.svelte]          │ -->
-    <!-- │ 职责：OTel 收集器地址配置，Popover 向上弹出避免裁切   │ -->
-    <!-- ╰─────────────────────────────────────────────────────╯ -->
+    <!-- Row: 任务基础目录 -->
+    <div
+      class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-8 p-6"
+    >
+      <div class="flex items-center gap-4 min-w-0">
+        <div
+          class="flex items-center justify-center size-9 rounded-lg bg-muted shrink-0"
+        >
+          <IconFolder size={20} stroke={1.5} class="text-muted-foreground" />
+        </div>
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-foreground">任务基础目录</p>
+          <p
+            class="text-xs mt-0.5 truncate max-w-md font-mono"
+            class:text-muted-foreground={!taskDirProxy.value}
+            class:text-foreground={!!taskDirProxy.value}
+            title={taskDirProxy.value || "尚未设置"}
+          >
+            {taskDirProxy.value || "尚未设置,将使用默认目录"}
+          </p>
+        </div>
+      </div>
+      <Button
+        variant="outline"
+        class="rounded-xl gap-2 shrink-0 transition-all duration-200"
+        onclick={pickTaskDir}
+      >
+        <IconFolderOpen size={16} stroke={1.5} />
+        选择目录
+      </Button>
+    </div>
+
+    <Separator class="bg-border/30" />
+
     <!-- Row: 遥测收集器地址 -->
     <div
       class="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-8 p-6"
@@ -323,12 +387,11 @@
         <div class="min-w-0">
           <p class="text-sm font-medium text-foreground">遥测收集器地址</p>
           <p class="text-xs text-muted-foreground mt-0.5 max-w-md">
-            兼容 OTel 的收集器地址（如arize-phoenix）。
+            兼容 OTel 的收集器地址(如arize-phoenix)。
           </p>
         </div>
       </div>
 
-      <!-- Popover 走 Portal 浮层，不受父级 overflow-hidden 裁切，side=top 向上弹出 -->
       <Popover.Root bind:open={telemetryOpen} onOpenChange={openTelemetry}>
         <Popover.Trigger>
           {#snippet child({ props })}
@@ -356,7 +419,6 @@
           sideOffset={8}
           class="rounded-xl p-0 w-[min(22rem,90vw)] overflow-hidden"
         >
-          <!-- 输入区 -->
           <div class="relative border-b border-border/50 p-2">
             <IconWorldSearch
               size={16}
@@ -377,7 +439,6 @@
             />
           </div>
 
-          <!-- 建议列表：向上弹出后位于按钮上方，无遮挡；自身细滚动条 -->
           <div class="max-h-56 overflow-y-auto p-1" use:autoAnimate>
             {#if filteredEndpoints.length > 0}
               {#each filteredEndpoints as opt, i (opt.url)}
@@ -386,23 +447,22 @@
                   onmouseenter={() => (activeIndex = i)}
                   class={`w-full flex flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left transition-all duration-200 ${i === activeIndex ? "bg-accent" : "hover:bg-accent"}`}
                 >
-                  <span class="text-sm text-foreground truncate w-full">
-                    {opt.url}
-                  </span>
-                  <span class="text-xs text-muted-foreground truncate w-full">
-                    {opt.label}
-                  </span>
+                  <span class="text-sm text-foreground truncate w-full"
+                    >{opt.url}</span
+                  >
+                  <span class="text-xs text-muted-foreground truncate w-full"
+                    >{opt.label}</span
+                  >
                 </button>
               {/each}
             {:else}
               <div class="px-3 py-4 text-center text-xs text-muted-foreground">
-                未匹配到预设端点，回车即可使用当前自定义地址。
+                未匹配到预设端点,回车即可使用当前自定义地址。
               </div>
             {/if}
           </div>
         </Popover.Content>
       </Popover.Root>
     </div>
-    <!-- ╭─── / TelemetryEndpointRow ───╮ -->
   </div>
 </section>

@@ -11,9 +11,11 @@ import { writeFile } from 'fs/promises'
 import { join } from 'path'
 import { z } from 'zod'
 // import { genText } from '$libs/utils/model/factory/node-llama-cpp/local.js'
+import { configService } from '$libs/store/index.js'
 import { throwCancel } from '$libs/utils/err.js'
 import { knowledgeCenter } from '$libs/utils/kc.js'
 import { dataCenter } from '$libs/utils/sys/data.js'
+import { nextIncrementalName } from '$libs/utils/sys/fs.js'
 import { appLife } from '$libs/utils/tapable/applife.js'
 import { projectTypeSchema } from '$types/shared/template/prjtype.js'
 import pTimeout from 'p-timeout'
@@ -27,14 +29,12 @@ const customFilterSchema = z.object({
 })
 
 /**
- * filters 字段：可以传预置枚举，也可以传自定义 filter 数组，也可以不传（默认 ALL）
+ * filters 字段:可以传预置枚举,也可以传自定义 filter 数组,也可以不传(默认 ALL)
  */
 const filtersInputSchema = z.union([
     fileFilterPresetSchema,
     z.array(customFilterSchema),
 ]).optional()
-
-// const fileReturnModeSchema = z.enum(FileReturnMode).optional()
 
 const saveResultSchema = z.object({
     success: z.boolean(),
@@ -113,7 +113,40 @@ const openFile = os
         return filePaths
     })
 
+/**
+ * 选择单个目录
+ * - defaultPath: 对话框打开时定位到该目录
+ * - title:       对话框标题(部分平台生效)
+ * 返回 { canceled, path },取消时 path 为 undefined。
+ */
+const selectDirectory = os
+    .input(
+        z.object({
+            defaultPath: z.string().optional(),
+            title: z.string().optional(),
+        }).optional(),
+    )
+    .output(
+        z.object({
+            canceled: z.boolean(),
+            path: z.string().optional(),
+        }),
+    )
+    .handler(async ({ input, context }) => {
+        const { canceled, filePaths } = await WindowService.instance.withModalWindow(context, (parent) => {
+            return dialog.showOpenDialog(parent, {
+                title: input?.title,
+                defaultPath: input?.defaultPath,
+                properties: ['openDirectory', 'createDirectory', 'dontAddToRecent'],
+            })
+        })
 
+        if (canceled || filePaths.length === 0) {
+            return { canceled: true }
+        }
+
+        return { canceled: false, path: filePaths[0] }
+    })
 
 /**
  * 保存文件
@@ -162,12 +195,12 @@ const saveFile = os
     })
 
 /**
- * 保存二进制文件（base64 输入）
+ * 保存二进制文件(base64 输入)
  */
 const saveBinaryFile = os
     .input(
         z.object({
-            /** base64 编码的数据（不含 data-uri 前缀） */
+            /** base64 编码的数据(不含 data-uri 前缀) */
             base64: z.string(),
             noDialog: z.boolean().optional(),
             defaultName: z.string().optional().default('untitled.bin'),
@@ -206,7 +239,7 @@ const saveBinaryFile = os
     })
 
 /**
- * 使用系统默认程序打开外部 URL（浏览器打开网址）
+ * 使用系统默认程序打开外部 URL(浏览器打开网址)
  */
 const openExternal = os
     .input(z.object({ url: z.string().url() }))
@@ -217,10 +250,8 @@ const openExternal = os
     })
 
 /**
- * 使用系统默认程序打开本地文件（如用 Finder/Explorer 打开图片、PDF 等）
+ * 使用系统默认程序打开本地文件(如用 Finder/Explorer 打开图片、PDF 等)
  */
-// 假设 Logger 和 shell 已经导入
-
 const OPEN_TIMEOUT_MS = 10_000; // 10秒超时
 
 const openPath = os
@@ -241,13 +272,13 @@ const openPath = os
                 },
             );
             if (errorMessage) {
-                Logger.error(`无法使用系统默认应用打开请求的文件：${input.path}, 错误: ${errorMessage}`);
+                Logger.error(`无法使用系统默认应用打开请求的文件:${input.path}, 错误: ${errorMessage}`);
                 return { success: false, errorMessage };
             }
             return { success: true };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            Logger.error(`打开文件异常：${input.path}, ${message}`);
+            Logger.error(`打开文件异常:${input.path}, ${message}`);
             return { success: false, errorMessage: message };
         }
     });
@@ -317,10 +348,8 @@ const streamLogs = os
     .handler(async function* ({ context, signal }) {
         // @ts-expect-error 不改进类型了。
         const externalSignal: AbortSignal | undefined = signal ?? context?.signal;
-        // Logger.debug('signal on streamLogs:', externalSignal);
 
         const queue: LogMessage[] = [];
-        // 改为存储触发器数组，支持更安全的通知机制
         let notifyWaiting: (() => void) | null = null;
 
         const logHook: Hook = (message: LogMessage, transport?: Transport, transportName?: string) => {
@@ -328,7 +357,7 @@ const streamLogs = os
                 queue.push(message);
                 if (notifyWaiting) {
                     notifyWaiting();
-                    notifyWaiting = null; // 消费后立即置空
+                    notifyWaiting = null;
                 }
             }
             return message;
@@ -339,30 +368,26 @@ const streamLogs = os
             const idx = Logger.hooks.indexOf(logHook);
             if (idx !== -1) Logger.hooks.splice(idx, 1);
             if (notifyWaiting) {
-                notifyWaiting(); // 唤醒悬空的 Promise 让其安全结束
+                notifyWaiting();
                 notifyWaiting = null;
             }
         };
 
-        // 统一处理 Abort 信号
         const onAbort = () => cleanup();
         if (externalSignal?.aborted) return cleanup();
         externalSignal?.addEventListener('abort', onAbort);
 
         try {
-            // 只要没有被终止，或者队列里还有没发完的日志，就继续消费
             while (!externalSignal?.aborted) {
                 if (queue.length > 0) {
                     yield queue.shift()!;
                 } else {
-                    // 完美的等待机制：纯粹作为条件变量使用
                     await new Promise<void>((resolve) => {
                         notifyWaiting = resolve;
                     });
                 }
             }
         } finally {
-            // 无论是 signal 触发、客户端断开、还是代码异常，必走这里
             cleanup();
             externalSignal?.removeEventListener('abort', onAbort);
             Logger.debug("logstream terminate successfully.", externalSignal);
@@ -383,8 +408,17 @@ const prjTypes = os
         return dataCenter.loadTplMetas(input);
     });
 
+
+const validTaskName = os
+    .input(z.void())
+    .output(z.string())
+    .handler(async () => {
+        return await nextIncrementalName(configService().get("task_dir"), "untitled");
+    });
+
 export default {
     openFile,
+    selectDirectory,
     saveFile,
     saveBinaryFile,
     openExternal,
@@ -395,5 +429,6 @@ export default {
     streamLogs,
     version,
     bootstrapped,
-    prjTypes
+    prjTypes,
+    validTaskName
 }

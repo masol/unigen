@@ -16,6 +16,5 @@ export async function fetchInstalledProjectTypes(): Promise<ProjectType[]> {
  * 返回空字符串时，对话框将显示占位符并等待用户输入。
  */
 export async function fetchDefaultProjectName(): Promise<string> {
-    // TODO: 接入真实的默认命名策略
-    return '';
+    return await safeApi().system.validTaskName();
 }

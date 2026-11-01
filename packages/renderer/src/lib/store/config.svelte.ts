@@ -24,6 +24,7 @@ class ConfigStore {
     #embedModel = $state<string>('')                   // 原始值 → $state
     #localModel = $state<string>('')                   // 原始值 → $state
     #providers = $state<Provider[]>([])           // 复合对象整体替换 → $state.raw
+    #task_dir = $state<string>("")           // 复合对象整体替换 → $state.raw
     #autoupdate = $state<boolean>(true)
     #disableHA = $state<boolean>(false)
     #silentSave = $state<boolean>(false)
@@ -64,6 +65,7 @@ class ConfigStore {
     get parallelRun() { return this.#parallelRun }
     get telemetry() { return this.#telemetry }
     get concurrency() { return this.#concurrency }
+    get task_dir() { return this.#task_dir }
 
     // ── 只读门面：init 异步状态 ──
     get isLoading() { return this.#isLoading }
@@ -162,6 +164,9 @@ class ConfigStore {
             case 'telemetry':
                 this.#telemetry = value as AppConfig['telemetry'];
                 break;
+            case 'task_dir':
+                this.#task_dir = value as AppConfig['task_dir'];
+                break;
             case 'keybindings':
                 this.keybinding.onKeybindingUpdate(value as AppConfig['keybindings'])
                 break;
@@ -220,6 +225,7 @@ class ConfigStore {
         this.#parallelRun = config.parallelRun
         this.#telemetry = config.telemetry
         this.#concurrency = config.concurrency
+        this.#task_dir = config.task_dir
 
         this.applyTheme();
         this.keybinding.onKeybindingUpdate(config.keybindings);
