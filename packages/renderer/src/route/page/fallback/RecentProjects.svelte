@@ -18,6 +18,7 @@
   }
 
   async function handleOpen(project: RecentProject) {
+    (document.activeElement as HTMLElement)?.blur();
     opening = true;
     try {
       await projectStore.open(project.path);
@@ -55,27 +56,27 @@
     <span>最近项目</span>
   </div>
 
-  <BlockUi bind:value={opening} message="正在打开任务…" class="w-full">
-    {#if recentProjectsStore.isLoading}
-      <ul class="space-y-1.5">
-        {#each Array.from({ length: 3 }, (_, i) => i) as idx (idx)}
-          <li class="flex items-center gap-3 rounded-lg px-3 py-2.5">
-            <Skeleton class="size-8 rounded-md" />
-            <div class="flex-1 space-y-2">
-              <Skeleton class="h-3.5 w-32" />
-              <Skeleton class="h-3 w-56" />
-            </div>
-            <Skeleton class="h-3 w-16" />
-          </li>
-        {/each}
-      </ul>
-    {:else if recentProjectsStore.error}
-      <p class="text-sm text-muted-foreground">
-        加载失败:{recentProjectsStore.error}
-      </p>
-    {:else if recentProjectsStore.isEmpty}
-      <p class="text-sm text-muted-foreground">暂无最近项目</p>
-    {:else}
+  {#if recentProjectsStore.isLoading}
+    <ul class="space-y-1.5">
+      {#each Array.from({ length: 3 }, (_, i) => i) as idx (idx)}
+        <li class="flex items-center gap-3 rounded-lg px-3 py-2.5">
+          <Skeleton class="size-8 rounded-md" />
+          <div class="flex-1 space-y-2">
+            <Skeleton class="h-3.5 w-32" />
+            <Skeleton class="h-3 w-56" />
+          </div>
+          <Skeleton class="h-3 w-16" />
+        </li>
+      {/each}
+    </ul>
+  {:else if recentProjectsStore.error}
+    <p class="text-sm text-muted-foreground">
+      加载失败:{recentProjectsStore.error}
+    </p>
+  {:else if recentProjectsStore.isEmpty}
+    <p class="text-sm text-muted-foreground">暂无最近项目</p>
+  {:else}
+    <BlockUi bind:value={opening} message="正在打开任务…" class="w-full">
       <ul use:autoAnimate class="space-y-1">
         {#each recentProjectsStore.projects as project (project.path)}
           <li class="group flex items-center gap-1">
@@ -116,6 +117,6 @@
           </li>
         {/each}
       </ul>
-    {/if}
-  </BlockUi>
+    </BlockUi>
+  {/if}
 </section>
