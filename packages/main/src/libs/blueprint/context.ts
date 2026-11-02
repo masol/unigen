@@ -21,7 +21,7 @@ export class RunnerContext implements IRunnerContext {
     private readonly abortController: AbortController | null = null;
     #isForceKilled: boolean = false;
 
-    constructor(prj: IProjectContext, signal?: AbortSignal | null, seq?: number) {
+    constructor(readonly sessId: string, prj: IProjectContext, signal?: AbortSignal | null, seq?: number) {
         this.seq = seq ? seq : runSeq--;
         this.prj = prj;
         this.prjdb = PrjDB.ensure(prj);

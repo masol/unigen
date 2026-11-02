@@ -1,11 +1,16 @@
-import { throwNotfound, throwPrecondition } from "$libs/utils/err.js";
+import { throwPrecondition } from "$libs/utils/err.js";
 import { knowledgeCenter } from "$libs/utils/kc.js";
 import matter from "@11ty/gray-matter";
 import Logger from "electron-log/main.js";
 import fs from "node:fs/promises";
 import { basename, dirname, isAbsolute, normalize, relative, resolve, sep } from "node:path";
+import { z } from "zod";
+import {
+    INPUT_VAR, SKILL_DOC_VAR, TOOL_DOC_VAR, classifyVars,
+} from "./context/index.js";
 import { loadExternalTools } from "./loader.js";
 import { buildToolDoc, jsonSchemaToZod, renderOutputSemantics } from "./schema.js";
+import { resolveOwnDefaults, resolveSettings } from "./settings.js";
 import {
     LOAD_SKILL_TOOL, READ_SKILL_FILE_TOOL,
     buildSkillDoc, buildSkillTools, discoverSkills, type DiscoveredSkill,
@@ -15,9 +20,6 @@ import type {
     CompileCache, CompiledPacAgent, JsonValue,
     PacFrontMatter, PacToolConfig, ToolRef,
 } from "./type.js";
-import {
-    INPUT_VAR, SKILL_DOC_VAR, TOOL_DOC_VAR, classifyVars, resolveOwnDefaults,
-} from "./vars.js";
 
 function sanitizeToolKey(name: string): string {
     return name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64) || "_tool";
@@ -60,22 +62,63 @@ export function resolvePacPath(
     return abs;
 }
 
-export function createCompileCache(rootPath: string): CompileCache {
-    return { compiled: new Map(), compiling: new Set(), rootPath };
+export function createCompileCache(rootPath: string, rootEntry?: string): CompileCache {
+    return { compiled: new Map(), compiling: new Set(), rootPath, rootEntry };
 }
 
-async function locateEntry(prjType: string): Promise<{ entry: string; root: string }> {
+/** 由 rootPath + 绝对源文件路径生成稳定 agent id(用作 HistoryStore 的子键) */
+export function buildAgentId(rootPath: string, sourcePath: string): string {
+    const rel = relative(rootPath, sourcePath);
+    const normalized = rel.split(sep).join("/");
+    return normalized.endsWith(".md") ? normalized.slice(0, -3) : normalized;
+}
+
+/**
+ * 定位入口。文件不存在返回 null,由上层构造直通 agent;其它错误照常冒泡。
+ */
+async function locateEntry(prjType: string): Promise<{ entry: string; root: string } | null> {
     const entry = await knowledgeCenter.getFile(prjType, "pac", "index.md");
-    if (!entry) {
-        throwNotfound(`[PAC] 入口文件未找到: ${prjType}/pac/index.md`);
-    }
+    if (!entry) return null;
     return { entry, root: dirname(entry) };
 }
 
 /**
- * 递归编译 PAC Agent。纯结构构建,与 ctx 无关。
- * 同一 cache 内同一文件只编译一次,并检测循环引用;
- * 不传 cache 时每次调用都是一次全新编译(会重新读盘)。
+ * 构造直通 agent:无系统提示词、无工具,userTemplate 为 {{_BI_input}}。
+ * 等价于把用户原始录入直送 LLM。
+ */
+function buildPassthroughAgent(prjType: string): CompiledPacAgent {
+    const name = prjType || "passthrough";
+    const vars = classifyVars([INPUT_VAR]);
+    Logger.warn(`[PAC] 未找到 ${prjType}/pac/index.md,构造直通 agent "${name}"`);
+    return {
+        id: `__passthrough__/${prjType || "default"}`,
+        name,
+        description: `PAC agent "${name}" (直通模式,未找到 pac/index.md)`,
+        passthrough: true,
+        config: {},
+        systemTemplate: "",
+        userTemplate: `{{${INPUT_VAR}}}`,
+        inputSchema: z.object({}),
+        outputSchema: null,
+        toolRefs: [],
+        toolDoc: "_当前 agent 未声明任何工具。_",
+        skills: [],
+        skillDoc: "_当前 agent 未关联任何技能。_",
+        vars,
+        ownDefaults: Object.freeze({}),
+        settings: resolveSettings({}),
+        basePath: "",
+        rootPath: "",
+        sourcePath: `<passthrough:${prjType}>`,
+    };
+}
+
+/**
+ * 递归编译 PAC Agent。
+ * 顶层调用时若入口文件不存在,返回直通 agent(不抛错);子级编译文件必须存在。
+ *
+ * CompileCache.rootEntry 记录"顶层调用首次定位到的入口文件",用于识别根 agent:
+ * 根 agent 不允许声明 inputs/outputs(其输入是用户原始录入,输出是对用户的回复)。
  */
 export async function compilePacAgent(
     prjType: string,
@@ -89,8 +132,9 @@ export async function compilePacAgent(
         entry = absPath;
     } else {
         const loc = await locateEntry(prjType);
+        if (!loc) return buildPassthroughAgent(prjType);
         entry = absPath ?? loc.entry;
-        cc = cache ?? createCompileCache(loc.root);
+        cc = cache ?? createCompileCache(loc.root, entry);
     }
 
     const key = resolve(entry);
@@ -115,7 +159,6 @@ export async function compilePacAgent(
 async function compileOne(cc: CompileCache, sourcePath: string): Promise<CompiledPacAgent> {
     const raw = await fs.readFile(sourcePath, "utf-8");
     const parsed = matter(raw) as { data: Record<string, unknown>; content: string };
-    // gray-matter 按原文缓存解析结果,data 是共享引用;深拷贝后使用
     const fm = structuredClone(parsed.data ?? {}) as PacFrontMatter;
 
     let systemTemplate = (parsed.content ?? "").trim();
@@ -124,21 +167,42 @@ async function compileOne(cc: CompileCache, sourcePath: string): Promise<Compile
     }
 
     const name = fm.name ?? basename(sourcePath, ".md");
+    const relSrc = relative(cc.rootPath, sourcePath);
     const description =
-        fm.description ?? `PAC agent "${name}" (${relative(cc.rootPath, sourcePath)})`;
+        fm.description ?? `PAC agent "${name}" (${relSrc})`;
     const basePath = dirname(sourcePath);
+    const id = buildAgentId(cc.rootPath, sourcePath);
+    const isRoot = sourcePath === cc.rootEntry;
 
-    Logger.debug(`[PAC] 编译 ${name} ← ${relative(cc.rootPath, sourcePath)}`);
+    Logger.debug(`[PAC] 编译 ${name} [id=${id}, root=${isRoot}] ← ${relSrc}`);
 
-    const inputSchema = jsonSchemaToZod(fm.inputs, "inputs", sourcePath);
-    const outputSchema = fm.outputs
-        ? jsonSchemaToZod(fm.outputs, "outputs", sourcePath)
-        : null;
+    // 根 agent 不应该声明 inputs/outputs——它的输入是用户的原始录入(文本/文档/语音…),
+    // 输出是直接回复给用户的内容,无需结构化契约。
+    if (isRoot) {
+        if (fm.inputs && Object.keys(fm.inputs).length > 0) {
+            Logger.warn(
+                `[PAC] 根 agent 不应声明 inputs,已忽略 (${relSrc})。` +
+                `根 agent 的输入是用户原始录入,通过 {{${INPUT_VAR}}} 展开。`,
+            );
+        }
+        if (fm.outputs && Object.keys(fm.outputs).length > 0) {
+            Logger.warn(
+                `[PAC] 根 agent 不应声明 outputs,已忽略 (${relSrc})。` +
+                `根 agent 直接响应用户,无结构化输出契约。`,
+            );
+        }
+    }
+
+    const inputSchema = isRoot
+        ? z.object({})
+        : jsonSchemaToZod(fm.inputs, "inputs", sourcePath);
+    const outputSchema = isRoot
+        ? null
+        : (fm.outputs ? jsonSchemaToZod(fm.outputs, "outputs", sourcePath) : null);
 
     const taken = new Set<string>();
     const toolRefs = await loadToolRefs(fm.tools ?? [], cc, basePath, sourcePath, taken);
 
-    // 技能:声明的 tools 并入工具列表,再追加 load_skill / read_skill_file
     const skills = await loadSkills(fm.skills, cc, basePath, sourcePath);
     let skillDoc = "";
     if (skills.length > 0) {
@@ -162,16 +226,14 @@ async function compileOne(cc: CompileCache, sourcePath: string): Promise<Compile
 
     const toolDoc = await buildToolDoc(toolRefs);
 
-    // 用户提示词模板:显式内联 > 外部文件 > 默认 "{{_BI_input}}"。
     const { template: userTemplate, extraDefaults: utExtraDefaults } =
         await resolveUserTemplate(fm, cc.rootPath, basePath, sourcePath);
 
-    // 主 agent setDefault 优先于用户模板 setDefault
     const mainDefaults = resolveOwnDefaults(fm);
     for (const k of Object.keys(utExtraDefaults)) {
         if (k in mainDefaults) {
             Logger.warn(
-                `[PAC] ${relative(cc.rootPath, sourcePath)}: ` +
+                `[PAC] ${relSrc}: ` +
                 `用户模板 setDefault.${k} 被主 agent setDefault.${k} 覆盖`,
             );
         }
@@ -181,7 +243,6 @@ async function compileOne(cc: CompileCache, sourcePath: string): Promise<Compile
         ...mainDefaults,
     });
 
-    // 系统 + 用户两份模板共享渲染上下文,必须一起分桶
     const scanAll = () =>
         classifyVars([
             ...scanTemplateVars(systemTemplate),
@@ -202,7 +263,6 @@ async function compileOne(cc: CompileCache, sourcePath: string): Promise<Compile
         vars = scanAll();
     }
 
-    // outputs → "最终回复要点"。不强制 JSON,原因见 agent.ts。
     if (outputSchema) {
         const semantics = await renderOutputSemantics(outputSchema);
         if (semantics) {
@@ -214,8 +274,10 @@ async function compileOne(cc: CompileCache, sourcePath: string): Promise<Compile
     }
 
     return {
+        id,
         name,
         description,
+        passthrough: false,
         config: fm,
         systemTemplate,
         userTemplate,
@@ -229,6 +291,7 @@ async function compileOne(cc: CompileCache, sourcePath: string): Promise<Compile
         skillDoc,
         vars,
         ownDefaults,
+        settings: resolveSettings(fm),
         basePath,
         rootPath: cc.rootPath,
         sourcePath,
@@ -250,7 +313,6 @@ async function loadSkills(
     return discoverSkills(dirs);
 }
 
-/** 用户模板文件允许在 front matter 中声明的字段。 */
 const USER_TEMPLATE_FM_ALLOWED = new Set(["setDefault"]);
 
 async function resolveUserTemplate(
@@ -285,7 +347,7 @@ async function resolveUserTemplate(
                 `[PAC] 读取 userTemplatePath 失败 ${path}: ` +
                 `${e instanceof Error ? e.message : String(e)} (${sourcePath})`,
             );
-            return { template: "", extraDefaults: {} }; // unreachable
+            return { template: "", extraDefaults: {} };
         }
 
         const parsed = matter(raw) as { data: Record<string, unknown>; content: string };
@@ -345,7 +407,6 @@ async function loadToolRefs(
             const loaded = await loadExternalTools(cfg);
 
             if (loaded.kind === "mcp_local") {
-                // 局部 MCP:每个工具一个 ref,运行期按 config 重连
                 const prefix = loaded.config.alias ? `${loaded.config.alias}_` : "";
                 for (const info of loaded.tools) {
                     const key = uniqueKey(`${prefix}${info.name}`, taken);
@@ -362,7 +423,6 @@ async function loadToolRefs(
                 continue;
             }
 
-            // builtin / search / 全局 mcp
             const origin = cfg.type === "mcp" ? "mcp_global" : cfg.type;
             for (const [rawKey, meta] of Object.entries(loaded.tools)) {
                 const key = uniqueKey(rawKey, taken);

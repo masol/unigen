@@ -1,6 +1,7 @@
 
 import { userClarifyTool } from '$libs/common/clarify/index.js';
 import { PrjRunner } from '$libs/project/controllers/runner.js';
+import { RunnerParamSchema } from '$types/shared/api/runner.js';
 import { os } from "@orpc/server";
 import Logger from 'electron-log/main.js';
 import { z } from 'zod';
@@ -77,10 +78,7 @@ type StreamEvent =
     | { type: "text"; text: string };
 
 const runCommand = os
-    .input(z.object({
-        msg: z.string(),
-        seq: z.number()
-    }))
+    .input(RunnerParamSchema)
     .handler(async function* ({ input, context, signal }) {
         // @ts-expect-error 不写类型定义了。
         const externalSignal: AbortSignal | undefined = signal ?? context?.signal;
@@ -162,7 +160,7 @@ const runCommand = os
             error: undefined as unknown,
         };
 
-        const runPromise = Promise.resolve(runner.runCommand(input.msg, onPhase, innerSignal))
+        const runPromise = Promise.resolve(runner.runCommand(input, onPhase, innerSignal))
             .then(() => {
                 state.settled = 'fulfilled';
             })

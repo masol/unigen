@@ -1,14 +1,11 @@
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import Logger from "electron-log/main.js";
 import Handlebars, { type TemplateDelegate } from "handlebars";
-import type { CompiledPacAgent, JsonValue } from "./type.js";
 import {
-    INPUT_VAR,
-    SKILL_DOC_VAR,
-    TOOL_DOC_VAR,
-    loadInputVar,
-    loadStorageVars,
-} from "./vars.js";
+    HISTORY_VAR, INPUT_VAR, SKILL_DOC_VAR, TOOL_DOC_VAR,
+    loadHistoryVar, loadInputVar, loadStorageVars,
+} from "./context/index.js";
+import type { CompiledPacAgent, JsonValue } from "./type.js";
 
 /* ------------------------------------------------------------------ *
  * 变量扫描 —— 直接复用 Handlebars.Visitor。
@@ -58,11 +55,12 @@ function getDelegates(c: CompiledPacAgent) {
     return e;
 }
 
+/** FM 中已被框架消费的字段,渲染时不再暴露到模板上下文根。 */
 const RESERVED = new Set([
     "name", "description", "inputs", "outputs",
     "tools", "maxSteps", "skills",
     "userTemplate", "userTemplatePath",
-    "setDefault",
+    "setDefault", "streaming", "thinking", "history",
 ]);
 
 function stripReserved(fm: Record<string, unknown>): Record<string, unknown> {
@@ -75,10 +73,7 @@ function stripReserved(fm: Record<string, unknown>): Record<string, unknown> {
 
 const warnedAgents = new WeakSet<CompiledPacAgent>();
 
-function warnMissingVarsOnce(
-    c: CompiledPacAgent,
-    finalCtx: Record<string, unknown>,
-): void {
+function warnMissingVarsOnce(c: CompiledPacAgent, finalCtx: Record<string, unknown>): void {
     if (warnedAgents.has(c)) return;
     warnedAgents.add(c);
     for (const v of c.vars.unknown) {
@@ -95,7 +90,10 @@ function warnMissingVarsOnce(
 /**
  * 构建模板上下文(系统/用户模板共用)。
  *
- * @param allowBodyFallback 仅根调用为 true;子 agent 调用为 false,避免借用根 body。
+ * {{_BI_history}} 读取的是"调用前"的历史(不含本轮 user 消息,因为渲染发生在
+ * 把本轮 user 并入 messages 之前,见 agent.ts)。
+ *
+ * @param allowBodyFallback 仅根调用传 true;子 agent 调用必须 false。
  */
 async function buildContext(
     c: CompiledPacAgent,
@@ -104,7 +102,7 @@ async function buildContext(
     effectiveDefaults: Record<string, JsonValue>,
     allowBodyFallback: boolean,
 ): Promise<Record<string, unknown>> {
-    const fm = c.config;
+    const fm = c.config as Record<string, unknown>;
 
     const storage = await loadStorageVars(c.vars.storage, ctx, effectiveDefaults);
 
@@ -116,6 +114,8 @@ async function buildContext(
             biVars[name] = c.skillDoc;
         } else if (name === INPUT_VAR) {
             biVars[name] = await loadInputVar(ctx, inputs, allowBodyFallback);
+        } else if (name === HISTORY_VAR) {
+            biVars[name] = await loadHistoryVar(ctx, c.id, c.settings.history);
         } else {
             Logger.warn(`[PAC] ${c.sourcePath}: 未知内置变量 ${name},渲染为空串`);
             biVars[name] = "";
@@ -126,8 +126,8 @@ async function buildContext(
         project: ctx.prj,
         command: ctx.cmd,
         inputs,
-        outputs: fm.outputs ?? null,
-        ...stripReserved(fm as Record<string, unknown>),
+        outputs: c.config.outputs ?? null,
+        ...stripReserved(fm),
     };
 
     const final: Record<string, unknown> = {
@@ -137,7 +137,6 @@ async function buildContext(
     };
 
     warnMissingVarsOnce(c, final);
-
     return final;
 }
 

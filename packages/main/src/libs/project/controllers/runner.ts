@@ -5,8 +5,9 @@ import { configService } from "$libs/store/index.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import { appLife } from "$libs/utils/tapable/applife.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
-import type { RunState } from "$types/index.js";
+import type { RunnerParam, RunState } from "$types/index.js";
 import { AsyncLocalStorage } from "async_hooks";
+import { randomUUID } from "crypto";
 import Logger from "electron-log/main.js";
 import { getErrorMessage } from "radashi";
 import { ProjectDbKeys } from "../../utils/db/dbkeys.js";
@@ -72,11 +73,15 @@ export class PrjRunner extends BaseProjectController {
         return this.#runner.waitFinish();
     }
 
-    async runCommand(command: string, fnNotify: ((title: string, detail: string) => void) | null, signal?: AbortSignal | null): Promise<void> {
+    async runCommand(command: RunnerParam, fnNotify: ((title: string, detail: string) => void) | null, signal?: AbortSignal | null): Promise<void> {
         if (this.#cmdrunner) {
             throwPrecondition("已经有一个命令在执行中，每个任务只能并行执行一个命令。并行命令，请自行撰写代码能力，并执行之。")
         }
-        const ctx = new RunnerContext(this.ctx, signal);
+        const sessId = command.sessId ?? randomUUID();
+        if (sessId !== command.sessId) {
+            // @todo:这里需要持久化新sess.
+        }
+        const ctx = new RunnerContext(sessId, this.ctx, signal);
 
         // 使用 run 方法包裹，将 store 注入到这一层以及后续所有的同步/异步调用链中
         await runnerContextTLS.run(ctx, async () => {
@@ -84,7 +89,7 @@ export class PrjRunner extends BaseProjectController {
             try {
                 this.#cmdrunner = new CmdRunner();
 
-                await this.#cmdrunner.run(command, ctx)
+                await this.#cmdrunner.run(command.msg, ctx)
             } catch (e) {
                 const msg = `## 命令执行错误： 
 ${getErrorMessage(e)}`;
@@ -118,7 +123,8 @@ ${getErrorMessage(e)}`;
             }
         }
 
-        const ctx = new RunnerContext(this.ctx, null, seq);
+        // @TODO: 移除start方法，改为runCommand，统一入口。并行执行的能力由用户自行编写能力来实现。
+        const ctx = new RunnerContext(randomUUID(), this.ctx, null, seq);
 
         // 使用 run 方法包裹，将 store 注入到这一层以及后续所有的同步/异步调用链中
         runnerContextTLS.run(ctx, async () => {
