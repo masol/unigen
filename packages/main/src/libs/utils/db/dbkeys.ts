@@ -11,22 +11,24 @@ export const ProjectDbKeys = {
     //entry_commandstr // 动态拼接的command_str
     imported: "imported", // 指示任务是否已导入了初始知识库。
     projectType: "project-type", // 指示任务类型。
-    extract_json_prompt: "_extract_json",
+    model: "model", // 指示固定使用指定model来执行，而不是使用auto balance.
+    sessionId: "sessionId", // 指示当前打开的sessionId。可以为空，此时新建。
+    // extract_json_prompt: "_extract_json",
 
     /// 下面是video插件定义的keys，先写这里了，应该移入video plugin.
-    scripts: "script",
-    synopsis: "synopsis",
-    character_specifications: 'character_specifications',
-    book_name: 'book_name',
-    requirements: 'requirements',
+    // scripts: "script",
+    // synopsis: "synopsis",
+    // character_specifications: 'character_specifications',
+    // book_name: 'book_name',
+    // requirements: 'requirements',
     // spec settings.
-    aspectRatio: "aspect-ratio",
-    resolution: "resolution",
-    frameRate: "frame-rate",
-    duration: "duration",
-    pace: "pace",
-    language: "language",
-    audience: "audience",
-    style: "style",
-    ScriptbyId: (id: string) => `script_${id}`
+    // aspectRatio: "aspect-ratio",
+    // resolution: "resolution",
+    // frameRate: "frame-rate",
+    // duration: "duration",
+    // pace: "pace",
+    // language: "language",
+    // audience: "audience",
+    // style: "style",
+    // ScriptbyId: (id: string) => `script_${id}`
 } as const;

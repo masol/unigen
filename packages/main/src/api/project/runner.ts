@@ -1,6 +1,7 @@
 
 import { userClarifyTool } from '$libs/common/clarify/index.js';
 import { PrjRunner } from '$libs/project/controllers/runner.js';
+import type { ChatStreamEvent } from '$types/index.js';
 import { RunnerParamSchema } from '$types/shared/api/runner.js';
 import { os } from "@orpc/server";
 import Logger from 'electron-log/main.js';
@@ -68,14 +69,14 @@ const clarify = os
         return userClarifyTool.rejectClarification(input.uuid, input.answer);
     });
 
-type ReflectPhase = {
-    title: string;
-    detail: string;
-} | null;
-// 流式事件：阶段更新 or 最终文本（真实场景可再加 token 增量等）
-type StreamEvent =
-    | { type: "phase"; phase: NonNullable<ReflectPhase> }
-    | { type: "text"; text: string };
+// type ReflectPhase = {
+//     title: string;
+//     detail: string;
+// } | null;
+// // 流式事件：阶段更新 or 最终文本（真实场景可再加 token 增量等）
+// type StreamEvent =
+//     | { type: "phase"; phase: NonNullable<ReflectPhase> }
+//     | { type: "text"; text: string };
 
 const runCommand = os
     .input(RunnerParamSchema)
@@ -108,10 +109,10 @@ const runCommand = os
             externalSignal?.removeEventListener('abort', forwardAbort);
         };
 
-        const runner = PrjRunner.ensure(ctx.project);
+        const project = PrjRunner.ensure(ctx.project);
 
         // 待消费的事件队列
-        const queue: StreamEvent[] = [];
+        const queue: ChatStreamEvent[] = [];
         let resolveNext: (() => void) | null = null;
 
         // 唤醒正在等待的消费者（幂等：取出后置空）
@@ -124,12 +125,13 @@ const runCommand = os
         };
 
         // 回调（生产者）：title 为空 -> text 事件；否则 -> phase 事件。
-        const onPhase = (title: string, detail: string) => {
-            if (!title) {
-                queue.push({ type: 'text', text: detail });
-            } else {
-                queue.push({ type: 'phase', phase: { title, detail } });
-            }
+        const onReport = (evt: ChatStreamEvent) => {
+            queue.push(evt);
+            //if (!title) {
+            //     queue.push({ type: 'text', text: detail });
+            // } else {
+            //     queue.push({ type: 'phase', phase: { title, detail } });
+            // }
             wakeup();
         };
 
@@ -160,7 +162,7 @@ const runCommand = os
             error: undefined as unknown,
         };
 
-        const runPromise = Promise.resolve(runner.runCommand(input, onPhase, innerSignal))
+        const runPromise = Promise.resolve(project.runCommand(input, onReport, innerSignal))
             .then(() => {
                 state.settled = 'fulfilled';
             })

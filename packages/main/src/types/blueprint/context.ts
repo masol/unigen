@@ -1,5 +1,6 @@
 import { ICapaFunctor } from "$libs/blueprint/capability/type.js";
 import type { IProjectContext } from "$libs/project/type.js";
+import type { ChatStreamEvent } from "$types/shared/chat.js";
 
 
 export interface CommandInfo {
@@ -46,15 +47,25 @@ export interface IRunnerContext {
 
 
     // ==========================================
-    // 📝 日志接口 (适配 electron-log)
+    // 📝 汇报进口，通知渲染进程工作进度。
     // ==========================================
     /**
+     * @deprecated
      * 向渲染端主界面发送通知，以报告关键进度和细节--只显示一个，不会树状显示。
      * @param message 
      * @param args 
      */
     notify(title: string, detail: string): void
 
+    /**
+     * 对话界面是一等公民，使用此接口来汇报。
+     * @param evt 
+     */
+    report(evt: ChatStreamEvent): void
+
+    // ==========================================
+    // 📝 日志接口 (适配 electron-log)
+    // ==========================================
 
     /**
      * 打印普通信息日志

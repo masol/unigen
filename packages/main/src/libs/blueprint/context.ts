@@ -1,6 +1,7 @@
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { IProjectContext } from '$libs/project/type.js';
 import { CommandInfo, IRunnerContext } from '$types/blueprint/context.js';
+import type { ChatStreamEvent } from '$types/index.js';
 import log from 'electron-log/main.js';
 import { loadFunctor } from './capability/index.js';
 import { ICapaFunctor } from './capability/type.js';
@@ -15,7 +16,7 @@ export class RunnerContext implements IRunnerContext {
     readonly store: Record<string, unknown> = {};
 
     cmd: CommandInfo = { isCommand: false, body: "" };
-    fnNotify: ((title: string, detail: string) => void) | null = null;
+    fnReport: ((evt: ChatStreamEvent) => void) | null = null;
     // #stack: Capability[] = [];
 
     private readonly abortController: AbortController | null = null;
@@ -106,12 +107,12 @@ export class RunnerContext implements IRunnerContext {
     //  @TODO: 适配通知接口，以通知主进程的日志过程。(是否应该取名step?)
     // ==========================================
     notify(title: string, detail: string): void {
-        if (this.fnNotify) {
-            this.fnNotify(title, detail);
-        } else {
-            this.prj.notify("task_progess_report", `${title} : ${detail}`);
-            // log.silly(arg);
-        }
+        this.prj.notify("task_progess_report", `${title} : ${detail}`);
+        // log.silly(arg);
+    }
+
+    report(evt: ChatStreamEvent): void {
+        this.fnReport?.(evt);
     }
 
     info(message: string, ...args: unknown[]): void {

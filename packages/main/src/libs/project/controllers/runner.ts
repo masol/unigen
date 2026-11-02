@@ -5,7 +5,7 @@ import { configService } from "$libs/store/index.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import { appLife } from "$libs/utils/tapable/applife.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
-import type { RunnerParam, RunState } from "$types/index.js";
+import type { ChatStreamEvent, RunnerParam, RunState } from "$types/index.js";
 import { AsyncLocalStorage } from "async_hooks";
 import { randomUUID } from "crypto";
 import Logger from "electron-log/main.js";
@@ -73,7 +73,7 @@ export class PrjRunner extends BaseProjectController {
         return this.#runner.waitFinish();
     }
 
-    async runCommand(command: RunnerParam, fnNotify: ((title: string, detail: string) => void) | null, signal?: AbortSignal | null): Promise<void> {
+    async runCommand(command: RunnerParam, fnReport: ((evt: ChatStreamEvent) => void) | null, signal?: AbortSignal | null): Promise<void> {
         if (this.#cmdrunner) {
             throwPrecondition("已经有一个命令在执行中，每个任务只能并行执行一个命令。并行命令，请自行撰写代码能力，并执行之。")
         }
@@ -85,7 +85,7 @@ export class PrjRunner extends BaseProjectController {
 
         // 使用 run 方法包裹，将 store 注入到这一层以及后续所有的同步/异步调用链中
         await runnerContextTLS.run(ctx, async () => {
-            ctx.fnNotify = fnNotify;
+            ctx.fnReport = fnReport;
             try {
                 this.#cmdrunner = new CmdRunner();
 
@@ -93,12 +93,16 @@ export class PrjRunner extends BaseProjectController {
             } catch (e) {
                 const msg = `## 命令执行错误： 
 ${getErrorMessage(e)}`;
-                if (fnNotify) {
-                    fnNotify("error", msg);
+                if (fnReport) {
+                    fnReport({
+                        type: "message.error",
+                        messageId: "0",
+                        error: msg
+                    });
                 }
             } finally {
                 this.#cmdrunner = null;
-                ctx.fnNotify = null;
+                ctx.fnReport = null;
             }
         });
     }

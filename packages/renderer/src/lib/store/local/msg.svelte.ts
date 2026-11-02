@@ -252,6 +252,7 @@ class MessageStore {
             )) as AsyncGenerator<ChatStreamEvent>;
 
             for await (const evt of stream) {
+                console.log("evt=", evt)
                 if (signal.aborted) break;
                 this.handleStreamEvent(evt);
             }

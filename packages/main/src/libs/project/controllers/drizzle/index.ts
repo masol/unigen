@@ -1,11 +1,38 @@
-import { metagFromJson, metagToJson, type MetagRow, type NewMetagRow } from '$libs/blueprint/metag/is.js';
+// packages/main/src/libs/project/controllers/drizzle/index.ts
+//
+// PrjDB —— 项目持久化门面
+//
+// 职责仅限于:
+//   1. SQLite 连接的生命周期管理 (open / close / migrate)
+//   2. KV 订阅通知状态 (subKeys)
+//   3. 对外暴露扁平 API，内部委托给同目录各领域模块
+//
+// 具体业务实现分散在:
+//   kvstore.ts  — KV 底层读写
+//   capa.ts     — 能力表
+//   metag.ts    — 元术语表
+//   chat.ts     — 会话 / 消息 / Trace
+//   list.ts     — 蓝图统一列表
+//   content.ts  — getContent / setContent 多态入口
+
+import { type MetagRow, type NewMetagRow } from '$libs/blueprint/metag/is.js';
 import * as schema from '$libs/utils/db/schema/index.js';
 import { throwNotfound, throwNotimplement, throwPrecondition } from "$libs/utils/err.js";
 import type { Capability, NewCapability } from "$types/blueprint/capability.js";
 import type { PrjTimeStamps, PrjTimeStore } from "$types/prjstore.js";
 import { BlueprintKind, GetItemInput, GetListResponse, QueryParams, SetItem } from '$types/shared/api/list.js';
+import type {
+    ChatMessage,
+    ChatSession,
+    GetMessageOptions,
+    ListMessagesParams,
+    ListSessionsParams,
+    NewChatMessage,
+    NewChatSession,
+    TraceNode,
+    TracePatch,
+} from "$types/shared/chat.js";
 import Database from 'better-sqlite3';
-import { eq, inArray, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { app } from "electron";
@@ -16,56 +43,84 @@ import { getErrorMessage } from 'radashi';
 import { fileURLToPath } from "url";
 import { metaDirName, type EmbedKVStore, type IProjectContext } from "../../type.js";
 import { BaseProjectController } from "../base.js";
-import { deleteCapabilityById, getCapabilityById, getCapaTimestamps, upsertCapability as upcertCapability } from './capa.js';
+import {
+    deleteCapabilityById,
+    getCapabilityById,
+    getCapaTimestamps,
+    upsertCapability,
+} from './capa.js';
+import {
+    appendTraceDetail,
+    createSession,
+    deleteMessage,
+    deleteSession,
+    getMessage,
+    getSession,
+    listMessages,
+    listSessions,
+    listTracesByMessage,
+    patchTrace,
+    saveMessage,
+    saveTraces,
+    updateSessionTitle,
+    upsertTrace,
+} from './chat.js';
+import { getContent, setContent } from './content.js';
+import {
+    getKV,
+    getKVsByGlob,
+    getKVUpdTime,
+    getKVWithTime,
+    removeKV,
+    removeKVByGlob,
+    setKV,
+} from './kvstore.js';
 import { getList } from './list.js';
-import { deleteMetag, getMetag, getMetagTimestamps, upcertMetag } from './metag.js';
+import {
+    deleteMetag,
+    getMetag,
+    getMetagTimestamps,
+    upcertMetag,
+} from './metag.js';
 import type { DrizzleDBType } from "./type.js";
 
-const dbName = 'db.sqlite'
+const dbName = 'db.sqlite';
 
 export class PrjDB extends BaseProjectController implements EmbedKVStore {
     static readonly serviceKey = Symbol.for('project.controller.PrjDB');
 
-    private migrationsPath: string = ""
+    private migrationsPath: string = "";
     private dqlite: Database.Database | null = null;
     private db: DrizzleDBType | null = null;
-
     private subKeys: Set<string> = new Set();
 
     constructor(ctx: IProjectContext) {
-        super(ctx)
+        super(ctx);
         const __dirname = dirname(fileURLToPath(import.meta.url));
         this.migrationsPath = app.isPackaged
             ? join(process.resourcesPath, 'drizzle')
             : join(__dirname, '../src/libs/utils/db/migrations');
 
-        Logger.info(`[Project:DB] migrationsPath= ${this.migrationsPath}`)
+        Logger.info(`[Project:DB] migrationsPath= ${this.migrationsPath}`);
     }
 
     static ensure(ctx: IProjectContext): PrjDB { return this.coreEnsure(this, ctx); }
 
     ensureDB(): DrizzleDBType {
-        if (!this.db) {
-            throwPrecondition("Drizzle数据库未初始化。")
-        }
+        if (!this.db) throwPrecondition("Drizzle数据库未初始化。");
         return this.db;
     }
 
-    /**
-     * 强制关闭数据库，幂等。用于异常路径下的资源清理。
-     * 与 close() 不同的是：即便 db 为 null，也会清理其他内部状态。
-     */
+    /* ──────────── 连接生命周期 ──────────── */
+
     forceClose(): void {
         this.clearSubs();
         if (this.dqlite) {
             try {
                 Logger.info('[Database] 强制断开数据库连接...');
                 if (this.dqlite.open) {
-                    try {
-                        this.dqlite.pragma('wal_checkpoint(TRUNCATE)');
-                    } catch (_) {
-                        // 忽略 checkpoint 失败
-                    }
+                    try { this.dqlite.pragma('wal_checkpoint(TRUNCATE)'); }
+                    catch (_) { /* 忽略 checkpoint 失败 */ }
                     this.dqlite.close();
                 }
             } catch (error) {
@@ -86,19 +141,12 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
         const dbPath = join(this.ctx.path, metaDirName, dbName);
         const exists = await pathExists(dbPath);
         if (!exists) {
-            if (!bCreate) {
-                throwNotfound(`任务"${this.ctx.path}"的数据库不存在！`)
-            }
+            if (!bCreate) throwNotfound(`任务"${this.ctx.path}"的数据库不存在！`);
             await ensureDir(join(this.ctx.path, metaDirName));
         }
-
-        // 关闭，如果存在旧数据。
         this.forceClose();
 
-        this.dqlite = new Database(dbPath, {
-            timeout: 5000
-        });
-
+        this.dqlite = new Database(dbPath, { timeout: 5000 });
         this.dqlite.pragma('foreign_keys = OFF');
         this.dqlite.pragma('journal_mode = WAL');
         this.dqlite.pragma('synchronous = NORMAL');
@@ -108,271 +156,162 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
         this.db = drizzle(this.dqlite, { schema });
         try {
             migrate(this.db, { migrationsFolder: this.migrationsPath });
-
         } catch (e) {
-            Logger.error("[drizzle] 数据库迁移失败，尝试继续执行:", getErrorMessage(e))
+            Logger.error("[drizzle] 数据库迁移失败，尝试继续执行:", getErrorMessage(e));
         }
     }
 
-    private getInitedDB(): DrizzleDBType {
-        if (!this.db) {
-            throw new Error("任务数据库未初始化");
-        }
-        return this.db;
+    dispose(): void {
+        this.forceClose();
     }
+
+    /* ──────────── 订阅 (notify on kv-changed) ──────────── */
+
+    clearSubs() { this.subKeys.clear(); }
+    addSub(key: string) { this.subKeys.add(key); }
+    rmSub(key: string) { this.subKeys.delete(key); }
+
+    /* ──────────── KV ──────────── */
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set(key: string, value: any): void {
-        const db = this.getInitedDB();
-        const now = new Date().toISOString();   // 统一 ISO/UTC，带 Z
-        db.insert(schema.kvStore)
-            .values({ key, value, updatedAt: now })
-            .onConflictDoUpdate({
-                target: schema.kvStore.key,
-                set: { value, updatedAt: now },   // 冲突更新也显式刷新，格式一致
-            })
-            .run();
+        setKV(this.ensureDB(), key, value);
         if (this.subKeys.has(key)) {
-            this.ctx.notify("kv-changed", { key, value })
+            this.ctx.notify("kv-changed", { key, value });
         }
     }
 
-    clearSubs() {
-        this.subKeys.clear();
-    }
-
-    addSub(key: string) {
-        this.subKeys.add(key);
-    }
-
-    rmSub(key: string) {
-        this.subKeys.delete(key);
-    }
-
-    remove(key: string): void {
-        const db = this.getInitedDB();
-        db.delete(schema.kvStore)
-            .where(eq(schema.kvStore.key, key))
-            .run();
-    }
-
-    removeByGlob(pattern: string): void {
-        const db = this.getInitedDB();
-        db.delete(schema.kvStore)
-            .where(sql`${schema.kvStore.key} GLOB ${pattern}`)
-            .run();
-    }
-
-    getByGlob(pattern: string): string[] {
-        const db = this.getInitedDB();
-
-        // 1. 使用 select 仅提取 key 列
-        const rows = db.select({ key: schema.kvStore.key })
-            .from(schema.kvStore)
-            .where(sql`${schema.kvStore.key} GLOB ${pattern}`)
-            .all(); // 使用 .all() 获取所有匹配的行
-
-        // 2. 将对象数组映射为纯字符串数组
-        return rows.map(row => row.key);
-    }
-
     get<T>(key: string): T | null {
-        const db = this.getInitedDB();
-        const result = db
-            .select({ value: schema.kvStore.value })
-            .from(schema.kvStore)
-            .where(eq(schema.kvStore.key, key))
-            .get();
-
-        return result ? (result.value as T) : null;
+        return getKV<T>(this.ensureDB(), key);
     }
 
     getWithTime<T>(key: string): PrjTimeStore<T> | null {
-        const db = this.getInitedDB();
-        const result = db
-            .select({ value: schema.kvStore.value, updatedAt: schema.kvStore.updatedAt })
-            .from(schema.kvStore)
-            .where(eq(schema.kvStore.key, key))
-            .get();
+        return getKVWithTime<T>(this.ensureDB(), key);
+    }
 
-        return result ? ({
-            value: result.value as T,
-            updatedAt: result.updatedAt
-        }) : null;
+    remove(key: string): void {
+        removeKV(this.ensureDB(), key);
+    }
+
+    removeByGlob(pattern: string): void {
+        removeKVByGlob(this.ensureDB(), pattern);
+    }
+
+    getByGlob(pattern: string): string[] {
+        return getKVsByGlob(this.ensureDB(), pattern);
     }
 
     geUpdTime(key: string): string | null;
     geUpdTime(key: string[]): Record<string, string>;
     geUpdTime(key: string | string[]): string | null | Record<string, string> {
-        const db = this.getInitedDB();
-
-        if (Array.isArray(key)) {
-            if (key.length === 0) return {};
-
-            const results = db
-                .select({
-                    key: schema.kvStore.key,
-                    updatedAt: schema.kvStore.updatedAt
-                })
-                .from(schema.kvStore)
-                .where(inArray(schema.kvStore.key, key))
-                .all();
-
-            return results.reduce((acc, row) => {
-                if (row.updatedAt) {
-                    acc[row.key] = row.updatedAt;
-                }
-                return acc;
-            }, {} as Record<string, string>);
-        }
-
-        const result = db
-            .select({ updatedAt: schema.kvStore.updatedAt })
-            .from(schema.kvStore)
-            .where(eq(schema.kvStore.key, key))
-            .get();
-
-        return result?.updatedAt || null;
+        // 调用重载实现签名的 getKVUpdTime；参数类型联合，返回类型联合
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return getKVUpdTime(this.ensureDB(), key as any);
     }
 
-    upcertCapa(capability: NewCapability): string {
-        return upcertCapability(this.ensureDB(), capability);
-    }
+    /* ──────────── Capability ──────────── */
 
-    getCapaById(id: string): Capability | null {
-        return getCapabilityById(this.ensureDB(), id);
-    }
+    upcertCapa(c: NewCapability): string { return upsertCapability(this.ensureDB(), c); }
+    getCapaById(id: string): Capability | null { return getCapabilityById(this.ensureDB(), id); }
+    rmCapaById(id: string): void { deleteCapabilityById(this.ensureDB(), id); }
+    getCapaTimes(id: string): PrjTimeStamps | null { return getCapaTimestamps(this.ensureDB(), id); }
 
-    rmCapaById(id: string): void {
-        return deleteCapabilityById(this.ensureDB(), id);
-    }
+    /* ──────────── Metag ──────────── */
 
-    getCapaTimes(id: string): PrjTimeStamps | null {
-        return getCapaTimestamps(this.ensureDB(), id);
-    }
-
-    getMetag(id: string | string[]): (MetagRow | null)[] {
-        return getMetag(this.ensureDB(), id);
-    }
-
-    rmMetag(id: string | string[]): void {
-        deleteMetag(this.ensureDB(), id);
-    }
-
-    upcertMetag(metags: NewMetagRow | NewMetagRow[]): void {
-        upcertMetag(this.ensureDB(), metags);
-    }
-
+    getMetag(id: string | string[]): (MetagRow | null)[] { return getMetag(this.ensureDB(), id); }
+    rmMetag(id: string | string[]): void { deleteMetag(this.ensureDB(), id); }
+    upcertMetag(m: NewMetagRow | NewMetagRow[]): void { upcertMetag(this.ensureDB(), m); }
     getMetagTimes(id: string | string[]): (PrjTimeStamps | null)[] {
         return getMetagTimestamps(this.ensureDB(), id);
     }
 
+    /* ──────────── Blueprint 列表 ──────────── */
+
     list<K extends BlueprintKind>(input: QueryParams & { kind: K }): GetListResponse {
-        return getList(this.ensureDB(), input)
+        return getList(this.ensureDB(), input);
     }
 
-    getContent({ kind, id, content, noThrow }: GetItemInput): string {
-        switch (kind) {
-            case 'capa': {
-                const capa = this.getCapaById(id);
-                if (!capa) {
-                    if (!noThrow) {
-                        throwNotfound(`没有id为"${id}"的能力。`)
-                    }
-                    return ""
-                }
-                if (content) {
-                    return capa.code;
-                }
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { updatedAt, createdAt, code, ...safeCapa } = capa;
+    /* ──────────── Content 多态 ──────────── */
 
-                return JSON.stringify(safeCapa, null, 2);
-            }
-            case 'glossary':
-                {
-                    const value = this.get<string>(id);
-                    if (value === null) {
-                        if (!noThrow) {
-                            throwNotfound(`没有key为"${id}"的术语。`)
-                        }
-                        return ""
-                    }
-                    if (content || id.startsWith('_')) {
-                        return value;
-                    }
-                    return JSON.stringify(value, null, 2)
-                }
-            case 'metag':
-                {
-                    const value = this.getMetag(id)[0];
-                    if (value === null) {
-                        if (!noThrow) {
-                            throwNotfound(`没有fieldKey为"${id}"的元术语。`)
-                        }
-                        return ""
-                    }
-                    const { updatedAt, createdAt, ...jsonValue } = metagToJson(value)!
-                    void (updatedAt)
-                    void (createdAt)
-                    return JSON.stringify(jsonValue, null, 2);
-                }
-            default:
-                if (!noThrow) {
-                    throwNotimplement(`试图获取未支持的kind:${kind}`)
-                }
-                return ''
-        }
+    getContent(input: GetItemInput): string {
+        return getContent(this.ensureDB(), input);
     }
 
-    setContent({ kind, id, content, code }: SetItem): string {
-        switch (kind) {
-            case 'capa': {
-                if (code) {
-                    const newCapa = {
-                        id,
-                        code: content
-                    }
-                    return this.upcertCapa(newCapa);
-                }
-                const cntJson = JSON.parse(content);
-                const newCapa = { ...cntJson, id }
-                {
-                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                    const { code, ...rest } = newCapa;
-                    return this.upcertCapa(rest)
-                }
-            }
-            case 'glossary':
-                {
-                    if (id.startsWith('_') || code) {
-                        this.set(id, content);
-                    } else {
-                        const cntJson = JSON.parse(content);
-                        this.set(id, cntJson);
-                    }
-                    return id
-                }
-            case 'metag':
-                {
-                    const cntJson = JSON.parse(content);
-                    const metag = metagFromJson(cntJson);
-                    this.upcertMetag({
-                        ...metag,
-                        fieldKey: id
-                    })
-                    return id
-                }
-            default:
-                throwNotimplement(`试图写入未支持的kind:${kind}`)
-        }
+    setContent(input: SetItem): string {
+        return setContent(this.ensureDB(), input);
     }
 
     verifyContent(_setInfo: SetItem): string[] {
-        throwNotimplement("尚未实现内容验证，自行小心。")
+        throwNotimplement("尚未实现内容验证，自行小心。");
     }
 
-    dispose(): void {
-        this.forceClose();
+    /* ──────────── Chat: Sessions ──────────── */
+
+    createSession(input?: NewChatSession): string {
+        return createSession(this.ensureDB(), input);
+    }
+
+    getSession(id: string): ChatSession | null {
+        return getSession(this.ensureDB(), id);
+    }
+
+    listSessions(params?: ListSessionsParams): ChatSession[] {
+        return listSessions(this.ensureDB(), params);
+    }
+
+    /**
+     * 修改会话标题。
+     * @param manual 用户手动改题时传 true；自动改题 (默认 false) 会在用户已改过时静默跳过。
+     */
+    updateSessionTitle(id: string, title: string, manual: boolean = false): void {
+        updateSessionTitle(this.ensureDB(), id, title, manual);
+    }
+
+    deleteSession(id: string): void {
+        deleteSession(this.ensureDB(), id);
+    }
+
+    /* ──────────── Chat: Messages ──────────── */
+
+    saveMessage(msg: NewChatMessage): string {
+        return saveMessage(this.ensureDB(), msg);
+    }
+
+    getMessage(id: string, opts?: GetMessageOptions): ChatMessage | null {
+        return getMessage(this.ensureDB(), id, opts);
+    }
+
+    listMessages(params: ListMessagesParams): ChatMessage[] {
+        return listMessages(this.ensureDB(), params);
+    }
+
+    deleteMessage(id: string): void {
+        deleteMessage(this.ensureDB(), id);
+    }
+
+    /* ──────────── Chat: Traces (流式增量 + 快照) ──────────── */
+
+    /** 流式写入：trace.start 事件 → upsertTrace */
+    upsertTrace(messageId: string, parentId: string | null | undefined, node: TraceNode): void {
+        upsertTrace(this.ensureDB(), messageId, parentId, node);
+    }
+
+    /** 流式写入：trace.update / trace.end 事件 → patchTrace */
+    patchTrace(nodeId: string, patch: TracePatch): void {
+        patchTrace(this.ensureDB(), nodeId, patch);
+    }
+
+    /** 流式写入：trace.detail.delta 事件 → appendTraceDetail */
+    appendTraceDetail(nodeId: string, delta: string): void {
+        appendTraceDetail(this.ensureDB(), nodeId, delta);
+    }
+
+    /** 快照路径：一次性接管整条消息的 trace 树 (导入/恢复场景使用) */
+    saveTraces(messageId: string, tree: TraceNode[] | undefined): void {
+        saveTraces(this.ensureDB(), messageId, tree);
+    }
+
+    listTracesByMessage(messageId: string): TraceNode[] {
+        return listTracesByMessage(this.ensureDB(), messageId);
     }
 }

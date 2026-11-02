@@ -11,18 +11,18 @@
   import { IconClock, IconLoader2, IconTrash } from "@tabler/icons-svelte";
 
   let deletingPath = $state<string | null>(null);
-  let openning = $state(false);
+  let opening = $state(false);
 
   function formatDate(ts: number) {
     return i18nStore.dayjs(ts).fromNow();
   }
 
   async function handleOpen(project: RecentProject) {
-    openning = true;
+    opening = true;
     try {
       await projectStore.open(project.path);
     } finally {
-      openning = false;
+      opening = false;
     }
   }
 
@@ -40,7 +40,7 @@
     }
   }
 
-  // 从路径里推断显示名（type 中无 name 字段，取最后一段）
+  // 从路径里推断显示名(type 中无 name 字段,取最后一段)
   function pickName(path: string): string {
     const seg = path.replace(/[\\/]+$/, "").split(/[\\/]/);
     return seg[seg.length - 1] || path;
@@ -51,11 +51,11 @@
   <div
     class="flex items-center gap-2 text-sm font-medium text-muted-foreground"
   >
-    <IconClock class="size-4" />
+    <IconClock size={16} stroke={1.5} />
     <span>最近项目</span>
   </div>
 
-  <BlockUi bind:value={openning} message="正在打开任务…">
+  <BlockUi bind:value={opening} message="正在打开任务…" class="w-full">
     {#if recentProjectsStore.isLoading}
       <ul class="space-y-1.5">
         {#each Array.from({ length: 3 }, (_, i) => i) as idx (idx)}
@@ -71,7 +71,7 @@
       </ul>
     {:else if recentProjectsStore.error}
       <p class="text-sm text-muted-foreground">
-        加载失败：{recentProjectsStore.error}
+        加载失败:{recentProjectsStore.error}
       </p>
     {:else if recentProjectsStore.isEmpty}
       <p class="text-sm text-muted-foreground">暂无最近项目</p>
@@ -102,15 +102,15 @@
             </button>
             <button
               type="button"
-              class="shrink-0 rounded p-1 text-red-500 opacity-0 transition-all hover:bg-red-100 group-hover:opacity-100 disabled:pointer-events-none"
+              class="shrink-0 rounded-lg p-1 text-destructive opacity-0 transition-all duration-200 hover:bg-destructive/10 group-hover:opacity-100 disabled:pointer-events-none"
               onclick={() => handleDelete(project)}
               disabled={deletingPath !== null}
-              aria-label="删除项目"
+              aria-label={`删除项目 ${pickName(project.path)}`}
             >
               {#if deletingPath === project.path}
-                <IconLoader2 size={16} class="animate-spin" />
+                <IconLoader2 size={16} stroke={1.5} class="animate-spin" />
               {:else}
-                <IconTrash size={16} />
+                <IconTrash size={16} stroke={1.5} />
               {/if}
             </button>
           </li>
