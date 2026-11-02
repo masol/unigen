@@ -1,30 +1,19 @@
-// src/lib/stores/msg.svelte.ts
-import type { Message } from "$lib/components/markdown/type";
-import { dashboardStore } from "$lib/store/dashboard.svelte";
-import { bottomPanelStore } from "$lib/store/local/bottombar.store.svelte";
+// src/lib/store/local/msg.svelte.ts
 import { projectStore } from "$lib/store/project.svelte";
-import { layoutStore } from "$lib/store/ui/layout.svelte";
 import { safeApi } from "$lib/utils/api";
 import evtbus from "$lib/utils/evtbus";
 import Logger from "electron-log/renderer.js";
 import pTimeout, { TimeoutError } from "p-timeout";
 import { toast } from "svelte-sonner";
 
-export type ReflectPhase = {
-    title: string;
-    detail: string;
-};
+import type {
+    ChatMessage,
+    ChatStreamEvent,
+    TraceAgentNode,
+    TraceNode,
+} from "./chat.types";
 
-export type PhaseRecord = ReflectPhase & {
-    id: string;
-    timestamp: Date;
-};
-
-type StreamEvent =
-    | { type: "phase"; phase: ReflectPhase }
-    | { type: "text"; text: string };
-
-const RUNCOMMAND_END_TIMEOUT_MS = 24 * 60 * 60 * 1000; // default 1 day.
+const RUNCOMMAND_END_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 1 day
 
 type SeqDeferred = {
     promise: Promise<boolean>;
@@ -39,6 +28,10 @@ function createDeferred(): SeqDeferred {
     return { promise, resolve };
 }
 
+function newId(): string {
+    return crypto?.randomUUID?.() ?? Date.now().toString();
+}
+
 class MessageStore {
     constructor() {
         evtbus.on("runcommand-end", ({ suc, seq }) => {
@@ -47,48 +40,62 @@ class MessageStore {
                 this.#pendingSeqs.delete(seq);
                 pending.resolve(suc);
             } else {
-                Logger.debug("runcommand-end received with no pending waiter", { suc, seq });
+                Logger.debug("runcommand-end received with no pending waiter", {
+                    suc,
+                    seq,
+                });
             }
         });
     }
 
-    messages = $state<Message[]>([]);
+    // ── Public reactive state ───────────────────────────────────
+    messages = $state<ChatMessage[]>([]);
     isLoading = $state(false);
-    phase = $state<ReflectPhase | null>(null);
     isAborting = $state(false);
-
-    phaseHistory = $state<PhaseRecord[]>([]);
-
+    /** 当前会话 ID（由主进程 message.start 事件设置或外部赋值） */
+    sessionId = $state<string | undefined>(undefined);
     collapsedMessages = $state<Record<string, boolean>>({});
 
     hasMessages = $derived(this.messages.length > 0);
     lastMessage = $derived(
-        this.messages.length > 0 ? this.messages[this.messages.length - 1] : null,
+        this.messages.length > 0
+            ? this.messages[this.messages.length - 1]
+            : null,
     );
 
+    // ── Internals ───────────────────────────────────────────────
     #controller: AbortController | null = null;
     #runPromise: Promise<void> | null = null;
     #nextSeq = 1;
     #pendingSeqs = new Map<number, SeqDeferred>();
 
-    addMessage(message: Omit<Message, "id" | "timestamp">) {
-        const newMessage: Message = {
-            ...message,
-            id: crypto?.randomUUID?.() ?? Date.now().toString(),
-            timestamp: new Date(),
+    /** trace 节点索引：按 id 直取，用于深层嵌套的快速定位 */
+    #traceIndex = new Map<string, TraceNode>();
+    /** 当前正在流式接收的助手消息 id（用于 fallback 错误归属） */
+    #activeAssistantId: string | null = null;
+
+    // ── Message CRUD ────────────────────────────────────────────
+    addMessage(partial: Omit<ChatMessage, "id" | "timestamp">): ChatMessage {
+        const msg: ChatMessage = {
+            ...partial,
+            id: newId(),
+            timestamp: Date.now(),
         };
-        this.messages = [...this.messages, newMessage];
-        return newMessage;
+        this.messages = [...this.messages, msg];
+        return msg;
     }
 
     clear() {
         this.messages = [];
-        this.phaseHistory = [];
         this.collapsedMessages = {};
+        this.#traceIndex.clear();
+        this.#activeAssistantId = null;
+        // 清对话 = 开新会话；如需保留 session，去掉下一行
+        this.sessionId = undefined;
     }
 
     deleteMessage(id: string) {
-        this.messages = this.messages.filter((msg) => msg.id !== id);
+        this.messages = this.messages.filter((m) => m.id !== id);
         delete this.collapsedMessages[id];
     }
 
@@ -100,153 +107,203 @@ class MessageStore {
         this.collapsedMessages[messageId] = !this.collapsedMessages[messageId];
     }
 
-    // ✅ 修复：正确处理 undefined 的情况
     toggleAllMessages() {
         if (this.messages.length === 0) return;
-
-        // 判断是否所有消息都已折叠（显式为 true）
-        const allCollapsed = this.messages.every((msg) => this.collapsedMessages[msg.id] === true);
-        const targetState = !allCollapsed;
-
-        this.messages.forEach((msg) => {
-            this.collapsedMessages[msg.id] = targetState;
+        const allCollapsed = this.messages.every(
+            (m) => this.collapsedMessages[m.id] === true,
+        );
+        const target = !allCollapsed;
+        this.messages.forEach((m) => {
+            this.collapsedMessages[m.id] = target;
         });
     }
 
-    #archivePhase() {
-        if (!this.phase) return;
-        const record: PhaseRecord = {
-            ...this.phase,
-            id: crypto?.randomUUID?.() ?? Date.now().toString(),
-            timestamp: new Date(),
-        };
-        this.phaseHistory = [...this.phaseHistory, record];
+    // ── Stream event handling ───────────────────────────────────
+    /**
+     * 处理一个流式事件，mutate 消息/trace 状态。
+     * 可被 AIResponse 的 async iterator 调用，也可被独立的 evtbus 订阅调用。
+     */
+    handleStreamEvent(event: ChatStreamEvent): void {
+        switch (event.type) {
+            case "message.start": {
+                const msg: ChatMessage = {
+                    id: event.messageId,
+                    role: "assistant",
+                    content: "",
+                    timestamp: event.timestamp,
+                    streaming: true,
+                    agent: event.agent,
+                    traces: [],
+                };
+                this.messages = [...this.messages, msg];
+                this.#activeAssistantId = event.messageId;
+                break;
+            }
+            case "message.delta": {
+                const m = this.#findMessage(event.messageId);
+                if (m) m.content += event.delta;
+                break;
+            }
+            case "message.end": {
+                const m = this.#findMessage(event.messageId);
+                if (!m) break;
+                m.streaming = false;
+                // 兜底规范化：只有主进程发了显式 content 才覆盖
+                if (event.content != null) {
+                    m.content = event.content;
+                }
+                if (this.#activeAssistantId === event.messageId) {
+                    this.#activeAssistantId = null;
+                }
+                break;
+            }
+            case "message.error": {
+                const m = this.#findMessage(event.messageId);
+                if (!m) break;
+                m.streaming = false;
+                m.isError = true;
+                m.content = event.error;
+                if (this.#activeAssistantId === event.messageId) {
+                    this.#activeAssistantId = null;
+                }
+                break;
+            }
+            case "trace.start": {
+                const m = this.#findMessage(event.messageId);
+                if (!m) break;
+                this.#traceIndex.set(event.node.id, event.node);
+                if (event.parentId) {
+                    const parent = this.#traceIndex.get(event.parentId);
+                    if (parent && parent.kind === "agent") {
+                        (parent as TraceAgentNode).children.push(event.node);
+                    } else {
+                        Logger.warn(
+                            "trace.start: parent missing or not agent, falling back to root",
+                            event,
+                        );
+                        (m.traces ??= []).push(event.node);
+                    }
+                } else {
+                    (m.traces ??= []).push(event.node);
+                }
+                break;
+            }
+            case "trace.update": {
+                const n = this.#traceIndex.get(event.nodeId);
+                if (n) Object.assign(n, event.patch);
+                break;
+            }
+            case "trace.detail.delta": {
+                const n = this.#traceIndex.get(event.nodeId);
+                if (!n) break;
+                n.detail = (n.detail ?? "") + event.delta;
+                n.streaming = true;
+                break;
+            }
+            case "trace.end": {
+                const n = this.#traceIndex.get(event.nodeId);
+                if (!n) break;
+                n.streaming = false;
+                if (event.detail != null) n.detail = event.detail;
+                break;
+            }
+        }
     }
 
-    AIResponse(userMessage: string): Promise<void> {
+    #findMessage(id: string): ChatMessage | undefined {
+        return this.messages.find((m) => m.id === id);
+    }
+
+    // ── Run lifecycle ───────────────────────────────────────────
+    async AIResponse(userMessage: string): Promise<void> {
         if (this.#runPromise) {
             toast.error("已有对话任务正在进行，请等待完成或先终止");
-            return Promise.resolve();
+            return;
         }
-
-        if (dashboardStore.runState !== "idle") {
-            toast.error("主控任务正在运行，请等待完成或先终止主控");
-            return Promise.resolve();
-        }
-
         if (!projectStore.opened) {
             toast.error("请先打开一个项目");
-            return Promise.resolve();
+            return;
         }
 
         this.#controller = new AbortController();
         const { signal } = this.#controller;
-
         this.isAborting = false;
         this.setLoading(true);
 
         const run = this.#run(userMessage, signal);
         this.#runPromise = run;
-        return run;
+        try {
+            await run;
+        } finally {
+            this.#runPromise = null;
+        }
     }
 
     async #run(userMessage: string, signal: AbortSignal): Promise<void> {
-        let stream: AsyncGenerator<StreamEvent> | null = null;
+        let stream: AsyncGenerator<ChatStreamEvent> | null = null;
         const seq = this.#nextSeq++;
         const deferred = createDeferred();
         this.#pendingSeqs.set(seq, deferred);
-        let finalText = "";
-        let responsed = false;
-
-        this.phaseHistory = [];
 
         try {
-            stream = await safeApi().project.runCommand({
-                msg: userMessage,
-                seq,
-            }, { signal });
+            stream = (await safeApi().project.runCommand(
+                { msg: userMessage, seq },
+                { signal },
+            )) as AsyncGenerator<ChatStreamEvent>;
 
             for await (const evt of stream) {
                 if (signal.aborted) break;
-                if (evt.type === "phase") {
-                    this.#archivePhase();
-
-                    if (evt.phase.title === 'error') {
-                        this.addMessage({
-                            role: "assistant",
-                            isError: true,
-                            content: evt.phase.detail,
-                        });
-                        responsed = true;
-                        this.phase = null;
-                    } else if (evt.phase.title === "show-asset") {
-                        projectStore.mediaURL = evt.phase.detail;
-                        layoutStore.openPanel("bottom");
-                        bottomPanelStore.setActiveTab("media");
-                        this.phase = null;
-                    } else {
-                        this.phase = evt.phase;
-                    }
-                } else {
-                    finalText = evt.text;
-                }
+                this.handleStreamEvent(evt);
             }
         } catch (err) {
             if (signal.aborted) {
-                this.phase = {
-                    title: "终止命令",
-                    detail: "向命令中心请求终止，等待其终止确认中...",
-                };
+                Logger.info("runCommand aborted");
             } else {
-                this.addMessage({
-                    role: "assistant",
-                    isError: true,
-                    content: `处理失败：${err instanceof Error ? err.message : String(err)}`,
-                });
-                responsed = true;
+                const errText =
+                    err instanceof Error ? err.message : String(err);
+                if (this.#activeAssistantId) {
+                    this.handleStreamEvent({
+                        type: "message.error",
+                        messageId: this.#activeAssistantId,
+                        error: `处理失败：${errText}`,
+                    });
+                } else {
+                    this.addMessage({
+                        role: "assistant",
+                        isError: true,
+                        content: `处理失败：${errText}`,
+                    });
+                }
             }
         } finally {
             if (stream && typeof stream.return === "function") {
                 try {
-                    Logger.debug("waiting for stream.return()...", { seq });
                     await stream.return(undefined);
                 } catch (returnErr) {
-                    Logger.error("Failed to close run command stream safely:", returnErr);
+                    Logger.error(
+                        "Failed to close run command stream safely:",
+                        returnErr,
+                    );
                 }
             }
 
             await this.#waitForRunEnd(seq, deferred);
 
-            this.#archivePhase();
-
-            const currentPhaseRecords = [...this.phaseHistory];
-
-            if (finalText) {
-                const msg = this.addMessage({ role: "assistant", content: finalText });
-                msg.phaseRecords = currentPhaseRecords;
-                responsed = true;
-            } else if (signal.aborted) {
-                const msg = this.addMessage({
-                    role: "assistant",
-                    content: `您终止了当前任务，查看日志了解执行细节。`,
-                });
-                msg.phaseRecords = currentPhaseRecords;
-                responsed = true;
+            // 兜底：abort 后主进程未发 message.end
+            if (this.#activeAssistantId) {
+                const m = this.#findMessage(this.#activeAssistantId);
+                if (m) {
+                    m.streaming = false;
+                    if (signal.aborted && m.content.length === 0) {
+                        m.content = "您终止了当前任务，查看日志了解执行细节。";
+                    }
+                }
+                this.#activeAssistantId = null;
             }
 
-            if (!responsed) {
-                this.addMessage({
-                    role: "assistant",
-                    isError: true,
-                    content: "任务正常结束，但 AI 没有返回任何最终文本，请查阅日志了解细节。",
-                });
-            }
-
-            this.phase = null;
             this.isAborting = false;
             this.setLoading(false);
             this.#controller = null;
-            this.#runPromise = null;
         }
     }
 
@@ -259,8 +316,12 @@ class MessageStore {
         } catch (err) {
             if (err instanceof TimeoutError) {
                 this.#pendingSeqs.delete(seq);
-                Logger.error("Timed out waiting for runcommand-end confirmation", { seq });
-                const msg = "终止任务超时：未能确认主进程的任务已完全结束。为安全起见，请关闭全部窗口并重启应用，避免悬置的能力组件意外更新术语库。";
+                Logger.error(
+                    "Timed out waiting for runcommand-end confirmation",
+                    { seq },
+                );
+                const msg =
+                    "终止任务超时：未能确认主进程的任务已完全结束。为安全起见，请关闭全部窗口并重启应用。";
                 this.addMessage({
                     role: "assistant",
                     isError: true,
@@ -268,7 +329,10 @@ class MessageStore {
                 });
                 toast.error(msg);
             } else {
-                Logger.error("Unexpected error while waiting for runcommand-end", err);
+                Logger.error(
+                    "Unexpected error while waiting for runcommand-end",
+                    err,
+                );
             }
         }
     }
@@ -281,6 +345,7 @@ class MessageStore {
     }
 }
 
-const KEY = Symbol.for('unigen.renderer.messageStore');
+const KEY = Symbol.for("unigen.renderer.messageStore");
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const messageStore: MessageStore = ((globalThis as any)[KEY] ??= new MessageStore());
+export const messageStore: MessageStore = ((globalThis as any)[KEY] ??=
+    new MessageStore());

@@ -1,6 +1,5 @@
 import DynEntry from '$lib/components/dyn/Entry.svelte';
 import type { Step } from '$lib/components/ui/walkthrough/ctx';
-import { dashboardStore } from '$lib/store/dashboard.svelte';
 import type { BlueprintFilters, InfoCardView, ProjectActivityData, TargetOption } from '@app/main/types';
 import { layoutStore } from '../layout.svelte';
 import type { IValueService } from './type';
@@ -56,6 +55,7 @@ export class ProjectActivity {
     readonly intputSteps: Step[] | null;
     readonly targets: TargetOption[] = []
     readonly service: IValueService;
+    readonly welcome: string | undefined;
 
     /**
      * 蓝图（术语表/元术语表/能力表）名称候选。
@@ -76,10 +76,9 @@ export class ProjectActivity {
         this.icon = data.icon
         this.statusText = data.statusText
         this.header = data.header
+        this.welcome = data.welcome
         this.infocards = mergeInfocards(data);
         this.targets = data.targets ?? [];
-
-        dashboardStore.viewMode = data.chatMode ? "chat" : "control"
 
         const targetSize = this.targets.length;
         this.targets.forEach((t, idx) => {

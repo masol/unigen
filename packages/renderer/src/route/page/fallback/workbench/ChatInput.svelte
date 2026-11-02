@@ -12,7 +12,7 @@
     IconSlash,
     IconTrash,
   } from "@tabler/icons-svelte";
-  import { tick } from "svelte";
+  import { onMount, tick } from "svelte";
   import ChatCommandMenu from "./ChatCommandMenu.svelte";
   import { chatCommands, filterCommands, type ChatCommand } from "./commands";
 
@@ -43,12 +43,15 @@
   let selectedIndex = $state(0);
   let isComposing = $state(false);
 
+  // 用户在发送动作后、本次 sending 转换为 false 的瞬间是否应被动恢复焦点。
+  // 用户若在流式期间点击他处 → activeElement 不再是 body → 跳过恢复。
+  let shouldRefocusAfterSend = $state(false);
+
   let filtered = $derived(showCommands ? filterCommands(value, commands) : []);
   let sending = $derived(messageStore.isLoading);
   let aborting = $derived(messageStore.isAborting);
   let canSend = $derived(value.trim().length > 0 && !sending);
 
-  // ✅ 修复：与 store 中的判断逻辑保持一致
   let allCollapsed = $derived.by(() => {
     const msgs = messageStore.messages;
     if (msgs.length === 0) return false;
@@ -62,6 +65,7 @@
   function send() {
     if (!canSend) return;
     showCommands = false;
+    shouldRefocusAfterSend = true;
     onSend();
     value = "";
     selectedIndex = 0;
@@ -72,13 +76,27 @@
     await messageStore.abort();
   }
 
+  // 显式 refocus 策略：
+  // 当 sending 结束时，仅在以下条件齐备时恢复焦点到输入框：
+  //   1. 用户本次发送动作触发过（shouldRefocusAfterSend === true）
+  //   2. 当前焦点仍在 document.body（即焦点是被 disabled textarea 自动踢出，而非用户主动移走）
+  $effect(() => {
+    if (sending || !shouldRefocusAfterSend) return;
+    shouldRefocusAfterSend = false;
+    if (typeof document === "undefined") return;
+    const active = document.activeElement;
+    if (!active || active === document.body) {
+      textarea?.focus();
+    }
+  });
+
   $effect(() => {
     void value;
     tick().then(adjustHeight);
   });
 
-  $effect(() => {
-    if (!sending) textarea?.focus();
+  onMount(() => {
+    textarea?.focus();
   });
 
   function adjustHeight() {
@@ -189,8 +207,7 @@
       rows="1"
       disabled={sending}
       class="chat-textarea max-h-50 w-full resize-none overflow-y-auto bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
-      aria-label="消息输入框"
-    ></textarea>
+      aria-label="消息输入框"></textarea>
 
     <div
       class="flex items-center justify-between border-t border-border/50 px-2 py-1.5"
