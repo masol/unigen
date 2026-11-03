@@ -627,7 +627,7 @@ function rowToTraceNode(row: typeof traces.$inferSelect): TraceNode {
             return {
                 ...base,
                 kind: "agent",
-                agent: extra?.kind === "agent" ? extra.agent : { name: "" },
+                agent: extra?.kind === "agent" ? extra.agent : { name: "", id: row.id },
                 children: [],
             };
         case "tool":
