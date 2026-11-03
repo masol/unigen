@@ -7,11 +7,10 @@ import pTimeout, { TimeoutError } from "p-timeout";
 import { toast } from "svelte-sonner";
 
 import type {
-    AgentIdentity,
     ChatMessage,
     ChatStreamEvent,
     TraceAgentNode,
-    TraceNode,
+    TraceNode
 } from "./chat.types";
 
 const RUNCOMMAND_END_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 1 day
@@ -71,8 +70,6 @@ class MessageStore {
 
     /** 当前正在流式接收的助手消息 id */
     #activeAssistantId: string | null = null;
-    /** 当前消息的根 agent 节点 id（用于自动挂载） */
-    #rootAgentId: string | null = null;
 
     // ── Message CRUD ────────────────────────────────────────────
     addMessage(partial: Omit<ChatMessage, "id" | "timestamp">): ChatMessage {
@@ -89,7 +86,6 @@ class MessageStore {
         this.messages = [];
         this.collapsedMessages = {};
         this.#activeAssistantId = null;
-        this.#rootAgentId = null;
         this.sessionId = undefined;
     }
 
@@ -143,16 +139,6 @@ class MessageStore {
         return search(msg.traces);
     }
 
-    /**
-     * 获取当前消息的根 agent 节点（如果存在）
-     */
-    #getRootAgent(): TraceAgentNode | null {
-        if (!this.#activeAssistantId || !this.#rootAgentId) return null;
-        const node = this.#findTraceNode(this.#activeAssistantId, this.#rootAgentId);
-        if (!node || node.kind !== "agent") return null;
-        return node as TraceAgentNode;
-    }
-
     // ── Stream event handling ───────────────────────────────────
     handleStreamEvent(event: ChatStreamEvent): void {
         switch (event.type) {
@@ -168,9 +154,6 @@ class MessageStore {
                 };
                 this.messages = [...this.messages, msg];
                 this.#activeAssistantId = event.messageId;
-
-                // 自动创建根 agent 节点
-                this.#createRootAgent(msg, event.agent);
                 break;
             }
             case "message.delta": {
@@ -188,7 +171,6 @@ class MessageStore {
                 this.#forceEndTraces(m);
                 if (this.#activeAssistantId === event.messageId) {
                     this.#activeAssistantId = null;
-                    this.#rootAgentId = null;
                 }
                 break;
             }
@@ -201,7 +183,6 @@ class MessageStore {
                 this.#forceEndTraces(m);
                 if (this.#activeAssistantId === event.messageId) {
                     this.#activeAssistantId = null;
-                    this.#rootAgentId = null;
                 }
                 break;
             }
@@ -215,23 +196,13 @@ class MessageStore {
                         (parent as TraceAgentNode).children.push(event.node);
                     } else {
                         Logger.warn(
-                            "trace.start: parentId not found, mounting to root agent",
+                            "trace.start: parentId not found, mounting to root",
                             { parentId: event.parentId, nodeId: event.node.id },
                         );
-                        const rootAgent = this.#getRootAgent();
-                        if (rootAgent) {
-                            rootAgent.children.push(event.node);
-                        } else {
-                            (m.traces ??= []).push(event.node);
-                        }
-                    }
-                } else {
-                    const rootAgent = this.#getRootAgent();
-                    if (rootAgent) {
-                        rootAgent.children.push(event.node);
-                    } else {
                         (m.traces ??= []).push(event.node);
                     }
+                } else {
+                    (m.traces ??= []).push(event.node);
                 }
                 break;
             }
@@ -267,24 +238,6 @@ class MessageStore {
 
     #findMessage(id: string): ChatMessage | undefined {
         return this.messages.find((m) => m.id === id);
-    }
-
-    #createRootAgent(message: ChatMessage, agent: AgentIdentity): void {
-        const rootId = `agent|${agent.name ?? "unknown"}`;
-        this.#rootAgentId = rootId;
-
-        const rootAgent: TraceAgentNode = {
-            id: rootId,
-            kind: "agent",
-            status: "running",
-            title: `执行 ${agent.name}`,
-            agent: agent,
-            children: [],
-            startedAt: message.timestamp,
-            streaming: true,
-        };
-
-        message.traces = [rootAgent];
     }
 
     #forceEndTraces(message: ChatMessage): void {
@@ -386,12 +339,11 @@ class MessageStore {
                 if (m) {
                     m.streaming = false;
                     if (signal.aborted && m.content.length === 0) {
-                        m.content = "您终止了当前任务，查看日志了解执行细节。";
+                        m.content = "您终止了当前任务,查看日志了解执行细节。";
                     }
                     this.#forceEndTraces(m);
                 }
                 this.#activeAssistantId = null;
-                this.#rootAgentId = null;
             }
 
             this.isAborting = false;
@@ -414,7 +366,7 @@ class MessageStore {
                     { seq },
                 );
                 const msg =
-                    "终止任务超时：未能确认主进程的任务已完全结束。为安全起见，请关闭全部窗口并重启应用。";
+                    "终止任务超时：未能确认主进程的任务已完全结束。为安全起见,请关闭全部窗口并重启应用。";
                 this.addMessage({
                     role: "assistant",
                     isError: true,

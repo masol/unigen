@@ -152,7 +152,7 @@
             {/if}
           </Button>
 
-          {#if message.agent?.name && message.agent.name !== "AI"}
+          <!-- {#if message.agent?.name && message.agent.name !== "AI"}
             <span class="shrink-0 text-xs text-muted-foreground">
               ({message.agent.name})
             </span>
@@ -163,7 +163,7 @@
             >
               {message.agent.model}
             </span>
-          {/if}
+          {/if} -->
         </div>
       </div>
 
