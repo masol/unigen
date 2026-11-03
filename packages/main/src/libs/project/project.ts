@@ -224,6 +224,7 @@ export class ProjectContainer implements IProjectContext {
             this.#path = ""
             this.#type = ""
             this.#inputName = ""
+            this.#agent = null;
             // @todo: 只在容器真正销毁时清
             // this.registry.clear();
         }

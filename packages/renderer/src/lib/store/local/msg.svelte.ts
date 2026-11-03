@@ -228,9 +228,30 @@ class MessageStore {
             }
             case "trace.end": {
                 const node = this.#findTraceNode(event.messageId, event.nodeId);
-                if (!node) break;
+
+                if (!node) {
+                    Logger.warn("trace.end,but can not found node:", event.nodeId);
+                    break;
+                }
+                // 📊 日志埋点 1：记录兜底触发情况
+                // const needsStatusFix = node.status === "running" || node.status === "pending";
+                // if (needsStatusFix) {
+                //     Logger.warn("trace.end: backend did not set terminal status, applying frontend fallback", {
+                //         nodeId: event.nodeId,
+                //         status: node.status,
+                //     });
+                // }
+
                 node.streaming = false;
                 if (event.detail != null) node.detail = event.detail;
+
+                // 如果后端未通过 trace.update 正确设置 status 终态，此处补齐
+                if (node.status === "running" || node.status === "pending") {
+                    node.status = "success";
+                    if (!node.finishedAt) {
+                        node.finishedAt = Date.now();
+                    }
+                }
                 break;
             }
         }

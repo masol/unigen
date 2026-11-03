@@ -19,7 +19,11 @@
 
   let { node, depth = 1 }: { node: TraceNode; depth?: number } = $props();
 
-  let running = $derived(node.status === "running");
+  // 🔴 确定性修复：running 状态判定增加 streaming 防御
+  // 当 streaming === false 时，无论 status 如何，都视作已终止
+  let running = $derived(
+    node.status === "running" && node.streaming !== false,
+  );
   let streaming = $derived(node.streaming === true);
 
   let traceStatus = $derived<"running" | "error" | "pending" | undefined>(
@@ -50,11 +54,8 @@
     return `${Math.floor(s / 60)}m ${s % 60}s`;
   });
 
-  // 关键修复：description 逻辑优化
   let descriptionText = $derived.by(() => {
-    // Agent 节点不显示 description（agent 信息已在单独区域展示）
     if (node.kind === "agent") return undefined;
-    // 优先使用显式 description，否则使用自动计算的耗时
     return node.description ?? autoDuration;
   });
 
@@ -69,7 +70,6 @@
   let showDepthBadge = $derived(depth >= 3);
 
   let userOpen = $state<boolean | undefined>(undefined);
-  // 关键修复：流式节点或 running 节点默认展开
   let open = $derived(userOpen ?? (streaming || running || hasDetail));
 </script>
 

@@ -2,7 +2,7 @@ import type { IRunnerContext } from "$types/blueprint/context.js";
 import Logger from "electron-log/main.js";
 import { getErrorMessage } from "radashi";
 import { ICapaFunctor } from "../type.js";
-import { PacAgent } from "./agent.js";
+import { PacAgent } from "./agent/index.js";
 import { compilePacAgent } from "./compiler.js";
 import type { CompiledPacAgent } from "./type.js";
 
@@ -146,7 +146,7 @@ function countSub(c: CompiledPacAgent): number {
 
 /* ────────────────────────────────────────────────────────── */
 
-export { buildAgentTool, PacAgent, type PacRunState } from "./agent.js";
+export { buildAgentTool, PacAgent, type PacRunState } from "./agent/index.js";
 export { buildAgentId, compilePacAgent, createCompileCache, resolvePacPath } from "./compiler.js";
 export {
     appendHistoryMessage, BI_PREFIX, buildHistoryId,
@@ -173,3 +173,4 @@ export type {
     ModelSelectOptions, PacFrontMatter, PacTimeoutConfig, PacToolConfig, ResolvedSettings,
     SkillInfo, ToolOrigin, ToolRef, VarBuckets
 } from "./type.js";
+
