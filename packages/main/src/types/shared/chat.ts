@@ -272,6 +272,7 @@ export type TraceStreamEvent =
         nodeId: string;
         /** 可选：最终 detail 内容（渲染端优先沿用累积结果） */
         detail?: string;
+        patch?: TracePatch;
     };
 
 export type ChatStreamEvent = MessageStreamEvent | TraceStreamEvent;

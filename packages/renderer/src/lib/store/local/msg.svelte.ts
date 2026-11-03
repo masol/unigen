@@ -6,10 +6,10 @@ import Logger from "electron-log/renderer.js";
 import pTimeout, { TimeoutError } from "p-timeout";
 import { toast } from "svelte-sonner";
 
+import { hasTraceChildren, isTraceAgentNode } from "./chat.guards";
 import type {
     ChatMessage,
     ChatStreamEvent,
-    TraceAgentNode,
     TraceNode
 } from "./chat.types";
 
@@ -128,7 +128,7 @@ class MessageStore {
         const search = (nodes: TraceNode[]): TraceNode | null => {
             for (const node of nodes) {
                 if (node.id === nodeId) return node;
-                if (node.kind === "agent" && node.children.length > 0) {
+                if (hasTraceChildren(node)) {
                     const found = search(node.children);
                     if (found) return found;
                 }
@@ -192,11 +192,11 @@ class MessageStore {
 
                 if (event.parentId) {
                     const parent = this.#findTraceNode(event.messageId, event.parentId);
-                    if (parent && parent.kind === "agent") {
-                        (parent as TraceAgentNode).children.push(event.node);
+                    if (parent && isTraceAgentNode(parent)) {
+                        parent.children.push(event.node);
                     } else {
                         Logger.warn(
-                            "trace.start: parentId not found, mounting to root",
+                            "trace.start: parentId not found or not an agent node, mounting to root",
                             { parentId: event.parentId, nodeId: event.node.id },
                         );
                         (m.traces ??= []).push(event.node);
@@ -228,24 +228,18 @@ class MessageStore {
             }
             case "trace.end": {
                 const node = this.#findTraceNode(event.messageId, event.nodeId);
-
-                if (!node) {
-                    Logger.warn("trace.end,but can not found node:", event.nodeId);
-                    break;
-                }
-                // 📊 日志埋点 1：记录兜底触发情况
-                // const needsStatusFix = node.status === "running" || node.status === "pending";
-                // if (needsStatusFix) {
-                //     Logger.warn("trace.end: backend did not set terminal status, applying frontend fallback", {
-                //         nodeId: event.nodeId,
-                //         status: node.status,
-                //     });
-                // }
-
+                if (!node) break;
                 node.streaming = false;
                 if (event.detail != null) node.detail = event.detail;
 
-                // 如果后端未通过 trace.update 正确设置 status 终态，此处补齐
+                if (event.patch?.status) {
+                    node.status = event.patch?.status
+                }
+                if (event.patch?.finishedAt) {
+                    node.finishedAt = event.patch?.finishedAt
+                }
+
+                // 兜底终止逻辑：如果后端未设置终态，此处补齐
                 if (node.status === "running" || node.status === "pending") {
                     node.status = "success";
                     if (!node.finishedAt) {
@@ -272,7 +266,7 @@ class MessageStore {
                     node.finishedAt = Date.now();
                 }
             }
-            if (node.kind === "agent" && node.children.length > 0) {
+            if (hasTraceChildren(node)) {
                 node.children.forEach(endNode);
             }
         };

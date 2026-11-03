@@ -29,12 +29,18 @@ export function buildCallArgs(
 /**
  * 流式执行，捕获 thinking 和流式输出。
  *
- * **关键决策**: Reasoning 和 Output 节点在 stream 完全结束后才关闭。
+ * **关键决策**: 使用 AI SDK v7 的 `text-start` 事件作为 thinking 结束的权威信号。
  *
- * **理由**:
- * 1. AI SDK 没有显式的 reasoning 结束事件
- * 2. reasoning-delta 和 text-delta 可以交错出现
- * 3. 正确性优先：绝不能让 reasoning 内容泄露到其它通道
+ * **事件顺序**:
+ * 1. reasoning-start (可选)
+ * 2. reasoning-delta (多次)
+ * 3. reasoning-end (可选，某些 provider 不发送)
+ * 4. text-start ← **关键**：思考结束，正文开始
+ * 5. text-delta (多次)
+ *
+ * **通道隔离**:
+ * - 在 `text-start` 之前的所有 `text-delta` 都是 thinking 内容，丢弃
+ * - 在 `text-start` 之后的所有 `text-delta` 是正文内容，按通道发送
  *
  * @param streamToMessage - true: 根 agent，文本 delta 发送到 message 通道
  * @param needOutputNode - true: 子 agent，需要创建 output 节点
@@ -58,9 +64,47 @@ export async function streamAgent(
     let reasoningNodeId: string | undefined;
     let outputNodeId: string | undefined;
 
+    // ✅ 关键修正：使用 text-start 事件作为权威信号
+    let textStarted = false;
+
     try {
         for await (const part of res.stream) {
             if (ctx.isAborted) break;
+
+            // ✅ 检测 text-start 事件
+            if (part.type === "text-start") {
+                textStarted = true;
+                Logger.debug(`[PAC] text-start 事件到达，思考结束，正文开始`);
+
+                // 关闭 reasoning 节点（如果存在）
+                if (reasoningNodeId) {
+                    const now = Date.now();
+                    prjdb.patchTrace(reasoningNodeId, {
+                        status: "success",
+                        finishedAt: now,
+                    });
+                    ctx.report({
+                        type: "trace.end",
+                        messageId: state.messageId,
+                        nodeId: reasoningNodeId,
+                        patch: {
+                            status: "success",
+                            finishedAt: now,
+                        },
+                    } as TraceStreamEvent);
+                }
+                continue;
+            }
+
+            if (part.type === "reasoning-start") {
+                Logger.debug(`[PAC] reasoning-start 事件到达，开始思考`);
+                continue;
+            }
+
+            if (part.type === "reasoning-end") {
+                Logger.debug(`[PAC] reasoning-end 事件到达（注意：text-start 才是权威信号）`);
+                continue;
+            }
 
             if (part.type === "reasoning-delta") {
                 const thinkDelta = part.text;
@@ -92,12 +136,25 @@ export async function streamAgent(
                         delta: thinkDelta,
                     } as TraceStreamEvent);
                 }
-            } else if (part.type === "text-delta") {
+                continue;
+            }
+
+            if (part.type === "text-delta") {
                 const delta = part.text;
                 textBuf.push(delta);
                 deltaBuffer.push(delta);
 
-                // 延迟创建 output 节点（第一个 text-delta 到达时）
+                // ✅ 关键修正：text-start 之前的 text-delta 是 thinking 内容，丢弃
+                if (!textStarted) {
+                    Logger.debug(
+                        `[PAC] 丢弃 text-start 之前的 text-delta (thinking 内容, length=${delta.length})`,
+                    );
+                    continue;
+                }
+
+                // text-start 之后的 text-delta 是正文内容，正常处理
+
+                // 延迟创建 output 节点（第一个正文 text-delta 到达时）
                 if (!outputNodeId && needOutputNode) {
                     outputNodeId = `${agentTraceNodeId}:output`;
                     const outputNode = {
@@ -118,12 +175,14 @@ export async function streamAgent(
                 }
 
                 if (streamToMessage) {
+                    // ✅ 根 agent: 发送到 message 通道
                     ctx.report({
                         type: "message.delta",
                         messageId: state.messageId,
                         delta,
                     } as MessageStreamEvent);
                 } else if (outputNodeId) {
+                    // ✅ 子 agent: 发送到 output 节点的 detail（trace 通道）
                     prjdb.appendTraceDetail(outputNodeId, delta);
                     ctx.report({
                         type: "trace.detail.delta",
@@ -131,6 +190,12 @@ export async function streamAgent(
                         nodeId: outputNodeId,
                         delta,
                     } as TraceStreamEvent);
+                } else {
+                    // ⚠️ 异常情况：text-delta 在 text-start 之后，但没有 output 节点
+                    Logger.warn(
+                        `[PAC] text-delta 无目标通道 (streamToMessage=${streamToMessage}, ` +
+                        `needOutputNode=${needOutputNode}, outputNodeId=${outputNodeId})`,
+                    );
                 }
             }
         }
@@ -142,28 +207,40 @@ export async function streamAgent(
     const text = (await res.text) ?? textBuf.join("");
     const usage = await res.usage;
 
-    // Stream 完全结束后，关闭所有节点
-    if (reasoningNodeId) {
+    const now = Date.now();
+
+    // Stream 完全结束后，关闭剩余节点
+    // 注意：reasoning 节点通常已在 text-start 时关闭，这里是兜底逻辑
+    if (reasoningNodeId && !textStarted) {
+        // 如果 text-start 未到达（异常情况），关闭 reasoning 节点
         prjdb.patchTrace(reasoningNodeId, {
             status: "success",
-            finishedAt: Date.now(),
+            finishedAt: now,
         });
         ctx.report({
             type: "trace.end",
             messageId: state.messageId,
             nodeId: reasoningNodeId,
+            patch: {
+                status: "success",
+                finishedAt: now,
+            },
         } as TraceStreamEvent);
     }
 
     if (outputNodeId) {
         prjdb.patchTrace(outputNodeId, {
             status: "success",
-            finishedAt: Date.now(),
+            finishedAt: now,
         });
         ctx.report({
             type: "trace.end",
             messageId: state.messageId,
             nodeId: outputNodeId,
+            patch: {
+                status: "success",
+                finishedAt: now,
+            },
         } as TraceStreamEvent);
     }
 

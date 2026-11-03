@@ -3,6 +3,7 @@
   import MarkdownView from "$lib/components/markdown/Message.svelte";
   import { RuntimeIcon } from "$lib/components/runtimeicon";
   import * as Trace from "$lib/components/ui/trace";
+  import { hasTraceChildren } from "$lib/store/local/chat.guards";
   import type { TraceNode } from "$lib/store/local/chat.types";
   import {
     IconAlertTriangle,
@@ -19,11 +20,8 @@
 
   let { node, depth = 1 }: { node: TraceNode; depth?: number } = $props();
 
-  // 🔴 确定性修复：running 状态判定增加 streaming 防御
-  // 当 streaming === false 时，无论 status 如何，都视作已终止
-  let running = $derived(
-    node.status === "running" && node.streaming !== false,
-  );
+  // running 状态判定：streaming === false 时强制视作已终止
+  let running = $derived(node.status === "running" && node.streaming !== false);
   let streaming = $derived(node.streaming === true);
 
   let traceStatus = $derived<"running" | "error" | "pending" | undefined>(
@@ -63,7 +61,13 @@
     node.detail !== undefined && node.detail !== null && node.detail.length > 0,
   );
 
-  let hasChildren = $derived(node.kind === "agent" && node.children.length > 0);
+  // 🔴 修复类型错误：直接在判断中使用守卫，避免 $derived 类型收窄失效
+  let children = $derived.by(() => {
+    if (!hasTraceChildren(node)) return [];
+    return node.children;
+  });
+
+  let hasChildren = $derived(children.length > 0);
 
   let expandable = $derived(hasDetail || hasChildren);
 
@@ -100,9 +104,9 @@
 {#snippet depthBadge()}
   <span
     class="ml-1 shrink-0 rounded-md border border-border/50 bg-muted/40 px-1.5 py-px font-mono text-xs text-muted-foreground"
-    title={`嵌套层级 L${depth}`}
+    title={`嵌套层级 L${depth - 1}`}
   >
-    L{depth}
+    L{depth - 1}
   </span>
 {/snippet}
 
@@ -142,13 +146,15 @@
     <Trace.CollapsibleTrigger>
       {@render line()}
     </Trace.CollapsibleTrigger>
-    <Trace.CollapsibleContent class="whitespace-pre-wrap">
+    <Trace.CollapsibleContent
+      class="whitespace-pre-wrap *:data-[slot=trace-collapsible-content-inner]:mt-1"
+    >
       {#if hasDetail}
         <MarkdownView message={{ content: node.detail ?? "" }} {streaming} />
       {/if}
-      {#if node.kind === "agent" && hasChildren}
+      {#if hasChildren}
         <div class:mt-2={hasDetail} class="flex flex-col gap-1">
-          {#each node.children as child (child.id)}
+          {#each children as child (child.id)}
             <Self node={child} depth={depth + 1} />
           {/each}
         </div>

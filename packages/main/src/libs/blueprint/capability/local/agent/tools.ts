@@ -6,8 +6,7 @@ import { tool, type Tool } from "ai";
 import Logger from "electron-log/main.js";
 import { connectLocalMcp, type LocalMcpClient } from "../mcp.js";
 import type { CompiledPacAgent, JsonValue, LocalMcpConfig } from "../type.js";
-import type { PacAgent } from "./core.js";
-import type { PacRunState } from "./types.js";
+import type { IAgentExecutor, PacRunState } from "./types.js";
 
 export async function materializeTools(
     compiled: CompiledPacAgent,
@@ -17,7 +16,7 @@ export async function materializeTools(
     parentStepPath: string,
     state: PacRunState,
     parentTraceId: string,
-    agentInstance: PacAgent,
+    agentExecutor: IAgentExecutor,
 ): Promise<Record<string, Tool>> {
     const out: Record<string, Tool> = {};
     for (let i = 0; i < compiled.toolRefs.length; i++) {
@@ -33,7 +32,7 @@ export async function materializeTools(
                 childStepPath,
                 state,
                 parentTraceId,
-                agentInstance,
+                agentExecutor,
             );
         } else if (ref.local) {
             out[ref.key] = ref.local.tool;
@@ -84,10 +83,10 @@ export function buildAgentTool(
     stepPath: string,
     state: PacRunState,
     parentTraceId: string,
-    agentInstance: PacAgent,
+    agentExecutor: IAgentExecutor,
 ): Tool {
     const execute = async (input: unknown): Promise<string> => {
-        return agentInstance.runSubAgent(
+        return agentExecutor.runSubAgent(
             compiled,
             ctx,
             (input && typeof input === "object" && !Array.isArray(input)

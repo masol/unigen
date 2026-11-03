@@ -1,0 +1,334 @@
+// packages/main/src/libs/blueprint/capability/local/agent/execution.ts
+
+import { getSmartModel } from "$libs/model/index.js";
+import type { PrjDB } from "$libs/project/controllers/drizzle/index.js";
+import type { IRunnerContext } from "$types/blueprint/context.js";
+import { isStepCount, ToolLoopAgent, type ModelMessage } from "ai";
+import Logger from "electron-log/main.js";
+import type { LocalMcpClient } from "../mcp.js";
+import { resolveModelOptions } from "../settings.js";
+import { buildUserPrompt, renderSystemPrompt } from "../template.js";
+import { agentTraceId, nextSeq } from "../traceid.js";
+import type { CompiledPacAgent, JsonValue, LocalMcpConfig } from "../type.js";
+import { MessageDeltaBuffer } from "./buffer.js";
+import { createToolCallbacks } from "./callbacks.js";
+import { generateAgent, streamAgent } from "./executor.js";
+import { loadPriorMessages, saveConversation } from "./history.js";
+import {
+    createInputNode,
+    finishAgentTrace,
+    finishRootMessage,
+    handleAbort,
+    handleFailure,
+    startAgentTrace,
+    startRootMessage,
+    type AgentContext,
+} from "./lifecycle.js";
+import { materializeTools } from "./tools.js";
+import type { IAgentExecutor, PacRunState, RunOptions, ToolCallTraceInfo } from "./types.js";
+import { THINKING_PROVIDER_OPTIONS } from "./types.js";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyToolLoopAgent = ToolLoopAgent<any, any, any, any>;
+
+export interface ExecutionResult {
+    text: string;
+    usage: unknown;
+}
+
+export async function executeAgent(
+    compiled: CompiledPacAgent,
+    ctx: IRunnerContext,
+    prjdb: PrjDB,
+    rawInputs: Record<string, unknown>,
+    inheritedDefaults: Record<string, JsonValue>,
+    options: RunOptions,
+    mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
+    state: PacRunState,
+    agentExecutor: IAgentExecutor,
+): Promise<ExecutionResult> {
+    const { validateInputs = true, isRoot = false, stepPath = "1", parentTraceId } = options;
+
+    if (ctx.isAborted) return { text: "", usage: undefined };
+
+    // 1. 输入校验
+    let inputs = rawInputs;
+    if (validateInputs) {
+        const parsed = compiled.inputSchema.safeParse(rawInputs);
+        if (!parsed.success) {
+            Logger.warn(
+                `[PAC][step=${stepPath}] ${compiled.name} 输入校验失败(将以原值运行):`,
+                {
+                    issues: parsed.error.issues.map(
+                        (i) => `${i.path.join(".") || "<root>"} ${i.message}`,
+                    ),
+                    received: rawInputs,
+                },
+            );
+        } else {
+            inputs = parsed.data as Record<string, unknown>;
+        }
+    }
+
+    const effectiveDefaults: Record<string, JsonValue> = {
+        ...inheritedDefaults,
+        ...compiled.ownDefaults,
+    };
+    const settings = compiled.settings;
+    const shouldStream = isRoot ? settings.streaming : true;
+    const histEnabled = settings.history !== 0;
+
+    // 2. 模型选择
+    const modelOptions = resolveModelOptions(ctx);
+    const model = getSmartModel(modelOptions as never, ctx);
+    const providerId = model?.provider ?? "unknown";
+    const modelId = model?.modelId ?? "unknown";
+    state.modelInfo = { providerId, modelId };
+
+    // 3. Trace 初始化
+    const agentSeq = nextSeq(state.counters, `agent:${compiled.id}`);
+    const agentTraceNodeId = agentTraceId(compiled.id, agentSeq);
+    const agentIdentity = {
+        id: agentTraceNodeId,
+        name: compiled.name,
+        model: `${providerId}::${modelId}`,
+    };
+
+    const agentCtx: AgentContext = {
+        agentTraceNodeId,
+        agentIdentity,
+    };
+
+    if (isRoot) {
+        startRootMessage(ctx, state, agentIdentity);
+    }
+
+    startAgentTrace(
+        ctx,
+        prjdb,
+        state,
+        agentTraceNodeId,
+        compiled.name,
+        { providerId, modelId },
+        agentIdentity,
+        parentTraceId,
+    );
+
+    if (!isRoot) {
+        agentCtx.inputNodeId = createInputNode(ctx, prjdb, state, agentTraceNodeId, inputs);
+    }
+
+    // 4. 构建 messages
+    const tools = await materializeTools(
+        compiled,
+        ctx,
+        effectiveDefaults,
+        mcpClients,
+        stepPath,
+        state,
+        agentTraceNodeId,
+        agentExecutor,
+    );
+
+    const system = await renderSystemPrompt(compiled, ctx, inputs, effectiveDefaults, isRoot);
+    const userText = await buildUserPrompt(compiled, ctx, inputs, effectiveDefaults, isRoot);
+    const userMessage: ModelMessage = { role: "user", content: userText };
+
+    const prior = await loadPriorMessages(ctx, compiled.id, settings.history, histEnabled);
+    const messages: ModelMessage[] = [...prior, userMessage];
+
+    ctx.debug(
+        `[PAC][step=${stepPath}] 进入 ${compiled.name} ` +
+        `(isRoot=${isRoot}, tools=${Object.keys(tools).length}, shouldStream=${shouldStream}, ` +
+        `thinking=${settings.thinking}, history=${prior.length}, ` +
+        `maxSteps=${settings.maxSteps}, timeout=${JSON.stringify(settings.timeout)})`,
+        { inputs },
+    );
+
+    Logger.debug(
+        `[PAC][step=${stepPath}] run ${compiled.name} (isRoot=${isRoot})\n` +
+        `────────── SYSTEM PROMPT ──────────\n${system}\n` +
+        `────────── MESSAGES (${messages.length} total, last is current user) ──────────\n` +
+        `${JSON.stringify(messages, null, 2)}\n` +
+        `────────────────────────────────────`,
+    );
+
+    // 5. 构建 Agent
+    const providerOptions = settings.thinking ? THINKING_PROVIDER_OPTIONS : undefined;
+    const toolCallTraces = new Map<string, ToolCallTraceInfo>();
+    const callbacks = createToolCallbacks(
+        compiled,
+        ctx,
+        state,
+        prjdb,
+        agentTraceNodeId,
+        stepPath,
+        toolCallTraces,
+    );
+
+    const agent: AnyToolLoopAgent = new ToolLoopAgent({
+        model,
+        instructions: system,
+        stopWhen: isStepCount(settings.maxSteps),
+        tools,
+        providerOptions,
+        onToolExecutionStart: callbacks.onToolExecutionStart,
+        onToolExecutionEnd: callbacks.onToolExecutionEnd,
+        onError: (ev: { error: unknown }) => {
+            Logger.warn(`[PAC][step=${stepPath}] ${compiled.name} agent 内部错误:`, ev.error);
+        },
+    } as never);
+
+    // 6. 执行
+    let finalText = "";
+    let usage: unknown = undefined;
+    let failure: unknown = undefined;
+    const deltaBuffer = new MessageDeltaBuffer();
+
+    try {
+        if (shouldStream) {
+            let streamSuccess = false;
+            try {
+                // ✅ 关键修正：严格传递 isRoot 标志，确保通道隔离
+                // isRoot=true  → streamToMessage=true  → message.delta 通道
+                // isRoot=false → streamToMessage=false → trace.detail.delta 通道
+                const r = await streamAgent(
+                    agent,
+                    messages,
+                    ctx,
+                    settings.timeout,
+                    state,
+                    agentTraceNodeId,
+                    deltaBuffer,
+                    prjdb,
+                    isRoot,          // ✅ 传递 isRoot，不做转换
+                    !isRoot,         // ✅ 子 agent 需要 output 节点
+                    (reasoningId, outputId) => {
+                        agentCtx.reasoningNodeId = reasoningId;
+                        agentCtx.outputNodeId = outputId;
+                    },
+                );
+                finalText = r.text;
+                usage = r.usage;
+                streamSuccess = true;
+            } catch (streamErr) {
+                Logger.warn(
+                    `[PAC][step=${stepPath}] 流式执行失败，fallback 到非流式:`,
+                    streamErr,
+                );
+            }
+
+            if (!streamSuccess) {
+                const r = await generateAgent(agent, messages, ctx, settings.timeout);
+                finalText = r.text;
+                usage = r.usage;
+
+                if (!isRoot && finalText) {
+                    const now = Date.now();
+                    agentCtx.outputNodeId = `${agentTraceNodeId}:output`;
+                    const outputNode = {
+                        id: agentCtx.outputNodeId,
+                        kind: "output" as const,
+                        status: "success" as const,
+                        title: "输出",
+                        detail: finalText,
+                        streaming: false,
+                        finishedAt: now,
+                    };
+                    prjdb.upsertTrace(state.messageId, agentTraceNodeId, outputNode);
+                    ctx.report({
+                        type: "trace.start",
+                        messageId: state.messageId,
+                        parentId: agentTraceNodeId,
+                        node: outputNode,
+                    });
+                    ctx.report({
+                        type: "trace.end",
+                        messageId: state.messageId,
+                        nodeId: agentCtx.outputNodeId,
+                        patch: {
+                            status: "success",
+                            finishedAt: now,
+                        },
+                    });
+                }
+            }
+        } else {
+            const r = await generateAgent(agent, messages, ctx, settings.timeout);
+            finalText = r.text;
+            usage = r.usage;
+
+            if (!isRoot && finalText) {
+                const now = Date.now();
+                agentCtx.outputNodeId = `${agentTraceNodeId}:output`;
+                const outputNode = {
+                    id: agentCtx.outputNodeId,
+                    kind: "output" as const,
+                    status: "success" as const,
+                    title: "输出",
+                    detail: finalText,
+                    streaming: false,
+                    finishedAt: now,
+                };
+                prjdb.upsertTrace(state.messageId, agentTraceNodeId, outputNode);
+                ctx.report({
+                    type: "trace.start",
+                    messageId: state.messageId,
+                    parentId: agentTraceNodeId,
+                    node: outputNode,
+                });
+                ctx.report({
+                    type: "trace.end",
+                    messageId: state.messageId,
+                    nodeId: agentCtx.outputNodeId,
+                    patch: {
+                        status: "success",
+                        finishedAt: now,
+                    },
+                });
+            }
+        }
+    } catch (e) {
+        failure = e;
+    }
+
+    // 7. 清理与完成
+    if (ctx.isAborted) {
+        handleAbort(ctx, prjdb, state, agentCtx, stepPath, compiled.name, isRoot);
+        return { text: "", usage: undefined };
+    }
+
+    deltaBuffer.flush(prjdb, state.messageId);
+
+    if (failure) {
+        handleFailure(ctx, prjdb, state, agentCtx, failure);
+    } else {
+        finishAgentTrace(ctx, prjdb, state, agentTraceNodeId);
+    }
+
+    if (isRoot) {
+        finishRootMessage(ctx, prjdb, state, finalText, usage, agentIdentity, failure);
+    }
+
+    await saveConversation(
+        ctx,
+        compiled.id,
+        userMessage,
+        finalText,
+        failure,
+        histEnabled,
+        stepPath,
+        compiled.name,
+    );
+
+    if (failure !== undefined) {
+        throw failure;
+    }
+
+    ctx.debug(`[PAC][step=${stepPath}] 完成 ${compiled.name}`, {
+        output: finalText,
+        usage,
+    });
+
+    return { text: finalText, usage };
+}

@@ -11,7 +11,7 @@ import type { ChatMessage as PersistedChatMessage } from "@app/main/types";
 
 export type {
     AgentIdentity, ChatSession, ChatStreamEvent, ListMessagesParams, ListSessionsParams, MessageStreamEvent, NewChatMessage,
-    NewChatSession, TraceAgentNode, TraceNode, TraceNodeKind, TraceReasoningNode, TraceSourceNode, TraceStatus, TraceStepNode, TraceStreamEvent, TraceToolNode
+    NewChatSession, TraceAgentNode, TraceInputNode, TraceNode, TraceNodeKind, TraceOutputNode, TraceReasoningNode, TraceSourceNode, TraceStatus, TraceStepNode, TraceStreamEvent, TraceToolNode
 } from "@app/main/types";
 
 /**

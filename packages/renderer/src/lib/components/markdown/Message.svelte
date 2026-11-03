@@ -23,9 +23,8 @@
     baseProse,
     "text-foreground",
     "[&_a]:text-primary",
-    // 仅直接父级非 pre 的 inline code 应用背景与颜色，不干扰 pre 内的高亮 token
-    "[&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:text-foreground",
-    "[&_pre]:bg-muted/70",
+    "[&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:text-foreground [&_:not(pre)>code]:font-medium", // ← 添加 font-medium 增强可读性
+    "[&_pre]:bg-muted [&_pre]:text-foreground", // ← 去掉透明度，添加明确前景色
     "[&_blockquote]:border-border [&_blockquote]:text-muted-foreground",
   ].join(" ");
 
