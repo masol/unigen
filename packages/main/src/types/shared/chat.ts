@@ -30,6 +30,7 @@
 
 export interface AgentIdentity {
     name: string;
+    /** providerId::modelId 格式，例如 "openai::gpt-4o" */
     model?: string;
 }
 
@@ -42,7 +43,9 @@ export type TraceNodeKind =
     | "reasoning"
     | "tool"
     | "source"
-    | "step";
+    | "step"
+    | "input"
+    | "output";
 
 interface TraceNodeBase {
     id: string;
@@ -57,7 +60,7 @@ interface TraceNodeBase {
     finishedAt?: number;
     /** markdown 详细内容 */
     detail?: string;
-    /** detail 是否仍在增量到达；纯 UI 态，不持久化 */
+    /** 是否为流式节点（默认 true）；false 表示瞬间完整，无需 end */
     streaming?: boolean;
 }
 
@@ -87,12 +90,22 @@ export interface TraceStepNode extends TraceNodeBase {
     icon?: string;
 }
 
+export interface TraceInputNode extends TraceNodeBase {
+    kind: "input";
+}
+
+export interface TraceOutputNode extends TraceNodeBase {
+    kind: "output";
+}
+
 export type TraceNode =
     | TraceAgentNode
     | TraceReasoningNode
-    | TraceToolNode
-    | TraceSourceNode
-    | TraceStepNode;
+    | TraceToolNode   // 预留：通用步骤，语义待定
+    | TraceSourceNode // 预留：搜索结果、文档引用等场景
+    | TraceStepNode
+    | TraceInputNode
+    | TraceOutputNode;
 
 /**
  * Trace 字段增量更新 patch。
@@ -211,23 +224,10 @@ export type MessageStreamEvent =
         sessionId: string;
         /** 由主进程时钟发出的 epoch ms */
         timestamp: number;
-        agent?: AgentIdentity;
-    }
-    | {
-        type: "message.meta";
-        messageId: string;
-        meta: {
-            model?: { providerId: string; modelId: string };
-            [key: string]: unknown;
-        };
+        agent: AgentIdentity;
     }
     | {
         type: "message.delta";
-        messageId: string;
-        delta: string;
-    }
-    | {
-        type: "message.thinking.delta";
         messageId: string;
         delta: string;
     }
@@ -269,6 +269,7 @@ export type TraceStreamEvent =
         type: "trace.end";
         messageId: string;
         nodeId: string;
+        /** 可选：最终 detail 内容（渲染端优先沿用累积结果） */
         detail?: string;
     };
 

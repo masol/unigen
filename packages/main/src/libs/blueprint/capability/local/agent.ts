@@ -89,8 +89,8 @@ class MessageDeltaBuffer {
  *  - 按 settings.timeout 透传超时;
  *  - 为每个 step / 子 tool 分配 stepPath,通过 ctx.debug 上报进入/完成及输入/输出;
  *  - 聚合 usage 并通过 ctx.report 上报。
- *  - 全链路汇报 trace 节点：root agent 节点 + tools + sub-agent + reasoning;
- *  - 流式汇报 message 增量与 thinking;
+ *  - 全链路汇报 trace 节点：root agent 节点 + tools + sub-agent + reasoning + input/output;
+ *  - 流式汇报 message 增量（仅根 agent）;
  *  - 持久化消息与 trace 树到 PrjDB。
  *
  * 子 agent 工具返回原文,异常继续冒泡给 AI SDK 转 tool-error,保持原有约定。
@@ -184,28 +184,73 @@ export class PacAgent implements IPacAgent {
         const willStream = isRoot && settings.streaming;
         const histEnabled = settings.history !== 0;
 
+        // 获取模型信息
+        const modelOptions = resolveModelOptions(ctx);
+        const model = getSmartModel(modelOptions as never, ctx);
+        const providerId = model?.provider ?? "unknown";
+        const modelId = model?.modelId ?? "unknown";
+        state.modelInfo = { providerId, modelId };
+
         // 创建本 agent 的 trace 节点
         const agentSeq = nextSeq(state.counters, `agent:${this.compiled.id}`);
         const agentTraceNodeId = agentTraceId(this.compiled.id, agentSeq);
-        const traceNode = {
+        const agentIdentity = {
+            name: this.compiled.name,
+            model: `${providerId}::${modelId}`,
+        };
+        const agentNode = {
             id: agentTraceNodeId,
             kind: "agent" as const,
             status: "running" as const,
             title: this.compiled.name,
-            agent: { name: this.compiled.name },
+            description: `模型: ${providerId}/${modelId}`,
+            agent: agentIdentity,
             children: [],
+            streaming: true,
         };
-        prjdb.upsertTrace(state.messageId, parentTraceId ?? null, traceNode);
 
-        // emit trace.start 事件
+        prjdb.upsertTrace(state.messageId, parentTraceId ?? null, agentNode);
+
+        const traceStartEvt: TraceStreamEvent = {
+            type: "trace.start",
+            messageId: state.messageId,
+            parentId: parentTraceId,
+            node: agentNode,
+        };
+        ctx.report(traceStartEvt);
+
+        // 根 agent 发送 message.start
         if (isRoot) {
-            const evt: TraceStreamEvent = {
+            const msgStartEvt: MessageStreamEvent = {
+                type: "message.start",
+                messageId: state.messageId,
+                sessionId: ctx.sessId,
+                timestamp: Date.now(),
+                agent: agentIdentity,
+            };
+            ctx.report(msgStartEvt);
+        }
+
+        // 子 agent 创建 input 节点
+        let inputNodeId: string | undefined;
+        if (!isRoot) {
+            inputNodeId = `${agentTraceNodeId}:input`;
+            const inputNode = {
+                id: inputNodeId,
+                kind: "input" as const,
+                status: "success" as const,
+                title: "输入",
+                detail: JSON.stringify(inputs, null, 2),
+                streaming: false,
+            };
+            prjdb.upsertTrace(state.messageId, agentTraceNodeId, inputNode);
+            const inputEvt: TraceStreamEvent = {
                 type: "trace.start",
                 messageId: state.messageId,
-                parentId: undefined,
-                node: traceNode,
+                parentId: agentTraceNodeId,
+                node: inputNode,
             };
-            ctx.report(evt);
+            ctx.report(inputEvt);
         }
 
         const tools = await this.materializeTools(ctx, effectiveDefaults, mcpClients, stepPath, state, agentTraceNodeId);
@@ -237,26 +282,6 @@ export class PacAgent implements IPacAgent {
             `${JSON.stringify(messages, null, 2)}\n` +
             `────────────────────────────────────`,
         );
-
-        // 获取模型信息并汇报
-        const modelOptions = resolveModelOptions(ctx);
-        const model = getSmartModel(modelOptions as never, ctx);
-        const providerId = model?.provider ?? "unknown";
-        const modelId = model?.modelId ?? "unknown";
-        state.modelInfo = { providerId, modelId };
-
-        // 更新 agent trace 节点描述，并汇报模型信息
-        if (isRoot) {
-            prjdb.patchTrace(agentTraceNodeId, {
-                description: `模型: ${providerId}/${modelId}`,
-            });
-            const metaEvt: MessageStreamEvent = {
-                type: "message.meta",
-                messageId: state.messageId,
-                meta: { model: { providerId, modelId } },
-            };
-            ctx.report(metaEvt);
-        }
 
         const providerOptions = settings.thinking ? THINKING_PROVIDER_OPTIONS : undefined;
 
@@ -294,8 +319,17 @@ export class PacAgent implements IPacAgent {
                     status: "running" as const,
                     title: key,
                     toolName: key,
+                    streaming: true,
                 };
                 prjdb.upsertTrace(state.messageId, agentTraceNodeId, toolNode);
+
+                const toolStartEvt: TraceStreamEvent = {
+                    type: "trace.start",
+                    messageId: state.messageId,
+                    parentId: agentTraceNodeId,
+                    node: toolNode,
+                };
+                ctx.report(toolStartEvt);
 
                 ctx.debug(
                     `[PAC][step=${stepPath}] 工具执行开始 ${key}`,
@@ -306,37 +340,43 @@ export class PacAgent implements IPacAgent {
                 const traceInfo = toolCallTraces.get(e.toolCall.toolCallId);
                 if (!traceInfo || traceInfo.isAgent) return;
 
-                // 先判断是否为错误类型
-                if (e.toolOutput.type === 'tool-error') {
-                    // 在这个分支内，e.toolOutput 的类型已被收窄
-                    // 可以安全地访问 e.toolOutput.error
-                    const errorDescription = `错误: ${String(e.toolOutput.error ?? '未知错误')}`;
+                // 这里必须直接对 e.toolOutput.type 判断，TS 才能收窄
+                const isError = e.toolOutput.type === "tool-error";
+                const status = isError ? ("error" as const) : ("success" as const);
+                const description =
+                    e.toolOutput.type === "tool-error"           // ← 直接判别
+                        ? `错误: ${String(e.toolOutput.error ?? "未知错误")}`
+                        : `耗时: ${e.toolExecutionMs}ms`;
 
-                    prjdb.patchTrace(traceInfo.traceId, {
-                        status: 'error',
-                        finishedAt: Date.now(),
-                        description: errorDescription,
-                    });
+                prjdb.patchTrace(traceInfo.traceId, {
+                    status,
+                    finishedAt: Date.now(),
+                    description,
+                });
 
+                const toolEndEvt: TraceStreamEvent = {
+                    type: "trace.end",
+                    messageId: state.messageId,
+                    nodeId: traceInfo.traceId,
+                };
+                ctx.report(toolEndEvt);
+
+                // 在分支内部直接判断，TS 才能分别访问 error / output
+                if (e.toolOutput.type === "tool-error") {
                     ctx.debug(
                         `[PAC][step=${stepPath}] 工具执行失败 ${e.toolCall.toolName}`,
                         { toolCallId: e.toolCall.toolCallId, error: String(e.toolOutput.error) },
                     );
-                    return; // 处理完错误后可以提前返回
+                } else {
+                    ctx.debug(
+                        `[PAC][step=${stepPath}] 工具执行完成 ${e.toolCall.toolName}`,
+                        {
+                            toolCallId: e.toolCall.toolCallId,
+                            durationMs: e.toolExecutionMs,
+                            output: e.toolOutput.output,
+                        },
+                    );
                 }
-
-                // 这里 TypeScript 知道 e.toolOutput 一定是 'tool-result' 类型
-                // 可以安全地访问 e.toolOutput.output
-                prjdb.patchTrace(traceInfo.traceId, {
-                    status: 'success',
-                    finishedAt: Date.now(),
-                    description: `耗时: ${e.toolExecutionMs}ms`,
-                });
-
-                ctx.debug(
-                    `[PAC][step=${stepPath}] 工具执行完成 ${e.toolCall.toolName}`,
-                    { toolCallId: e.toolCall.toolCallId, durationMs: e.toolExecutionMs, output: e.toolOutput.output },
-                );
             },
             onError: (ev: { error: unknown }) => {
                 Logger.warn(`[PAC][step=${stepPath}] ${this.compiled.name} agent 内部错误:`, ev.error);
@@ -348,6 +388,28 @@ export class PacAgent implements IPacAgent {
         let failure: unknown = undefined;
         const deltaBuffer = new MessageDeltaBuffer();
         let reasoningTraceNodeId: string | undefined = undefined;
+        let outputNodeId: string | undefined = undefined;
+
+        // 子 agent 创建 output 节点
+        if (!isRoot) {
+            outputNodeId = `${agentTraceNodeId}:output`;
+            const outputNode = {
+                id: outputNodeId,
+                kind: "output" as const,
+                status: "running" as const,
+                title: "输出",
+                detail: "",
+                streaming: true,
+            };
+            prjdb.upsertTrace(state.messageId, agentTraceNodeId, outputNode);
+            const outputEvt: TraceStreamEvent = {
+                type: "trace.start",
+                messageId: state.messageId,
+                parentId: agentTraceNodeId,
+                node: outputNode,
+            };
+            ctx.report(outputEvt);
+        }
 
         try {
             if (willStream) {
@@ -360,6 +422,7 @@ export class PacAgent implements IPacAgent {
                     agentTraceNodeId,
                     deltaBuffer,
                     prjdb,
+                    outputNodeId,
                     (tid) => {
                         reasoningTraceNodeId = tid;
                     }
@@ -371,41 +434,152 @@ export class PacAgent implements IPacAgent {
                 finalText = (result as { text?: string }).text ?? "";
                 usage = (result as { totalUsage?: unknown; usage?: unknown }).totalUsage
                     ?? (result as { usage?: unknown }).usage;
+
+                // 非流式模式：直接更新 output 节点（如果存在）
+                if (outputNodeId) {
+                    prjdb.patchTrace(outputNodeId, {
+                        detail: finalText,
+                        status: "success",
+                        finishedAt: Date.now(),
+                    });
+                }
             }
         } catch (e) {
             failure = e;
         }
 
-        // 中断场景
+        // 中断场景：清理并提前返回
         if (ctx.isAborted) {
             ctx.debug(`[PAC][step=${stepPath}] ${this.compiled.name} 已中断`);
+
+            // 标记所有未完成节点为 error
+            prjdb.patchTrace(agentTraceNodeId, {
+                status: "error",
+                finishedAt: Date.now(),
+                description: "已中断",
+            });
+            const agentEndEvt: TraceStreamEvent = {
+                type: "trace.end",
+                messageId: state.messageId,
+                nodeId: agentTraceNodeId,
+            };
+            ctx.report(agentEndEvt);
+
+            if (outputNodeId) {
+                prjdb.patchTrace(outputNodeId, {
+                    status: "error",
+                    finishedAt: Date.now(),
+                });
+                const outputEndEvt: TraceStreamEvent = {
+                    type: "trace.end",
+                    messageId: state.messageId,
+                    nodeId: outputNodeId,
+                };
+                ctx.report(outputEndEvt);
+            }
+
+            if (reasoningTraceNodeId) {
+                prjdb.patchTrace(reasoningTraceNodeId, {
+                    status: "error",
+                    finishedAt: Date.now(),
+                });
+                const reasoningEndEvt: TraceStreamEvent = {
+                    type: "trace.end",
+                    messageId: state.messageId,
+                    nodeId: reasoningTraceNodeId,
+                };
+                ctx.report(reasoningEndEvt);
+            }
+
+            if (isRoot) {
+                const msgEndEvt: MessageStreamEvent = {
+                    type: "message.end",
+                    messageId: state.messageId,
+                    content: "",
+                };
+                ctx.report(msgEndEvt);
+            }
+
             return "";
         }
 
         // 落库：刷新最后的 delta
         deltaBuffer.flush(prjdb, state.messageId);
 
-        // 更新 agent 节点状态
-        const agentNodePatch = {
-            status: failure ? ("error" as const) : ("success" as const),
-            finishedAt: Date.now(),
-            description: failure
-                ? `错误: ${String(failure instanceof Error ? failure.message : failure)}`
-                : undefined,
-        };
-        prjdb.patchTrace(agentTraceNodeId, agentNodePatch);
-
-        // 更新 reasoning 节点（若有）
-        if (reasoningTraceNodeId && !failure) {
-            prjdb.patchTrace(reasoningTraceNodeId, { status: "success", finishedAt: Date.now() });
+        // 完成 output 节点（若有）
+        if (outputNodeId) {
+            prjdb.patchTrace(outputNodeId, {
+                status: failure ? "error" : "success",
+                finishedAt: Date.now(),
+            });
+            const outputEndEvt: TraceStreamEvent = {
+                type: "trace.end",
+                messageId: state.messageId,
+                nodeId: outputNodeId,
+                detail: finalText,
+            };
+            ctx.report(outputEndEvt);
         }
 
-        // 完成 message
+        // 完成 reasoning 节点（若有）
+        if (reasoningTraceNodeId) {
+            prjdb.patchTrace(reasoningTraceNodeId, {
+                status: failure ? "error" : "success",
+                finishedAt: Date.now(),
+            });
+            const reasoningEndEvt: TraceStreamEvent = {
+                type: "trace.end",
+                messageId: state.messageId,
+                nodeId: reasoningTraceNodeId,
+            };
+            ctx.report(reasoningEndEvt);
+        }
+
+        // 更新 agent 节点状态
+        const agentStatus = failure ? "error" as const : "success" as const;
+        const agentDesc = failure
+            ? `错误: ${String(failure instanceof Error ? failure.message : failure)}`
+            : undefined;
+        prjdb.patchTrace(agentTraceNodeId, {
+            status: agentStatus,
+            finishedAt: Date.now(),
+            description: agentDesc,
+        });
+
+        // 发送 agent trace.end
+        const agentEndEvt: TraceStreamEvent = {
+            type: "trace.end",
+            messageId: state.messageId,
+            nodeId: agentTraceNodeId,
+        };
+        ctx.report(agentEndEvt);
+
+        // 根 agent 发送 message.end / message.error
+        if (isRoot) {
+            if (failure) {
+                const msgErrorEvt: MessageStreamEvent = {
+                    type: "message.error",
+                    messageId: state.messageId,
+                    error: String(failure instanceof Error ? failure.message : failure),
+                };
+                ctx.report(msgErrorEvt);
+            } else {
+                const msgEndEvt: MessageStreamEvent = {
+                    type: "message.end",
+                    messageId: state.messageId,
+                    content: finalText,
+                    meta: usage ? { usage } : undefined,
+                };
+                ctx.report(msgEndEvt);
+            }
+        }
+
+        // 完成 message 持久化
         if (isRoot) {
             prjdb.finishMessage(state.messageId, {
                 content: finalText,
                 isError: !!failure,
-                agent: { name: this.compiled.name, model: modelId },
+                agent: agentIdentity,
             });
         }
 
@@ -438,19 +612,6 @@ export class PacAgent implements IPacAgent {
             `[PAC][step=${stepPath}] 完成 ${this.compiled.name}`,
             { output: finalText, usage },
         );
-        if (usage) {
-            ctx.report({
-                type: "message.end",
-                messageId: state.messageId,
-                content: finalText,
-                meta: {
-                    stepPath,
-                    agent: this.compiled.name,
-                    agentId: this.compiled.id,
-                    usage
-                },
-            });
-        }
 
         return finalText;
     }
@@ -558,10 +719,12 @@ function buildCallArgs(
 /* ──────────────────────────────────────────────────────────── */
 
 /**
- * 流式执行根 agent，优先使用 fullStream 获取 reasoning 内容。
+ * 流式执行根 agent 或子 agent，优先使用 fullStream 获取 reasoning 内容。
  * 
  * AI SDK v7 中 reasoning 是独立的 part type，不在 textStream 中。
  * 必须使用 fullStream 才能捕获 reasoning-delta 部分。
+ * 
+ * @param outputNodeId 子 agent 的 output 节点 ID；根 agent 为 undefined
  */
 async function streamRoot(
     agent: AnyToolLoopAgent,
@@ -572,6 +735,7 @@ async function streamRoot(
     agentTraceNodeId: string,
     deltaBuffer: MessageDeltaBuffer,
     prjdb: PrjDB,
+    outputNodeId: string | undefined,
     onReasoningTraceId: (id: string) => void,
 ): Promise<{ text: string; usage: unknown }> {
     const res = await agent.stream(buildCallArgs(messages, ctx, timeout));
@@ -582,19 +746,34 @@ async function streamRoot(
         for await (const part of res.stream) {
             if (ctx.isAborted) break;
 
-            // 文本增量 - 字段名是 text 不是 textDelta
+            // 文本增量
             if (part.type === "text-delta") {
                 const delta = part.text;
                 textBuf.push(delta);
                 deltaBuffer.push(delta);
-                const evt: MessageStreamEvent = {
-                    type: "message.delta",
-                    messageId: state.messageId,
-                    delta,
-                };
-                ctx.report(evt);
+
+                // 根 agent：通过 message.delta 汇报
+                if (!outputNodeId) {
+                    const evt: MessageStreamEvent = {
+                        type: "message.delta",
+                        messageId: state.messageId,
+                        delta,
+                    };
+                    ctx.report(evt);
+                }
+                // 子 agent：通过 trace.detail.delta 汇报
+                else {
+                    prjdb.appendTraceDetail(outputNodeId, delta);
+                    const evt: TraceStreamEvent = {
+                        type: "trace.detail.delta",
+                        messageId: state.messageId,
+                        nodeId: outputNodeId,
+                        delta,
+                    };
+                    ctx.report(evt);
+                }
             }
-            // Reasoning 增量 - 字段名是 text 不是 textDelta
+            // Reasoning 增量
             else if (part.type === "reasoning-delta") {
                 const thinkDelta = part.text;
                 if (thinkDelta) {
@@ -605,17 +784,28 @@ async function streamRoot(
                             kind: "reasoning" as const,
                             status: "running" as const,
                             title: "思考",
+                            detail: "",
+                            streaming: true,
                         };
                         prjdb.upsertTrace(state.messageId, agentTraceNodeId, node);
                         onReasoningTraceId(reasoningNodeId);
+
+                        const reasoningStartEvt: TraceStreamEvent = {
+                            type: "trace.start",
+                            messageId: state.messageId,
+                            parentId: agentTraceNodeId,
+                            node,
+                        };
+                        ctx.report(reasoningStartEvt);
                     }
-                    const evt: MessageStreamEvent = {
-                        type: "message.thinking.delta",
+                    prjdb.appendTraceDetail(reasoningNodeId, thinkDelta);
+                    const evt: TraceStreamEvent = {
+                        type: "trace.detail.delta",
                         messageId: state.messageId,
+                        nodeId: reasoningNodeId,
                         delta: thinkDelta,
                     };
                     ctx.report(evt);
-                    prjdb.appendTraceDetail(reasoningNodeId, thinkDelta);
                 }
             }
         }

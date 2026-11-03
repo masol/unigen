@@ -589,6 +589,10 @@ function nodeToRow(
                 return { kind: "step", icon: node.icon };
             case "reasoning":
                 return { kind: "reasoning" };
+            case "input":
+                return { kind: "input" };
+            case "output":
+                return { kind: "output" };
         }
     })();
 
@@ -603,7 +607,6 @@ function nodeToRow(
         detail: node.detail ?? null,
         startedAt: node.startedAt ?? null,
         finishedAt: node.finishedAt ?? null,
-        // createdAt 由具体写入路径决定 (upsert 用 Date.now()，snapshot 用 base+seq)
         extra,
     };
 }
@@ -648,6 +651,10 @@ function rowToTraceNode(row: typeof traces.$inferSelect): TraceNode {
             };
         case "reasoning":
             return { ...base, kind: "reasoning" };
+        case "input":
+            return { ...base, kind: "input" };
+        case "output":
+            return { ...base, kind: "output" };
     }
 }
 

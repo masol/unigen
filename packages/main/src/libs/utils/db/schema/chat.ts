@@ -69,7 +69,9 @@ export type TraceExtra =
     | { kind: "reasoning" }
     | { kind: "tool"; toolName: string; errorText?: string }
     | { kind: "source"; url: string }
-    | { kind: "step"; icon?: string };
+    | { kind: "step"; icon?: string }
+    | { kind: "input" }
+    | { kind: "output" };
 
 export const traces = sqliteTable(
     'traces',
@@ -83,7 +85,7 @@ export const traces = sqliteTable(
          *  parent 允许暂时不存在（流式写入时序允许父后到），读取时容错挂根 */
         parentId: text('parent_id'),
         kind: text('kind', {
-            enum: ['agent', 'reasoning', 'tool', 'source', 'step'],
+            enum: ['agent', 'reasoning', 'tool', 'source', 'step', 'input', 'output'],
         }).notNull(),
         status: text('status', {
             enum: ['pending', 'running', 'success', 'error'],
