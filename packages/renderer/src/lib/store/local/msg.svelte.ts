@@ -247,7 +247,7 @@ class MessageStore {
 
         try {
             stream = (await safeApi().project.runCommand(
-                { msg: userMessage, seq },
+                { msg: userMessage, seq, sessId: "123123" },
                 { signal },
             )) as AsyncGenerator<ChatStreamEvent>;
 

@@ -1,29 +1,80 @@
 import { getSmartModel } from "$libs/model/index.js";
+import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import { globalToolDB } from "$libs/tooldb/index.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
+import type { MessageStreamEvent, TraceStreamEvent } from "$types/shared/chat.js";
 import { isStepCount, tool, ToolLoopAgent, type ModelMessage, type Tool } from "ai";
 import Logger from "electron-log/main.js";
-import { isString } from "radashi";
 import {
     appendHistoryMessage, loadHistoryMessages, SYSTEM_FAILURE_MARKER,
 } from "./context/index.js";
 import { connectLocalMcp, type LocalMcpClient } from "./mcp.js";
 import { resolveModelOptions } from "./settings.js";
 import { buildUserPrompt, renderSystemPrompt } from "./template.js";
+import { agentTraceId, nextSeq, reasoningTraceId, toolTraceId } from "./traceid.js";
 import type {
     CompiledPacAgent, IPacAgent, JsonValue, LocalMcpConfig, PacTimeoutConfig,
 } from "./type.js";
 
 /**
+ * PAC 运行状态：跨 root/sub agent 传递，维护全局唯一性。
+ */
+export interface PacRunState {
+    messageId: string;
+    counters: Map<string, number>;
+    modelInfo?: { providerId: string; modelId: string };
+}
+
+/**
+ * 工具调用的 trace 信息
+ */
+interface ToolCallTraceInfo {
+    traceId: string;
+    isAgent: boolean;
+}
+
+/**
  * PAC 层的 ToolLoopAgent 别名。
- *
- * ToolLoopAgent 的泛型形参是 <CALL_OPTIONS, TOOLS, CONTEXT, OUTPUT>——PAC 运行期
- * 动态组装 tools、不定义 CallOptions schema、不使用 runtimeContext,也不走结构化
- * output,这几个泛型都无从在编译期精确表达。统一用 `any` 做兜底,比 `never` 更
- * 符合"任何实例我都接受"的语义(`never` 在参数位置是逆变的,只接受 `never`)。
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyToolLoopAgent = ToolLoopAgent<any, any, any, any>;
+
+/**
+ * 流式消息缓冲：定期落库，避免频繁 DB 写入
+ */
+class MessageDeltaBuffer {
+    private buffer = "";
+    private lastFlushTime = Date.now();
+    private readonly flushIntervalMs = 500;
+    private readonly flushThreshold = 200;
+
+    push(delta: string): void {
+        this.buffer += delta;
+        if (
+            this.buffer.length >= this.flushThreshold ||
+            Date.now() - this.lastFlushTime > this.flushIntervalMs
+        ) {
+            this.flush();
+        }
+    }
+
+    flush(prjdb?: PrjDB, messageId?: string): void {
+        if (this.buffer.length === 0) return;
+        if (prjdb && messageId) {
+            try {
+                prjdb.appendMessageDelta(messageId, this.buffer);
+            } catch (e) {
+                Logger.warn("[PAC] appendMessageDelta 失败:", e);
+            }
+        }
+        this.buffer = "";
+        this.lastFlushTime = Date.now();
+    }
+
+    getBuffer(): string {
+        return this.buffer;
+    }
+}
 
 /**
  * PAC Agent 运行时。相对 compiled 的"纯数据"而言,本类负责:
@@ -37,7 +88,10 @@ type AnyToolLoopAgent = ToolLoopAgent<any, any, any, any>;
  *  - 把 ctx.signal 透传给 generate/stream,实现 provider 级即时中断;
  *  - 按 settings.timeout 透传超时;
  *  - 为每个 step / 子 tool 分配 stepPath,通过 ctx.debug 上报进入/完成及输入/输出;
- *  - 聚合 usage 并通过 ctx.notify("usage", ...) 上报。
+ *  - 聚合 usage 并通过 ctx.report 上报。
+ *  - 全链路汇报 trace 节点：root agent 节点 + tools + sub-agent + reasoning;
+ *  - 流式汇报 message 增量与 thinking;
+ *  - 持久化消息与 trace 树到 PrjDB。
  *
  * 子 agent 工具返回原文,异常继续冒泡给 AI SDK 转 tool-error,保持原有约定。
  */
@@ -48,16 +102,31 @@ export class PacAgent implements IPacAgent {
         return this.compiled;
     }
 
-    /** 顶层入口:isRoot=true,stepPath="1"。 */
+    /** 顶层入口:isRoot=true,stepPath="1"。*/
     async run(ctx: IRunnerContext): Promise<string> {
         const mcpClients = new Map<LocalMcpConfig, LocalMcpClient>();
         try {
+            // 创建 root message
+            const prjdb = PrjDB.ensure(ctx.prj);
+            const messageId = prjdb.saveMessage({
+                sessionId: ctx.sessId,
+                role: "assistant",
+                content: "",
+            });
+
+            // 创建运行状态
+            const state: PacRunState = {
+                messageId,
+                counters: new Map(),
+            };
+
             return await this.runWithInputs(
                 ctx,
                 this.inputsFromCtx(ctx),
                 {},
                 { validateInputs: false, isRoot: true, stepPath: "1" },
                 mcpClients,
+                state
             );
         } finally {
             await this.closeLocalMcpClients(mcpClients);
@@ -68,23 +137,33 @@ export class PacAgent implements IPacAgent {
         ctx: IRunnerContext,
         rawInputs: Record<string, unknown>,
         inheritedDefaults: Record<string, JsonValue> = {},
-        options: { validateInputs?: boolean; isRoot?: boolean; stepPath?: string } = {},
+        options: { validateInputs?: boolean; isRoot?: boolean; stepPath?: string; parentTraceId?: string } = {},
         mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
+        state?: PacRunState,
     ): Promise<string> {
         if (ctx.isAborted) return "";
         const validateInputs = options.validateInputs ?? true;
         const isRoot = options.isRoot ?? false;
         const stepPath = options.stepPath ?? "1";
-        const label =
-            `${this.compiled.name}${this.compiled.passthrough ? " (passthrough)" : ""}` +
-            ` [id=${this.compiled.id}, src=${this.compiled.sourcePath}]`;
+        const parentTraceId = options.parentTraceId ?? undefined;
+        const prjdb = PrjDB.ensure(ctx.prj);
+
+        // 确保 state 存在；若非 root 且无 state，为独立运行创建一个
+        if (!state) {
+            const messageId = prjdb.saveMessage({
+                sessionId: ctx.sessId,
+                role: "assistant",
+                content: "",
+            });
+            state = { messageId, counters: new Map() };
+        }
 
         let inputs: Record<string, unknown> = rawInputs;
         if (validateInputs) {
             const parsed = this.compiled.inputSchema.safeParse(rawInputs);
             if (!parsed.success) {
                 Logger.warn(
-                    `[PAC][step=${stepPath}] ${label} 输入校验失败(将以原值运行):`,
+                    `[PAC][step=${stepPath}] ${this.compiled.name} 输入校验失败(将以原值运行):`,
                     {
                         issues: parsed.error.issues.map(
                             (i) => `${i.path.join(".") || "<root>"} ${i.message}`,
@@ -105,7 +184,31 @@ export class PacAgent implements IPacAgent {
         const willStream = isRoot && settings.streaming;
         const histEnabled = settings.history !== 0;
 
-        const tools = await this.materializeTools(ctx, effectiveDefaults, mcpClients, stepPath);
+        // 创建本 agent 的 trace 节点
+        const agentSeq = nextSeq(state.counters, `agent:${this.compiled.id}`);
+        const agentTraceNodeId = agentTraceId(this.compiled.id, agentSeq);
+        const traceNode = {
+            id: agentTraceNodeId,
+            kind: "agent" as const,
+            status: "running" as const,
+            title: this.compiled.name,
+            agent: { name: this.compiled.name },
+            children: [],
+        };
+        prjdb.upsertTrace(state.messageId, parentTraceId ?? null, traceNode);
+
+        // emit trace.start 事件
+        if (isRoot) {
+            const evt: TraceStreamEvent = {
+                type: "trace.start",
+                messageId: state.messageId,
+                parentId: undefined,
+                node: traceNode,
+            };
+            ctx.report(evt);
+        }
+
+        const tools = await this.materializeTools(ctx, effectiveDefaults, mcpClients, stepPath, state, agentTraceNodeId);
         const system = await renderSystemPrompt(
             this.compiled, ctx, inputs, effectiveDefaults, isRoot,
         );
@@ -113,16 +216,14 @@ export class PacAgent implements IPacAgent {
             this.compiled, ctx, inputs, effectiveDefaults, isRoot,
         );
 
-        // 事务化历史:在内存里组装 [prior..., userMessage] 传给 LLM,
-        // 调用成功或失败后再把配对消息写回 store。防御性修复由 loadHistoryMessages 负责。
         const userMessage: ModelMessage = { role: "user", content: userText };
         const prior = histEnabled
             ? await loadHistoryMessages(ctx, this.compiled.id, settings.history)
             : [];
         const messages: ModelMessage[] = [...prior, userMessage];
 
-        safeDebug(ctx,
-            `[PAC][step=${stepPath}] 进入 ${label} ` +
+        ctx.debug(
+            `[PAC][step=${stepPath}] 进入 ${this.compiled.name} ` +
             `(tools=${Object.keys(tools).length}, streaming=${willStream}, ` +
             `thinking=${settings.thinking}, history=${prior.length}, ` +
             `maxSteps=${settings.maxSteps}, timeout=${JSON.stringify(settings.timeout)})`,
@@ -130,16 +231,37 @@ export class PacAgent implements IPacAgent {
         );
 
         Logger.debug(
-            `[PAC][step=${stepPath}] run ${label}\n` +
+            `[PAC][step=${stepPath}] run ${this.compiled.name}\n` +
             `────────── SYSTEM PROMPT ──────────\n${system}\n` +
             `────────── MESSAGES (${messages.length} total, last is current user) ──────────\n` +
             `${JSON.stringify(messages, null, 2)}\n` +
             `────────────────────────────────────`,
         );
 
+        // 获取模型信息并汇报
         const modelOptions = resolveModelOptions(ctx);
         const model = getSmartModel(modelOptions as never, ctx);
+        const providerId = model?.provider ?? "unknown";
+        const modelId = model?.modelId ?? "unknown";
+        state.modelInfo = { providerId, modelId };
+
+        // 更新 agent trace 节点描述，并汇报模型信息
+        if (isRoot) {
+            prjdb.patchTrace(agentTraceNodeId, {
+                description: `模型: ${providerId}/${modelId}`,
+            });
+            const metaEvt: MessageStreamEvent = {
+                type: "message.meta",
+                messageId: state.messageId,
+                meta: { model: { providerId, modelId } },
+            };
+            ctx.report(metaEvt);
+        }
+
         const providerOptions = settings.thinking ? THINKING_PROVIDER_OPTIONS : undefined;
+
+        // 工具调用 trace 映射
+        const toolCallTraces = new Map<string, ToolCallTraceInfo>();
 
         const agent: AnyToolLoopAgent = new ToolLoopAgent({
             model,
@@ -148,34 +270,100 @@ export class PacAgent implements IPacAgent {
             tools,
             providerOptions,
             onToolExecutionStart: (e: ToolExecStartEvent) => {
-                safeDebug(ctx,
-                    `[PAC][step=${stepPath}] 工具执行开始 ${e.toolCall.toolName}`,
+                const key = e.toolCall.toolName;
+                const ref = this.compiled.toolRefs.find(r => r.key === key);
+
+                // Agent 工具的 trace 由子 agent 自己创建；这里仅记录映射
+                if (ref?.agent) {
+                    toolCallTraces.set(e.toolCall.toolCallId, {
+                        traceId: agentTraceId(ref.agent.id, nextSeq(state.counters, `agent:${ref.agent.id}`)),
+                        isAgent: true,
+                    });
+                    return;
+                }
+
+                // 非 agent 工具：创建工具 trace 节点
+                const toolSeq = nextSeq(state.counters, `tool:${key}`);
+                const fallbackRef = { key, origin: "builtin" as const, meta: null, agent: null, local: null, mcpLocal: undefined, declaredAs: undefined };
+                const toolTraceNodeId = toolTraceId(ref || fallbackRef, toolSeq);
+                toolCallTraces.set(e.toolCall.toolCallId, { traceId: toolTraceNodeId, isAgent: false });
+
+                const toolNode = {
+                    id: toolTraceNodeId,
+                    kind: "tool" as const,
+                    status: "running" as const,
+                    title: key,
+                    toolName: key,
+                };
+                prjdb.upsertTrace(state.messageId, agentTraceNodeId, toolNode);
+
+                ctx.debug(
+                    `[PAC][step=${stepPath}] 工具执行开始 ${key}`,
                     { toolCallId: e.toolCall.toolCallId, input: e.toolCall.input },
                 );
             },
             onToolExecutionEnd: (e: ToolExecEndEvent) => {
-                const out = e.toolOutput.type === "tool-result"
-                    ? { output: e.toolOutput.output }
-                    : { error: String(e.toolOutput.error) };
-                safeDebug(ctx,
+                const traceInfo = toolCallTraces.get(e.toolCall.toolCallId);
+                if (!traceInfo || traceInfo.isAgent) return;
+
+                // 先判断是否为错误类型
+                if (e.toolOutput.type === 'tool-error') {
+                    // 在这个分支内，e.toolOutput 的类型已被收窄
+                    // 可以安全地访问 e.toolOutput.error
+                    const errorDescription = `错误: ${String(e.toolOutput.error ?? '未知错误')}`;
+
+                    prjdb.patchTrace(traceInfo.traceId, {
+                        status: 'error',
+                        finishedAt: Date.now(),
+                        description: errorDescription,
+                    });
+
+                    ctx.debug(
+                        `[PAC][step=${stepPath}] 工具执行失败 ${e.toolCall.toolName}`,
+                        { toolCallId: e.toolCall.toolCallId, error: String(e.toolOutput.error) },
+                    );
+                    return; // 处理完错误后可以提前返回
+                }
+
+                // 这里 TypeScript 知道 e.toolOutput 一定是 'tool-result' 类型
+                // 可以安全地访问 e.toolOutput.output
+                prjdb.patchTrace(traceInfo.traceId, {
+                    status: 'success',
+                    finishedAt: Date.now(),
+                    description: `耗时: ${e.toolExecutionMs}ms`,
+                });
+
+                ctx.debug(
                     `[PAC][step=${stepPath}] 工具执行完成 ${e.toolCall.toolName}`,
-                    { toolCallId: e.toolCall.toolCallId, durationMs: e.toolExecutionMs, ...out },
+                    { toolCallId: e.toolCall.toolCallId, durationMs: e.toolExecutionMs, output: e.toolOutput.output },
                 );
             },
-            // stream() 内部错误通过 onError 冒泡;不配置则 SDK 直接 console.log,
-            // 这里借它落到 Logger。真正的终止控制仍靠 try/catch + ctx.signal。
             onError: (ev: { error: unknown }) => {
-                Logger.warn(`[PAC][step=${stepPath}] ${label} agent 内部错误:`, ev.error);
+                Logger.warn(`[PAC][step=${stepPath}] ${this.compiled.name} agent 内部错误:`, ev.error);
             },
         } as never);
 
         let finalText = "";
         let usage: unknown = undefined;
         let failure: unknown = undefined;
+        const deltaBuffer = new MessageDeltaBuffer();
+        let reasoningTraceNodeId: string | undefined = undefined;
 
         try {
             if (willStream) {
-                const r = await streamRoot(agent, messages, ctx, settings.timeout);
+                const r = await streamRoot(
+                    agent,
+                    messages,
+                    ctx,
+                    settings.timeout,
+                    state,
+                    agentTraceNodeId,
+                    deltaBuffer,
+                    prjdb,
+                    (tid) => {
+                        reasoningTraceNodeId = tid;
+                    }
+                );
                 finalText = r.text;
                 usage = r.usage;
             } else {
@@ -188,19 +376,44 @@ export class PacAgent implements IPacAgent {
             failure = e;
         }
 
-        // 中断场景:静默返回,不写历史(用户主动取消)
+        // 中断场景
         if (ctx.isAborted) {
-            safeDebug(ctx, `[PAC][step=${stepPath}] ${label} 已中断,跳过历史写入`);
+            ctx.debug(`[PAC][step=${stepPath}] ${this.compiled.name} 已中断`);
             return "";
         }
 
-        // 事务化历史写入:成功写真结果,失败写 SYSTEM_FAILURE_MARKER。
-        // finalText 为空且无异常(例如模型只调工具不输出,或 maxSteps 耗尽):不写,
-        // 避免产生"空助手回复"污染;下轮若读到孤立 user,由 loadHistoryMessages 兜底修复。
+        // 落库：刷新最后的 delta
+        deltaBuffer.flush(prjdb, state.messageId);
+
+        // 更新 agent 节点状态
+        const agentNodePatch = {
+            status: failure ? ("error" as const) : ("success" as const),
+            finishedAt: Date.now(),
+            description: failure
+                ? `错误: ${String(failure instanceof Error ? failure.message : failure)}`
+                : undefined,
+        };
+        prjdb.patchTrace(agentTraceNodeId, agentNodePatch);
+
+        // 更新 reasoning 节点（若有）
+        if (reasoningTraceNodeId && !failure) {
+            prjdb.patchTrace(reasoningTraceNodeId, { status: "success", finishedAt: Date.now() });
+        }
+
+        // 完成 message
+        if (isRoot) {
+            prjdb.finishMessage(state.messageId, {
+                content: finalText,
+                isError: !!failure,
+                agent: { name: this.compiled.name, model: modelId },
+            });
+        }
+
+        // 事务化历史写入
         if (histEnabled) {
             if (failure !== undefined) {
                 Logger.warn(
-                    `[PAC][step=${stepPath}] ${label} 生成失败,写入 SYSTEM_FAILURE_MARKER 占位:`,
+                    `[PAC][step=${stepPath}] ${this.compiled.name} 生成失败,写入占位符`,
                     failure,
                 );
                 await appendHistoryMessage(ctx, this.compiled.id, userMessage);
@@ -218,16 +431,24 @@ export class PacAgent implements IPacAgent {
         }
 
         if (failure !== undefined) {
-            throw failure; // 保留原始错误栈
+            throw failure;
         }
 
-        safeDebug(ctx,
-            `[PAC][step=${stepPath}] 完成 ${label}`,
+        ctx.debug(
+            `[PAC][step=${stepPath}] 完成 ${this.compiled.name}`,
             { output: finalText, usage },
         );
         if (usage) {
-            safeNotify(ctx, "usage", {
-                stepPath, agent: this.compiled.name, agentId: this.compiled.id, usage,
+            ctx.report({
+                type: "message.end",
+                messageId: state.messageId,
+                content: finalText,
+                meta: {
+                    stepPath,
+                    agent: this.compiled.name,
+                    agentId: this.compiled.id,
+                    usage
+                },
             });
         }
 
@@ -236,14 +457,15 @@ export class PacAgent implements IPacAgent {
 
     /**
      * 物化 ToolSet。子 agent 包装为 Tool 并透传 stepPath;其它工具直接取
-     * 已有实例。工具级 input/output 由 ToolLoopAgent 的 onToolExecutionStart/End
-     * 回调上报,不再手动包装。
+     * 已有实例。
      */
     private async materializeTools(
         ctx: IRunnerContext,
         parentDefaults: Record<string, JsonValue>,
         mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
         parentStepPath: string,
+        state: PacRunState,
+        parentTraceId: string,
     ): Promise<Record<string, Tool>> {
         const out: Record<string, Tool> = {};
         for (let i = 0; i < this.compiled.toolRefs.length; i++) {
@@ -252,7 +474,7 @@ export class PacAgent implements IPacAgent {
 
             if (ref.agent) {
                 out[ref.key] = buildAgentTool(
-                    ref.agent, ctx, parentDefaults, mcpClients, childStepPath,
+                    ref.agent, ctx, parentDefaults, mcpClients, childStepPath, state, parentTraceId,
                 );
             } else if (ref.local) {
                 out[ref.key] = ref.local.tool;
@@ -309,19 +531,15 @@ export class PacAgent implements IPacAgent {
     }
 
     private inputsFromCtx(ctx: IRunnerContext): Record<string, unknown> {
-        const args = (ctx.cmd?.args as Record<string, unknown> | undefined) ?? {};
-        return { ...args };
+        const args = ctx.cmd?.args;
+        if (!args || typeof args !== 'object' || Array.isArray(args)) {
+            return {};
+        }
+        return { ...args as Record<string, unknown> };
     }
 }
 
-/* ------------------------------------------------------------------ *
- * 调用参数构造
- *
- * `options: undefined` 是为了满足 ToolLoopAgent 的 CALL_OPTIONS 泛型:当未配置
- * callOptionsSchema 时 TS 推不出泛型,把 options 当作必填 `any`;显式传 undefined
- * 可以满足类型检查而不影响运行行为。`as never` 把整个参数对象兜底到 SDK 期望的
- * 严格类型。
- * ------------------------------------------------------------------ */
+/* ──────────────────────────────────────────────────────────── */
 
 function buildCallArgs(
     messages: ModelMessage[],
@@ -337,42 +555,81 @@ function buildCallArgs(
     return args as never;
 }
 
-/* ------------------------------------------------------------------ *
- * 流式执行(仅根 agent)
- *
- * ToolLoopAgent.stream 返回 Promise<StreamTextResult>:先 await 拿到结果对象,
- * 再迭代 textStream / await text / await totalUsage。
- * ------------------------------------------------------------------ */
+/* ──────────────────────────────────────────────────────────── */
 
+/**
+ * 流式执行根 agent，优先使用 fullStream 获取 reasoning 内容。
+ * 
+ * AI SDK v7 中 reasoning 是独立的 part type，不在 textStream 中。
+ * 必须使用 fullStream 才能捕获 reasoning-delta 部分。
+ */
 async function streamRoot(
     agent: AnyToolLoopAgent,
     messages: ModelMessage[],
     ctx: IRunnerContext,
     timeout: PacTimeoutConfig | undefined,
+    state: PacRunState,
+    agentTraceNodeId: string,
+    deltaBuffer: MessageDeltaBuffer,
+    prjdb: PrjDB,
+    onReasoningTraceId: (id: string) => void,
 ): Promise<{ text: string; usage: unknown }> {
     const res = await agent.stream(buildCallArgs(messages, ctx, timeout));
-    const buf: string[] = [];
+    const textBuf: string[] = [];
+    let reasoningNodeId: string | undefined;
 
-    for await (const chunk of res.textStream) {
-        if (ctx.isAborted) break;
-        if (typeof chunk === "string" && chunk.length > 0) {
-            buf.push(chunk);
-            safeDebug(ctx, "[PAC][stream]", chunk);
-            safeNotify(ctx, "stream", chunk);
+    try {
+        for await (const part of res.stream) {
+            if (ctx.isAborted) break;
+
+            // 文本增量 - 字段名是 text 不是 textDelta
+            if (part.type === "text-delta") {
+                const delta = part.text;
+                textBuf.push(delta);
+                deltaBuffer.push(delta);
+                const evt: MessageStreamEvent = {
+                    type: "message.delta",
+                    messageId: state.messageId,
+                    delta,
+                };
+                ctx.report(evt);
+            }
+            // Reasoning 增量 - 字段名是 text 不是 textDelta
+            else if (part.type === "reasoning-delta") {
+                const thinkDelta = part.text;
+                if (thinkDelta) {
+                    if (!reasoningNodeId) {
+                        reasoningNodeId = reasoningTraceId(agentTraceNodeId);
+                        const node = {
+                            id: reasoningNodeId,
+                            kind: "reasoning" as const,
+                            status: "running" as const,
+                            title: "思考",
+                        };
+                        prjdb.upsertTrace(state.messageId, agentTraceNodeId, node);
+                        onReasoningTraceId(reasoningNodeId);
+                    }
+                    const evt: MessageStreamEvent = {
+                        type: "message.thinking.delta",
+                        messageId: state.messageId,
+                        delta: thinkDelta,
+                    };
+                    ctx.report(evt);
+                    prjdb.appendTraceDetail(reasoningNodeId, thinkDelta);
+                }
+            }
         }
+    } catch (e) {
+        Logger.warn("[PAC] stream 处理失败:", e);
+        throw e;
     }
 
-    const text = (await res.text) ?? buf.join("");
-    const usage = await res.totalUsage;
+    const text = (await res.text) ?? textBuf.join("");
+    const usage = await res.usage;
     return { text, usage };
 }
 
-/* ------------------------------------------------------------------ *
- * 思考 providerOptions
- *
- * 对多家 provider 的通用 key 一次性填上,不认识的会被 SDK 忽略。
- * 实际是否生效取决于底层模型能力。
- * ------------------------------------------------------------------ */
+/* ──────────────────────────────────────────────────────────── */
 
 const THINKING_PROVIDER_OPTIONS: Readonly<Record<string, unknown>> = Object.freeze({
     anthropic: { thinking: { type: "enabled", budgetTokens: 10000 } },
@@ -380,9 +637,7 @@ const THINKING_PROVIDER_OPTIONS: Readonly<Record<string, unknown>> = Object.free
     google: { thinkingConfig: { includeThoughts: true } },
 });
 
-/* ------------------------------------------------------------------ *
- * 工具执行事件最小类型(SDK 未直接导出时的本地定义)
- * ------------------------------------------------------------------ */
+/* ──────────────────────────────────────────────────────────── */
 
 interface ToolExecStartEvent {
     toolCall: { toolName: string; toolCallId: string; input: unknown };
@@ -396,38 +651,10 @@ interface ToolExecEndEvent {
     | { type: "tool-error"; error: unknown };
 }
 
-/* ------------------------------------------------------------------ *
- * 日志/事件工具
- * ------------------------------------------------------------------ */
-
-function safeDebug(ctx: IRunnerContext, msg: string, data?: unknown): void {
-    try {
-        if (data === undefined) ctx.debug(msg);
-        else ctx.debug(msg, data);
-    } catch (e) {
-        Logger.warn(`[PAC] ctx.debug 调用失败: ${msg}`, e);
-    }
-}
-
-function safeNotify(ctx: IRunnerContext, channel: string, data: unknown): void {
-    try {
-        ctx.notify(channel, isString(data) ? data : JSON.stringify(data));
-    } catch (e) {
-        Logger.warn(`[PAC] ctx.notify("${channel}") 调用失败`, e);
-    }
-}
-
-/* ------------------------------------------------------------------ *
- * 子 agent → Tool 包装
- * ------------------------------------------------------------------ */
+/* ──────────────────────────────────────────────────────────── */
 
 /**
- * execute 原样返回子 agent 的最终文本;子 agent 自身 runWithInputs 会上报
- * 进入/完成及 input/output,这里不重复包装。
- *
- * 注意:子 agent 若默认开启历史(settings.history !== 0),会把每次调用的
- * 结构化 inputs 以 user 消息形式持久化到自己的历史里。工具型子 agent 应在
- * front matter 中显式声明 `history: 0`。
+ * 子 agent → Tool 包装
  */
 export function buildAgentTool(
     compiled: CompiledPacAgent,
@@ -435,16 +662,18 @@ export function buildAgentTool(
     inheritedDefaults: Record<string, JsonValue> = {},
     mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
     stepPath: string = compiled.name,
+    state: PacRunState,
+    parentTraceId: string,
 ): Tool {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const execute = async (input: any): Promise<string> => {
+    const execute = async (input: unknown): Promise<string> => {
         const sub = new PacAgent(compiled);
         return sub.runWithInputs(
             ctx,
-            (input ?? {}) as Record<string, unknown>,
+            (input && typeof input === 'object' && !Array.isArray(input) ? input : {}) as Record<string, unknown>,
             inheritedDefaults,
-            { stepPath },
+            { stepPath, parentTraceId },
             mcpClients,
+            state,
         );
     };
     return tool({

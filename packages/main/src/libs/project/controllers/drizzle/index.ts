@@ -22,6 +22,7 @@ import type { Capability, NewCapability } from "$types/blueprint/capability.js";
 import type { PrjTimeStamps, PrjTimeStore } from "$types/prjstore.js";
 import { BlueprintKind, GetItemInput, GetListResponse, QueryParams, SetItem } from '$types/shared/api/list.js';
 import type {
+    AgentIdentity,
     ChatMessage,
     ChatSession,
     GetMessageOptions,
@@ -50,10 +51,12 @@ import {
     upsertCapability,
 } from './capa.js';
 import {
+    appendMessageDelta,
     appendTraceDetail,
     createSession,
     deleteMessage,
     deleteSession,
+    finishMessage,
     getMessage,
     getSession,
     listMessages,
@@ -287,6 +290,16 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
 
     deleteMessage(id: string): void {
         deleteMessage(this.ensureDB(), id);
+    }
+
+    /** 流式追加消息内容增量 */
+    appendMessageDelta(messageId: string, delta: string): void {
+        appendMessageDelta(this.ensureDB(), messageId, delta);
+    }
+
+    /** 完成消息：设置最终内容、错误标记、agent 身份 */
+    finishMessage(messageId: string, opts?: { content?: string; isError?: boolean; agent?: AgentIdentity }): void {
+        finishMessage(this.ensureDB(), messageId, opts);
     }
 
     /* ──────────── Chat: Traces (流式增量 + 快照) ──────────── */

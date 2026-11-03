@@ -40,13 +40,26 @@ type PacProject = IRunnerContext["prj"];
  * HistoryStore 的实际存取由宿主通过 registerHistoryStore() 注入,复合键为
  * `${ctx.sessId}:${compiled.id}`。
  *
+ * **Trace 体系**:全链路汇报进度——root agent 节点为树根,工具/子 agent/推理分别为树节点。
+ * Trace 节点 id 编码规范见 traceid.ts。消息与 trace 通过 messageId 关联持久化到 PrjDB。
+ *
+ * **流式消息**:根 agent 流式生成时,每个 delta 通过 ctx.notify("stream", chunk) 实时汇报,
+ * 并定期落库到 messages 表 content 列;thinking 部分通过 message.thinking.delta 独立汇报。
+ *
  * 调用流程:
  *   1. 读取 N 条历史(调用前,不含本轮)
  *   2. 读取时若末尾是孤立 user(进程崩溃或旧数据遗留),自动追加 SYSTEM_FAILURE_MARKER
  *      占位 assistant 并持久化
  *   3. 在内存里组装 [历史..., 本轮 user] 作为 messages 传给 agent
- *   4. 调用成功 → 写入一对 (user, assistant 结果) 到 store
- *      调用失败 → 写入一对 (user, SYSTEM_FAILURE_MARKER) 到 store 并抛出原始错误
+ *   4. 同步创建 root agent trace 节点 (status=running)
+ *   5. 开始调用——流式汇报:
+ *      - 每条 tool 调用创建 tool trace 节点(或 agent 子调用的 agent 节点)
+ *      - thinking 内容创建 reasoning trace 节点,detail 增量追加
+ *      - 文本 delta 通过 stream 通道汇报,同时定期落库 message content
+ *   6. 调用成功 → 更新 agent 节点 status=success,完成 message 落库；
+ *      → 写入一对 (user, assistant 结果) 到 history store
+ *      调用失败 → 更新 agent 节点 status=error；
+ *      → 写入一对 (user, SYSTEM_FAILURE_MARKER) 到 history store 并抛出原始错误
  *      中断场景 → 不写历史,静默返回空字符串
  *
  * 工具型子 agent(被父 agent 反复调用的无状态工具)应在 front matter 中显式声明
@@ -58,6 +71,7 @@ type PacProject = IRunnerContext["prj"];
  * **模型选择:**
  *   运行期每一层(含子 tools)读取 prjdb.get("model") 决定使用哪个模型。
  *   字符串 → modelPattern;对象 → getSmartModel 的 options 透传。
+ *   模型 id (providerId/modelId) 在 trace 节点 description 与 message.meta 中汇报。
  *
  * **文件缺失:** pac/index.md 不存在时不报错,构造一个"直通 agent"
  * (无系统提示词、无工具,userTemplate = {{_BI_input}}),等价于把用户原始录入直送 LLM。
@@ -130,9 +144,9 @@ function countSub(c: CompiledPacAgent): number {
     return n;
 }
 
-/* ---------------- 对外导出 ---------------- */
+/* ────────────────────────────────────────────────────────── */
 
-export { buildAgentTool, PacAgent } from "./agent.js";
+export { buildAgentTool, PacAgent, type PacRunState } from "./agent.js";
 export { buildAgentId, compilePacAgent, createCompileCache, resolvePacPath } from "./compiler.js";
 export {
     appendHistoryMessage, BI_PREFIX, buildHistoryId,
@@ -151,9 +165,11 @@ export {
     LOAD_SKILL_TOOL, READ_SKILL_FILE_TOOL, SKILL_FILE
 } from "./skill.js";
 export { buildUserPrompt, renderSystemPrompt, scanTemplateVars } from "./template.js";
+export {
+    agentTraceId, nextSeq, reasoningTraceId, stepTraceId, toolTraceId
+} from "./traceid.js";
 export type {
     CompileCache, CompiledPacAgent, IPacAgent, JsonValue, LocalMcpConfig, LocalToolSpec,
     ModelSelectOptions, PacFrontMatter, PacTimeoutConfig, PacToolConfig, ResolvedSettings,
     SkillInfo, ToolOrigin, ToolRef, VarBuckets
 } from "./type.js";
-

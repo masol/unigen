@@ -15,6 +15,16 @@
 // 时间戳约定:
 //   统一用 epoch milliseconds (number)。
 //   SQLite INTEGER / IPC / dayjs(ms) 全链路兼容，避免字符串时区偏移。
+//
+// Trace 节点 id 编码约定（单一真源，见 libs/blueprint/capability/local/traceid.ts）:
+//   agent       : "agent|<相对路径>"          例: agent|sub/foo
+//   builtin工具 : "builtin:<工具id>"          例: builtin:web-search
+//   search结果  : "search:<llmName>"          例: search:web_search
+//   全局MCP     : "mcp:<serverId>:<工具名>"   例: mcp:brave:search
+//   局部MCP     : "mcplocal:<alias>:<工具名>" 例: mcplocal:local:analyze
+//   技能工具    : "skill:<工具名>"            例: skill:load_skill
+//   通用步骤    : "step:<uuid>"               例: step:550e8400-e29b-41d4-a716-446655440000
+//   子调用序号  : 基础id后追加 "#<n>"         例: agent|sub/foo#2（同一agent第2次调用）
 
 /* ───────── Agent identity ───────── */
 
@@ -204,7 +214,20 @@ export type MessageStreamEvent =
         agent?: AgentIdentity;
     }
     | {
+        type: "message.meta";
+        messageId: string;
+        meta: {
+            model?: { providerId: string; modelId: string };
+            [key: string]: unknown;
+        };
+    }
+    | {
         type: "message.delta";
+        messageId: string;
+        delta: string;
+    }
+    | {
+        type: "message.thinking.delta";
         messageId: string;
         delta: string;
     }

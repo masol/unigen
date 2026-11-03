@@ -82,10 +82,10 @@ export class PrjRunner extends BaseProjectController {
             // @todo:这里需要持久化新sess.
         }
         const ctx = new RunnerContext(sessId, this.ctx, signal);
+        ctx.fnReport = fnReport;
 
         // 使用 run 方法包裹，将 store 注入到这一层以及后续所有的同步/异步调用链中
         await runnerContextTLS.run(ctx, async () => {
-            ctx.fnReport = fnReport;
             try {
                 this.#cmdrunner = new CmdRunner();
 

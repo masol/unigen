@@ -59,5 +59,6 @@ test-results/
 /.idea/csv-plugin.xml
 
 repomix-output.xml
+repo-path*.txt
 zcodebase.md
 codebase.md

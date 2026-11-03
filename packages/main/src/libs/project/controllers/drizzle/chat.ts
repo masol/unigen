@@ -17,6 +17,7 @@ import {
 } from "$libs/utils/db/schema/chat.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import type {
+    AgentIdentity,
     ChatMessage,
     ChatSession,
     GetMessageOptions,
@@ -356,6 +357,57 @@ export function deleteMessage(db: DrizzleDBType, id: string): void {
             })
             .where(eq(sessions.id, existing.sessionId))
             .run();
+    });
+}
+
+/**
+ * 流式增量追加消息内容。原子拼接，不涉及读取修改写回。
+ * 用于流式生成消息时，定期落库增量。
+ */
+export function appendMessageDelta(
+    db: DrizzleDBType,
+    messageId: string,
+    delta: string
+): void {
+    if (!messageId || !delta) return;
+    db.update(messages)
+        .set({ content: sql`COALESCE(${messages.content}, '') || ${delta}` })
+        .where(eq(messages.id, messageId))
+        .run();
+}
+
+/**
+ * 完成消息：设置最终内容、错误标记、agent 身份。
+ * 同时刷新所属会话的 updatedAt。
+ */
+export function finishMessage(
+    db: DrizzleDBType,
+    messageId: string,
+    opts: { content?: string; isError?: boolean; agent?: AgentIdentity } = {}
+): void {
+    if (!messageId) return;
+
+    const set: Partial<typeof messages.$inferInsert> = {};
+    if (opts.content !== undefined) set.content = opts.content;
+    if (opts.isError !== undefined) set.isError = opts.isError;
+    if (opts.agent !== undefined) set.agent = opts.agent;
+    set.timestamp = Date.now();
+
+    db.transaction((tx) => {
+        tx.update(messages).set(set).where(eq(messages.id, messageId)).run();
+
+        // 刷新会话 updatedAt
+        const msg = tx
+            .select({ sessionId: messages.sessionId })
+            .from(messages)
+            .where(eq(messages.id, messageId))
+            .get();
+        if (msg) {
+            tx.update(sessions)
+                .set({ updatedAt: Date.now() })
+                .where(eq(sessions.id, msg.sessionId))
+                .run();
+        }
     });
 }
 
