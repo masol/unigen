@@ -147,7 +147,7 @@ export class PacAgent implements IPacAgent {
             ...this.compiled.ownDefaults,
         };
         const settings = this.compiled.settings;
-        const willStreamToMessage = isRoot && settings.streaming;
+        const shouldStream = isRoot ? settings.streaming : true;
         const histEnabled = settings.history !== 0;
 
         const modelOptions = resolveModelOptions(ctx);
@@ -208,21 +208,17 @@ export class PacAgent implements IPacAgent {
                 streaming: false,
             };
             prjdb.upsertTrace(state.messageId, agentTraceNodeId, inputNode);
-            const inputEvt: TraceStreamEvent = {
+            ctx.report({
                 type: "trace.start",
                 messageId: state.messageId,
                 parentId: agentTraceNodeId,
                 node: inputNode,
-            };
-            ctx.report(inputEvt);
-
-            // Input 节点立即完成，发送 trace.end
-            const inputEndEvt: TraceStreamEvent = {
+            } as TraceStreamEvent);
+            ctx.report({
                 type: "trace.end",
                 messageId: state.messageId,
                 nodeId: inputNodeId,
-            };
-            ctx.report(inputEndEvt);
+            } as TraceStreamEvent);
         }
 
         const tools = await this.materializeTools(ctx, effectiveDefaults, mcpClients, stepPath, state, agentTraceNodeId);
@@ -241,7 +237,7 @@ export class PacAgent implements IPacAgent {
 
         ctx.debug(
             `[PAC][step=${stepPath}] 进入 ${this.compiled.name} ` +
-            `(tools=${Object.keys(tools).length}, streaming=${willStreamToMessage}, ` +
+            `(tools=${Object.keys(tools).length}, shouldStream=${shouldStream}, ` +
             `thinking=${settings.thinking}, history=${prior.length}, ` +
             `maxSteps=${settings.maxSteps}, timeout=${JSON.stringify(settings.timeout)})`,
             { inputs },
@@ -288,7 +284,7 @@ export class PacAgent implements IPacAgent {
                     id: toolTraceNodeId,
                     kind: "tool" as const,
                     status: "running" as const,
-                    title: key,
+                    title: `调用工具: ${key}`,
                     toolName: key,
                     detail: paramsDetail,
                     streaming: true,
@@ -370,54 +366,99 @@ export class PacAgent implements IPacAgent {
         let reasoningTraceNodeId: string | undefined = undefined;
         let outputNodeId: string | undefined = undefined;
 
-        if (!isRoot) {
-            outputNodeId = `${agentTraceNodeId}:output`;
-            const outputNode = {
-                id: outputNodeId,
-                kind: "output" as const,
-                status: "running" as const,
-                title: "输出",
-                detail: "",
-                streaming: true,
-            };
-            prjdb.upsertTrace(state.messageId, agentTraceNodeId, outputNode);
-            const outputEvt: TraceStreamEvent = {
-                type: "trace.start",
-                messageId: state.messageId,
-                parentId: agentTraceNodeId,
-                node: outputNode,
-            };
-            ctx.report(outputEvt);
-        }
-
         try {
-            // 统一走 stream 路径，区别在于汇报通道
-            const r = await streamAgent(
-                agent,
-                messages,
-                ctx,
-                settings.timeout,
-                state,
-                agentTraceNodeId,
-                deltaBuffer,
-                prjdb,
-                willStreamToMessage,
-                outputNodeId,
-                (tid) => {
-                    reasoningTraceNodeId = tid;
+            if (shouldStream) {
+                let streamSuccess = false;
+                try {
+                    const r = await streamAgent(
+                        agent,
+                        messages,
+                        ctx,
+                        settings.timeout,
+                        state,
+                        agentTraceNodeId,
+                        deltaBuffer,
+                        prjdb,
+                        isRoot,
+                        !isRoot,
+                        (reasoningId, outputId) => {
+                            reasoningTraceNodeId = reasoningId;
+                            outputNodeId = outputId;
+                        }
+                    );
+                    finalText = r.text;
+                    usage = r.usage;
+                    streamSuccess = true;
+                } catch (streamErr) {
+                    Logger.warn(`[PAC][step=${stepPath}] 流式执行失败，fallback 到非流式:`, streamErr);
                 }
-            );
-            finalText = r.text;
-            usage = r.usage;
+
+                if (!streamSuccess) {
+                    const r = await generateAgent(agent, messages, ctx, settings.timeout);
+                    finalText = r.text;
+                    usage = r.usage;
+
+                    if (!isRoot && finalText) {
+                        outputNodeId = `${agentTraceNodeId}:output`;
+                        const outputNode = {
+                            id: outputNodeId,
+                            kind: "output" as const,
+                            status: "success" as const,
+                            title: "输出",
+                            detail: finalText,
+                            streaming: false,
+                        };
+                        prjdb.upsertTrace(state.messageId, agentTraceNodeId, outputNode);
+                        ctx.report({
+                            type: "trace.start",
+                            messageId: state.messageId,
+                            parentId: agentTraceNodeId,
+                            node: outputNode,
+                        } as TraceStreamEvent);
+                        ctx.report({
+                            type: "trace.end",
+                            messageId: state.messageId,
+                            nodeId: outputNodeId,
+                        } as TraceStreamEvent);
+                    }
+                }
+            } else {
+                const r = await generateAgent(agent, messages, ctx, settings.timeout);
+                finalText = r.text;
+                usage = r.usage;
+
+                if (!isRoot && finalText) {
+                    outputNodeId = `${agentTraceNodeId}:output`;
+                    const outputNode = {
+                        id: outputNodeId,
+                        kind: "output" as const,
+                        status: "success" as const,
+                        title: "输出",
+                        detail: finalText,
+                        streaming: false,
+                    };
+                    prjdb.upsertTrace(state.messageId, agentTraceNodeId, outputNode);
+                    ctx.report({
+                        type: "trace.start",
+                        messageId: state.messageId,
+                        parentId: agentTraceNodeId,
+                        node: outputNode,
+                    } as TraceStreamEvent);
+                    ctx.report({
+                        type: "trace.end",
+                        messageId: state.messageId,
+                        nodeId: outputNodeId,
+                    } as TraceStreamEvent);
+                }
+            }
         } catch (e) {
             failure = e;
         }
 
-        // 中断场景：清理并提前返回
+        // 中断场景：清理未关闭的节点
         if (ctx.isAborted) {
             ctx.debug(`[PAC][step=${stepPath}] ${this.compiled.name} 已中断`);
 
-            // 自底向上关闭节点
             if (reasoningTraceNodeId) {
                 prjdb.patchTrace(reasoningTraceNodeId, {
                     status: "error",
@@ -467,10 +508,11 @@ export class PacAgent implements IPacAgent {
         // 正常完成或失败场景
         deltaBuffer.flush(prjdb, state.messageId);
 
-        // 自底向上关闭节点
-        if (reasoningTraceNodeId) {
+        // reasoning 和 output 节点已在 streamAgent 内关闭（正常情况）
+        // 只有异常情况才需要在这里补关闭
+        if (failure && reasoningTraceNodeId) {
             prjdb.patchTrace(reasoningTraceNodeId, {
-                status: failure ? "error" : "success",
+                status: "error",
                 finishedAt: Date.now(),
             });
             ctx.report({
@@ -480,12 +522,11 @@ export class PacAgent implements IPacAgent {
             } as TraceStreamEvent);
         }
 
-        if (outputNodeId) {
+        if (failure && outputNodeId) {
             prjdb.patchTrace(outputNodeId, {
-                status: failure ? "error" : "success",
+                status: "error",
                 finishedAt: Date.now(),
             });
-            // trace.end 不传 detail，因为已通过流式 delta 累积
             ctx.report({
                 type: "trace.end",
                 messageId: state.messageId,
@@ -661,10 +702,18 @@ function buildCallArgs(
 }
 
 /**
- * 统一的流式执行函数，同时支持根 agent 和子 agent。
+ * 流式执行，捕获 thinking 和流式输出。
  * 
- * @param streamToMessage - true: 文本 delta 发送到 message 通道（根 agent）
- *                         false: 文本 delta 发送到 output trace 节点（子 agent）
+ * **关键决策**: Reasoning 和 Output 节点在 stream 完全结束后才关闭。
+ * 
+ * **理由**: 
+ * 1. AI SDK 没有显式的 reasoning 结束事件
+ * 2. reasoning-delta 和 text-delta 可以交错出现
+ * 3. 正确性优先：绝不能让 reasoning 内容泄露到其它通道
+ * 
+ * @param streamToMessage - true: 根 agent，文本 delta 发送到 message 通道
+ * @param needOutputNode - true: 子 agent，需要创建 output 节点
+ * @param onNodeIds - 回调，用于返回创建的 reasoning 和 output 节点 ID
  */
 async function streamAgent(
     agent: AnyToolLoopAgent,
@@ -676,40 +725,19 @@ async function streamAgent(
     deltaBuffer: MessageDeltaBuffer,
     prjdb: PrjDB,
     streamToMessage: boolean,
-    outputNodeId: string | undefined,
-    onReasoningTraceId: (id: string) => void,
+    needOutputNode: boolean,
+    onNodeIds: (reasoningId: string | undefined, outputId: string | undefined) => void,
 ): Promise<{ text: string; usage: unknown }> {
     const res = await agent.stream(buildCallArgs(messages, ctx, timeout));
     const textBuf: string[] = [];
     let reasoningNodeId: string | undefined;
+    let outputNodeId: string | undefined;
 
     try {
         for await (const part of res.stream) {
             if (ctx.isAborted) break;
 
-            if (part.type === "text-delta") {
-                const delta = part.text;
-                textBuf.push(delta);
-                deltaBuffer.push(delta);
-
-                if (streamToMessage) {
-                    // 根 agent: 发送到 message 通道
-                    ctx.report({
-                        type: "message.delta",
-                        messageId: state.messageId,
-                        delta,
-                    } as MessageStreamEvent);
-                } else if (outputNodeId) {
-                    // 子 agent: 发送到 output trace 节点
-                    prjdb.appendTraceDetail(outputNodeId, delta);
-                    ctx.report({
-                        type: "trace.detail.delta",
-                        messageId: state.messageId,
-                        nodeId: outputNodeId,
-                        delta,
-                    } as TraceStreamEvent);
-                }
-            } else if (part.type === "reasoning-delta") {
+            if (part.type === "reasoning-delta") {
                 const thinkDelta = part.text;
                 if (thinkDelta) {
                     if (!reasoningNodeId) {
@@ -723,7 +751,6 @@ async function streamAgent(
                             streaming: true,
                         };
                         prjdb.upsertTrace(state.messageId, agentTraceNodeId, node);
-                        onReasoningTraceId(reasoningNodeId);
 
                         ctx.report({
                             type: "trace.start",
@@ -740,6 +767,46 @@ async function streamAgent(
                         delta: thinkDelta,
                     } as TraceStreamEvent);
                 }
+            } else if (part.type === "text-delta") {
+                const delta = part.text;
+                textBuf.push(delta);
+                deltaBuffer.push(delta);
+
+                // 延迟创建 output 节点（第一个 text-delta 到达时）
+                if (!outputNodeId && needOutputNode) {
+                    outputNodeId = `${agentTraceNodeId}:output`;
+                    const outputNode = {
+                        id: outputNodeId,
+                        kind: "output" as const,
+                        status: "running" as const,
+                        title: "输出",
+                        detail: "",
+                        streaming: true,
+                    };
+                    prjdb.upsertTrace(state.messageId, agentTraceNodeId, outputNode);
+                    ctx.report({
+                        type: "trace.start",
+                        messageId: state.messageId,
+                        parentId: agentTraceNodeId,
+                        node: outputNode,
+                    } as TraceStreamEvent);
+                }
+
+                if (streamToMessage) {
+                    ctx.report({
+                        type: "message.delta",
+                        messageId: state.messageId,
+                        delta,
+                    } as MessageStreamEvent);
+                } else if (outputNodeId) {
+                    prjdb.appendTraceDetail(outputNodeId, delta);
+                    ctx.report({
+                        type: "trace.detail.delta",
+                        messageId: state.messageId,
+                        nodeId: outputNodeId,
+                        delta,
+                    } as TraceStreamEvent);
+                }
             }
         }
     } catch (e) {
@@ -749,6 +816,49 @@ async function streamAgent(
 
     const text = (await res.text) ?? textBuf.join("");
     const usage = await res.usage;
+
+    // Stream 完全结束后，关闭所有节点
+    if (reasoningNodeId) {
+        prjdb.patchTrace(reasoningNodeId, {
+            status: "success",
+            finishedAt: Date.now(),
+        });
+        ctx.report({
+            type: "trace.end",
+            messageId: state.messageId,
+            nodeId: reasoningNodeId,
+        } as TraceStreamEvent);
+    }
+
+    if (outputNodeId) {
+        prjdb.patchTrace(outputNodeId, {
+            status: "success",
+            finishedAt: Date.now(),
+        });
+        ctx.report({
+            type: "trace.end",
+            messageId: state.messageId,
+            nodeId: outputNodeId,
+        } as TraceStreamEvent);
+    }
+
+    onNodeIds(reasoningNodeId, outputNodeId);
+    return { text, usage };
+}
+
+/**
+ * 非流式执行，无法捕获 thinking 和增量输出。
+ */
+async function generateAgent(
+    agent: AnyToolLoopAgent,
+    messages: ModelMessage[],
+    ctx: IRunnerContext,
+    timeout: PacTimeoutConfig | undefined,
+): Promise<{ text: string; usage: unknown }> {
+    const result = await agent.generate(buildCallArgs(messages, ctx, timeout));
+    const text = (result as { text?: string }).text ?? "";
+    const usage = (result as { totalUsage?: unknown; usage?: unknown }).totalUsage
+        ?? (result as { usage?: unknown }).usage;
     return { text, usage };
 }
 
