@@ -60,14 +60,18 @@
   }
 </script>
 
-<!--╭─────────────────────────────────────────────────────╮-->
-<!-- │ [可抽取子组件 → MessageActionsUser.svelte]           │-->
-<!-- │ 职责：封装用户气泡 ContextMenu 的四条命令            │-->
-<!-- ╰─────────────────────────────────────────────────────╯-->
 <ContextMenu.Root>
   <ContextMenu.Trigger class="block">
     <div class="group/msg flex min-w-0 flex-col gap-1.5">
-      <MessageHeader align="end">
+      <MessageHeader role="user">
+        {#snippet identity()}
+          <span class="text-xs font-medium text-muted-foreground">你</span>
+          <Chat.BubbleAvatar class="size-6 shrink-0">
+            <Chat.BubbleAvatarFallback class="bg-primary/10 text-primary">
+              <IconUser size={15} stroke={1.5} />
+            </Chat.BubbleAvatarFallback>
+          </Chat.BubbleAvatar>
+        {/snippet}
         {#snippet actions()}
           <Button
             variant="ghost"
@@ -95,14 +99,6 @@
               <IconChevronUp size={14} stroke={1.5} />
             {/if}
           </Button>
-        {/snippet}
-        {#snippet identity()}
-          <span class="text-xs font-medium text-muted-foreground">你</span>
-          <Chat.BubbleAvatar class="size-6 shrink-0">
-            <Chat.BubbleAvatarFallback class="bg-primary/10 text-primary">
-              <IconUser size={15} stroke={1.5} />
-            </Chat.BubbleAvatarFallback>
-          </Chat.BubbleAvatar>
         {/snippet}
       </MessageHeader>
 

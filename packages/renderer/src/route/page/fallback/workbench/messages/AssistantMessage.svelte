@@ -2,7 +2,6 @@
 <script lang="ts">
   import MarkdownView from "$lib/components/markdown/Message.svelte";
   import { Button } from "$lib/components/ui/button";
-  import * as Chat from "$lib/components/ui/chat";
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import type { ChatMessage } from "$lib/store/local/chat.types";
   import { messageStore } from "$lib/store/local/msg.svelte";
@@ -11,7 +10,10 @@
     IconChevronDown,
     IconChevronUp,
     IconCopy,
+    IconEye,
+    IconEyeOff,
     IconGitBranch,
+    IconLoader2,
     IconRefresh,
     IconRobot,
     IconTrash,
@@ -19,16 +21,28 @@
   import { toast } from "svelte-sonner";
   import TypingDots from "../TypingDots.svelte";
   import AgentTrace from "../trace/AgentTrace.svelte";
-  import MessageHeader from "./MessageHeader.svelte";
 
   let { message }: { message: ChatMessage } = $props();
 
   let copied = $state(false);
   let collapsed = $derived(messageStore.collapsedMessages[message.id] === true);
+  let traceVisible = $state(true);
 
   let hasContent = $derived(message.content.length > 0);
   let hasTraces = $derived((message.traces?.length ?? 0) > 0);
   let showShimmer = $derived(message.streaming && !hasContent && !hasTraces);
+
+  // 递归检测trace树中是否存在running节点
+  function hasRunningTrace(traces?: typeof message.traces): boolean {
+    if (!traces || traces.length === 0) return false;
+    for (const node of traces) {
+      if (node.status === "running") return true;
+      if (node.kind === "agent" && hasRunningTrace(node.children)) return true;
+    }
+    return false;
+  }
+
+  let traceRunning = $derived(hasRunningTrace(message.traces));
 
   function copy() {
     if (!hasContent) return;
@@ -40,6 +54,10 @@
 
   function toggleCollapse() {
     messageStore.toggleMessage(message.id);
+  }
+
+  function toggleTrace() {
+    traceVisible = !traceVisible;
   }
 
   function regenerate() {
@@ -67,37 +85,49 @@
   }
 </script>
 
-<!--╭─────────────────────────────────────────────────────╮-->
-<!-- │ [可抽取子组件 → MessageActionsAssistant.svelte]      │-->
-<!-- │ 职责：封装助手气泡 ContextMenu 的四条命令            │-->
-<!-- ╰─────────────────────────────────────────────────────╯-->
 <ContextMenu.Root>
   <ContextMenu.Trigger class="block">
     <div class="group/msg flex min-w-0 flex-col gap-2">
-      <MessageHeader>
-        {#snippet identity()}
-          <Chat.BubbleAvatar class="size-6 shrink-0">
-            <Chat.BubbleAvatarFallback class="bg-muted text-muted-foreground">
-              <IconRobot size={15} stroke={1.5} />
-            </Chat.BubbleAvatarFallback>
-          </Chat.BubbleAvatar>
-          <div class="flex min-w-0 flex-1 items-baseline gap-2">
-            <span class="truncate text-xs font-medium text-foreground">
-              {message.agent?.name ?? "助手"}
-            </span>
-            {#if message.agent?.model}
-              <span class="truncate font-mono text-xs text-muted-foreground">
-                {message.agent.model}
-              </span>
-            {/if}
-          </div>
-        {/snippet}
-        {#snippet actions()}
+      <!-- Header：Robot图标 → AI → 按钮区 → agent名称，全部在一行 -->
+      <div class="flex min-w-0 items-center gap-2">
+        <!-- Robot 图标 - 直接用圆形背景包裹，不用 Chat.BubbleAvatar -->
+        <div
+          class="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+        >
+          <IconRobot size={15} stroke={1.5} />
+        </div>
+
+        <!-- AI 文字 - 固定显示 -->
+        <span class="shrink-0 text-xs font-medium text-foreground">AI</span>
+
+        <!-- 功能按钮区 + agent名称 - hover显示 -->
+        <div
+          class="flex min-w-0 items-center gap-0.5 opacity-0 transition-opacity duration-200 group-hover/msg:opacity-100"
+        >
+          {#if hasTraces}
+            <Button
+              variant="ghost"
+              size="icon"
+              onclick={toggleTrace}
+              class="size-6 shrink-0 rounded-lg text-muted-foreground transition-all duration-200 hover:text-foreground"
+              aria-label={traceVisible ? "隐藏进度" : "显示进度"}
+              title={traceVisible ? "隐藏进度" : "显示进度"}
+            >
+              {#if traceVisible}
+                <IconEye size={14} stroke={1.5} />
+              {:else if traceRunning}
+                <IconLoader2 size={14} stroke={1.5} class="animate-spin" />
+              {:else}
+                <IconEyeOff size={14} stroke={1.5} />
+              {/if}
+            </Button>
+          {/if}
+
           <Button
             variant="ghost"
             size="icon"
             onclick={toggleCollapse}
-            class="size-6 rounded-lg text-muted-foreground opacity-0 transition-all duration-200 hover:text-foreground group-hover/msg:opacity-100"
+            class="size-6 shrink-0 rounded-lg text-muted-foreground transition-all duration-200 hover:text-foreground"
             aria-label={collapsed ? "展开消息" : "折叠消息"}
           >
             {#if collapsed}
@@ -106,12 +136,13 @@
               <IconChevronUp size={14} stroke={1.5} />
             {/if}
           </Button>
+
           <Button
             variant="ghost"
             size="icon"
             onclick={copy}
             disabled={!hasContent}
-            class="size-6 rounded-lg text-muted-foreground opacity-0 transition-all duration-200 hover:text-foreground group-hover/msg:opacity-100 disabled:opacity-0"
+            class="size-6 shrink-0 rounded-lg text-muted-foreground transition-all duration-200 hover:text-foreground disabled:opacity-30"
             aria-label="复制消息内容"
           >
             {#if copied}
@@ -120,8 +151,21 @@
               <IconCopy size={14} stroke={1.5} />
             {/if}
           </Button>
-        {/snippet}
-      </MessageHeader>
+
+          {#if message.agent?.name && message.agent.name !== "AI"}
+            <span class="shrink-0 text-xs text-muted-foreground">
+              ({message.agent.name})
+            </span>
+          {/if}
+          {#if message.agent?.model}
+            <span
+              class="min-w-0 truncate font-mono text-xs text-muted-foreground"
+            >
+              {message.agent.model}
+            </span>
+          {/if}
+        </div>
+      </div>
 
       {#if collapsed}
         <button
@@ -133,7 +177,7 @@
           <span>消息已折叠 · 点击展开</span>
         </button>
       {:else}
-        {#if hasTraces}
+        {#if hasTraces && traceVisible}
           <AgentTrace nodes={message.traces ?? []} />
         {/if}
 
@@ -186,4 +230,3 @@
     </ContextMenu.Item>
   </ContextMenu.Content>
 </ContextMenu.Root>
-<!-- ╭─── / MessageActionsAssistant ───╮-->

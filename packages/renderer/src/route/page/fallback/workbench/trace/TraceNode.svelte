@@ -1,4 +1,4 @@
-<!-- 单个 trace 节点：按 kind/status 渲染，支持递归嵌套 -->
+<!-- 单个 trace 节点 · 显示真实动态内容 -->
 <script lang="ts">
   import MarkdownView from "$lib/components/markdown/Message.svelte";
   import { RuntimeIcon } from "$lib/components/runtimeicon";
@@ -8,6 +8,7 @@
     IconAlertTriangle,
     IconArrowUpRight,
     IconBrain,
+    IconCheck,
     IconCircleDashed,
     IconLink,
     IconLoader2,
@@ -30,7 +31,6 @@
           : undefined,
   );
 
-  // ── 1Hz 心跳：仅当节点运行中时存在，驱动耗时文字自动滚动 ──
   let now = $state(Date.now());
   $effect(() => {
     if (!running) return;
@@ -49,21 +49,22 @@
     return `${Math.floor(s / 60)}m ${s % 60}s`;
   });
 
-  /** 非 agent 节点的次要文字（agent 的 "name · model" 在模板内渲染） */
   let descriptionText = $derived(
     node.kind === "agent" ? undefined : (node.description ?? autoDuration),
   );
 
-  let expandable = $derived(
-    !!node.detail || (node.kind === "agent" && node.children.length > 0),
+  let hasDetail = $derived(
+    node.detail !== undefined && node.detail !== null && node.detail.length > 0,
   );
 
-  // 深层节点显示 L{n} 微标签（>3 层时启用）
+  let hasChildren = $derived(node.kind === "agent" && node.children.length > 0);
+
+  let expandable = $derived(hasDetail || hasChildren);
+
   let showDepthBadge = $derived(depth >= 3);
 
-  // 用户点击前跟随 running；点击后以 userOpen 为准
   let userOpen = $state<boolean | undefined>(undefined);
-  let open = $derived(userOpen ?? running);
+  let open = $derived(userOpen ?? (running || hasDetail));
 </script>
 
 {#snippet leadingIcon()}
@@ -73,6 +74,8 @@
     <IconAlertTriangle size={16} stroke={1.5} />
   {:else if node.status === "pending"}
     <IconCircleDashed size={16} stroke={1.5} />
+  {:else if node.status === "success"}
+    <IconCheck size={16} stroke={1.5} />
   {:else if node.kind === "agent"}
     <IconRobot size={16} stroke={1.5} />
   {:else if node.kind === "reasoning"}
@@ -133,22 +136,18 @@
     <Trace.CollapsibleTrigger>
       {@render line()}
     </Trace.CollapsibleTrigger>
-    <Trace.CollapsibleContent>
-      {#if node.detail}
-        <div class="text-foreground">
-          <MarkdownView
-            message={{ content: node.detail }}
-            streaming={node.streaming}
-          />
-        </div>
+    <Trace.CollapsibleContent class="whitespace-pre-wrap">
+      {#if hasDetail}
+        <MarkdownView
+          message={{ content: node.detail ?? "" }}
+          streaming={node.streaming}
+        />
       {/if}
-      {#if node.kind === "agent" && node.children.length > 0}
-        <div class:mt-2={!!node.detail}>
-          <Trace.Root>
-            {#each node.children as child (child.id)}
-              <Self node={child} depth={depth + 1} />
-            {/each}
-          </Trace.Root>
+      {#if node.kind === "agent" && hasChildren}
+        <div class:mt-2={hasDetail} class="flex flex-col gap-1">
+          {#each node.children as child (child.id)}
+            <Self node={child} depth={depth + 1} />
+          {/each}
         </div>
       {/if}
     </Trace.CollapsibleContent>

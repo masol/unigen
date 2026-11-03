@@ -1,4 +1,4 @@
-// packages/main/types/shared/chat.ts
+// packages/main/src/types/shared/chat.ts
 //
 // 聊天领域的共享类型 —— 单一真源
 //
@@ -29,6 +29,7 @@
 /* ───────── Agent identity ───────── */
 
 export interface AgentIdentity {
+    id: string;
     name: string;
     /** providerId::modelId 格式，例如 "openai::gpt-4o" */
     model?: string;
