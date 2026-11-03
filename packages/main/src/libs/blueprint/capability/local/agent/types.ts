@@ -5,10 +5,24 @@ import type { ModelMessage } from "ai";
 import type { LocalMcpClient } from "../mcp.js";
 import type { CompiledPacAgent, JsonValue, LocalMcpConfig } from "../type.js";
 
+/**
+ * Agent 的 thinking 状态（per-agent，存储在 PacRunState 中）
+ */
+export interface AgentThinkingState {
+    /** 是否已收到 text-start（正文开始） */
+    textStarted: boolean;
+    /** reasoning 轮次计数（用于生成唯一节点 ID） */
+    reasoningCount: number;
+    /** 当前活跃的 reasoning 节点 ID */
+    currentReasoningNodeId?: string;
+}
+
 export interface PacRunState {
     messageId: string;
     counters: Map<string, number>;
     modelInfo?: { providerId: string; modelId: string };
+    /** 每个 agent 的 thinking 状态（按 agentTraceNodeId 索引） */
+    thinkingStates: Map<string, AgentThinkingState>;
 }
 
 export interface ToolCallTraceInfo {

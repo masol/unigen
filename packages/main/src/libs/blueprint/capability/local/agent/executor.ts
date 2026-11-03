@@ -8,7 +8,7 @@ import Logger from "electron-log/main.js";
 import { reasoningTraceId } from "../traceid.js";
 import type { PacTimeoutConfig } from "../type.js";
 import { MessageDeltaBuffer } from "./buffer.js";
-import type { GenerateCallArgs, PacRunState, StreamResult } from "./types.js";
+import type { AgentThinkingState, GenerateCallArgs, PacRunState, StreamResult } from "./types.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyToolLoopAgent = ToolLoopAgent<any, any, any, any>;
@@ -27,16 +27,41 @@ export function buildCallArgs(
 }
 
 /**
+ * 获取或初始化 agent 的 thinking 状态
+ */
+function getThinkingState(
+    state: PacRunState,
+    agentTraceNodeId: string,
+): AgentThinkingState {
+    let thinkingState = state.thinkingStates.get(agentTraceNodeId);
+    if (!thinkingState) {
+        thinkingState = {
+            textStarted: false,
+            reasoningCount: 0,
+        };
+        state.thinkingStates.set(agentTraceNodeId, thinkingState);
+    }
+    return thinkingState;
+}
+
+/**
  * 流式执行，捕获 thinking 和流式输出。
  *
  * **关键决策**: 使用 AI SDK v7 的 `text-start` 事件作为 thinking 结束的权威信号。
  *
  * **事件顺序**:
- * 1. reasoning-start (可选)
+ * 1. reasoning-start (可选) ← **重要**：可能多次出现（工具调用后重新思考）
  * 2. reasoning-delta (多次)
  * 3. reasoning-end (可选，某些 provider 不发送)
  * 4. text-start ← **关键**：思考结束，正文开始
  * 5. text-delta (多次)
+ * 6. [工具调用] → 可能回到步骤 1
+ *
+ * **状态管理** (✅ 并发安全):
+ * - 状态存储在 `state.thinkingStates[agentTraceNodeId]` 中
+ * - 每个 agent（包括并行的子 agent）有独立的状态
+ * - `reasoning-start` 到达 → 重置 `textStarted = false`（进入新的 thinking 阶段）
+ * - `text-start` 到达 → 设置 `textStarted = true`（thinking 结束）
  *
  * **通道隔离**:
  * - 在 `text-start` 之前的所有 `text-delta` 都是 thinking 内容，丢弃
@@ -61,61 +86,102 @@ export async function streamAgent(
 ): Promise<StreamResult> {
     const res = await agent.stream(buildCallArgs(messages, ctx, timeout) as never);
     const textBuf: string[] = [];
-    let reasoningNodeId: string | undefined;
     let outputNodeId: string | undefined;
 
-    // ✅ 关键修正：使用 text-start 事件作为权威信号
-    let textStarted = false;
+    // ✅ 关键修正：从共享状态中读取 thinking 状态
+    const thinkingState = getThinkingState(state, agentTraceNodeId);
 
     try {
         for await (const part of res.stream) {
             if (ctx.isAborted) break;
 
+            // ✅ 检测 reasoning-start 事件（重新进入 thinking 状态）
+            if (part.type === "reasoning-start") {
+                thinkingState.reasoningCount++;
+
+                // ✅ 关键修正：重置 textStarted 标志
+                if (thinkingState.textStarted) {
+                    Logger.debug(
+                        `[PAC][${agentTraceNodeId}] reasoning-start #${thinkingState.reasoningCount} 到达，` +
+                        `重新进入思考状态 (重置 textStarted: true → false)`,
+                    );
+                    thinkingState.textStarted = false;
+
+                    // 关闭上一个 reasoning 节点（如果存在且未关闭）
+                    if (thinkingState.currentReasoningNodeId) {
+                        const now = Date.now();
+                        prjdb.patchTrace(thinkingState.currentReasoningNodeId, {
+                            status: "success",
+                            finishedAt: now,
+                        });
+                        ctx.report({
+                            type: "trace.end",
+                            messageId: state.messageId,
+                            nodeId: thinkingState.currentReasoningNodeId,
+                            patch: {
+                                status: "success",
+                                finishedAt: now,
+                            },
+                        } as TraceStreamEvent);
+                        thinkingState.currentReasoningNodeId = undefined;
+                    }
+                } else {
+                    Logger.debug(
+                        `[PAC][${agentTraceNodeId}] reasoning-start #${thinkingState.reasoningCount} 到达，开始思考`,
+                    );
+                }
+                continue;
+            }
+
             // ✅ 检测 text-start 事件
             if (part.type === "text-start") {
-                textStarted = true;
-                Logger.debug(`[PAC] text-start 事件到达，思考结束，正文开始`);
+                thinkingState.textStarted = true;
+                Logger.debug(`[PAC][${agentTraceNodeId}] text-start 事件到达，思考结束，正文开始`);
 
                 // 关闭 reasoning 节点（如果存在）
-                if (reasoningNodeId) {
+                if (thinkingState.currentReasoningNodeId) {
                     const now = Date.now();
-                    prjdb.patchTrace(reasoningNodeId, {
+                    prjdb.patchTrace(thinkingState.currentReasoningNodeId, {
                         status: "success",
                         finishedAt: now,
                     });
                     ctx.report({
                         type: "trace.end",
                         messageId: state.messageId,
-                        nodeId: reasoningNodeId,
+                        nodeId: thinkingState.currentReasoningNodeId,
                         patch: {
                             status: "success",
                             finishedAt: now,
                         },
                     } as TraceStreamEvent);
+                    thinkingState.currentReasoningNodeId = undefined;
                 }
                 continue;
             }
 
-            if (part.type === "reasoning-start") {
-                Logger.debug(`[PAC] reasoning-start 事件到达，开始思考`);
-                continue;
-            }
-
             if (part.type === "reasoning-end") {
-                Logger.debug(`[PAC] reasoning-end 事件到达（注意：text-start 才是权威信号）`);
+                Logger.debug(
+                    `[PAC][${agentTraceNodeId}] reasoning-end 事件到达 ` +
+                    `(reasoning #${thinkingState.reasoningCount})（注意：text-start 才是权威信号）`,
+                );
                 continue;
             }
 
             if (part.type === "reasoning-delta") {
                 const thinkDelta = part.text;
                 if (thinkDelta) {
-                    if (!reasoningNodeId) {
-                        reasoningNodeId = reasoningTraceId(agentTraceNodeId);
+                    if (!thinkingState.currentReasoningNodeId) {
+                        // 为多次 reasoning 生成唯一 ID
+                        const suffix = thinkingState.reasoningCount > 1 ? `_${thinkingState.reasoningCount}` : "";
+                        thinkingState.currentReasoningNodeId = `${reasoningTraceId(agentTraceNodeId)}${suffix}`;
+
                         const node = {
-                            id: reasoningNodeId,
+                            id: thinkingState.currentReasoningNodeId,
                             kind: "reasoning" as const,
                             status: "running" as const,
-                            title: "思考",
+                            title: thinkingState.reasoningCount > 1
+                                ? `思考 #${thinkingState.reasoningCount}`
+                                : "思考",
                             detail: "",
                             streaming: true,
                         };
@@ -128,11 +194,11 @@ export async function streamAgent(
                             node,
                         } as TraceStreamEvent);
                     }
-                    prjdb.appendTraceDetail(reasoningNodeId, thinkDelta);
+                    prjdb.appendTraceDetail(thinkingState.currentReasoningNodeId, thinkDelta);
                     ctx.report({
                         type: "trace.detail.delta",
                         messageId: state.messageId,
-                        nodeId: reasoningNodeId,
+                        nodeId: thinkingState.currentReasoningNodeId,
                         delta: thinkDelta,
                     } as TraceStreamEvent);
                 }
@@ -143,11 +209,19 @@ export async function streamAgent(
                 const delta = part.text;
                 textBuf.push(delta);
                 deltaBuffer.push(delta);
-
-                // ✅ 关键修正：text-start 之前的 text-delta 是 thinking 内容，丢弃
-                if (!textStarted) {
+                // 添加详细日志
+                Logger.debug(
+                    `[PAC][${agentTraceNodeId}] text-delta 到达 ` +
+                    `(textStarted=${thinkingState.textStarted}, ` +
+                    `reasoningCount=${thinkingState.reasoningCount}, ` +
+                    `streamToMessage=${streamToMessage}, ` +
+                    `length=${delta.length})`,
+                );
+                // text-start 之前的 text-delta 是 thinking 内容，丢弃
+                if (!thinkingState.textStarted) {
                     Logger.debug(
-                        `[PAC] 丢弃 text-start 之前的 text-delta (thinking 内容, length=${delta.length})`,
+                        `[PAC][${agentTraceNodeId}] 丢弃 text-start 之前的 text-delta ` +
+                        `(reasoning #${thinkingState.reasoningCount}, thinking 内容, length=${delta.length})`,
                     );
                     continue;
                 }
@@ -193,14 +267,15 @@ export async function streamAgent(
                 } else {
                     // ⚠️ 异常情况：text-delta 在 text-start 之后，但没有 output 节点
                     Logger.warn(
-                        `[PAC] text-delta 无目标通道 (streamToMessage=${streamToMessage}, ` +
-                        `needOutputNode=${needOutputNode}, outputNodeId=${outputNodeId})`,
+                        `[PAC][${agentTraceNodeId}] text-delta 无目标通道 ` +
+                        `(streamToMessage=${streamToMessage}, needOutputNode=${needOutputNode}, ` +
+                        `outputNodeId=${outputNodeId})`,
                     );
                 }
             }
         }
     } catch (e) {
-        Logger.warn("[PAC] stream 处理失败:", e);
+        Logger.warn(`[PAC][${agentTraceNodeId}] stream 处理失败:`, e);
         throw e;
     }
 
@@ -210,17 +285,16 @@ export async function streamAgent(
     const now = Date.now();
 
     // Stream 完全结束后，关闭剩余节点
-    // 注意：reasoning 节点通常已在 text-start 时关闭，这里是兜底逻辑
-    if (reasoningNodeId && !textStarted) {
+    if (thinkingState.currentReasoningNodeId && !thinkingState.textStarted) {
         // 如果 text-start 未到达（异常情况），关闭 reasoning 节点
-        prjdb.patchTrace(reasoningNodeId, {
+        prjdb.patchTrace(thinkingState.currentReasoningNodeId, {
             status: "success",
             finishedAt: now,
         });
         ctx.report({
             type: "trace.end",
             messageId: state.messageId,
-            nodeId: reasoningNodeId,
+            nodeId: thinkingState.currentReasoningNodeId,
             patch: {
                 status: "success",
                 finishedAt: now,
@@ -244,7 +318,7 @@ export async function streamAgent(
         } as TraceStreamEvent);
     }
 
-    onNodeIds(reasoningNodeId, outputNodeId);
+    onNodeIds(thinkingState.currentReasoningNodeId, outputNodeId);
     return { text, usage };
 }
 

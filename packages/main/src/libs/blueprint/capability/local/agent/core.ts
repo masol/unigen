@@ -28,6 +28,7 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
             const state: PacRunState = {
                 messageId,
                 counters: new Map(),
+                thinkingStates: new Map(),  // ✅ 初始化 thinking 状态存储
             };
 
             const result = await executeAgent(
@@ -64,7 +65,11 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
                 role: "assistant",
                 content: "",
             });
-            state = { messageId, counters: new Map() };
+            state = {
+                messageId,
+                counters: new Map(),
+                thinkingStates: new Map(),  // ✅ 初始化
+            };
         }
 
         const result = await executeAgent(
