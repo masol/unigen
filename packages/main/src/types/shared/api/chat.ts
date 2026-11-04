@@ -47,6 +47,7 @@ export const listMessagesParamsSchema = z.object({
 
 export type ListMessagesParams = z.infer<typeof listMessagesParamsSchema>;
 
+export type SessionPatch = Partial<Omit<ChatSession, 'id'>> & Pick<ChatSession, 'id'>
 
 // ChatMessage相关类型:
 

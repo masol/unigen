@@ -10,8 +10,7 @@ import type { MarkdownMessage } from "$lib/components/markdown/type";
 import type { ChatMessage as PersistedChatMessage } from "@app/main/types";
 
 export type {
-    AgentIdentity, ChatSession, ChatStreamEvent, ListMessagesParams, ListSessionsParams, MessageStreamEvent, NewChatMessage,
-    NewChatSession, TraceAgentNode, TraceInputNode, TraceNode, TraceNodeKind, TraceOutputNode, TraceReasoningNode, TraceSourceNode, TraceStatus, TraceStepNode, TraceStreamEvent, TraceToolNode
+    AgentIdentity, ChatSession, ChatStreamEvent, ListMessagesParams, ListSessionsParams, MessageStreamEvent, NewChatMessage, NewChatSession, SessionPatch, TraceAgentNode, TraceInputNode, TraceNode, TraceNodeKind, TraceOutputNode, TraceReasoningNode, TraceSourceNode, TraceStatus, TraceStepNode, TraceStreamEvent, TraceToolNode
 } from "@app/main/types";
 
 /**

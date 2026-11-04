@@ -28,7 +28,7 @@
 
 /* ───────── Agent identity ───────── */
 
-export type { TraceAgentNode, TraceInputNode, TraceNodeKind, TraceOutputNode, TraceReasoningNode, TraceSourceNode, TraceStepNode, TraceToolNode } from "./api/chat.js";
+export type { SessionPatch, TraceAgentNode, TraceInputNode, TraceNodeKind, TraceOutputNode, TraceReasoningNode, TraceSourceNode, TraceStepNode, TraceToolNode } from "./api/chat.js";
 
 /* ───────── Trace tree ───────── */
 

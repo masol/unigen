@@ -71,6 +71,21 @@ const createSession = os
     });
 
 
+
+const updateSessTitle = os
+    .input(z.object({
+        id: z.string(),
+        title: z.string()
+    }))
+    .output(z.void())
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        const prjdb = PrjDB.ensure(ctx.project);
+        prjdb.updateSessionTitle(input.id, input.title);
+    });
+
+
+
 const listMessage = os
     .input(listMessagesParamsSchema)
     .output(z.array(chatMessageSchema))
@@ -97,6 +112,7 @@ export default {
     listSessions,
     deleteSession,
     createSession,
+    updateSessTitle,
     listMessage,
     newMessage
 }

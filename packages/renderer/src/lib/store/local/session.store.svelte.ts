@@ -5,7 +5,7 @@ import { hooks } from "$lib/utils/hook";
 import { DbKeys } from '$lib/utils/service/dbkeys';
 import log from 'electron-log/renderer';
 import { i18nStore } from '../i18n.svelte';
-import type { ChatSession } from './chat.types';
+import type { ChatSession, SessionPatch } from './chat.types';
 
 
 // ── 类型定义 ──
@@ -16,12 +16,9 @@ export interface TimeGroup {
     sessions: ChatSession[]
 }
 
-// ── 假数据工厂（待替换为 api() 调用）──
-
-async function fakeUpdateTitle(_id: string, _title: string): Promise<boolean> {
-    // TODO: 替换为 await api().chat.updateSessionTitle(id, title, true)
-    await new Promise((resolve) => setTimeout(resolve, 200))
-    return true
+/** 会话在列表中的排序键（降序排列，新的在前） */
+function sessionOrderKey(s: Pick<ChatSession, 'createdAt' | 'updatedAt'>): number {
+    return s.createdAt ?? s.updatedAt ?? 0
 }
 
 // ── SessionStore 类 ──
@@ -188,15 +185,23 @@ class SessionStore {
         }
     }
 
+    /**
+     * 增加session的message Count.不再通知主进程，而是在消息追加时自动更新。
+     * @param sessId 对应的sessionId
+     */
+    updMessageCount(cnt = 1, sessId?: string): void {
+        const sid = sessId ?? this.#activeSessionId;
+        const session = this.#sessions.find((s) => s.id === sid)
+        if (session) {
+            session.messageCount += cnt;
+        }
+    }
+
     async updateSessionTitle(id: string, newTitle: string): Promise<boolean> {
         log.debug(`[SessionStore] updateSessionTitle() called, id=${id}`)
         this.#isUpdating = true
         try {
-            const success = await fakeUpdateTitle(id, newTitle)
-            if (!success) {
-                log.error(`[SessionStore] updateSessionTitle failed, id=${id}`)
-                return false
-            }
+            await safeApi().project.updateSessTitle({ id, title: newTitle })
             const session = this.#sessions.find((s) => s.id === id)
             if (session) {
                 session.title = newTitle
@@ -213,6 +218,47 @@ class SessionStore {
     }
 
     // ── 本地状态操作（无异步、无状态机）──
+
+    /**
+     * Upsert 一条会话：
+     * - 已存在（同 id）→ 用 patch 就地合并字段（细粒度 mutation，$state 深度代理保证响应式）
+     * - 不存在 → 构造一条会话，按 createdAt 降序插入到正确位置
+     *
+     * 纯本地操作：不发请求、不改 activeSessionId。
+     * #sessions 变化后，#fuseIndex / filteredSessions / groupedSessions 会自动重算。
+     */
+    upsertSession(patch: SessionPatch): void {
+        const idx = this.#sessions.findIndex((s) => s.id === patch.id)
+
+        if (idx !== -1) {
+            Object.assign(this.#sessions[idx], patch)
+            log.debug(`[SessionStore] session merged, id=${patch.id}`)
+            return
+        }
+
+        // 补全排序所需的时间戳；其余字段由调用方保证完整
+        const now = Date.now()
+        const incoming = {
+            ...patch,
+            createdAt: patch.createdAt ?? now,
+            updatedAt: patch.updatedAt ?? now,
+        } as ChatSession
+
+        const incomingKey = sessionOrderKey(incoming)
+
+        // 列表按 key 降序：插在第一个比它「旧」的元素之前
+        const insertAt = this.#sessions.findIndex((s) => sessionOrderKey(s) < incomingKey)
+
+        if (insertAt === -1) {
+            this.#sessions.push(incoming)
+        } else {
+            this.#sessions.splice(insertAt, 0, incoming)
+        }
+
+        log.info(
+            `[SessionStore] session inserted, id=${patch.id}, at=${insertAt === -1 ? 'tail' : insertAt}`,
+        )
+    }
 
     setSearchQuery(value: string): void {
         this.#searchQuery = value

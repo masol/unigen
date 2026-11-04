@@ -111,6 +111,7 @@ class MessageStore {
             msg.id = id;
 
         this.messages = [...this.messages, msg];
+        sessionStore.updMessageCount();
         return msg;
     }
 
