@@ -1,10 +1,11 @@
 import DynEntry from '$lib/components/dyn/Entry.svelte';
+import SessionHeader from '$lib/components/leftside/session/session.header.svelte';
+import SessionManager from '$lib/components/leftside/session/session.list.svelte';
 import type { Step } from '$lib/components/ui/walkthrough/ctx';
 import type { BlueprintFilters, InfoCardView, ProjectActivityData, TargetOption } from '@app/main/types';
 import { layoutStore } from '../layout.svelte';
 import type { IValueService } from './type';
 import { ValueService } from './value-service.svelte';
-
 
 function mergeInfocards(data: ProjectActivityData): InfoCardView[] {
     return [
@@ -71,6 +72,20 @@ export class ProjectActivity {
      */
     readonly mediaFields: string[];
 
+
+    /**
+     * 为项目区添加内建activity.
+     */
+    private addInternalActivity() {
+        layoutStore.addActivity({
+            id: "session-manager",
+            icon: "IconMessageChatbot",
+            label: "会话管理",
+            component: SessionManager,
+            header: SessionHeader,
+        })
+    }
+
     constructor(data: ProjectActivityData) {
         this.clearTop();
         this.icon = data.icon
@@ -112,6 +127,7 @@ export class ProjectActivity {
 
         this.service = new ValueService();
 
+        this.addInternalActivity();
         data.activities.forEach(act => {
             layoutStore.addActivity({
                 id: act.id,

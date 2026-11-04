@@ -127,20 +127,7 @@ export type TracePatch = Partial<{
 /**
  * 聊天会话 (sessions 表)
  */
-export interface ChatSession {
-    id: string;
-    title: string;
-    /** 用户是否手动修改过标题；一旦为 true，自动标题逻辑不再触发 */
-    titleManual: boolean;
-    /** 会话创建时间 epoch ms */
-    createdAt: number;
-    /** 会话属性最后变更 epoch ms (改标题、消息到达等) */
-    updatedAt: number;
-    /** 最近一条消息到达时间 epoch ms；用于按活跃度排序 */
-    lastMessageAt?: number;
-    /** 累计消息数（冗余以免每次扫表） */
-    messageCount: number;
-}
+export type { ChatSession } from "./api/chat.js";
 
 /**
  * 持久化消息 (messages 表)
@@ -189,13 +176,8 @@ export interface NewChatMessage {
 
 /* ───────── 查询参数 ───────── */
 
-export interface ListSessionsParams {
-    pageIndex?: number;
-    pageSize?: number;
-    /** 默认 lastMessageAt (最近活跃优先) */
-    orderBy?: "lastMessageAt" | "updatedAt" | "createdAt";
-    orderDir?: "asc" | "desc";
-}
+export type { ListSessionsParams } from "./api/chat.js";
+
 
 export interface ListMessagesParams {
     sessionId: string;

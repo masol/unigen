@@ -8,8 +8,6 @@ import { DbKeys } from '$lib/utils/service/dbkeys';
 import type { ProjectActivityData, RunState } from "@app/main/types";
 import { COMMON_ORPC_ERROR_DEFS, ORPCError } from "@orpc/client";
 import Logger from "electron-log/renderer";
-import pMap from 'p-map';
-import { getErrorMessage } from 'radashi';
 import { toast } from "svelte-sonner";
 import { push } from "svelte-spa-router";
 import { pluginStore } from "./plugin.svelte";
@@ -137,19 +135,6 @@ class ProjectStore {
         }
     }
 
-    private async setupRapi(apis: string[]): Promise<void> {
-        await pMap(
-            apis,
-            async (api) => {
-                if (api === 'icon') {
-                    await this.setupIconRapi();
-                } else {
-                    Logger.error(`[setupRapi] 未支持的反向API:${api}`)
-                }
-            },
-            { concurrency: 4 }
-        )
-    }
 
     // 需要确保本函数在path设置之前执行，否则可能触发主控台报错。
     private async setupUI(activityData: ProjectActivityData) {
@@ -164,11 +149,6 @@ class ProjectStore {
                 size: "xl2",
                 message: status,
             })
-        }
-        const api = activityData.api;
-        if (api && Array.isArray(api)) {
-            // 脱离执行链，注册api.
-            this.setupRapi(api).catch(e => Logger.error(`[setupRapi] 注册反向API时发生错误：${getErrorMessage(e)}`))
         }
         this.#activity = new ProjectActivity(activityData);
     }

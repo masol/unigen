@@ -53,11 +53,6 @@ export const projectActivityDataSchema = z.object({
     statusText: z.string(),
     // 欢迎字符串。如果无内容，检查类型目录下welcome.md，如果存在，则返回其内容。
     welcome: z.string().optional(),
-    /**
-     * 需要客户端反向注入的api.
-     * 当前有效值只有 "icon"。
-     */
-    api: z.array(projectApiSchema).optional(),
     activities: z.array(leftSidebarItemJSONSchema),
     header: z.object({
         title: z.string(),

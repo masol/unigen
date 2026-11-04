@@ -8,9 +8,7 @@ import SettingPanel from './setting.svelte'
 
 const bottomActivities: LeftSidebarItem[] = [
     { id: 'account', icon: "IconUserCircle", label: '账户', component: Fallback, header: null },
-    { id: 'settings', icon: "IconSettings", label: '设置', component: SettingPanel, header: SettingHeader },
-    // { id: 'InputManagerPanel', icon: IconUserCircle as unknown as Component<any>, label: '输入管理', component: InputManagerPanel, header: null },
-
+    { id: 'settings', icon: "IconSettings", label: '设置', component: SettingPanel, header: SettingHeader }
 ]
 
 export default bottomActivities;
