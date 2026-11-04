@@ -9,6 +9,7 @@
 //     读取时对缺失父节点或非法关系做容错 (挂到根)，保证返回最小可用且结构完整。
 //   - FK 名义声明；运行期 pragma foreign_keys = OFF，故删除做手工级联。
 
+import { ConstUntitled } from "$libs/const.js";
 import {
     messages,
     sessions,
@@ -57,7 +58,7 @@ export function createSession(
 ): string {
     const id = input.id ?? crypto.randomUUID();
     const now = input.createdAt ?? Date.now();
-    const title = input.title ?? "";
+    const title = input.title ?? ConstUntitled;
     // 显式指定了非空标题视为"手动"，否则置 false 等自动标题
     const titleManual = input.titleManual ?? (title.length > 0);
     db.insert(sessions)

@@ -28,85 +28,13 @@
 
 /* ───────── Agent identity ───────── */
 
-export interface AgentIdentity {
-    id: string;
-    name: string;
-    /** providerId::modelId 格式，例如 "openai::gpt-4o" */
-    model?: string;
-}
+export type { TraceAgentNode, TraceInputNode, TraceNodeKind, TraceOutputNode, TraceReasoningNode, TraceSourceNode, TraceStepNode, TraceToolNode } from "./api/chat.js";
 
 /* ───────── Trace tree ───────── */
 
-export type TraceStatus = "pending" | "running" | "success" | "error";
+import type { AgentIdentity, TraceNode, TraceStatus } from './api/chat.js';
 
-export type TraceNodeKind =
-    | "agent"
-    | "reasoning"
-    | "tool"
-    | "source"
-    | "step"
-    | "input"
-    | "output";
-
-interface TraceNodeBase {
-    id: string;
-    status: TraceStatus;
-    /** 单行标题 (动词短语) */
-    title: string;
-    /** 次要文本：计数、耗时等 */
-    description?: string;
-    /** 开始时间 epoch ms */
-    startedAt?: number;
-    /** 结束时间 epoch ms */
-    finishedAt?: number;
-    /** markdown 详细内容 */
-    detail?: string;
-    /** 是否为流式节点（默认 true）；false 表示瞬间完整，无需 end */
-    streaming?: boolean;
-}
-
-export interface TraceAgentNode extends TraceNodeBase {
-    kind: "agent";
-    agent: AgentIdentity;
-    children: TraceNode[];
-}
-
-export interface TraceReasoningNode extends TraceNodeBase {
-    kind: "reasoning";
-}
-
-export interface TraceToolNode extends TraceNodeBase {
-    kind: "tool";
-    toolName: string;
-    errorText?: string;
-}
-
-export interface TraceSourceNode extends TraceNodeBase {
-    kind: "source";
-    url: string;
-}
-
-export interface TraceStepNode extends TraceNodeBase {
-    kind: "step";
-    icon?: string;
-}
-
-export interface TraceInputNode extends TraceNodeBase {
-    kind: "input";
-}
-
-export interface TraceOutputNode extends TraceNodeBase {
-    kind: "output";
-}
-
-export type TraceNode =
-    | TraceAgentNode
-    | TraceReasoningNode
-    | TraceToolNode   // 预留：通用步骤，语义待定
-    | TraceSourceNode // 预留：搜索结果、文档引用等场景
-    | TraceStepNode
-    | TraceInputNode
-    | TraceOutputNode;
+export { AgentIdentity, TraceNode, TraceStatus };
 
 /**
  * Trace 字段增量更新 patch。
@@ -122,6 +50,7 @@ export type TracePatch = Partial<{
     finishedAt: number;
 }>;
 
+
 /* ───────── 持久化记录 ───────── */
 
 /**
@@ -134,18 +63,8 @@ export type { ChatSession } from "./api/chat.js";
  *
  * 注意: `traces` 不是列，仅在 getMessage/listMessages 带 withTraces 时附带返回。
  */
-export interface ChatMessage {
-    id: string;
-    sessionId: string;
-    role: "user" | "assistant";
-    content: string;
-    isError?: boolean;
-    /** 消息发生时间 epoch ms；用作会话内自然排序键 */
-    timestamp: number;
-    agent?: AgentIdentity;
-    /** 可选：树形 trace 列表（仅查询时按需填充） */
-    traces?: TraceNode[];
-}
+export type { ChatMessage } from "./api/chat.js";
+
 
 /**
  * 新建会话的输入
@@ -163,35 +82,13 @@ export interface NewChatSession {
  * 新建/更新消息的输入
  * 以 id 幂等：若存在则覆盖主体字段
  */
-export interface NewChatMessage {
-    id?: string;
-    sessionId: string;
-    role: "user" | "assistant";
-    content: string;
-    isError?: boolean;
-    /** 不传则取 Date.now() */
-    timestamp?: number;
-    agent?: AgentIdentity;
-}
+export type { NewChatMessage } from "./api/chat.js";
+
 
 /* ───────── 查询参数 ───────── */
 
-export type { ListSessionsParams } from "./api/chat.js";
+export type { ListMessagesParams, ListSessionsParams } from "./api/chat.js";
 
-
-export interface ListMessagesParams {
-    sessionId: string;
-    /** 是否同时加载 traces 树 */
-    withTraces?: boolean;
-    /** 时间游标: 仅返回 timestamp < before */
-    before?: number;
-    /** 时间游标: 仅返回 timestamp > after */
-    after?: number;
-    /** 默认 500；用于防止超大历史一次性拉爆 */
-    limit?: number;
-    /** 默认 asc (按时间升序，自然对话流) */
-    orderDir?: "asc" | "desc";
-}
 
 export interface GetMessageOptions {
     withTraces?: boolean;

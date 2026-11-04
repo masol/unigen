@@ -1,5 +1,8 @@
 
 export const DbKeys = {
+    sessionId: "sessionId", // 指示当前打开的sessionId。可以为空，此时新建。
+
+    // deprecated:
     // input-manangers.
     scripts: "script",
     synopsis: "synopsis",

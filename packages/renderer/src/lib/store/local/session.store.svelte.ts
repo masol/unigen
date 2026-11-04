@@ -1,6 +1,8 @@
 // packages/renderer/src/lib/store/local/session.store.svelte.ts
+import { safeApi } from '$lib/utils/api';
 import { PinyinFuseSearch } from '$lib/utils/fuse';
 import { hooks } from "$lib/utils/hook";
+import { DbKeys } from '$lib/utils/service/dbkeys';
 import log from 'electron-log/renderer';
 import { i18nStore } from '../i18n.svelte';
 import type { ChatSession } from './chat.types';
@@ -16,43 +18,10 @@ export interface TimeGroup {
 
 // ── 假数据工厂（待替换为 api() 调用）──
 
-async function fakeFetchAllSessions(): Promise<ChatSession[]> {
-    // TODO: 替换为 await api().chat.listSessions()
-    // 对应主进程 PrjDB.listSessions(params?)，一次性返回全部
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    return []
-}
-
-async function fakeCreateSession(): Promise<ChatSession> {
-    // TODO: 替换为 await api().chat.createSession({ title: '新对话' })
-    // 对应主进程 PrjDB.createSession(input?) → id，然后用 getSession(id) 取回完整对象
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    const now = Date.now()
-    return {
-        id: `session-${now}`,
-        title: '新对话',
-        titleManual: false,
-        createdAt: now,
-        updatedAt: now,
-        messageCount: 0,
-    }
-}
-
-async function fakeDeleteSession(_id: string): Promise<boolean> {
-    // TODO: 替换为 await api().chat.deleteSession(id)
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    return true
-}
-
 async function fakeUpdateTitle(_id: string, _title: string): Promise<boolean> {
     // TODO: 替换为 await api().chat.updateSessionTitle(id, title, true)
     await new Promise((resolve) => setTimeout(resolve, 200))
     return true
-}
-
-async function fakeClearAll(): Promise<void> {
-    // TODO: 替换为 await api().chat.clearAllSessions()
-    await new Promise((resolve) => setTimeout(resolve, 500))
 }
 
 // ── SessionStore 类 ──
@@ -64,8 +33,6 @@ class SessionStore {
     #sessions = $state<ChatSession[]>([])
     #activeSessionId = $state<string | undefined>(undefined)
     #searchQuery = $state('')
-    // 多选集合；Svelte 5 原生支持响应式 Set
-    #selectedIds = $state(new Set<string>())
 
     // 异步状态机 - init（唯一需要完整状态机的操作）
     #isLoadingInit = $state(false)
@@ -76,14 +43,13 @@ class SessionStore {
     #isCreating = $state(false)
     #isDeleting = $state(false)
     #isUpdating = $state(false)
-    #isClearing = $state(false)
 
     constructor() {
         log.info('[SessionStore] initialized')
 
         hooks.hook("project:loaded", async () => {
             //项目加载完毕，开始加载其session list.
-            await this.loadAllSession();
+            await this.reload();
         })
     }
 
@@ -91,7 +57,6 @@ class SessionStore {
     get sessions() { return this.#sessions }
     get activeSessionId() { return this.#activeSessionId }
     get searchQuery() { return this.#searchQuery }
-    get selectedIds() { return this.#selectedIds }
 
     get isLoadingInit() { return this.#isLoadingInit }
     get errorInit() { return this.#errorInit }
@@ -99,12 +64,10 @@ class SessionStore {
     get isCreating() { return this.#isCreating }
     get isDeleting() { return this.#isDeleting }
     get isUpdating() { return this.#isUpdating }
-    get isClearing() { return this.#isClearing }
 
     // ── 派生状态 ──
 
     readonly hasSearch = $derived(this.#searchQuery.trim().length > 0)
-    readonly hasMultiSelect = $derived(this.#selectedIds.size > 0)
 
     /**
      * Fuse 索引：只在 #sessions 变化时重建；
@@ -157,16 +120,18 @@ class SessionStore {
     // ── 主要 Action（完整状态机）──
 
     /** 加载全量会话；重复调用等于刷新 */
-    private async loadAllSession(): Promise<void> {
+    private async reload(): Promise<void> {
         log.debug('[SessionStore] init() called')
         this.#isLoadingInit = true
         this.#errorInit = null
 
         try {
-            const all = await fakeFetchAllSessions()
-            this.#sessions = all
+            const sessInfo = await safeApi().project.listSessions();
+            console.log("load all session...", sessInfo)
+            this.#sessions = sessInfo.sesses;
             this.#lastUpdatedInit = Date.now()
-            log.info(`[SessionStore] init completed, loaded ${all.length} sessions`)
+            await this.onSessionChange(sessInfo.active);
+            log.info(`[SessionStore] init completed, loaded ${sessInfo.sesses.length} sessions`)
         } catch (err) {
             this.#errorInit = err instanceof Error ? err.message : String(err)
             log.error('[SessionStore] init() failed', err)
@@ -175,15 +140,22 @@ class SessionStore {
         }
     }
 
+    private async onSessionChange(newId: string): Promise<void> {
+        this.#activeSessionId = newId;
+        await hooks.callHook("session:changed");
+        log.debug("session:changed hook over")
+    }
+
     // ── 次要 Action（简化状态机）──
 
     async createSession(): Promise<string | null> {
         log.debug('[SessionStore] createSession() called')
         this.#isCreating = true
         try {
-            const newSession = await fakeCreateSession()
+            const newSession = await safeApi().project.createSession();
             this.#sessions = [newSession, ...this.#sessions]
-            this.setActiveSession(newSession.id)
+            // 已经保存为当前激活session了。
+            await this.onSessionChange(newSession.id);
             log.info(`[SessionStore] session created, id=${newSession.id}`)
             return newSession.id
         } catch (err) {
@@ -198,38 +170,19 @@ class SessionStore {
         log.debug(`[SessionStore] deleteSession() called, id=${id}`)
         this.#isDeleting = true
         try {
-            const success = await fakeDeleteSession(id)
-            if (!success) {
-                log.error(`[SessionStore] deleteSession failed, id=${id}`)
-                return false
-            }
+            await safeApi().project.deleteSession(id);
 
             this.#sessions = this.#sessions.filter((s) => s.id !== id)
-            this.#selectedIds.delete(id)
-            if (this.#activeSessionId === id) {
-                this.#activeSessionId = this.#sessions[0]?.id
+            if (this.#sessions.length === 0) {
+                await this.reload();
+            } else if (this.#activeSessionId === id) {
+                await this.onSessionChange(this.#sessions[0].id);
             }
             log.info(`[SessionStore] session deleted, id=${id}`)
             return true
         } catch (err) {
             log.error(`[SessionStore] deleteSession() failed, id=${id}`, err)
             return false
-        } finally {
-            this.#isDeleting = false
-        }
-    }
-
-    async deleteMultiple(ids: string[]): Promise<number> {
-        log.debug(`[SessionStore] deleteMultiple() called, count=${ids.length}`)
-        this.#isDeleting = true
-        try {
-            let deleted = 0
-            for (const id of ids) {
-                if (await this.deleteSession(id)) deleted++
-            }
-            this.#selectedIds.clear()
-            log.info(`[SessionStore] deleted ${deleted}/${ids.length} sessions`)
-            return deleted
         } finally {
             this.#isDeleting = false
         }
@@ -259,53 +212,23 @@ class SessionStore {
         }
     }
 
-    async clearAllSessions(): Promise<void> {
-        log.debug('[SessionStore] clearAllSessions() called')
-        this.#isClearing = true
-        try {
-            await fakeClearAll()
-            this.#sessions = []
-            this.#activeSessionId = undefined
-            this.#selectedIds.clear()
-            log.info('[SessionStore] all sessions cleared')
-        } catch (err) {
-            log.error('[SessionStore] clearAllSessions() failed', err)
-            throw err
-        } finally {
-            this.#isClearing = false
-        }
-    }
-
     // ── 本地状态操作（无异步、无状态机）──
 
     setSearchQuery(value: string): void {
         this.#searchQuery = value
-        // 搜索上下文变化时清空多选，避免选中态指向不可见项
-        if (this.#selectedIds.size > 0) this.#selectedIds.clear()
     }
 
     clearSearch(): void {
         this.setSearchQuery('')
     }
 
-    setActiveSession(id: string): void {
+    async setActiveSession(id: string): Promise<void> {
         log.debug(`[SessionStore] setActiveSession() called, id=${id}`)
-        this.#activeSessionId = id
-        // TODO: 持久化：await api().chat.setActiveSession(id)
-    }
-
-    toggleSelect(id: string): void {
-        if (this.#selectedIds.has(id)) this.#selectedIds.delete(id)
-        else this.#selectedIds.add(id)
-    }
-
-    selectAll(): void {
-        // 只全选当前可见（过滤后）的会话
-        for (const s of this.filteredSessions) this.#selectedIds.add(s.id)
-    }
-
-    clearSelection(): void {
-        this.#selectedIds.clear()
+        await safeApi().project.set({
+            key: DbKeys.sessionId,
+            value: id
+        })
+        await this.onSessionChange(id);
     }
 }
 

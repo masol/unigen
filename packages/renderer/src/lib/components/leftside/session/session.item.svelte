@@ -1,6 +1,5 @@
-<!-- packages/renderer/src/route/featured/leftside/session/session.item.svelte -->
+<!-- packages/renderer/src/lib/components/leftside/session/session.item.svelte -->
 <script lang="ts">
-  import { Checkbox } from "$lib/components/ui/checkbox";
   import { i18nStore } from "$lib/store/i18n.svelte";
   import type { ChatSession } from "$lib/store/local/chat.types";
   import { sessionStore } from "$lib/store/local/session.store.svelte";
@@ -14,7 +13,6 @@
   let inputRef: HTMLInputElement | undefined = $state();
 
   const isActive = $derived(sessionStore.activeSessionId === session.id);
-  const isSelected = $derived(sessionStore.selectedIds.has(session.id));
 
   function formatRelativeTime(timestamp: number): string {
     return i18nStore.getDayjs()(timestamp).fromNow();
@@ -61,16 +59,6 @@
       : "border-transparent bg-background hover:border-border/50 hover:bg-accent/40",
   ]}
 >
-  {#if sessionStore.hasMultiSelect}
-    <div class="pl-3">
-      <Checkbox
-        checked={isSelected}
-        onCheckedChange={() => sessionStore.toggleSelect(session.id)}
-        class="size-4"
-      />
-    </div>
-  {/if}
-
   <button
     class="flex min-w-0 flex-1 flex-col gap-1 px-3 py-3 text-left"
     onclick={() => sessionStore.setActiveSession(session.id)}
@@ -118,11 +106,13 @@
     </div>
   </button>
 
-  {#if !sessionStore.hasMultiSelect}
+  {#if !isEditing}
     <div
-      class="flex shrink-0 gap-1 pr-2 opacity-0 transition-opacity duration-200 group-hover/item:opacity-100"
+      class="flex shrink-0 gap-1 pr-2 opacity-0 transition-opacity duration-200 group-hover/item:opacity-100 group-focus-within/item:opacity-100"
     >
       <button
+        type="button"
+        aria-label="重命名会话"
         class="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground"
         onclick={(e) => {
           e.stopPropagation();
@@ -132,6 +122,8 @@
         <IconEdit class="size-3.5" stroke={1.5} />
       </button>
       <button
+        type="button"
+        aria-label="删除会话"
         class="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-destructive/10 hover:text-destructive"
         onclick={(e) => {
           e.stopPropagation();

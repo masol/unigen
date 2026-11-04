@@ -2,6 +2,8 @@
 import { projectStore } from "$lib/store/project.svelte";
 import { safeApi } from "$lib/utils/api";
 import evtbus from "$lib/utils/evtbus";
+import { hooks } from "$lib/utils/hook";
+import log from 'electron-log/renderer';
 import Logger from "electron-log/renderer.js";
 import pTimeout, { TimeoutError } from "p-timeout";
 import { toast } from "svelte-sonner";
@@ -12,6 +14,7 @@ import type {
     ChatStreamEvent,
     TraceNode
 } from "./chat.types";
+import { sessionStore } from "./session.store.svelte";
 
 const RUNCOMMAND_END_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 1 day
 
@@ -46,13 +49,16 @@ class MessageStore {
                 });
             }
         });
+        hooks.hook("session:changed", async () => {
+            //active session变化了，开始加载其message list.
+            await this.reload();
+        })
     }
 
     // ── Public reactive state ───────────────────────────────────
     messages = $state<ChatMessage[]>([]);
     isLoading = $state(false);
     isAborting = $state(false);
-    sessionId = $state<string | undefined>(undefined);
     collapsedMessages = $state<Record<string, boolean>>({});
 
     hasMessages = $derived(this.messages.length > 0);
@@ -71,13 +77,39 @@ class MessageStore {
     /** 当前正在流式接收的助手消息 id */
     #activeAssistantId: string | null = null;
 
+    private async reload(): Promise<void> {
+        this.messages = [];
+        log.debug('[MessageStore] reload() called')
+        this.isLoading = true
+
+        try {
+            this.messages = await safeApi().project.listMessage({
+                sessionId: sessionStore.activeSessionId,
+                withTraces: true
+            })
+            log.info(`[MessageStore] reload completed, loaded ${this.messages.length} messages`)
+        } catch (err) {
+            const errMessage = err instanceof Error ? err.message : String(err);
+            toast.error(errMessage);
+            log.error('[MessageStore] reload() failed', err)
+        } finally {
+            this.isLoading = false
+        }
+    }
+
     // ── Message CRUD ────────────────────────────────────────────
-    addMessage(partial: Omit<ChatMessage, "id" | "timestamp">): ChatMessage {
+    async addMessage(partial: Omit<ChatMessage, "id" | "timestamp">): Promise<ChatMessage> {
         const msg: ChatMessage = {
             ...partial,
+            sessionId: sessionStore.activeSessionId,
             id: newId(),
             timestamp: Date.now(),
         };
+
+        const id = await safeApi().project.newMessage(msg);
+        if (id !== msg.id)
+            msg.id = id;
+
         this.messages = [...this.messages, msg];
         return msg;
     }
@@ -86,7 +118,6 @@ class MessageStore {
         this.messages = [];
         this.collapsedMessages = {};
         this.#activeAssistantId = null;
-        this.sessionId = undefined;
     }
 
     deleteMessage(id: string) {
@@ -307,7 +338,7 @@ class MessageStore {
 
         try {
             stream = (await safeApi().project.runCommand(
-                { msg: userMessage, seq, sessId: this.sessionId ?? "default" },
+                { msg: userMessage, seq, sessId: sessionStore.activeSessionId },
                 { signal },
             )) as AsyncGenerator<ChatStreamEvent>;
 

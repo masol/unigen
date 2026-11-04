@@ -4,9 +4,9 @@
   import { settingsPanelStore } from "./settingStore.svelte";
 </script>
 
-<div class="shrink-0 px-1 pb-2">
+<div class="flex h-full w-full min-w-0 items-center gap-1.5 px-1">
   <div
-    class="flex items-center gap-2 rounded-xl border border-border/50 bg-background px-3 py-1.5"
+    class="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-border/50 bg-background px-2 transition-all duration-200 focus-within:border-primary/40"
   >
     <IconSearch class="size-4 shrink-0 text-muted-foreground" />
     <input
