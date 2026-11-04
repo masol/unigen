@@ -149,12 +149,11 @@ function countSub(c: CompiledPacAgent): number {
 export { buildAgentTool, PacAgent, type PacRunState } from "./agent/index.js";
 export { buildAgentId, compilePacAgent, createCompileCache, resolvePacPath } from "./compiler.js";
 export {
-    appendHistoryMessage, BI_PREFIX, buildHistoryId,
-    classifyVars, clearHistory, getHistoryStore,
-    HISTORY_VAR, INPUT_VAR, loadHistoryMessages, loadHistoryVar,
-    loadInputVar, loadStorageVars, registerHistoryStore,
-    SKILL_DOC_VAR, STORAGE_PREFIX, SYSTEM_FAILURE_MARKER, TOOL_DOC_VAR,
-    type HistoryStore
+    BI_PREFIX,
+    classifyVars,
+    HISTORY_VAR, INPUT_VAR,
+    loadInputVar, loadStorageVars,
+    SKILL_DOC_VAR, STORAGE_PREFIX, TOOL_DOC_VAR
 } from "./context/index.js";
 export { loadExternalTools } from "./loader.js";
 export { connectLocalMcp, probeMcpMetadata, type LocalMcpClient } from "./mcp.js";

@@ -3,7 +3,7 @@ import Logger from "electron-log/main.js";
 import Handlebars, { type TemplateDelegate } from "handlebars";
 import {
     HISTORY_VAR, INPUT_VAR, SKILL_DOC_VAR, TOOL_DOC_VAR,
-    loadHistoryVar, loadInputVar, loadStorageVars,
+    loadInputVar, loadStorageVars,
 } from "./context/index.js";
 import type { CompiledPacAgent, JsonValue } from "./type.js";
 
@@ -115,7 +115,7 @@ async function buildContext(
         } else if (name === INPUT_VAR) {
             biVars[name] = await loadInputVar(ctx, inputs, allowBodyFallback);
         } else if (name === HISTORY_VAR) {
-            biVars[name] = await loadHistoryVar(ctx, c.id, c.settings.history);
+            // biVars[name] = await loadHistoryVar(ctx, c.id, c.settings.history);
         } else {
             Logger.warn(`[PAC] ${c.sourcePath}: 未知内置变量 ${name},渲染为空串`);
             biVars[name] = "";

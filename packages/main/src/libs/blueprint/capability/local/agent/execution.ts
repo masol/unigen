@@ -16,7 +16,7 @@ import type { CompiledPacAgent, JsonValue, LocalMcpConfig } from "../type.js";
 import { MessageDeltaBuffer } from "./buffer.js";
 import { createToolCallbacks } from "./callbacks.js";
 import { generateAgent, streamAgent } from "./executor.js";
-import { loadPriorMessages, saveConversation } from "./history.js";
+import { loadPriorMessages } from "./history.js";
 import {
     createInputNode,
     finishAgentTrace,
@@ -177,7 +177,15 @@ export async function executeAgent(
     const userText = await buildUserPrompt(compiled, ctx, inputs, effectiveDefaults, isRoot);
     const userMessage: ModelMessage = { role: "user", content: userText };
 
-    const prior = await loadPriorMessages(ctx, compiled.id, settings.history, histEnabled);
+    // 历史来自 PrjDB.messages,排除本轮两条占位 (当前 user / 正在生成的 assistant)
+    const prior = await loadPriorMessages(
+        ctx,
+        compiled.id,
+        settings.history,
+        histEnabled,
+        isRoot,
+        [ctx.msgId, state.messageId],
+    );
     const messages: ModelMessage[] = [...prior, userMessage];
 
     ctx.debug(
@@ -351,19 +359,10 @@ export async function executeAgent(
     }
 
     if (isRoot) {
+        // Root agent: 结束消息并通过 prjdb.finishMessage 持久化内容 / isError / agent.
+        // 子 agent: 不写 messages 表,inputs/output 已通过 trace 节点保留.
         finishRootMessage(ctx, prjdb, state, finalText, usage, agentIdentity, failure);
     }
-
-    await saveConversation(
-        ctx,
-        compiled.id,
-        userMessage,
-        finalText,
-        failure,
-        histEnabled,
-        stepPath,
-        compiled.name,
-    );
 
     if (failure !== undefined) {
         throw failure;
