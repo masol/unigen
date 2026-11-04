@@ -243,6 +243,7 @@ export const chatMessageSchema = z.object({
     sessionId: z.string(),
     role: z.enum(["user", "assistant"]),
     content: z.string(),
+    files: z.array(z.string()).optional(),
     isError: z.boolean().optional(),
     /** 消息发生时间 epoch ms；用作会话内自然排序键 */
     timestamp: z.number(),

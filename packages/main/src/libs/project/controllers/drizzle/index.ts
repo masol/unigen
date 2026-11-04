@@ -55,6 +55,7 @@ import {
     appendTraceDetail,
     createSession,
     deleteMessage,
+    deleteMessagesAfter,
     deleteSession,
     finishMessage,
     getMessage,
@@ -66,7 +67,7 @@ import {
     saveMessage,
     saveTraces,
     updateSessionTitle,
-    upsertTrace,
+    upsertTrace
 } from './chat.js';
 import { getContent, setContent } from './content.js';
 import {
@@ -326,5 +327,12 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
 
     listTracesByMessage(messageId: string): TraceNode[] {
         return listTracesByMessage(this.ensureDB(), messageId);
+    }
+
+    /**
+ * 删除指定时间戳之后的所有消息及 traces (rerun 场景)。
+ */
+    deleteMessagesAfter(sessionId: string, fromTs: number): void {
+        deleteMessagesAfter(this.ensureDB(), sessionId, fromTs);
     }
 }

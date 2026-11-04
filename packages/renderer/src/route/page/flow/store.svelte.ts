@@ -761,8 +761,8 @@ export class FlowStore {
         layoutStore.openPanel("right");
         rightPanelStore.activeTab = "assistant";
         const content = `/run --plan=${this.id}`;
-        messageStore.addMessage({ role: "user", content });
-        await messageStore.AIResponse(content);
+        const userMsg = messageStore.addMessage({ role: "user", content });
+        await messageStore.AIResponse(userMsg);
     }
 
     /**

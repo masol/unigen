@@ -17,12 +17,10 @@ export type {
  * UI 层 ChatMessage。
  *
  * - 持久化字段来自 PersistedChatMessage，但 sessionId 在渲染端可选
- *   (极端错误路径下可能在未建立 session 前就产生错误消息)。
  * - 结构性兼容 MarkdownMessage，可直接喂给 markdown 渲染组件。
  * - `streaming` 为纯 UI 态，不持久化。
  */
 export type ChatMessage = MarkdownMessage &
-    Omit<PersistedChatMessage, "sessionId"> & {
-        sessionId?: string;
+    PersistedChatMessage & {
         streaming?: boolean;
-    };  
+    };

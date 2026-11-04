@@ -1,7 +1,7 @@
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { IProjectContext } from '$libs/project/type.js';
 import { CommandInfo, IRunnerContext } from '$types/blueprint/context.js';
-import type { ChatStreamEvent } from '$types/index.js';
+import type { ChatStreamEvent, RunnerParam } from '$types/index.js';
 import log from 'electron-log/main.js';
 import { loadFunctor } from './capability/index.js';
 import { ICapaFunctor } from './capability/type.js';
@@ -14,6 +14,9 @@ export class RunnerContext implements IRunnerContext {
     readonly prjdb: PrjDB;
     readonly seq: number;
     readonly store: Record<string, unknown> = {};
+    readonly files: string[];
+    readonly msgId: string;
+    readonly sessId: string
 
     cmd: CommandInfo = { isCommand: false, body: "" };
     fnReport: ((evt: ChatStreamEvent) => void) | null = null;
@@ -22,7 +25,11 @@ export class RunnerContext implements IRunnerContext {
     private readonly abortController: AbortController | null = null;
     #isForceKilled: boolean = false;
 
-    constructor(readonly sessId: string, prj: IProjectContext, signal?: AbortSignal | null, seq?: number) {
+    constructor(command: RunnerParam, prj: IProjectContext, signal?: AbortSignal | null, seq?: number) {
+        this.files = command.files ?? [];
+        this.msgId = command.msgId;
+        this.sessId = command.sessId;
+        
         this.seq = seq ? seq : runSeq--;
         this.prj = prj;
         this.prjdb = PrjDB.ensure(prj);

@@ -1,19 +1,14 @@
-import { localTypeName } from "$libs/blueprint/capability/is.js";
 import { RunnerContext } from "$libs/blueprint/context.js";
 import { CapaRunner, CmdRunner } from "$libs/blueprint/runner/index.js";
-import { configService } from "$libs/store/index.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import { appLife } from "$libs/utils/tapable/applife.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import type { ChatStreamEvent, RunnerParam, RunState } from "$types/index.js";
 import { AsyncLocalStorage } from "async_hooks";
-import { randomUUID } from "crypto";
 import Logger from "electron-log/main.js";
 import { getErrorMessage } from "radashi";
-import { ProjectDbKeys } from "../../utils/db/dbkeys.js";
 import type { IProjectContext } from "../type.js";
 import { BaseProjectController } from "./base.js";
-import { PrjDB } from "./drizzle/index.js";
 
 
 const runnerContextTLS = new AsyncLocalStorage<IRunnerContext>();
@@ -77,11 +72,12 @@ export class PrjRunner extends BaseProjectController {
         if (this.#cmdrunner) {
             throwPrecondition("已经有一个命令在执行中，每个任务只能并行执行一个命令。并行命令，请自行撰写代码能力，并执行之。")
         }
-        const sessId = command.sessId ?? randomUUID();
-        if (sessId !== command.sessId) {
-            // @todo:这里需要持久化新sess.
-        }
-        const ctx = new RunnerContext(sessId, this.ctx, signal);
+        // const sessId = command.sessId ?? randomUUID();
+        // if (sessId !== command.sessId) {
+        //     // @todo:这里需要持久化新sess.
+        //     throwUnprcessable("请求命令，但是未传入有效的sessionId.")
+        // }
+        const ctx = new RunnerContext(command, this.ctx, signal);
         ctx.fnReport = fnReport;
 
         // 使用 run 方法包裹，将 store 注入到这一层以及后续所有的同步/异步调用链中
@@ -107,33 +103,40 @@ ${getErrorMessage(e)}`;
         });
     }
 
+    /**
+     * @deprecated
+     * @param entry 
+     * @param seq 
+     */
     start(entry?: string, seq?: number): void {
-        if (this.#cmdrunner) {
-            const parallelRun = configService().get("parallelRun");
-            if (!parallelRun) {
-                throwPrecondition("有工作流改进任务在执行中，如果期望改进任务与工作流可以同步执行，在开发中启用并行执行。")
-            }
-        }
-        const prjdb = PrjDB.ensure(this.ctx);
-        if (!entry) {
-            const defEntry = prjdb.get<string>(ProjectDbKeys.entry_capa);
-            if (!defEntry) {
-                if (this.ctx.agent) {
-                    entry = localTypeName(this.ctx.type);
-                }
-                throwPrecondition("任务未指定默认启动的能力ID，也没有给出能力ID.")
-            } else {
-                entry = defEntry;
-            }
-        }
+        void (entry);
+        void (seq);
+        // if (this.#cmdrunner) {
+        //     const parallelRun = configService().get("parallelRun");
+        //     if (!parallelRun) {
+        //         throwPrecondition("有工作流改进任务在执行中，如果期望改进任务与工作流可以同步执行，在开发中启用并行执行。")
+        //     }
+        // }
+        // const prjdb = PrjDB.ensure(this.ctx);
+        // if (!entry) {
+        //     const defEntry = prjdb.get<string>(ProjectDbKeys.entry_capa);
+        //     if (!defEntry) {
+        //         if (this.ctx.agent) {
+        //             entry = localTypeName(this.ctx.type);
+        //         }
+        //         throwPrecondition("任务未指定默认启动的能力ID，也没有给出能力ID.")
+        //     } else {
+        //         entry = defEntry;
+        //     }
+        // }
 
         // @TODO: 移除start方法，改为runCommand，统一入口。并行执行的能力由用户自行编写能力来实现。
-        const ctx = new RunnerContext(randomUUID(), this.ctx, null, seq);
+        // const ctx = new RunnerContext(randomUUID(), this.ctx, null, seq);
 
         // 使用 run 方法包裹，将 store 注入到这一层以及后续所有的同步/异步调用链中
-        runnerContextTLS.run(ctx, async () => {
-            this.#runner.start(entry, ctx);
-        });
+        // runnerContextTLS.run(ctx, async () => {
+        //     this.#runner.start(entry, ctx);
+        // });
     }
 
     stop(bForce: boolean): void {

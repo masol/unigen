@@ -20,6 +20,8 @@ export interface IRunnerContext {
     // 指示本次会话的id.
     readonly sessId: string;
     readonly store: Record<string, unknown>;
+    readonly msgId: string;
+    readonly files: string[];
 
     /** 快照检查点：判断当前工作流是否已经被终止 */
     readonly isAborted: boolean;

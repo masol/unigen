@@ -19,9 +19,9 @@
       return;
     }
 
-    await messageStore.addMessage({ role: "user", content });
+    const userMsg = messageStore.addMessage({ role: "user", content });
     inputValue = "";
-    await messageStore.AIResponse(content);
+    await messageStore.AIResponse(userMsg);
   }
 
   async function handleClear() {

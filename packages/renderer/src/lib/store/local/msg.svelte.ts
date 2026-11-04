@@ -98,17 +98,13 @@ class MessageStore {
     }
 
     // ── Message CRUD ────────────────────────────────────────────
-    async addMessage(partial: Omit<ChatMessage, "id" | "timestamp">): Promise<ChatMessage> {
+    addMessage(partial: Omit<ChatMessage, "id" | "timestamp" | "sessionId">): ChatMessage {
         const msg: ChatMessage = {
-            ...partial,
-            sessionId: sessionStore.activeSessionId,
+            sessionId: sessionStore.activeSessionId ?? "error",
             id: newId(),
             timestamp: Date.now(),
+            ...partial,
         };
-
-        const id = await safeApi().project.newMessage(msg);
-        if (id !== msg.id)
-            msg.id = id;
 
         this.messages = [...this.messages, msg];
         sessionStore.updMessageCount();
@@ -177,6 +173,7 @@ class MessageStore {
             case "message.start": {
                 const msg: ChatMessage = {
                     id: event.messageId,
+                    sessionId: event.sessionId,
                     role: "assistant",
                     content: "",
                     timestamp: event.timestamp,
@@ -185,6 +182,7 @@ class MessageStore {
                     traces: [],
                 };
                 this.messages = [...this.messages, msg];
+                sessionStore.updMessageCount();
                 this.#activeAssistantId = event.messageId;
                 break;
             }
@@ -307,7 +305,7 @@ class MessageStore {
     }
 
     // ── Run lifecycle ───────────────────────────────────────────
-    async AIResponse(userMessage: string): Promise<void> {
+    async AIResponse(userMessage: ChatMessage): Promise<void> {
         if (this.#runPromise) {
             toast.error("已有对话任务正在进行，请等待完成或先终止");
             return;
@@ -331,7 +329,7 @@ class MessageStore {
         }
     }
 
-    async #run(userMessage: string, signal: AbortSignal): Promise<void> {
+    async #run(userMessage: ChatMessage, signal: AbortSignal): Promise<void> {
         let stream: AsyncGenerator<ChatStreamEvent> | null = null;
         const seq = this.#nextSeq++;
         const deferred = createDeferred();
@@ -339,7 +337,7 @@ class MessageStore {
 
         try {
             stream = (await safeApi().project.runCommand(
-                { msg: userMessage, seq, sessId: sessionStore.activeSessionId },
+                { msg: userMessage.content, msgId: userMessage.id, files: userMessage.files, seq, sessId: sessionStore.activeSessionId },
                 { signal },
             )) as AsyncGenerator<ChatStreamEvent>;
 

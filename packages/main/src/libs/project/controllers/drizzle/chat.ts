@@ -688,3 +688,53 @@ function buildTraceTree(
     }
     return roots;
 }
+
+
+/* ============================================================
+ *  Messages —— 批量清理 (rerun 场景)
+ * ============================================================ */
+/**
+ * 删除某会话内 timestamp 严格大于 `fromTs` 的所有消息及其 traces,
+ * 并同步修正会话的 messageCount 与 lastMessageAt。
+ *
+ * 用于 --rerun 场景: 在目标 user 消息之后发生的 assistant 回复、
+ * 后续追加的 user/assistant 轮次全部作废。
+ */
+export function deleteMessagesAfter(
+    db: DrizzleDBType,
+    sessionId: string,
+    fromTs: number
+): void {
+    if (!sessionId || !fromTs) return;
+    db.transaction((tx) => {
+        const victims = tx
+            .select({ id: messages.id })
+            .from(messages)
+            .where(
+                and(
+                    eq(messages.sessionId, sessionId),
+                    gt(messages.timestamp, fromTs)
+                )
+            )
+            .all()
+            .map((r) => r.id);
+        if (victims.length === 0) return;
+        tx.delete(traces).where(inArray(traces.messageId, victims)).run();
+        tx.delete(messages).where(inArray(messages.id, victims)).run();
+        // 重算 lastMessageAt (剩余消息中最晚的时间戳)
+        const latest = tx
+            .select({ ts: sql<number | null>`MAX(${messages.timestamp})` })
+            .from(messages)
+            .where(eq(messages.sessionId, sessionId))
+            .get();
+        const newLastMessageAt = latest?.ts ?? null;
+        tx.update(sessions)
+            .set({
+                messageCount: sql`MAX(${sessions.messageCount} - ${victims.length}, 0)`,
+                lastMessageAt: newLastMessageAt,
+                updatedAt: Date.now(),
+            })
+            .where(eq(sessions.id, sessionId))
+            .run();
+    });
+}
