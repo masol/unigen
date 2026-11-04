@@ -19,7 +19,7 @@
       return;
     }
 
-    messageStore.addMessage({ role: "user", content });
+    await messageStore.addMessage({ role: "user", content });
     inputValue = "";
     await messageStore.AIResponse(content);
   }
