@@ -59,8 +59,7 @@ export function createSession(
     const id = input.id ?? crypto.randomUUID();
     const now = input.createdAt ?? Date.now();
     const title = input.title ?? ConstUntitled;
-    // 显式指定了非空标题视为"手动"，否则置 false 等自动标题
-    const titleManual = input.titleManual ?? (title.length > 0);
+    const titleManual = !!input.titleManual;
     db.insert(sessions)
         .values({
             id,
@@ -185,7 +184,7 @@ function rowToSession(row: typeof sessions.$inferSelect): ChatSession {
  *
  * - 不存在: 插入 + 会话 messageCount += 1 + lastMessageAt 刷新
  *           + 若为 user 消息且会话仍未手动改题/标题为空，则自动生成标题
- * - 已存在: 覆盖主体字段 (content/isError/agent/timestamp)，不改 messageCount
+ * - 已存在: 覆盖主体字段 (content/isError/agent/timestamp/files/mode)，不改 messageCount
  */
 export function saveMessage(
     db: DrizzleDBType,
@@ -196,6 +195,7 @@ export function saveMessage(
     }
     const id = msg.id ?? crypto.randomUUID();
     const ts = msg.timestamp ?? Date.now();
+    const files = msg.files ?? [];
 
     db.transaction((tx) => {
         const existing = tx
@@ -210,6 +210,8 @@ export function saveMessage(
                     content: msg.content,
                     isError: msg.isError ?? false,
                     agent: msg.agent ?? null,
+                    files,
+                    mode: msg.mode ?? null,
                     timestamp: ts,
                 })
                 .where(eq(messages.id, id))
@@ -228,6 +230,8 @@ export function saveMessage(
                     content: msg.content,
                     isError: msg.isError ?? false,
                     agent: msg.agent ?? null,
+                    files,
+                    mode: msg.mode ?? null,
                     timestamp: ts,
                 })
                 .run();
@@ -320,12 +324,15 @@ export function listMessages(
             .where(inArray(traces.messageId, msgIds))
             .orderBy(asc(traces.createdAt), asc(traces.id))
             .all();
+
+        // 使用标准且安全的 Map 分组模式，确保所有 trace 都被正确累积
         const byMsg = new Map<string, typeof traceRows>();
         for (const r of traceRows) {
-            const arr = byMsg.get(r.messageId);
-            if (arr) arr.push(r);
-            else byMsg.set(r.messageId, [r]);
+            const arr = byMsg.get(r.messageId) ?? [];
+            arr.push(r);
+            byMsg.set(r.messageId, arr);
         }
+
         for (const m of result) {
             const trs = byMsg.get(m.id);
             if (trs && trs.length > 0) m.traces = buildTraceTree(trs);
@@ -418,7 +425,9 @@ function rowToMessage(row: typeof messages.$inferSelect): ChatMessage {
         sessionId: row.sessionId,
         role: row.role,
         content: row.content,
+        files: Array.isArray(row.files) ? row.files : [],
         isError: row.isError || undefined,
+        mode: row.mode ?? undefined,
         timestamp: row.timestamp,
         agent: row.agent ?? undefined,
     };

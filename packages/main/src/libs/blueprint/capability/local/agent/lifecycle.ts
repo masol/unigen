@@ -66,7 +66,12 @@ export function createInputNode(
     agentTraceNodeId: string,
     inputs: Record<string, unknown>,
 ): string {
-    const inputNodeId = `${agentTraceNodeId}:input`;
+    // 通过父 UUID 反查内部键,再派生 input 子键;若反查不到,退化为 UUID 本身,
+    // 结果仍是全新的 UUID,保证跨 run 唯一.
+    const parentInternalKey =
+        state.idRegistry.internalKeyOf(agentTraceNodeId) ?? agentTraceNodeId;
+    const inputNodeId = state.idRegistry.getOrCreate(`${parentInternalKey}:input`);
+
     const now = Date.now();
     const node = {
         id: inputNodeId,

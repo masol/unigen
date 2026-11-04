@@ -3,7 +3,7 @@ import { safeApi } from '$lib/utils/api';
 import { PinyinFuseSearch } from '$lib/utils/fuse';
 import { hooks } from "$lib/utils/hook";
 import { DbKeys } from '$lib/utils/service/dbkeys';
-import log from 'electron-log/renderer';
+import { default as log, default as Logger } from 'electron-log/renderer';
 import { i18nStore } from '../i18n.svelte';
 import type { ChatSession, SessionPatch } from './chat.types';
 
@@ -124,10 +124,10 @@ class SessionStore {
 
         try {
             const sessInfo = await safeApi().project.listSessions();
-            console.log("load all session...", sessInfo)
             this.#sessions = sessInfo.sesses;
             this.#lastUpdatedInit = Date.now()
             await this.onSessionChange(sessInfo.active);
+            log.debug("loaded sessions=", sessInfo.sesses)
             log.info(`[SessionStore] init completed, loaded ${sessInfo.sesses.length} sessions`)
         } catch (err) {
             this.#errorInit = err instanceof Error ? err.message : String(err)
@@ -194,6 +194,18 @@ class SessionStore {
         const session = this.#sessions.find((s) => s.id === sid)
         if (session) {
             session.messageCount += cnt;
+        }
+    }
+
+    // 自动更新title，不调用主进程，而是采用相同算法。
+    autoTitle(newTitle: string): void {
+        if (!this.#activeSessionId) {
+            return;
+        }
+        const session = this.#sessions.find((s) => s.id === this.#activeSessionId)
+        Logger.debug(newTitle, " session autoTitle session=", session)
+        if (session && !session.titleManual) {
+            session.title = newTitle
         }
     }
 
@@ -269,6 +281,7 @@ class SessionStore {
     }
 
     async setActiveSession(id: string): Promise<void> {
+        if (id === this.#activeSessionId) return;
         log.debug(`[SessionStore] setActiveSession() called, id=${id}`)
         await safeApi().project.set({
             key: DbKeys.sessionId,

@@ -1,3 +1,27 @@
+CREATE TABLE `kv_store` (
+	`key` text PRIMARY KEY NOT NULL,
+	`value` text NOT NULL,
+	`updated_at` text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE INDEX `idx_kv_store_updated_at` ON `kv_store` (`updated_at`);--> statement-breakpoint
+CREATE TABLE `capabilities` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text DEFAULT '' NOT NULL,
+	`role` text DEFAULT '' NOT NULL,
+	`goal` text DEFAULT '' NOT NULL,
+	`code` text DEFAULT '' NOT NULL,
+	`input` text DEFAULT '[]' NOT NULL,
+	`output` text DEFAULT '[]' NOT NULL,
+	`process` text DEFAULT '' NOT NULL,
+	`negative` text DEFAULT '' NOT NULL,
+	`criteria` text DEFAULT '' NOT NULL,
+	`fewshot` text DEFAULT '[]' NOT NULL,
+	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `idx_capabilities_updated_at` ON `capabilities` (`updated_at`);--> statement-breakpoint
 CREATE TABLE `messages` (
 	`id` text PRIMARY KEY NOT NULL,
 	`session_id` text NOT NULL,
@@ -5,6 +29,8 @@ CREATE TABLE `messages` (
 	`content` text DEFAULT '' NOT NULL,
 	`is_error` integer DEFAULT false NOT NULL,
 	`agent` text,
+	`files` text DEFAULT '[]' NOT NULL,
+	`mode` text,
 	`timestamp` integer NOT NULL,
 	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE cascade
 );
@@ -12,6 +38,7 @@ CREATE TABLE `messages` (
 CREATE INDEX `idx_messages_session_id` ON `messages` (`session_id`);--> statement-breakpoint
 CREATE INDEX `idx_messages_timestamp` ON `messages` (`timestamp`);--> statement-breakpoint
 CREATE INDEX `idx_messages_session_ts` ON `messages` (`session_id`,`timestamp`);--> statement-breakpoint
+CREATE INDEX `idx_messages_session_mode` ON `messages` (`session_id`,`mode`);--> statement-breakpoint
 CREATE TABLE `sessions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`title` text DEFAULT '' NOT NULL,
@@ -42,4 +69,14 @@ CREATE TABLE `traces` (
 --> statement-breakpoint
 CREATE INDEX `idx_traces_message_id` ON `traces` (`message_id`);--> statement-breakpoint
 CREATE INDEX `idx_traces_message_parent` ON `traces` (`message_id`,`parent_id`);--> statement-breakpoint
-CREATE INDEX `idx_traces_message_created` ON `traces` (`message_id`,`created_at`);
+CREATE INDEX `idx_traces_message_created` ON `traces` (`message_id`,`created_at`);--> statement-breakpoint
+CREATE TABLE `metag` (
+	`field_key` text PRIMARY KEY NOT NULL,
+	`intent` text,
+	`dims` text DEFAULT '[]' NOT NULL,
+	`schema` text,
+	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `idx_metag_updated_at` ON `metag` (`updated_at`);

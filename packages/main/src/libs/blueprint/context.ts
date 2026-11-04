@@ -1,6 +1,6 @@
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { IProjectContext } from '$libs/project/type.js';
-import { CommandInfo, IRunnerContext } from '$types/blueprint/context.js';
+import type { CmdMode, CommandInfo, IRunnerContext } from '$types/blueprint/context.js';
 import type { ChatStreamEvent, RunnerParam } from '$types/index.js';
 import log from 'electron-log/main.js';
 import { loadFunctor } from './capability/index.js';
@@ -16,7 +16,12 @@ export class RunnerContext implements IRunnerContext {
     readonly store: Record<string, unknown> = {};
     readonly files: string[];
     readonly msgId: string;
-    readonly sessId: string
+    readonly sessId: string;
+    #mode: CmdMode;
+
+    get mode() {
+        return this.#mode;
+    }
 
     cmd: CommandInfo = { isCommand: false, body: "" };
     fnReport: ((evt: ChatStreamEvent) => void) | null = null;
@@ -29,7 +34,8 @@ export class RunnerContext implements IRunnerContext {
         this.files = command.files ?? [];
         this.msgId = command.msgId;
         this.sessId = command.sessId;
-        
+        this.#mode = (command.mode ?? null);
+
         this.seq = seq ? seq : runSeq--;
         this.prj = prj;
         this.prjdb = PrjDB.ensure(prj);
@@ -46,6 +52,11 @@ export class RunnerContext implements IRunnerContext {
         // 这样该工作流实例的所有日志都会自动带上 [workflow-id] 前缀，方便排查问题
         log.scope(`workflow-${this.prj.path}`);
     }
+
+    setMode(mode: CmdMode): void {
+        this.#mode = mode;
+    }
+
 
     // push(cap: Capability): void {
     //     this.#stack.push(cap);

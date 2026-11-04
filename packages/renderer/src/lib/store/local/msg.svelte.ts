@@ -3,6 +3,7 @@ import { projectStore } from "$lib/store/project.svelte";
 import { safeApi } from "$lib/utils/api";
 import evtbus from "$lib/utils/evtbus";
 import { hooks } from "$lib/utils/hook";
+import { truncate } from '$lib/utils/str';
 import log from 'electron-log/renderer';
 import Logger from "electron-log/renderer.js";
 import pTimeout, { TimeoutError } from "p-timeout";
@@ -305,7 +306,7 @@ class MessageStore {
     }
 
     // ── Run lifecycle ───────────────────────────────────────────
-    async AIResponse(userMessage: ChatMessage): Promise<void> {
+    async AIResponse(userMessage: ChatMessage, mode: string | null = null): Promise<void> {
         if (this.#runPromise) {
             toast.error("已有对话任务正在进行，请等待完成或先终止");
             return;
@@ -319,8 +320,10 @@ class MessageStore {
         const { signal } = this.#controller;
         this.isAborting = false;
         this.setLoading(true);
-
-        const run = this.#run(userMessage, signal);
+        if (userMessage.content) {
+            sessionStore.autoTitle(truncate(userMessage.content))
+        }
+        const run = this.#run(userMessage, signal, mode);
         this.#runPromise = run;
         try {
             await run;
@@ -329,7 +332,7 @@ class MessageStore {
         }
     }
 
-    async #run(userMessage: ChatMessage, signal: AbortSignal): Promise<void> {
+    async #run(userMessage: ChatMessage, signal: AbortSignal, mode: string | null): Promise<void> {
         let stream: AsyncGenerator<ChatStreamEvent> | null = null;
         const seq = this.#nextSeq++;
         const deferred = createDeferred();
@@ -337,7 +340,14 @@ class MessageStore {
 
         try {
             stream = (await safeApi().project.runCommand(
-                { msg: userMessage.content, msgId: userMessage.id, files: userMessage.files, seq, sessId: sessionStore.activeSessionId },
+                {
+                    msg: userMessage.content,
+                    msgId: userMessage.id,
+                    files: userMessage.files ?? [],
+                    seq,
+                    mode,
+                    sessId: sessionStore.activeSessionId
+                },
                 { signal },
             )) as AsyncGenerator<ChatStreamEvent>;
 

@@ -14,3 +14,11 @@ export function path2URL(path: string) {
     const url = `appfile://localhost${encoded}`;
     return url;
 }
+
+
+export function truncate(str: string, maxLength = 30, ellipsis = '...') {
+    if (str.length <= maxLength) {
+        return str;
+    }
+    return str.slice(0, maxLength) + ellipsis;
+}

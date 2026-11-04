@@ -6,7 +6,7 @@ import type { LocalMcpClient } from "../mcp.js";
 import type { CompiledPacAgent, IPacAgent, JsonValue, LocalMcpConfig } from "../type.js";
 import { executeAgent } from "./execution.js";
 import { closeLocalMcpClients } from "./tools.js";
-import type { IAgentExecutor, PacRunState, RunOptions } from "./types.js";
+import { TraceIdRegistry, type IAgentExecutor, type PacRunState, type RunOptions } from "./types.js";
 
 export class PacAgent implements IPacAgent, IAgentExecutor {
     constructor(private readonly compiled: CompiledPacAgent) { }
@@ -28,7 +28,8 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
             const state: PacRunState = {
                 messageId,
                 counters: new Map(),
-                thinkingStates: new Map(),  // ✅ 初始化 thinking 状态存储
+                thinkingStates: new Map(),
+                idRegistry: new TraceIdRegistry(),
             };
 
             const result = await executeAgent(
@@ -68,7 +69,8 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
             state = {
                 messageId,
                 counters: new Map(),
-                thinkingStates: new Map(),  // ✅ 初始化
+                thinkingStates: new Map(),
+                idRegistry: new TraceIdRegistry(),
             };
         }
 

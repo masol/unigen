@@ -50,6 +50,10 @@ export const messages = sqliteTable(
         isError: integer('is_error', { mode: 'boolean' }).notNull().default(false),
         /** 助手消息的 agent 身份；user 消息为 null */
         agent: text('agent', { mode: 'json' }).$type<AgentIdentity | null>(),
+        /** 相对项目根目录的文件路径数组，JSON 存储 */
+        files: text('files', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+        /** 消息模式：null (默认，参与历史) 或 "cmd" (不参与历史) */
+        mode: text('mode', { enum: ['cmd'] }),
         /** epoch ms；会话内自然排序键 */
         timestamp: integer('timestamp').notNull(),
     },
@@ -57,6 +61,7 @@ export const messages = sqliteTable(
         index('idx_messages_session_id').on(table.sessionId),
         index('idx_messages_timestamp').on(table.timestamp),
         index('idx_messages_session_ts').on(table.sessionId, table.timestamp),
+        index('idx_messages_session_mode').on(table.sessionId, table.mode)
     ]
 );
 

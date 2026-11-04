@@ -243,8 +243,14 @@ export const chatMessageSchema = z.object({
     sessionId: z.string(),
     role: z.enum(["user", "assistant"]),
     content: z.string(),
-    files: z.array(z.string()).optional(),
+    /** 相对项目根目录的文件路径数组 */
+    files: z.array(z.string()).default([]).optional(),
     isError: z.boolean().optional(),
+    /** 消息模式：
+      *  - 不传 / null / undefined：默认，参与历史记录
+      *  - "cmd"：命令类消息，不参与历史记录
+    */
+    mode: z.enum(["cmd"]).nullish(),
     /** 消息发生时间 epoch ms；用作会话内自然排序键 */
     timestamp: z.number(),
     agent: agentIdentitySchema.optional(),
@@ -261,7 +267,14 @@ export const newChatMessageSchema = z.object({
     sessionId: z.string(),
     role: z.enum(["user", "assistant"]),
     content: z.string(),
+    /** 相对项目根目录的文件路径数组 */
+    files: z.array(z.string()).optional(),
     isError: z.boolean().optional(),
+    /** 消息模式：
+         *  - 不传 / null / undefined：默认，参与历史记录
+         *  - "cmd"：命令类消息，不参与历史记录
+    */
+    mode: z.enum(["cmd"]).nullish(),
     /** 不传则取 Date.now() */
     timestamp: z.number().optional(),
     agent: agentIdentitySchema.optional(),

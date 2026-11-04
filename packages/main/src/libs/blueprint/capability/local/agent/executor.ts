@@ -5,7 +5,6 @@ import type { IRunnerContext } from "$types/blueprint/context.js";
 import type { MessageStreamEvent, TraceStreamEvent } from "$types/shared/chat.js";
 import type { ModelMessage, ToolLoopAgent } from "ai";
 import Logger from "electron-log/main.js";
-import { reasoningTraceId } from "../traceid.js";
 import type { PacTimeoutConfig } from "../type.js";
 import { MessageDeltaBuffer } from "./buffer.js";
 import type { AgentThinkingState, GenerateCallArgs, PacRunState, StreamResult } from "./types.js";
@@ -57,19 +56,9 @@ function getThinkingState(
  * 5. text-delta (多次)
  * 6. [工具调用] → 可能回到步骤 1
  *
- * **状态管理** (✅ 并发安全):
- * - 状态存储在 `state.thinkingStates[agentTraceNodeId]` 中
- * - 每个 agent（包括并行的子 agent）有独立的状态
- * - `reasoning-start` 到达 → 重置 `textStarted = false`（进入新的 thinking 阶段）
- * - `text-start` 到达 → 设置 `textStarted = true`（thinking 结束）
- *
- * **通道隔离**:
- * - 在 `text-start` 之前的所有 `text-delta` 都是 thinking 内容，丢弃
- * - 在 `text-start` 之后的所有 `text-delta` 是正文内容，按通道发送
- *
- * @param streamToMessage - true: 根 agent，文本 delta 发送到 message 通道
- * @param needOutputNode - true: 子 agent，需要创建 output 节点
- * @param onNodeIds - 回调，用于返回创建的 reasoning 和 output 节点 ID
+ * **ID 策略**:
+ * - 对外的所有节点 ID 都是 UUID,由 `state.idRegistry` 从内部语义键派生.
+ * - 本函数通过父 UUID 反查内部键,再拼接 `:reasoning:${count}` / `:output` 得到子内部键.
  */
 export async function streamAgent(
     agent: AnyToolLoopAgent,
@@ -88,18 +77,20 @@ export async function streamAgent(
     const textBuf: string[] = [];
     let outputNodeId: string | undefined;
 
-    // ✅ 关键修正：从共享状态中读取 thinking 状态
     const thinkingState = getThinkingState(state, agentTraceNodeId);
+    // 父内部键:用于派生 reasoning / output 子节点的内部键.
+    // 反查失败时退化为 UUID 本身,仍然能产出全新的、不冲突的 UUID.
+    const parentInternalKey =
+        state.idRegistry.internalKeyOf(agentTraceNodeId) ?? agentTraceNodeId;
 
     try {
         for await (const part of res.stream) {
             if (ctx.isAborted) break;
 
-            // ✅ 检测 reasoning-start 事件（重新进入 thinking 状态）
+            // 检测 reasoning-start 事件（重新进入 thinking 状态）
             if (part.type === "reasoning-start") {
                 thinkingState.reasoningCount++;
 
-                // ✅ 关键修正：重置 textStarted 标志
                 if (thinkingState.textStarted) {
                     Logger.debug(
                         `[PAC][${agentTraceNodeId}] reasoning-start #${thinkingState.reasoningCount} 到达，` +
@@ -107,7 +98,6 @@ export async function streamAgent(
                     );
                     thinkingState.textStarted = false;
 
-                    // 关闭上一个 reasoning 节点（如果存在且未关闭）
                     if (thinkingState.currentReasoningNodeId) {
                         const now = Date.now();
                         prjdb.patchTrace(thinkingState.currentReasoningNodeId, {
@@ -133,12 +123,11 @@ export async function streamAgent(
                 continue;
             }
 
-            // ✅ 检测 text-start 事件
+            // 检测 text-start 事件
             if (part.type === "text-start") {
                 thinkingState.textStarted = true;
                 Logger.debug(`[PAC][${agentTraceNodeId}] text-start 事件到达，思考结束，正文开始`);
 
-                // 关闭 reasoning 节点（如果存在）
                 if (thinkingState.currentReasoningNodeId) {
                     const now = Date.now();
                     prjdb.patchTrace(thinkingState.currentReasoningNodeId, {
@@ -171,9 +160,12 @@ export async function streamAgent(
                 const thinkDelta = part.text;
                 if (thinkDelta) {
                     if (!thinkingState.currentReasoningNodeId) {
-                        // 为多次 reasoning 生成唯一 ID
-                        const suffix = thinkingState.reasoningCount > 1 ? `_${thinkingState.reasoningCount}` : "";
-                        thinkingState.currentReasoningNodeId = `${reasoningTraceId(agentTraceNodeId)}${suffix}`;
+                        // 用 count 做为内部键后缀,保证本次 run 内 reasoning 节点互不冲突;
+                        // 跨 run 则由 idRegistry 实例隔离,产出不同 UUID.
+                        const reasoningInternalKey =
+                            `${parentInternalKey}:reasoning:${thinkingState.reasoningCount}`;
+                        thinkingState.currentReasoningNodeId =
+                            state.idRegistry.getOrCreate(reasoningInternalKey);
 
                         const node = {
                             id: thinkingState.currentReasoningNodeId,
@@ -209,7 +201,6 @@ export async function streamAgent(
                 const delta = part.text;
                 textBuf.push(delta);
                 deltaBuffer.push(delta);
-                // 添加详细日志
                 Logger.debug(
                     `[PAC][${agentTraceNodeId}] text-delta 到达 ` +
                     `(textStarted=${thinkingState.textStarted}, ` +
@@ -217,7 +208,6 @@ export async function streamAgent(
                     `streamToMessage=${streamToMessage}, ` +
                     `length=${delta.length})`,
                 );
-                // text-start 之前的 text-delta 是 thinking 内容，丢弃
                 if (!thinkingState.textStarted) {
                     Logger.debug(
                         `[PAC][${agentTraceNodeId}] 丢弃 text-start 之前的 text-delta ` +
@@ -226,11 +216,11 @@ export async function streamAgent(
                     continue;
                 }
 
-                // text-start 之后的 text-delta 是正文内容，正常处理
-
-                // 延迟创建 output 节点（第一个正文 text-delta 到达时）
+                // 延迟创建 output 节点(第一个正文 text-delta 到达时)
                 if (!outputNodeId && needOutputNode) {
-                    outputNodeId = `${agentTraceNodeId}:output`;
+                    outputNodeId = state.idRegistry.getOrCreate(
+                        `${parentInternalKey}:output`,
+                    );
                     const outputNode = {
                         id: outputNodeId,
                         kind: "output" as const,
@@ -249,14 +239,12 @@ export async function streamAgent(
                 }
 
                 if (streamToMessage) {
-                    // ✅ 根 agent: 发送到 message 通道
                     ctx.report({
                         type: "message.delta",
                         messageId: state.messageId,
                         delta,
                     } as MessageStreamEvent);
                 } else if (outputNodeId) {
-                    // ✅ 子 agent: 发送到 output 节点的 detail（trace 通道）
                     prjdb.appendTraceDetail(outputNodeId, delta);
                     ctx.report({
                         type: "trace.detail.delta",
@@ -265,7 +253,6 @@ export async function streamAgent(
                         delta,
                     } as TraceStreamEvent);
                 } else {
-                    // ⚠️ 异常情况：text-delta 在 text-start 之后，但没有 output 节点
                     Logger.warn(
                         `[PAC][${agentTraceNodeId}] text-delta 无目标通道 ` +
                         `(streamToMessage=${streamToMessage}, needOutputNode=${needOutputNode}, ` +
@@ -284,9 +271,7 @@ export async function streamAgent(
 
     const now = Date.now();
 
-    // Stream 完全结束后，关闭剩余节点
     if (thinkingState.currentReasoningNodeId && !thinkingState.textStarted) {
-        // 如果 text-start 未到达（异常情况），关闭 reasoning 节点
         prjdb.patchTrace(thinkingState.currentReasoningNodeId, {
             status: "success",
             finishedAt: now,

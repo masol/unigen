@@ -16,6 +16,7 @@ export async function loadPriorMessages(
     histEnabled: boolean,
 ): Promise<ModelMessage[]> {
     if (!histEnabled) return [];
+    // 内部会自动过滤 mode="cmd" 的记录
     return loadHistoryMessages(ctx, agentId, historyLimit);
 }
 

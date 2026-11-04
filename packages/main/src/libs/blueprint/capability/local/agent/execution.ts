@@ -1,14 +1,17 @@
 // packages/main/src/libs/blueprint/capability/local/agent/execution.ts
 
+import { ConstUntitled } from "$libs/const.js";
 import { getSmartModel } from "$libs/model/index.js";
 import type { PrjDB } from "$libs/project/controllers/drizzle/index.js";
+import { throwNotfound } from "$libs/utils/err.js";
+import { truncate } from "$libs/utils/str.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { isStepCount, ToolLoopAgent, type ModelMessage } from "ai";
 import Logger from "electron-log/main.js";
 import type { LocalMcpClient } from "../mcp.js";
 import { resolveModelOptions } from "../settings.js";
 import { buildUserPrompt, renderSystemPrompt } from "../template.js";
-import { agentTraceId, nextSeq } from "../traceid.js";
+import { nextSeq } from "../traceid.js";
 import type { CompiledPacAgent, JsonValue, LocalMcpConfig } from "../type.js";
 import { MessageDeltaBuffer } from "./buffer.js";
 import { createToolCallbacks } from "./callbacks.js";
@@ -86,8 +89,10 @@ export async function executeAgent(
     state.modelInfo = { providerId, modelId };
 
     // 3. Trace 初始化
+    // 内部键用于本次 run 中跨函数稳定定位同一节点;对外一律使用注册表产出的 UUID.
     const agentSeq = nextSeq(state.counters, `agent:${compiled.id}`);
-    const agentTraceNodeId = agentTraceId(compiled.id, agentSeq);
+    const agentInternalKey = `agent:${compiled.id}:${agentSeq}`;
+    const agentTraceNodeId = state.idRegistry.getOrCreate(agentInternalKey);
     const agentIdentity = {
         id: agentTraceNodeId,
         name: compiled.name,
@@ -100,6 +105,44 @@ export async function executeAgent(
     };
 
     if (isRoot) {
+        // Root Agent 特殊处理：重写消息与历史记录
+        const isRerun = ctx.mode === "rerun";
+        const userMsgId = ctx.msgId;
+
+        if (isRerun) {
+            // Rerun: 截断历史，使用历史输入
+            const histMsg = prjdb.getMessage(userMsgId);
+            if (!histMsg || histMsg.role !== 'user') {
+                throwNotfound(`无法加载id为${userMsgId}消息，或加载到的不是合法的用户消息。`)
+            }
+            ctx.setMode(histMsg.mode === 'cmd' ? 'cmd' : null)
+            ctx.cmd.body = histMsg.content;
+            prjdb.deleteMessagesAfter(ctx.sessId, histMsg.timestamp);
+            inputs = histMsg?.files ? { files: histMsg.files } : {};
+        } else {
+            prjdb.updateSessionTitle(ctx.sessId, truncate(ctx.cmd?.body || ConstUntitled))
+            // 正常运行：保存用户消息
+            prjdb.saveMessage({
+                id: userMsgId,
+                sessionId: ctx.sessId,
+                role: "user",
+                content: ctx.cmd?.body || "",
+                files: ctx.files || [],
+                timestamp: Date.now(),
+                mode: ctx.mode === "cmd" ? "cmd" : null,
+            });
+        }
+
+        // 为 Root 创建助手消息记录 (若不存在)
+        prjdb.saveMessage({
+            id: state.messageId,
+            sessionId: ctx.sessId,
+            role: "assistant",
+            content: "",
+            timestamp: Date.now(),
+            mode: ctx.mode === "cmd" ? "cmd" : null,
+        });
+
         startRootMessage(ctx, state, agentIdentity);
     }
 
@@ -189,9 +232,6 @@ export async function executeAgent(
         if (shouldStream) {
             let streamSuccess = false;
             try {
-                // ✅ 关键修正：严格传递 isRoot 标志，确保通道隔离
-                // isRoot=true  → streamToMessage=true  → message.delta 通道
-                // isRoot=false → streamToMessage=false → trace.detail.delta 通道
                 const r = await streamAgent(
                     agent,
                     messages,
@@ -201,8 +241,8 @@ export async function executeAgent(
                     agentTraceNodeId,
                     deltaBuffer,
                     prjdb,
-                    isRoot,          // ✅ 传递 isRoot，不做转换
-                    !isRoot,         // ✅ 子 agent 需要 output 节点
+                    isRoot,
+                    !isRoot,
                     (reasoningId, outputId) => {
                         agentCtx.reasoningNodeId = reasoningId;
                         agentCtx.outputNodeId = outputId;
@@ -225,7 +265,9 @@ export async function executeAgent(
 
                 if (!isRoot && finalText) {
                     const now = Date.now();
-                    agentCtx.outputNodeId = `${agentTraceNodeId}:output`;
+                    agentCtx.outputNodeId = state.idRegistry.getOrCreate(
+                        `${agentInternalKey}:output`,
+                    );
                     const outputNode = {
                         id: agentCtx.outputNodeId,
                         kind: "output" as const,
@@ -260,7 +302,9 @@ export async function executeAgent(
 
             if (!isRoot && finalText) {
                 const now = Date.now();
-                agentCtx.outputNodeId = `${agentTraceNodeId}:output`;
+                agentCtx.outputNodeId = state.idRegistry.getOrCreate(
+                    `${agentInternalKey}:output`,
+                );
                 const outputNode = {
                     id: agentCtx.outputNodeId,
                     kind: "output" as const,

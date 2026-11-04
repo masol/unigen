@@ -36,3 +36,10 @@ export function toArraySafe(val: string | string[] | unknown): string[] {
     // 3. 不满足条件，抛出前置条件错误
     return throwPrecondition(`无法合法转化为字符串数组:${JSON.stringify(val, null, 2)}`, true);
 }
+
+export function truncate(str: string, maxLength = 30, ellipsis = '...') {
+    if (str.length <= maxLength) {
+        return str;
+    }
+    return str.slice(0, maxLength) + ellipsis;
+}

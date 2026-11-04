@@ -11,6 +11,8 @@ export interface CommandInfo {
     body: string;
 }
 
+export type CmdMode = 'cmd' | 'rerun' | null;
+
 export interface IRunnerContext {
     /** 原生的 Web API AbortSignal，可透传给支持取消的异步底层操作 */
     readonly signal: AbortSignal;
@@ -22,6 +24,7 @@ export interface IRunnerContext {
     readonly store: Record<string, unknown>;
     readonly msgId: string;
     readonly files: string[];
+    readonly mode: CmdMode;
 
     /** 快照检查点：判断当前工作流是否已经被终止 */
     readonly isAborted: boolean;
@@ -40,6 +43,8 @@ export interface IRunnerContext {
      */
     triggerAbort(force?: boolean): void;
 
+    // 为mode打的补丁，为了支持rerun。如果加载到cmd,需要重置mode.
+    setMode(mode: CmdMode): void;
 
     /**
      * 加载特定能力id对应的执行对象。
