@@ -5,11 +5,9 @@
 <script lang="ts">
   import { RuntimeIcon } from "$lib/components/runtimeicon";
   import * as Menubar from "$lib/components/ui/menubar";
-  import { dashboardStore } from "$lib/store/dashboard.svelte";
   import { i18nStore } from "$lib/store/i18n.svelte";
   import { projectStore } from "$lib/store/project.svelte";
   import { recentProjectsStore } from "$lib/store/recent-projects.svelte";
-  import { confirmStore } from "$lib/store/ui/confirm.svelte";
   import { windowStore } from "$lib/store/window.svelte";
   import { safeApi } from "$lib/utils/api";
   import type { RecentProject } from "@app/main/types";
@@ -59,14 +57,6 @@
     await recentProjectsStore.clear();
   }
   async function quit() {
-    if (dashboardStore.runState === "running") {
-      const confirmed = await confirmStore.request({
-        title: "确认退出",
-        message: "项目任务正在执行中，确认退出程序吗？",
-        variant: "question",
-      });
-      if (!confirmed) return;
-    }
     windowStore.close();
   }
 </script>

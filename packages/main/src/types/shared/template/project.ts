@@ -1,12 +1,6 @@
 import { z } from "zod";
-import { infoCardViewSchema } from "./info-card.js";
 import { leftSidebarItemJSONSchema } from "./sidebar.js";
-import { targetOptionSchema } from "./target.js";
 
-/** Partial<Omit<InfoCardView, "id">> */
-const partialInfoCardSchema = infoCardViewSchema.omit({ id: true }).partial();
-
-export type PartialInfoCard = z.infer<typeof partialInfoCardSchema>;
 
 /**
  * 单个蓝图名称候选项 —— 提示不再是裸字符串，而是带描述的结构。
@@ -37,7 +31,6 @@ export const blueprintFiltersSchema = z.object({
 
 export type BlueprintFilters = z.infer<typeof blueprintFiltersSchema>;
 
-export const projectApiSchema = z.enum(["icon"]);
 /**
  * 媒体资源字段名列表 —— 用于在编辑器侧识别"素材"下拉。
  *
@@ -48,6 +41,7 @@ export const projectApiSchema = z.enum(["icon"]);
  * 不设置 = 不出现素材下拉（与现状一致）。
  */
 export const projectActivityDataSchema = z.object({
+    /// 工作台header处的图标。
     icon: z.string(),
     /// 如果设置，为markdown内容，此时，打开/创建此类型的任务时，会以对话框方式通知用户。用于重要信息说明。
     status: z.string().optional(),
@@ -55,33 +49,13 @@ export const projectActivityDataSchema = z.object({
     statusText: z.string(),
     // 欢迎字符串。如果无内容，检查类型目录下welcome.md，如果存在，则返回其内容。否则退化为原始的固定字符串。
     welcome: z.string().optional(),
-    activities: z.array(leftSidebarItemJSONSchema),
+    // 面板定义，用于定义用户可设置的项--用户设置直接改变kv-store中变量，提示词中可以直接索引和使用这些变量，运行期会加载最新变量。
+    activities: z.array(leftSidebarItemJSONSchema).optional(),
+    // 工作台header处的文字及详情。过长会被裁剪。
     header: z.object({
         title: z.string(),
         detail: z.string(),
     }),
-    infocards: z
-        .object({
-            "input-manager": partialInfoCardSchema.optional(),
-            "spec-setting": partialInfoCardSchema.optional(),
-            output: partialInfoCardSchema.optional(),
-        })
-        .optional(),
-    targets: z.array(targetOptionSchema).optional(),
-    hints: z
-        .object({
-            idle: z.string().optional(),
-            running: z.string().optional(),
-            term: z.string().optional(),
-        })
-        .optional(),
-    checkInput: z
-        .object({
-            title: z.string().optional(),
-            description: z.string().optional(),
-            key: z.string().optional(),
-        })
-        .optional(),
     /**
      * 三张蓝图表的名称候选列表。
      */
@@ -92,10 +66,6 @@ export const projectActivityDataSchema = z.object({
      * 顶部渲染为"素材"下拉。不设置或空数组 = 不渲染。
      */
     mediaFields: z.array(z.string()).optional(),
-    /**
-     * 输入的keyName。不设置时默认为 "script"。
-     */
-    inputName: z.string().optional().default("script"),
 });
 
 export type ProjectActivityData = z.infer<typeof projectActivityDataSchema>;

@@ -1,5 +1,4 @@
 import { configStore } from "$lib/store/config.svelte";
-import { dashboardStore } from "$lib/store/dashboard.svelte";
 import { projectStore } from "$lib/store/project.svelte";
 import { safeApi } from "../api";
 import { AppearanceBuildin } from "./appearance";
@@ -81,27 +80,6 @@ export const builtins: CommandDescriptor[] = [
         category: 'Project',
         handler: () =>
             projectStore.close(),
-    },
-    {
-        id: 'project.start',
-        label: '运行项目任务',
-        category: 'Project',
-        handler: () =>
-            dashboardStore.start(),
-    },
-    {
-        id: 'project.stop',
-        label: '终止项目任务',
-        category: 'Project',
-        handler: () =>
-            dashboardStore.stop(),
-    },
-    {
-        id: 'project.forceStop',
-        label: '强制杀死项目任务',
-        category: 'Project',
-        handler: () =>
-            dashboardStore.stop(true),
     },
 
     // ── 开发者工具 ──

@@ -1,5 +1,6 @@
 import { getInput } from "$libs/blueprint/glossary/input.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
+import Logger from "electron-log/main.js";
 
 /**
  * 加载 {{_BI_input}}。
@@ -23,7 +24,8 @@ export async function loadInputVar(
 
     let input = ctx.cmd?.body;
     if (!input) {
-        const got = getInput(ctx, ctx.prj.inputName ?? "script");
+        Logger.error("旧代码访问？新机制下，用户输入都是从ctx.cmd.body处获取，而不是从kv-store,请报告问题!")
+        const got = getInput(ctx, "script");
         input = got.length > 0 ? got.join("\n") : "";
     }
     return input;

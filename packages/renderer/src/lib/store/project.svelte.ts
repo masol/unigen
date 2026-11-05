@@ -1,6 +1,5 @@
 import SelectProjectTypeDialog from '$lib/components/dialog/project-type/SelectProjectTypeDialog.svelte';
 import TextInputDialog from "$lib/components/dyn/dialog/TextInputDialog.svelte";
-import { loadTwemojiNames, TABLER_ICON_NAMES } from '$lib/components/runtimeicon';
 import { api, procApiError, safeApi } from "$lib/utils/api";
 import evtbus from "$lib/utils/evtbus";
 import { hooks } from '$lib/utils/hook';
@@ -8,7 +7,6 @@ import { DbKeys } from '$lib/utils/service/dbkeys';
 import type { ProjectActivityData, RunState } from "@app/main/types";
 import { COMMON_ORPC_ERROR_DEFS, ORPCError } from "@orpc/client";
 import Logger from "electron-log/renderer";
-import { toast } from "svelte-sonner";
 import { push } from "svelte-spa-router";
 import { pluginStore } from "./plugin.svelte";
 import { ProjectActivity } from "./ui/activity/activity";
@@ -57,6 +55,7 @@ class ProjectStore {
             this.#runState = "idle";
         })
 
+        // @todo: 移动到专门的clarify处理模块来处理，而不是这里处理。
         evtbus.on("clarify", async ({ question, uuid, options }) => {
             const extHints = options && options.length > 0 ? "可以从右上方的“插入片段”确定模板，然后修改确定。" : "可以回应“你自行补充一切细节吧。”";
             const content = await dialogStore.safeShow(
@@ -82,33 +81,33 @@ class ProjectStore {
         return false;
     }
 
-    // 非命令入口！只被dashboardStore调用。
-    async start(seq: number, bThrow?: boolean): Promise<void> {
-        try {
-            if (this.#path.trim().length === 0) {
-                toast.error("尚未打开任务")
-                return
-            }
-            await api().project.start(seq);
-            this.#runState = await api().project.runState(); // "running";
-            // console.log("this.#runState=", this.#runState)
-        } catch (e) {
-            this.#runState = 'idle';
-            this.procError(e);
-            if (bThrow) {
-                throw e;
-            }
-        }
-    }
+    // // 非命令入口！只被dashboardStore调用。
+    // async start(seq: number, bThrow?: boolean): Promise<void> {
+    //     try {
+    //         if (this.#path.trim().length === 0) {
+    //             toast.error("尚未打开任务")
+    //             return
+    //         }
+    //         await api().project.start(seq);
+    //         this.#runState = await api().project.runState(); // "running";
+    //         // console.log("this.#runState=", this.#runState)
+    //     } catch (e) {
+    //         this.#runState = 'idle';
+    //         this.procError(e);
+    //         if (bThrow) {
+    //             throw e;
+    //         }
+    //     }
+    // }
 
-    async stop(bForce = false): Promise<void> {
-        try {
-            await api().project.stop(bForce);
-            this.#runState = await api().project.runState(); // bForce ? "idle" : "terminating";
-        } catch (e) {
-            this.procError(e);
-        }
-    }
+    // async stop(bForce = false): Promise<void> {
+    //     try {
+    //         await api().project.stop(bForce);
+    //         this.#runState = await api().project.runState(); // bForce ? "idle" : "terminating";
+    //     } catch (e) {
+    //         this.procError(e);
+    //     }
+    // }
 
     async watiFinish(): Promise<void> {
         try {
@@ -116,22 +115,6 @@ class ProjectStore {
             this.#runState = "idle";
         } catch (e) {
             this.procError(e);
-        }
-    }
-
-    private async setupIconRapi(): Promise<void> {
-        const inited = await safeApi().rapi.iconInited();
-        if (!inited) {
-            const icons = safeApi().rapi.addIcon({
-                names: TABLER_ICON_NAMES,
-                icon: true
-            });
-            const emojNames = await loadTwemojiNames();
-            const emojs = safeApi().rapi.addIcon({
-                names: emojNames,
-                icon: false
-            });
-            await Promise.all([icons, emojs])
         }
     }
 
@@ -250,6 +233,8 @@ class ProjectStore {
         if (this.#depPlugins && this.#depPlugins.length > 0) {
             await pluginStore.ensurePlugins(this.#depPlugins);
         }
+        await hooks.callHook("project:loaded", { path: this.#path });
+        Logger.debug("项目创建成功", this.#path)
         return true;
     }
 
@@ -259,7 +244,7 @@ class ProjectStore {
             return await this.doCreate(false, prjType, pathName);
         } catch (e) {
             if (e instanceof ORPCError && e.status === COMMON_ORPC_ERROR_DEFS.UNSUPPORTED_MEDIA_TYPE.status) {
-                // 不做任何处理。继续向下强制执行。
+                // 报警目录已存在，需要用户确认，不做任何处理。继续向下强制执行。
                 realPathname = e.message;
             } else {
                 return this.procError(e);
@@ -277,12 +262,7 @@ class ProjectStore {
         }
 
         try {
-            const result = await this.doCreate(true, prjType, realPathname);
-            if (result) {
-                await hooks.callHook("project:loaded", { path: this.#path });
-            }
-            Logger.debug("项目创建成功", this.#path)
-            return result;
+            return await this.doCreate(true, prjType, realPathname);
         } catch (e) {
             return this.procError(e);
         }

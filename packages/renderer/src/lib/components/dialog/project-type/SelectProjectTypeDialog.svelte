@@ -125,6 +125,7 @@
 
   async function handleCreate() {
     if (!canConfirm) return;
+    (document.activeElement as HTMLElement)?.blur();
     creating = true;
     try {
       await onCreate?.(selectedId, trimmedName);

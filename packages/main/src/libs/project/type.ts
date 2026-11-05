@@ -5,7 +5,6 @@ export interface IProjectContext {
     readonly path: string;
     readonly type: string;
     readonly wid: number;
-    readonly inputName: string;
     readonly agent: ICapaFunctor | null;  // 本地Agent,在任务打开或新建时创建，可以随时刷新。
     reloadAgent(): Promise<void>;  // 重新加载本地Agent.
     getCmd(cmdName: string): ICapaFunctor | null;

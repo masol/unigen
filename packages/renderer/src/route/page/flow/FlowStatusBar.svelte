@@ -15,7 +15,6 @@
     IconStack2,
     IconTopologyStar3,
   } from "@tabler/icons-svelte";
-  import RunState from "../../RunState.svelte";
   import { flowStore as store } from "./store.svelte";
 
   // 后端读取键：.${id}_state —— 直接作为文件名展示在左侧
@@ -118,5 +117,4 @@
   {/if}
 
   <span class="ml-3 text-muted-foreground/70">流程图</span>
-  <RunState></RunState>
 {/if}

@@ -25,7 +25,6 @@ export class ProjectContainer implements IProjectContext {
     // 任务根目录。
     #path = "";
     #type = "";
-    #inputName = "";
     #plugin: IProjectPlugin | null = null; // plugin type.
     #wid = -1;
     #prjId = -1; // used for ProjectMananger(not for controller).
@@ -60,10 +59,6 @@ export class ProjectContainer implements IProjectContext {
     get type() {
         return this.#type;
     }
-    get inputName() {
-        return this.#inputName;
-    }
-
     get agent() {
         return this.#agent?.hasAgent ? this.#agent : null;
     }
@@ -148,15 +143,10 @@ export class ProjectContainer implements IProjectContext {
         throwUnprcessable(msg)
     }
 
-    private setInputName(prjData: ProjectActivityData): void {
-        this.#inputName = prjData.inputName ?? "script";
-    }
-
     async loadUI(): Promise<ProjectActivityData> {
         const uiFile = this.getPath("type.json");
         const uiJSON = await fsExtra.readJSON(uiFile);
         const prjdata = this.validatePrjData(uiFile, uiJSON);
-        this.setInputName(prjdata);
         return prjdata;
     }
 
@@ -204,7 +194,6 @@ export class ProjectContainer implements IProjectContext {
                 fsExtra.copyFile(typePath, this.getPath("type.json")),
                 fs.writeFile(this.getPath("type.txt"), type)
             ])
-            this.setInputName(prjdata);
             await this.reloadAgent();
             return prjdata;
         } catch (e) {
@@ -223,7 +212,6 @@ export class ProjectContainer implements IProjectContext {
         } finally {
             this.#path = ""
             this.#type = ""
-            this.#inputName = ""
             this.#agent = null;
             // @todo: 只在容器真正销毁时清
             // this.registry.clear();

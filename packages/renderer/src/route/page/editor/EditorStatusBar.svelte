@@ -8,7 +8,6 @@
     IconMapPin,
     IconTextWrap,
   } from "@tabler/icons-svelte";
-  import RunState from "../../RunState.svelte";
   import { editorStore as store } from "./store.svelte";
 </script>
 
@@ -41,8 +40,4 @@
     </div>
   {/if}
 
-  <div class="ml-auto flex items-center gap-3">
-    <span class="text-muted-foreground/70">{store.kindLabel}</span>
-    <RunState></RunState>
-  </div>
 {/if}

@@ -27,7 +27,7 @@
       <div class="space-y-2">
         <h2 class="text-lg font-medium text-foreground">{title}</h2>
         <p class="max-w-md text-sm leading-relaxed text-muted-foreground">
-          在下方输入框开始描述你的任务，Agent 会按需规划步骤并执行。
+          在下方输入框开始描述你的任务，会使用Agent的类型，规划步骤并执行。
         </p>
       </div>
     </div>

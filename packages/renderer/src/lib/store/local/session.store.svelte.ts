@@ -127,7 +127,6 @@ class SessionStore {
             this.#sessions = sessInfo.sesses;
             this.#lastUpdatedInit = Date.now()
             await this.onSessionChange(sessInfo.active);
-            log.debug("loaded sessions=", sessInfo.sesses)
             log.info(`[SessionStore] init completed, loaded ${sessInfo.sesses.length} sessions`)
         } catch (err) {
             this.#errorInit = err instanceof Error ? err.message : String(err)
@@ -140,7 +139,7 @@ class SessionStore {
     private async onSessionChange(newId: string): Promise<void> {
         this.#activeSessionId = newId;
         await hooks.callHook("session:changed");
-        log.debug("session:changed hook over")
+        // log.debug("session:changed hook over")
     }
 
     // ── 次要 Action（简化状态机）──

@@ -56,14 +56,24 @@ export class PrjRunner extends BaseProjectController {
 
     static ensure(ctx: IProjectContext): PrjRunner { return this.coreEnsure(this, ctx); }
 
+    /**
+     * @deprecated
+     */
     get runState(): RunState {
         return this.#runner ? this.#runner.state : 'idle';
     }
 
+    /**
+     * @deprecated
+     */
     get startTime(): number {
         return this.#runner ? this.#runner.startTime : 0;
     }
 
+    /**
+     * @deprecated
+     * @returns 
+     */
     async waitFinish(): Promise<void> {
         return this.#runner.waitFinish();
     }
@@ -139,6 +149,10 @@ ${getErrorMessage(e)}`;
         // });
     }
 
+    /**
+     * @deprecated
+     * @param bForce 
+     */
     stop(bForce: boolean): void {
         this.#runner.stop(bForce);
     }
