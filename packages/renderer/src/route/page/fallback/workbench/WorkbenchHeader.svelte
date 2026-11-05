@@ -82,7 +82,7 @@
       </div>
     </div>
 
-    <!-- 右：打开任务目录 -->
+    <!-- 右：打开项目目录 -->
     <div class="flex shrink-0 items-center gap-1.5">
       <Button
         variant="ghost"

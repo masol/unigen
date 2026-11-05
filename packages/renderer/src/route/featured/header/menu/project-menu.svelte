@@ -151,7 +151,7 @@
 
     <Menubar.Item disabled={!canClose} onSelect={closeProject}>
       <IconFolderX size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
-      关闭任务
+      关闭项目
       <MenuShortcut command="project.close" />
     </Menubar.Item>
 
