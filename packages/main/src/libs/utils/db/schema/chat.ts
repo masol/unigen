@@ -11,7 +11,7 @@
 //   - trace 行入库顺序通过 `created_at` 维持，无需额外 orderIndex。
 //   - sessions.titleManual 标志用户是否手动改过标题，自动改题逻辑读它决定是否覆盖。
 
-import type { AgentIdentity } from "$types/shared/chat.js";
+import type { AgentIdentity, MessageExtra } from "$types/shared/chat.js";
 import { sql } from 'drizzle-orm';
 import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
@@ -54,6 +54,11 @@ export const messages = sqliteTable(
         files: text('files', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
         /** 消息模式：null (默认，参与历史) 或 "cmd" (不参与历史) */
         mode: text('mode', { enum: ['cmd'] }),
+        /** 消息级扩展 JSON 对象：user 存 args / assistant 存 config；读取时必有值 (DB default '{}') */
+        extra: text('extra', { mode: 'json' })
+            .$type<MessageExtra>()
+            .notNull()
+            .default(sql`'{}'`),
         /** epoch ms；会话内自然排序键 */
         timestamp: integer('timestamp').notNull(),
     },

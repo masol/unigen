@@ -8,6 +8,7 @@ import { truncate } from "$libs/utils/str.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { isStepCount, ToolLoopAgent, type ModelMessage } from "ai";
 import Logger from "electron-log/main.js";
+import { isPlainObject } from "radashi";
 import type { LocalMcpClient } from "../mcp.js";
 import { resolveModelOptions } from "../settings.js";
 import { buildUserPrompt, renderSystemPrompt } from "../template.js";
@@ -115,13 +116,27 @@ export async function executeAgent(
             if (!histMsg || histMsg.role !== 'user') {
                 throwNotfound(`无法加载id为${userMsgId}消息，或加载到的不是合法的用户消息。`)
             }
-            ctx.setMode(histMsg.mode === 'cmd' ? 'cmd' : null)
+
+            ctx.setMode(histMsg.mode === 'cmd' ? 'cmd' : null);
             ctx.cmd.body = histMsg.content;
+
+            // 合并式恢复：历史 args 作为基底，本次 rerun 已传入的 args 优先覆盖
+            const histArgs = histMsg.extra?.args;
+            const currentArgs = isPlainObject(ctx.cmd.args) ? ctx.cmd.args : {};
+            if (isPlainObject(histArgs)) {
+                ctx.cmd.args = { ...histArgs, ...currentArgs };
+            }
+
             prjdb.deleteMessagesAfter(ctx.sessId, histMsg.timestamp);
-            inputs = histMsg?.files ? { files: histMsg.files } : {};
+
+            // inputs = {
+            //     ...(isPlainObject(ctx.cmd.args) ? ctx.cmd.args : {}),
+            //     ...(histMsg.files ? { files: histMsg.files } : {}),
+            // };
         } else {
             prjdb.updateSessionTitle(ctx.sessId, truncate(ctx.cmd?.body || ConstUntitled))
             // 正常运行：保存用户消息
+            const cmdArgs = isPlainObject(ctx.cmd?.args) ? ctx.cmd.args : undefined;
             prjdb.saveMessage({
                 id: userMsgId,
                 sessionId: ctx.sessId,
@@ -130,6 +145,7 @@ export async function executeAgent(
                 files: ctx.files || [],
                 timestamp: Date.now(),
                 mode: ctx.mode === "cmd" ? "cmd" : null,
+                extra: cmdArgs ? { args: cmdArgs } : {},
             });
         }
 

@@ -143,6 +143,20 @@ export const agentIdentitySchema: z.ZodType<AgentIdentity, AgentIdentity> =
         model: z.string().optional(),
     });
 
+/* ───── MessageExtra：user 的 args / assistant 的 config ───── */
+
+export const messageExtraSchema = z
+    .object({
+        /** user 消息：调用参数 (slash 命令参数、生成选项等) */
+        args: z.record(z.string(), z.unknown()).optional(),
+        /** assistant 消息：额外配置 (模型参数、工具调用设置等) */
+        config: z.record(z.string(), z.unknown()).optional(),
+    })
+    /** 预留任意扩展键：写入不报错，读取侧按需收窄 */
+    .catchall(z.unknown());
+
+export type MessageExtra = z.infer<typeof messageExtraSchema>;
+
 export const traceStatusSchema: z.ZodType<TraceStatus, TraceStatus> = z.enum([
     "pending",
     "running",
@@ -251,6 +265,8 @@ export const chatMessageSchema = z.object({
       *  - "cmd"：命令类消息，不参与历史记录
     */
     mode: z.enum(["cmd"]).nullish(),
+    /** 消息级扩展载荷：user 存 args / assistant 存 config */
+    extra: messageExtraSchema.optional(),
     /** 消息发生时间 epoch ms；用作会话内自然排序键 */
     timestamp: z.number(),
     agent: agentIdentitySchema.optional(),
@@ -275,6 +291,8 @@ export const newChatMessageSchema = z.object({
          *  - "cmd"：命令类消息，不参与历史记录
     */
     mode: z.enum(["cmd"]).nullish(),
+    /** 消息级扩展载荷：user 存 args / assistant 存 config */
+    extra: messageExtraSchema.optional(),    
     /** 不传则取 Date.now() */
     timestamp: z.number().optional(),
     agent: agentIdentitySchema.optional(),

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6d7ce2b5-74c2-47bc-aa22-06d6beb85a04",
+  "id": "7926ea72-544a-42f1-9dab-f6625188db5e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "kv_store": {
@@ -226,6 +226,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "extra": {
+          "name": "extra",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'{}'"
         },
         "timestamp": {
           "name": "timestamp",

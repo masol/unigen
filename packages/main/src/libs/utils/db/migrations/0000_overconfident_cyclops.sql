@@ -31,6 +31,7 @@ CREATE TABLE `messages` (
 	`agent` text,
 	`files` text DEFAULT '[]' NOT NULL,
 	`mode` text,
+	`extra` text DEFAULT '{}' NOT NULL,
 	`timestamp` integer NOT NULL,
 	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE cascade
 );

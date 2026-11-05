@@ -184,7 +184,7 @@ function rowToSession(row: typeof sessions.$inferSelect): ChatSession {
  *
  * - 不存在: 插入 + 会话 messageCount += 1 + lastMessageAt 刷新
  *           + 若为 user 消息且会话仍未手动改题/标题为空，则自动生成标题
- * - 已存在: 覆盖主体字段 (content/isError/agent/timestamp/files/mode)，不改 messageCount
+ * - 已存在: 覆盖主体字段 (content/isError/agent/timestamp/files/mode/extra)，不改 messageCount
  */
 export function saveMessage(
     db: DrizzleDBType,
@@ -213,6 +213,7 @@ export function saveMessage(
                     files,
                     mode: msg.mode ?? null,
                     timestamp: ts,
+                    extra: msg.extra ?? {},
                 })
                 .where(eq(messages.id, id))
                 .run();
@@ -233,6 +234,7 @@ export function saveMessage(
                     files,
                     mode: msg.mode ?? null,
                     timestamp: ts,
+                    extra: msg.extra ?? {},
                 })
                 .run();
 
@@ -430,6 +432,7 @@ function rowToMessage(row: typeof messages.$inferSelect): ChatMessage {
         mode: row.mode ?? undefined,
         timestamp: row.timestamp,
         agent: row.agent ?? undefined,
+        extra: row.extra ?? {},
     };
 }
 
