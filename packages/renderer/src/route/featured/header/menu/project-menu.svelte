@@ -82,7 +82,7 @@
 
     <Menubar.Item disabled={isBusy} onSelect={newProject}>
       <IconFilePlus size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
-      新建任务
+      新建项目
       <MenuShortcut command="project.create" />
     </Menubar.Item>
     <Menubar.Item disabled={isBusy} onSelect={openProject}>
@@ -91,7 +91,7 @@
         stroke={1.5}
         class="mr-2 text-muted-foreground"
       />
-      打开任务...
+      打开项目...
       <MenuShortcut command="project.open" />
     </Menubar.Item>
 

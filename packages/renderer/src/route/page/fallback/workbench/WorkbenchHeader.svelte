@@ -89,8 +89,8 @@
         size="sm"
         onclick={openFolder}
         disabled={openingFolder || !projectStore.path}
-        title="打开任务目录"
-        aria-label="打开任务目录"
+        title="打开项目目录"
+        aria-label="打开项目目录"
         class="gap-1.5 rounded-xl"
       >
         <IconFolderOpen size={16} stroke={1.5} />

@@ -308,7 +308,7 @@ class MessageStore {
     // ── Run lifecycle ───────────────────────────────────────────
     async AIResponse(userMessage: ChatMessage, mode: string | null = null): Promise<void> {
         if (this.#runPromise) {
-            toast.error("已有对话任务正在进行，请等待完成或先终止");
+            toast.error("已有任务正在进行，请等待完成或先终止");
             return;
         }
         if (!projectStore.opened) {

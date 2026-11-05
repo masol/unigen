@@ -79,12 +79,12 @@
         <IconFolderOpen size={24} stroke={1.5} />
       </span>
       <div class="space-y-2">
-        <h3 class="text-lg font-medium">尚未打开任务</h3>
+        <h3 class="text-lg font-medium">尚未打开项目</h3>
         <p class="max-w-sm text-sm text-muted-foreground">
-          蓝图内容（术语表、元术语表以及能力表）需要在打开任务后才可查阅与编辑。
+          蓝图内容（术语表、元术语表以及能力表）需要在打开项目后才可查阅与编辑。
         </p>
         <p class="text-xs text-muted-foreground">
-          请先在主控制台打开一个任务，然后返回此处继续。
+          请先在主控制台打开一个项目，然后返回此处继续。
         </p>
       </div>
     </div>

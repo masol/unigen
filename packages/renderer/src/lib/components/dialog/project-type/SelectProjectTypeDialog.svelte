@@ -38,7 +38,7 @@
     onCreate: (type: string, path: string) => Promise<boolean>;
   } & DialogComponentProps<CreateProjectResult>;
 
-  let { title = "新建任务", onCreate, onClose, onCancel }: Props = $props();
+  let { title = "新建项目", onCreate, onClose, onCancel }: Props = $props();
 
   let isLoading = $state(true);
   let installed = $state<ProjectType[]>([]);
@@ -58,7 +58,7 @@
     currentPage = 1; // 新搜索回到首页
   });
 
-  /** 点击「管理任务类型」时触发 */
+  /** 点击「管理项目类型」时触发 */
   // function onManage() {}
 
   /** 点击左下浏览按钮：选择本地目录后可回填 projectName，由上层实现 */
@@ -147,7 +147,7 @@
   onMount(load);
 </script>
 
-<BlockUi bind:value={creating} message="正在创建任务…">
+<BlockUi bind:value={creating} message="正在创建项目…">
   <DialogHeader>
     <div class="flex items-center gap-3">
       <DialogTitle class="shrink-0">{title}</DialogTitle>
@@ -182,7 +182,7 @@
       <Input
         bind:value={searchTerm}
         oninput={() => applySearch(searchTerm)}
-        placeholder="选择一个任务类型，或搜索…"
+        placeholder="选择一个项目类型，或搜索…"
         class="rounded-xl pl-9"
         disabled={isLoading}
       />
@@ -204,7 +204,7 @@
           in:fade={{ duration: DUR, easing: cubicInOut }}
         >
           <IconMoodEmpty class="size-8 text-muted-foreground" />
-          <p class="text-sm text-foreground">没有匹配的任务类型</p>
+          <p class="text-sm text-foreground">没有匹配的项目类型</p>
           <p class="text-xs text-muted-foreground">换个关键词试试。</p>
         </div>
       {:else}
@@ -269,14 +269,14 @@
   <Separator />
   <!-- <div class="flex items-center justify-between pt-3">
     <p class="text-xs text-muted-foreground">
-        本机已安装的任务类型。可在
+        本机已安装的项目类型。可在
         <button
             type="button"
             onclick={() => onManage?.()}
             class="rounded-lg text-primary underline-offset-2 transition-all duration-200
                    hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-            设置 · 任务类型
+            设置 · 项目类型
         </button>
         中安装更多。
     </p>
@@ -308,8 +308,8 @@
         bind:value={projectName}
         oninput={() => (nameTouched = true)}
         onkeydown={handleNameKeydown}
-        placeholder="任务名称"
-        aria-label="任务名称"
+        placeholder="项目名称"
+        aria-label="项目名称"
         disabled={isLoading}
         class="rounded-xl"
       />
@@ -317,7 +317,7 @@
 
     <div class="flex shrink-0 items-center gap-2">
       <Button variant="outline" onclick={() => onCancel()}>取消</Button>
-      <Button disabled={!canConfirm} onclick={handleCreate}>创建任务</Button>
+      <Button disabled={!canConfirm} onclick={handleCreate}>创建项目</Button>
     </div>
   </DialogFooter>
 </BlockUi>

@@ -308,13 +308,13 @@ class PluginStore {
     }
 
     /**
-     * 维护任务依赖插件，确保只有depPlugins集合被激活（由 projectStore 在任务打开时调用）
+     * 维护项目依赖插件，确保只有depPlugins集合被激活（由 projectStore 在项目打开时调用）
      *
-     * @param pluginIds 任务配置中声明的依赖插件列表。
+     * @param pluginIds 项目配置中声明的依赖插件列表。
      *
      */
     async ensurePlugins(depPlugins: string[]): Promise<void> {
-        await this.#unloadProjectPlugins(depPlugins); // 卸载除depPlugins之外的任务级插件。
+        await this.#unloadProjectPlugins(depPlugins); // 卸载除depPlugins之外的项目级插件。
         if (depPlugins.length > 0) {
             await this.#regPlugins(depPlugins);
             await this.#loadProjectPlugins(depPlugins);

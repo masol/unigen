@@ -59,24 +59,24 @@ export const builtins: CommandDescriptor[] = [
         handler: () =>
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }),
     },
-    // ---任务执行---
+    // ---项目执行---
     {
         id: 'project.open',
-        label: '打开任务',
+        label: '打开项目',
         category: 'Project',
         handler: () =>
             projectStore.open(),
     },
     {
         id: 'project.create',
-        label: '新建任务',
+        label: '新建项目',
         category: 'Project',
         handler: () =>
             projectStore.create(),
     },
     {
         id: 'project.close',
-        label: '关闭任务',
+        label: '关闭项目',
         category: 'Project',
         handler: () =>
             projectStore.close(),

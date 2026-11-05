@@ -23,13 +23,13 @@ import { registProjectBuildin } from "./register.js";
 import { type IProjectContext, type IProjectController, metaDirName, ServiceToken } from "./type.js";
 
 export class ProjectContainer implements IProjectContext {
-    // 任务根目录。
+    // 项目根目录。
     #path = "";
     #type = "";
     #plugin: IProjectPlugin | null = null; // plugin type.
     #wid = -1;
     #prjId = -1; // used for ProjectMananger(not for controller).
-    #agent: PACFunctor | null = null;  // 本地Agent,在任务打开或新建时创建，可以随时刷新。
+    #agent: PACFunctor | null = null;  // 本地Agent,在项目打开或新建时创建，可以随时刷新。
 
     // 在构造容器时初始化全部IProjectController(某个具体的剖面)
     constructor(wid: number, prjId: number) {

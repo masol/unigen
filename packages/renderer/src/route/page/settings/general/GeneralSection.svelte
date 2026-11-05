@@ -98,7 +98,7 @@
   };
 
   // ───────────────────────────────────────────────────────────
-  // 任务基础目录:通过主进程原生对话框选择
+  // 项目基础目录:通过主进程原生对话框选择
   // ───────────────────────────────────────────────────────────
   const taskDirProxy = {
     get value(): string {
@@ -114,12 +114,12 @@
   async function pickTaskDir() {
     try {
       const result = await api().system.selectDirectory({
-        title: "选择任务基础目录",
+        title: "选择项目基础目录",
         defaultPath: taskDirProxy.value || undefined,
       });
       if (result.canceled || !result.path) return;
       taskDirProxy.value = result.path;
-      toast.success("任务基础目录已更新");
+      toast.success("项目基础目录已更新");
     } catch (e) {
       toast.error(
         `选择目录失败: ${e instanceof Error ? e.message : String(e)}`,
@@ -336,7 +336,7 @@
 
     <Separator class="bg-border/30" />
 
-    <!-- Row: 任务基础目录 -->
+    <!-- Row: 项目根目录 -->
     <div
       class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-8 p-6"
     >
@@ -347,7 +347,7 @@
           <IconFolder size={20} stroke={1.5} class="text-muted-foreground" />
         </div>
         <div class="min-w-0">
-          <p class="text-sm font-medium text-foreground">任务基础目录</p>
+          <p class="text-sm font-medium text-foreground">项目根目录</p>
           <p
             class="text-xs mt-0.5 truncate max-w-md font-mono"
             class:text-muted-foreground={!taskDirProxy.value}

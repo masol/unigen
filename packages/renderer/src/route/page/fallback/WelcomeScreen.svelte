@@ -23,7 +23,7 @@
           欢迎
         </h2>
         <p class="text-sm text-muted-foreground">
-          打开已有任务或创建新任务以开始
+          打开已有项目或创建新项目以开始
         </p>
       </div>
       <WelcomeActions />

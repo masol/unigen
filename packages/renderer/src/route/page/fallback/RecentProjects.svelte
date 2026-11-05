@@ -76,7 +76,7 @@
   {:else if recentProjectsStore.isEmpty}
     <p class="text-sm text-muted-foreground">暂无最近项目</p>
   {:else}
-    <BlockUi bind:value={opening} message="正在打开任务…" class="w-full">
+    <BlockUi bind:value={opening} message="正在打开项目…" class="w-full">
       <ul use:autoAnimate class="space-y-1">
         {#each recentProjectsStore.projects as project (project.path)}
           <li class="group flex items-center gap-1">
