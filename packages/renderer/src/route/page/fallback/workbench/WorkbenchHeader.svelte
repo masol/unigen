@@ -1,38 +1,26 @@
 <!-- 工作台头部：任务名 · 会话ID · 打开目录 -->
 <script lang="ts">
+  import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { Button } from "$lib/components/ui/button";
-  import { sessionStore } from "$lib/store/local/session.store.svelte";
   import { projectStore } from "$lib/store/project.svelte";
   import { safeApi } from "$lib/utils/api";
-  import {
-    IconBolt,
-    IconCheck,
-    IconCopy,
-    IconFolderOpen,
-  } from "@tabler/icons-svelte";
+  import { IconFolderOpen } from "@tabler/icons-svelte";
 
-  let copied = $state(false);
   let openingFolder = $state(false);
-
-  let sessionId = $derived(sessionStore.activeSessionId ?? "");
-  let shortSession = $derived(sessionId ? sessionId.slice(0, 8) : "");
 
   async function openFolder() {
     if (!projectStore.path || openingFolder) return;
     openingFolder = true;
     try {
-      await safeApi().system.showItemInFolder({ path: projectStore.path });
+      await safeApi().system.showItemInFolder({
+        path: [projectStore.path, "meta"],
+      });
     } finally {
       openingFolder = false;
     }
   }
 
-  async function copySession() {
-    if (!sessionId) return;
-    await navigator.clipboard.writeText(sessionId);
-    copied = true;
-    setTimeout(() => (copied = false), 1500);
-  }
+  let icon = $derived(projectStore.activity?.icon ?? "IconMessageCircle");
 </script>
 
 <header class="shrink-0 border-b border-border/50 bg-card/50 backdrop-blur-sm">
@@ -42,7 +30,7 @@
       <div
         class="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background"
       >
-        <IconBolt size={18} stroke={1.5} class="text-primary" />
+        <RuntimeIcon name={icon} size={18} stroke={1.5} class="text-primary" />
       </div>
 
       <div class="flex min-w-0 flex-col leading-tight">
@@ -55,28 +43,6 @@
             <span class="truncate">
               {projectStore.activity.header.detail}
             </span>
-          {/if}
-
-          {#if shortSession}
-            <span class="shrink-0 text-border">·</span>
-            <button
-              type="button"
-              onclick={copySession}
-              title={`Session ${sessionId}`}
-              aria-label="复制会话 ID"
-              class="group flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 font-mono transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <span>#{shortSession}</span>
-              {#if copied}
-                <IconCheck size={12} stroke={1.5} class="text-primary" />
-              {:else}
-                <IconCopy
-                  size={12}
-                  stroke={1.5}
-                  class="opacity-0 transition-opacity group-hover:opacity-100"
-                />
-              {/if}
-            </button>
           {/if}
         </div>
       </div>

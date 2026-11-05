@@ -8,7 +8,7 @@ import { Hook, LogMessage, Transport } from 'electron-log'
 import Logger from 'electron-log/main'
 import { ensureDir } from 'fs-extra'
 import { writeFile } from 'fs/promises'
-import { join } from 'path'
+import { isAbsolute, join } from 'path'
 import { z } from 'zod'
 // import { genText } from '$libs/utils/model/factory/node-llama-cpp/local.js'
 import { configService } from '$libs/store/index.js'
@@ -19,6 +19,7 @@ import { nextIncrementalName } from '$libs/utils/sys/fs.js'
 import { appLife } from '$libs/utils/tapable/applife.js'
 import { projectTypeSchema } from '$types/shared/template/prjtype.js'
 import pTimeout from 'p-timeout'
+import { RpcContext } from '../type.js'
 
 // ─── Zod Schemas ─────────────────────────────────────────────
 const fileFilterPresetSchema = z.enum(FileFilterPreset)
@@ -286,11 +287,14 @@ const openPath = os
  * 在文件管理器中显示 / 高亮文件
  */
 const showItemInFolder = os
-    .input(z.object({ path: z.string() }))
+    .input(z.object({ path: z.union([z.string(), z.array(z.string())]) }))
     .output(z.boolean())
-    .handler(async ({ input }) => {
-        shell.showItemInFolder(input.path)
-        Logger.info(`使用系统资源管理器显示文件(目录):${input.path}`)
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        const path = Array.isArray(input.path) ? join(...input.path) : input.path;
+        const fullPath = isAbsolute(path) ? path : ctx.project.getPath(path);
+        shell.showItemInFolder(fullPath)
+        Logger.info(`使用系统资源管理器显示文件(目录):${fullPath}`)
         return true
     })
 

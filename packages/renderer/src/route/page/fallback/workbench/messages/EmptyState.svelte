@@ -1,11 +1,12 @@
 <!-- 空状态：渲染来自 project 的欢迎 markdown -->
 <script lang="ts">
   import MarkdownView from "$lib/components/markdown/Message.svelte";
+  import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { projectStore } from "$lib/store/project.svelte";
-  import { IconMessageCircle } from "@tabler/icons-svelte";
 
   let welcome = $derived(projectStore.activity?.welcome);
   let title = $derived(projectStore.activity?.header.title ?? "开始对话");
+  let icon = $derived(projectStore.activity?.icon ?? "IconMessageCircle");
 </script>
 
 <div
@@ -22,12 +23,14 @@
       <div
         class="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"
       >
-        <IconMessageCircle size={28} stroke={1.5} />
+        <RuntimeIcon name={icon} size={28} stroke={1.5} />
       </div>
       <div class="space-y-2">
         <h2 class="text-lg font-medium text-foreground">{title}</h2>
         <p class="max-w-md text-sm leading-relaxed text-muted-foreground">
-          在下方输入框开始输入你的要求，会按照Agent的配置，规划并执行。
+          {projectStore.activity?.header.detail
+            ? projectStore.activity?.header.detail
+            : "在下方输入框开始输入你的要求，会按照Agent的配置，规划并执行。"}
         </p>
       </div>
     </div>
