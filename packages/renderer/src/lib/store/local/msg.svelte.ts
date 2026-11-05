@@ -50,6 +50,13 @@ class MessageStore {
                 });
             }
         });
+        evtbus.on("switch-session", ({ state }) => {
+            if (state === "start") {
+                this.isReloading = true;
+            } else if (state == "failed") {
+                this.isReloading = false;
+            }
+        });
         hooks.hook("session:changed", async () => {
             //active session变化了，开始加载其message list.
             await this.reload();
@@ -60,6 +67,10 @@ class MessageStore {
     messages = $state<ChatMessage[]>([]);
     isLoading = $state(false);
     isAborting = $state(false);
+
+    /** 消息列表同步加载中：与 AI 运行中的 isLoading 分开，避免 BlockUI 误伤流式回答 */
+    isReloading = $state(true);
+
     collapsedMessages = $state<Record<string, boolean>>({});
 
     hasMessages = $derived(this.messages.length > 0);
@@ -81,7 +92,7 @@ class MessageStore {
     private async reload(): Promise<void> {
         this.messages = [];
         log.debug('[MessageStore] reload() called')
-        this.isLoading = true
+        this.isReloading = true
 
         try {
             this.messages = await safeApi().project.listMessage({
@@ -94,7 +105,7 @@ class MessageStore {
             toast.error(errMessage);
             log.error('[MessageStore] reload() failed', err)
         } finally {
-            this.isLoading = false
+            this.isReloading = false
         }
     }
 
@@ -309,6 +320,10 @@ class MessageStore {
     async AIResponse(userMessage: ChatMessage, mode: string | null = null): Promise<void> {
         if (this.#runPromise) {
             toast.error("已有任务正在进行，请等待完成或先终止");
+            return;
+        }
+        if (this.isReloading) {
+            toast.error("正在同步会话，请稍后");
             return;
         }
         if (!projectStore.opened) {

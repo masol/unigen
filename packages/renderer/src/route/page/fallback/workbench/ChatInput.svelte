@@ -49,8 +49,14 @@
 
   let filtered = $derived(showCommands ? filterCommands(value, commands) : []);
   let sending = $derived(messageStore.isLoading);
+  let reloading = $derived(messageStore.isReloading);
   let aborting = $derived(messageStore.isAborting);
-  let canSend = $derived(value.trim().length > 0 && !sending);
+  let disabled = $derived(sending || reloading);
+  let canSend = $derived(value.trim().length > 0 && !disabled);
+
+  let effectivePlaceholder = $derived(
+    reloading ? "正在同步会话…" : placeholder,
+  );
 
   let allCollapsed = $derived.by(() => {
     const msgs = messageStore.messages;
@@ -59,7 +65,7 @@
   });
 
   $effect(() => {
-    if (sending) showCommands = false;
+    if (disabled) showCommands = false;
   });
 
   function send() {
@@ -128,7 +134,7 @@
   }
 
   function openCommands() {
-    if (sending) return;
+    if (disabled) return;
     value = "/";
     handleInput();
     tick().then(() => {
@@ -144,7 +150,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (sending) {
+    if (disabled) {
       event.preventDefault();
       return;
     }
@@ -162,7 +168,7 @@
           selectedIndex === 0 ? filtered.length - 1 : selectedIndex - 1;
         return;
       }
-      if (event.key === "Enter" && !event.shiftKey) {
+      if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey) {
         event.preventDefault();
         const cmd = filtered[selectedIndex];
         if (cmd) selectCommand(cmd);
@@ -175,7 +181,8 @@
       }
     }
 
-    if (event.key === "Enter" && (event.shiftKey || event.ctrlKey)) {
+    // 与 placeholder 保持一致：Enter 换行，Ctrl+Enter 发送，Shift+Enter 也换行
+    if (event.key === "Enter" && event.ctrlKey) {
       event.preventDefault();
       send();
     }
@@ -183,7 +190,7 @@
 </script>
 
 <div class="relative shrink-0 border-t border-border/50 bg-muted/20 p-3">
-  {#if showCommands && filtered.length > 0 && !sending}
+  {#if showCommands && filtered.length > 0 && !disabled}
     <ChatCommandMenu
       commands={filtered}
       {selectedIndex}
@@ -192,7 +199,7 @@
   {/if}
 
   <div
-    class="rounded-2xl border border-input bg-background/50 transition-all duration-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 {sending
+    class="rounded-2xl border border-input bg-background/50 transition-all duration-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 {disabled
       ? 'opacity-60'
       : ''}"
   >
@@ -203,9 +210,9 @@
       onkeydown={handleKeydown}
       oncompositionstart={() => (isComposing = true)}
       oncompositionend={() => (isComposing = false)}
-      {placeholder}
+      placeholder={effectivePlaceholder}
       rows="1"
-      disabled={sending}
+      {disabled}
       class="chat-textarea max-h-50 w-full resize-none overflow-y-auto bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
       aria-label="消息输入框"></textarea>
 
@@ -215,8 +222,8 @@
       <div class="flex items-center gap-0.5">
         <button
           type="button"
-          onclick={() => !sending && onAttach()}
-          disabled={sending}
+          onclick={() => !disabled && onAttach()}
+          {disabled}
           title="附加文件"
           aria-label="附加文件"
           class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
@@ -225,8 +232,8 @@
         </button>
         <button
           type="button"
-          onclick={() => !sending && onRecord()}
-          disabled={sending}
+          onclick={() => !disabled && onRecord()}
+          {disabled}
           title="语音输入"
           aria-label="语音输入"
           class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
@@ -236,7 +243,7 @@
         <button
           type="button"
           onclick={openCommands}
-          disabled={sending}
+          {disabled}
           title="命令"
           aria-label="打开命令菜单"
           class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
@@ -245,8 +252,8 @@
         </button>
         <button
           type="button"
-          onclick={() => !sending && canClear && onClear()}
-          disabled={sending || !canClear}
+          onclick={() => !disabled && canClear && onClear()}
+          disabled={disabled || !canClear}
           title="清空对话"
           aria-label="清空对话"
           class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
@@ -257,7 +264,7 @@
           <button
             type="button"
             onclick={toggleAllMessages}
-            disabled={sending}
+            {disabled}
             title={allCollapsed ? "展开全部消息" : "收起全部消息"}
             aria-label={allCollapsed ? "展开全部消息" : "收起全部消息"}
             class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"

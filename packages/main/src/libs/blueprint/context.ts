@@ -132,14 +132,15 @@ export class RunnerContext implements IRunnerContext {
         return loadFunctor(this, capaId);
     }
 
-
-    // ==========================================
-    // 📝 日志接口 (适配 electron-log) 
-    //  @TODO: 适配通知接口，以通知主进程的日志过程。(是否应该取名step?)
-    // ==========================================
+    /**
+     * 日志接口 (适配 electron-log) 
+    // @deprecated
+     * @param title 
+     * @param detail 
+     */
     notify(title: string, detail: string): void {
-        this.prj.notify("task_progess_report", `${title} : ${detail}`);
-        // log.silly(arg);
+        // this.prj.notify("task_progess_report", `${title} : ${detail}`);
+        log.silly(`${title} : ${detail}`);
     }
 
     report(evt: ChatStreamEvent): void {

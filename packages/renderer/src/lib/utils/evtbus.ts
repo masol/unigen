@@ -13,8 +13,7 @@ export type Events = {
     "cfg:set": { name: string; value: unknown };
     "sys:usedark": boolean  // 更改了操作系统的深色/浅色模式。
     "lang:changed": string  // 更新了语言设置。
-    "task_finished": { success: boolean, reason?: string, seq: number } // 任务结束，启动时间。
-    "task_progess_report": string // 项目主任务进度报告。
+    "task_finished": { success: boolean, reason?: string, seq: number } // 任务结束，启动时间。    
     "clarify": { uuid: string, question: string, mode?: string, options?: string[] }, // 请求用户澄清,在projectStore处理。
     "runcommand-end": { suc: boolean, seq: number }
     "recent:projects": RecentProject[]
@@ -25,7 +24,8 @@ export type Events = {
         metaKey: boolean;
         shiftKey: boolean;
         altKey: boolean;
-    }
+    },
+    "switch-session": { state: "start" | "failed" } // 切换session.
 };
 
 export type EventNameType = keyof Events;

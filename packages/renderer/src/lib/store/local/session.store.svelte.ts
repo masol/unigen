@@ -1,5 +1,6 @@
 // packages/renderer/src/lib/store/local/session.store.svelte.ts
 import { safeApi } from '$lib/utils/api';
+import evtbus from '$lib/utils/evtbus';
 import { PinyinFuseSearch } from '$lib/utils/fuse';
 import { hooks } from "$lib/utils/hook";
 import { DbKeys } from '$lib/utils/service/dbkeys';
@@ -281,13 +282,18 @@ class SessionStore {
 
     async setActiveSession(id: string): Promise<boolean> {
         if (id === this.#activeSessionId) return false;
+        evtbus.emit("switch-session", { state: "start" });
         log.debug(`[SessionStore] setActiveSession() called, id=${id}`)
         const bOk = await safeApi().project.set({
             key: DbKeys.sessionId,
             value: id
         })
         // 发生错误，set返回undefined.
-        if (!bOk) return false;
+        if (!bOk) {
+            evtbus.emit("switch-session", { state: "failed" });
+            return false;
+        }
+        // 不失败时，在message reload会自行重置为false.
         await this.onSessionChange(id);
         return true;
     }

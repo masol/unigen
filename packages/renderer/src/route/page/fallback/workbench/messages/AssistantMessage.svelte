@@ -49,7 +49,7 @@
     navigator.clipboard?.writeText(message.content);
     copied = true;
     setTimeout(() => (copied = false), 1500);
-    toast.success("已复制");
+    // toast.success("已复制");
   }
 
   function toggleCollapse() {

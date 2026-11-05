@@ -50,6 +50,7 @@
     "@floating-ui/dom": "^1.8.0",
     "@formkit/auto-animate": "^0.10.0",
     "@humanspeak/svelte-markdown": "^1.8.4",
+    "@humanspeak/svelte-virtual-chat": "^0.1.23",
     "@humanspeak/svelte-virtual-list": "^0.5.15",
     "@iconify-json/twemoji": "^1.2.5",
     "@iconify/svelte": "^5.2.2",

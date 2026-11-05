@@ -23,8 +23,8 @@
     baseProse,
     "text-foreground",
     "[&_a]:text-primary",
-    "[&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:text-foreground [&_:not(pre)>code]:font-medium", // ← 添加 font-medium 增强可读性
-    "[&_pre]:bg-muted [&_pre]:text-foreground", // ← 去掉透明度，添加明确前景色
+    "[&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:text-foreground [&_:not(pre)>code]:font-medium",
+    "[&_pre]:bg-muted [&_pre]:text-foreground",
     "[&_blockquote]:border-border [&_blockquote]:text-muted-foreground",
   ].join(" ");
 
@@ -87,9 +87,10 @@
 
 <div
   class={[
-    "prose prose-sm w-full min-w-0 max-w-none wrap-break-word",
+    "prose prose-sm w-full min-w-0 max-w-none wrap-break-word select-text",
     proseClass,
   ]}
+  style="font-family: system-ui, 'Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;"
 >
   <SvelteMarkdown source={message.content} {renderers} {streaming} />
   {#if streaming && !error}
