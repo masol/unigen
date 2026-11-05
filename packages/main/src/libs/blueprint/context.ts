@@ -17,10 +17,23 @@ export class RunnerContext implements IRunnerContext {
     readonly files: string[];
     readonly msgId: string;
     readonly sessId: string;
+    #varMap: Map<string, unknown> = new Map();
     #mode: CmdMode;
 
     get mode() {
         return this.#mode;
+    }
+
+    getVar(name: string): unknown | null {
+        return this.#varMap.get(name);
+    }
+    setVar(name: string, value: unknown): void {
+        this.#varMap.set(name, value);
+    }
+
+    clear() {
+        // 防止循环递归引用，无法GC.
+        this.#varMap.clear();
     }
 
     cmd: CommandInfo = { isCommand: false, body: "" };

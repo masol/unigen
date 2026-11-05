@@ -2,11 +2,16 @@
 
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
-import type { LocalMcpClient } from "../mcp.js";
-import type { CompiledPacAgent, IPacAgent, JsonValue, LocalMcpConfig } from "../type.js";
+import type { CompiledPacAgent, IPacAgent, JsonValue } from "../type.js";
 import { executeAgent } from "./execution.js";
 import { closeLocalMcpClients } from "./tools.js";
-import { TraceIdRegistry, type IAgentExecutor, type PacRunState, type RunOptions } from "./types.js";
+import {
+    TraceIdRegistry,
+    type IAgentExecutor,
+    type McpClientCache,
+    type PacRunState,
+    type RunOptions,
+} from "./types.js";
 
 export class PacAgent implements IPacAgent, IAgentExecutor {
     constructor(private readonly compiled: CompiledPacAgent) { }
@@ -16,7 +21,7 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
     }
 
     async run(ctx: IRunnerContext): Promise<string> {
-        const mcpClients = new Map<LocalMcpConfig, LocalMcpClient>();
+        const mcpClients: McpClientCache = new Map();
         try {
             const prjdb = PrjDB.ensure(ctx.prj);
             const messageId = prjdb.saveMessage({
@@ -55,7 +60,7 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
         rawInputs: Record<string, unknown>,
         inheritedDefaults: Record<string, JsonValue> = {},
         options: RunOptions = {},
-        mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
+        mcpClients: McpClientCache,
         state?: PacRunState,
     ): Promise<string> {
         const prjdb = PrjDB.ensure(ctx.prj);
@@ -98,7 +103,7 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
         inputs: Record<string, unknown>,
         inheritedDefaults: Record<string, JsonValue>,
         options: RunOptions,
-        mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
+        mcpClients: McpClientCache,
         state: PacRunState,
     ): Promise<string> {
         const subAgent = new PacAgent(compiled);

@@ -46,6 +46,9 @@ export interface IRunnerContext {
     // 为mode打的补丁，为了支持rerun。如果加载到cmd,需要重置mode.
     setMode(mode: CmdMode): void;
 
+    getVar(name: string): unknown|null;
+    setVar(name: string, value: unknown): void;
+
     /**
      * 加载特定能力id对应的执行对象。
      * @param capaId capability id.

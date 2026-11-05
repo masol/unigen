@@ -7,6 +7,15 @@ import type { LocalMcpClient } from "../mcp.js";
 import type { CompiledPacAgent, JsonValue, LocalMcpConfig } from "../type.js";
 
 /**
+ * 运行期 MCP 客户端缓存。
+ *
+ * 值使用 Promise 而不是已连接 client：同一 run 内多个子 agent 并行物化工具时，
+ * 对同一 LocalMcpConfig 只会发起一次 connectLocalMcp，其余等待同一个 Promise。
+ * Map 本身由每次根 run 在堆栈上创建，不跨 run 共享。
+ */
+export type McpClientCache = Map<LocalMcpConfig, Promise<LocalMcpClient>>;
+
+/**
  * Trace 节点 ID 注册表：内部语义键 ↔ 对外 UUID。
  *
  * 背景：早期实现把 `agent|${agentId}#${seq}` 这类确定性字符串直接当作 trace 节点 ID
@@ -134,7 +143,7 @@ export interface IAgentExecutor {
         inputs: Record<string, unknown>,
         inheritedDefaults: Record<string, JsonValue>,
         options: RunOptions,
-        mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
+        mcpClients: McpClientCache,
         state: PacRunState,
     ): Promise<string>;
 }

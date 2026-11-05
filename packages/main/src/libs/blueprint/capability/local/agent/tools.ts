@@ -4,14 +4,14 @@ import type { IRunnerContext } from "$types/blueprint/context.js";
 import { tool, type Tool } from "ai";
 import Logger from "electron-log/main.js";
 import { connectLocalMcp, type LocalMcpClient } from "../mcp.js";
-import type { CompiledPacAgent, JsonValue, LocalMcpConfig } from "../type.js";
-import type { IAgentExecutor, PacRunState } from "./types.js";
+import type { CompiledPacAgent, JsonValue } from "../type.js";
+import type { IAgentExecutor, McpClientCache, PacRunState } from "./types.js";
 
 export async function materializeTools(
     compiled: CompiledPacAgent,
     ctx: IRunnerContext,
     parentDefaults: Record<string, JsonValue>,
-    mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
+    mcpClients: McpClientCache,
     parentStepPath: string,
     state: PacRunState,
     parentTraceId: string,
@@ -46,19 +46,27 @@ export async function materializeTools(
             }
         } else if (ref.mcpLocal) {
             const { config, tool: info } = ref.mcpLocal;
-            let client = mcpClients.get(config);
-            if (!client) {
-                try {
-                    client = await connectLocalMcp(config);
-                    mcpClients.set(config, client);
-                } catch (e) {
-                    Logger.error(
-                        `[PAC] ${compiled.name}: 局部 MCP 连接失败,跳过工具 ${ref.key}`,
-                        e,
-                    );
-                    continue;
-                }
+
+            // 缓存 Promise 而不是 client：并行子 agent 同时物化同一局部 MCP 时，
+            // 只有第一个会真正发起连接，其余等待同一个 Promise。
+            let pending = mcpClients.get(config);
+            if (!pending) {
+                pending = connectLocalMcp(config);
+                mcpClients.set(config, pending);
             }
+
+            let client: LocalMcpClient;
+            try {
+                client = await pending;
+            } catch (e) {
+                mcpClients.delete(config);
+                Logger.error(
+                    `[PAC] ${compiled.name}: 局部 MCP 连接失败,跳过工具 ${ref.key}`,
+                    e,
+                );
+                continue;
+            }
+
             const tools = (await client.tools()) as Record<string, Tool>;
             const t = tools[info.name];
             if (t) {
@@ -87,7 +95,7 @@ export function buildAgentTool(
     compiled: CompiledPacAgent,
     ctx: IRunnerContext,
     inheritedDefaults: Record<string, JsonValue> = {},
-    mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
+    mcpClients: McpClientCache,
     stepPath: string,
     state: PacRunState,
     parentTraceId: string,
@@ -114,10 +122,11 @@ export function buildAgentTool(
 }
 
 export async function closeLocalMcpClients(
-    mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
+    mcpClients: McpClientCache,
 ): Promise<void> {
-    for (const [, client] of mcpClients) {
+    for (const [, pending] of mcpClients) {
         try {
+            const client = await pending;
             await client.close();
         } catch (e) {
             Logger.warn(`[PAC] 关闭局部 MCP 连接失败:`, e);

@@ -9,11 +9,10 @@ import type { IRunnerContext } from "$types/blueprint/context.js";
 import { isStepCount, ToolLoopAgent, type ModelMessage } from "ai";
 import Logger from "electron-log/main.js";
 import { isPlainObject } from "radashi";
-import type { LocalMcpClient } from "../mcp.js";
 import { resolveModelOptions } from "../settings.js";
 import { buildUserPrompt, renderSystemPrompt } from "../template.js";
 import { nextSeq } from "../traceid.js";
-import type { CompiledPacAgent, JsonValue, LocalMcpConfig } from "../type.js";
+import type { CompiledPacAgent, JsonValue } from "../type.js";
 import { MessageDeltaBuffer } from "./buffer.js";
 import { createToolCallbacks } from "./callbacks.js";
 import { generateAgent, streamAgent } from "./executor.js";
@@ -29,7 +28,13 @@ import {
     type AgentContext,
 } from "./lifecycle.js";
 import { materializeTools } from "./tools.js";
-import type { IAgentExecutor, PacRunState, RunOptions, ToolCallTraceInfo } from "./types.js";
+import type {
+    IAgentExecutor,
+    McpClientCache,
+    PacRunState,
+    RunOptions,
+    ToolCallTraceInfo,
+} from "./types.js";
 import { THINKING_PROVIDER_OPTIONS } from "./types.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,7 +52,7 @@ export async function executeAgent(
     rawInputs: Record<string, unknown>,
     inheritedDefaults: Record<string, JsonValue>,
     options: RunOptions,
-    mcpClients: Map<LocalMcpConfig, LocalMcpClient>,
+    mcpClients: McpClientCache,
     state: PacRunState,
     agentExecutor: IAgentExecutor,
 ): Promise<ExecutionResult> {

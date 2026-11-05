@@ -93,5 +93,7 @@ ${getErrorMessage(e)}`;
                 ctx.fnReport = null;
             }
         });
+        ctx.fnReport = null;
+        ctx.clear();
     }
 }
