@@ -1,5 +1,4 @@
-// packages/main/src/libs/blueprint/capability/local/agent/tools.ts
-
+// file: agent/tools.ts
 import { globalToolDB } from "$libs/tooldb/index.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { tool, type Tool } from "ai";
@@ -35,7 +34,16 @@ export async function materializeTools(
                 agentExecutor,
             );
         } else if (ref.local) {
-            out[ref.key] = ref.local.tool;
+            // 编译产物不持有 prj；需要 prj 的工具(skill)在运行期通过 build(ctx.prj) 构造。
+            if (ref.local.tool) {
+                out[ref.key] = ref.local.tool;
+            } else if (ref.local.build) {
+                out[ref.key] = ref.local.build(ctx.prj);
+            } else {
+                Logger.warn(
+                    `[PAC] ${compiled.name}: local 工具 ${ref.key} 既无 tool 也无 build，本次运行跳过`,
+                );
+            }
         } else if (ref.mcpLocal) {
             const { config, tool: info } = ref.mcpLocal;
             let client = mcpClients.get(config);

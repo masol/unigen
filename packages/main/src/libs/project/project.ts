@@ -15,6 +15,7 @@ import { filenamifyPath } from "filenamify";
 import fsExtra from 'fs-extra';
 import fs from 'node:fs/promises';
 import { isAbsolute, join, resolve } from "node:path";
+import pMap from "p-map";
 import { z } from "zod";
 import { closeProject, createProject, openProject } from "./helper/create.js";
 import type { IProjectPlugin } from "./plugin.js";
@@ -66,7 +67,7 @@ export class ProjectContainer implements IProjectContext {
     async reloadAgent(): Promise<void>  // 重新加载本地Agent.
     {
         if (!this.#agent) {
-            this.#agent = new PACFunctor(this.#type);
+            this.#agent = new PACFunctor(this.#type, ['pac']);
         }
         return await this.#agent.compile(this);
     }
@@ -147,6 +148,15 @@ export class ProjectContainer implements IProjectContext {
         const uiFile = this.getPath("type.json");
         const uiJSON = await fsExtra.readJSON(uiFile);
         const prjdata = this.validatePrjData(uiFile, uiJSON);
+        if (!prjdata.welcome) {
+            //加载项目的welcome.
+            const welcomeFile = this.getPath("welcome.md");
+            try {
+                prjdata.welcome = await fs.readFile(welcomeFile, { encoding: "utf-8" });
+            } catch {
+                void (0);
+            }
+        }
         return prjdata;
     }
 
@@ -174,6 +184,29 @@ export class ProjectContainer implements IProjectContext {
         }
     }
 
+    private async assetsFromType(type: string) {
+        await pMap(
+            ['pac', 'cmds', 'skills'],
+            async (subDir) => {
+                const srcPath = await knowledgeCenter.getFile(type, subDir);
+
+                if (!srcPath) {
+                    return;
+                }
+
+                const destPath = this.getPath(subDir);
+
+                // 递归拷贝目录，覆盖已有内容
+                await fsExtra.copy(srcPath, destPath, {
+                    overwrite: true,
+                    errorOnExist: false,
+                    recursive: true,
+                });
+            },
+            { concurrency: configService().get("concurrency") },
+        );
+    }
+
 
     async create(path: string, type: string, bForce = false): Promise<ProjectActivityData> {
         const resolvedPath = this.#resolveAndSanitizePath(path);
@@ -192,7 +225,8 @@ export class ProjectContainer implements IProjectContext {
             await createProject(this, type, prjdata.icon, bForce);
             await Promise.all([
                 fsExtra.copyFile(typePath, this.getPath("type.json")),
-                fs.writeFile(this.getPath("type.txt"), type)
+                fs.writeFile(this.getPath("type.txt"), type),
+                this.assetsFromType(type)
             ])
             await this.reloadAgent();
             return prjdata;

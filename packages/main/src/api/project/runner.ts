@@ -9,25 +9,6 @@ import { z } from 'zod';
 import { RpcContext } from '../type.js';
 
 
-const start = os
-    .input(z.number().optional())
-    .output(z.void())
-    .handler(async ({ input, context }) => {
-        const ctx = context as RpcContext;
-        const runner = PrjRunner.ensure(ctx.project);
-        runner.start(undefined, input);
-    });
-
-
-const stop = os
-    .input(z.boolean().optional().default(false))
-    .output(z.void())
-    .handler(async ({ input, context }) => {
-        const ctx = context as RpcContext;
-        const runner = PrjRunner.ensure(ctx.project);
-        runner.stop(input);
-    });
-
 
 const waitFinish = os
     .input(z.void())
@@ -38,23 +19,6 @@ const waitFinish = os
         await runner.waitFinish();
     });
 
-const runState = os
-    .input(z.void())
-    .output(z.enum(['idle', 'running', 'terminating']))
-    .handler(async ({ context }) => {
-        const ctx = context as RpcContext;
-        const runner = PrjRunner.ensure(ctx.project);
-        return runner.runState;
-    });
-
-const startTime = os
-    .input(z.void())
-    .output(z.number())
-    .handler(async ({ context }) => {
-        const ctx = context as RpcContext;
-        const runner = PrjRunner.ensure(ctx.project);
-        return runner.startTime;
-    });
 
 const clarify = os
     .input(z.object({
@@ -228,11 +192,7 @@ const runCommand = os
     });
 
 export default {
-    start,
-    stop,
     waitFinish,
-    runState,
-    startTime,
     runCommand,
     clarify
 }

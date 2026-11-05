@@ -1,8 +1,10 @@
+// file: skill.ts
+import type { IProjectContext } from "$libs/project/type.js";
 import matter from "@11ty/gray-matter";
 import { tool } from "ai";
 import Logger from "electron-log/main.js";
 import fs from "node:fs/promises";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { z } from "zod";
 import type { LocalToolSpec, PacToolConfig, SkillInfo } from "./type.js";
 
@@ -15,6 +17,12 @@ import type { LocalToolSpec, PacToolConfig, SkillInfo } from "./type.js";
  *   - 不执行技能目录内的脚本。
  *
  * 技能不跨层继承:子 agent 需要技能时在自己的 front matter 里声明。
+ *
+ * 路径约定:
+ *   - 技能目录以相对项目根的分段路径(base)保存；
+ *   - 所有文件读取统一通过 prj.getPath([...base, ...relPaths]) 获取绝对路径；
+ *   - 技能工具的 Tool 由 buildSkillTools 返回"工厂"，运行期由 materializeTools
+ *     使用 ctx.prj 完成构建（避免在编译产物里缓存 prj）。
  */
 
 export const SKILL_FILE = "SKILL.md";
@@ -33,78 +41,120 @@ export interface SkillToolKeys {
     read: string;
 }
 
+function projectPath(prj: IProjectContext, segments: string[]): string | undefined {
+    return prj.getPath(segments);
+}
+
+function requireProjectPath(prj: IProjectContext, segments: string[]): string {
+    const p = projectPath(prj, segments);
+    if (!p) {
+        throw new Error(`无法解析技能路径: ${segments.join("/")}`);
+    }
+    return p;
+}
+
+function splitRelPath(p: string): string[] {
+    return p.replace(/[\\/]+/g, "/").split("/").filter((s) => s.length > 0);
+}
+
 /**
- * dirs 中每一项:
+ * bases 中每一项:
  *   - 自身含 SKILL.md → 单个技能
  *   - 否则视为技能集合目录,扫描一级子目录
  * 重名技能保留先出现者。
  */
-export async function discoverSkills(dirs: string[]): Promise<DiscoveredSkill[]> {
+export async function discoverSkills(
+    prj: IProjectContext,
+    bases: string[][],
+): Promise<DiscoveredSkill[]> {
     const out: DiscoveredSkill[] = [];
     const byName = new Map<string, string>();
 
-    for (const dir of dirs) {
-        const st = await fs.stat(dir).catch(() => null);
-        if (!st?.isDirectory()) {
-            Logger.warn(`[PAC] 技能目录不存在或不是目录,已跳过: ${dir}`);
+    for (const base of bases) {
+        const dir = projectPath(prj, base);
+        if (!dir) {
+            Logger.warn(`[PAC] 技能目录无法解析,已跳过: ${base.join("/")}`);
             continue;
         }
-        const single = await readSkill(dir);
-        const found = single ? [single] : await readSkillChildren(dir);
+
+        const st = await fs.stat(dir).catch(() => null);
+        if (!st?.isDirectory()) {
+            Logger.warn(`[PAC] 技能目录不存在或不是目录,已跳过: ${base.join("/")}`);
+            continue;
+        }
+
+        const single = await readSkill(prj, base);
+        const found = single ? [single] : await readSkillChildren(prj, base);
         if (found.length === 0) {
-            Logger.warn(`[PAC] 目录下未发现任何 ${SKILL_FILE}: ${dir}`);
+            Logger.warn(`[PAC] 目录下未发现任何 ${SKILL_FILE}: ${base.join("/")}`);
         }
         for (const s of found) {
             const prev = byName.get(s.name);
             if (prev) {
-                Logger.warn(`[PAC] 技能重名 "${s.name}",保留 ${prev},忽略 ${s.dir}`);
+                Logger.warn(`[PAC] 技能重名 "${s.name}",保留 ${prev},忽略 ${s.base.join("/")}`);
                 continue;
             }
-            byName.set(s.name, s.dir);
+            byName.set(s.name, s.base.join("/"));
             out.push(s);
         }
     }
     return out;
 }
 
-async function readSkillChildren(dir: string): Promise<DiscoveredSkill[]> {
-    const entries = (await fs.readdir(dir, { withFileTypes: true }))
+async function readSkillChildren(
+    prj: IProjectContext,
+    base: string[],
+): Promise<DiscoveredSkill[]> {
+    const dir = projectPath(prj, base);
+    if (!dir) return [];
+
+    const entries = (await fs.readdir(dir, { withFileTypes: true }).catch(() => []))
         .filter((e) => e.isDirectory() && !e.name.startsWith("."))
         .sort((a, b) => a.name.localeCompare(b.name));
+
     const out: DiscoveredSkill[] = [];
     for (const e of entries) {
-        const s = await readSkill(join(dir, e.name));
+        const s = await readSkill(prj, [...base, e.name]);
         if (s) out.push(s);
     }
     return out;
 }
 
-async function readSkill(dir: string): Promise<DiscoveredSkill | null> {
-    const entry = join(dir, SKILL_FILE);
+async function readSkill(
+    prj: IProjectContext,
+    base: string[],
+): Promise<DiscoveredSkill | null> {
+    const entry = projectPath(prj, [...base, SKILL_FILE]);
+    if (!entry) return null;
+
     let raw: string;
     try {
         raw = await fs.readFile(entry, "utf-8");
     } catch {
         return null;
     }
+
     const parsed = matter(raw) as { data?: Record<string, unknown>; content: string };
     const data = structuredClone(parsed.data ?? {});
 
+    const fallbackName = base[base.length - 1] ?? "unnamed-skill";
     const name =
-        typeof data.name === "string" && data.name.trim() ? data.name.trim() : basename(dir);
+        typeof data.name === "string" && data.name.trim()
+            ? data.name.trim()
+            : fallbackName;
     const description = typeof data.description === "string" ? data.description.trim() : "";
     if (!description) {
-        Logger.warn(`[PAC] 技能 ${name} 缺少 description,LLM 难以判断何时使用 (${entry})`);
+        Logger.warn(`[PAC] 技能 ${name} 缺少 description,LLM 难以判断何时使用 (${base.join("/")})`);
     }
 
     let tools: PacToolConfig[] = [];
     if (Array.isArray(data.tools)) {
         tools = data.tools as PacToolConfig[];
     } else if (data.tools !== undefined) {
-        Logger.warn(`[PAC] 技能 ${name} 的 tools 不是数组,已忽略 (${entry})`);
+        Logger.warn(`[PAC] 技能 ${name} 的 tools 不是数组,已忽略 (${base.join("/")})`);
     }
 
-    return { name, description, dir, entry, tools };
+    return { name, description, base, tools };
 }
 
 /** {{_BI_skill}} 的取值 */
@@ -121,7 +171,13 @@ export function buildSkillDoc(skills: SkillInfo[], keys: SkillToolKeys): string 
     return lines.join("\n");
 }
 
-/** 构造两个技能工具。纯函数,只依赖技能清单,可在编译期生成。skills 不能为空。 */
+/**
+ * 构造两个技能工具的"工厂"。
+ *
+ * 返回的 LocalToolSpec 只有 description/inputSchema 是编译期固化的;
+ * 真正的 Tool 在 materializeTools 时使用运行期 ctx.prj 完成构建。
+ * 这样编译产物不持有 prj。
+ */
 export function buildSkillTools(
     skills: SkillInfo[],
     keys: SkillToolKeys,
@@ -151,61 +207,73 @@ export function buildSkillTools(
         load: {
             description: loadDesc,
             inputSchema: loadInput,
-            tool: tool({
-                description: loadDesc,
-                inputSchema: loadInput,
-                execute: async ({ name }) => {
-                    const s = getSkill(name);
-                    const raw = await fs.readFile(s.entry, "utf-8");
-                    const parsed = matter(raw) as { content?: string };
-                    const body = (parsed.content ?? "").trim();
-                    const files = await listFiles(s.dir);
-                    return [
-                        `# 技能: ${s.name}`,
-                        "",
-                        body,
-                        "",
-                        `## 技能目录文件(用 ${keys.read} 读取)`,
-                        "",
-                        files.length > 0 ? files.map((f) => `- ${f}`).join("\n") : "_无其它文件_",
-                    ].join("\n");
-                },
-            }),
+            build: (prj) =>
+                tool({
+                    description: loadDesc,
+                    inputSchema: loadInput,
+                    execute: async ({ name }) => {
+                        const s = getSkill(name);
+                        const entry = requireProjectPath(prj, [...s.base, SKILL_FILE]);
+                        const raw = await fs.readFile(entry, "utf-8");
+                        const parsed = matter(raw) as { content?: string };
+                        const body = (parsed.content ?? "").trim();
+                        const files = await listFiles(prj, s.base);
+                        return [
+                            `# 技能: ${s.name}`,
+                            "",
+                            body,
+                            "",
+                            `## 技能目录文件(用 ${keys.read} 读取)`,
+                            "",
+                            files.length > 0 ? files.map((f) => `- ${f}`).join("\n") : "_无其它文件_",
+                        ].join("\n");
+                    },
+                }),
         },
         read: {
             description: readDesc,
             inputSchema: readInput,
-            tool: tool({
-                description: readDesc,
-                inputSchema: readInput,
-                execute: async ({ skill, path }) => {
-                    const s = getSkill(skill);
-                    const abs = await resolveInside(s.dir, path);
-                    const st = await fs.stat(abs);
-                    if (!st.isFile()) throw new Error(`不是文件: ${path}`);
-                    if (st.size > MAX_FILE_BYTES) {
-                        throw new Error(`文件过大(${st.size} 字节,上限 ${MAX_FILE_BYTES}): ${path}`);
-                    }
-                    const buf = await fs.readFile(abs);
-                    if (buf.includes(0)) throw new Error(`疑似二进制文件,不支持读取: ${path}`);
-                    return buf.toString("utf-8");
-                },
-            }),
+            build: (prj) =>
+                tool({
+                    description: readDesc,
+                    inputSchema: readInput,
+                    execute: async ({ skill, path }) => {
+                        const s = getSkill(skill);
+                        const abs = await resolveInside(prj, s.base, path);
+                        const st = await fs.stat(abs);
+                        if (!st.isFile()) throw new Error(`不是文件: ${path}`);
+                        if (st.size > MAX_FILE_BYTES) {
+                            throw new Error(`文件过大(${st.size} 字节,上限 ${MAX_FILE_BYTES}): ${path}`);
+                        }
+                        const buf = await fs.readFile(abs);
+                        if (buf.includes(0)) throw new Error(`疑似二进制文件,不支持读取: ${path}`);
+                        return buf.toString("utf-8");
+                    },
+                }),
         },
     };
 }
 
 /** 解开符号链接后再判断越界,防止 symlink 逃逸出技能目录 */
-async function resolveInside(dir: string, p: string): Promise<string> {
+async function resolveInside(
+    prj: IProjectContext,
+    base: string[],
+    p: string,
+): Promise<string> {
     if (isAbsolute(p)) throw new Error(`只允许技能目录内的相对路径: ${p}`);
+
+    const relSegs = splitRelPath(p);
+    if (relSegs.length === 0) throw new Error(`文件路径为空: ${p}`);
+
     let root: string;
     let real: string;
     try {
-        root = await fs.realpath(dir);
-        real = await fs.realpath(resolve(dir, p));
+        root = await fs.realpath(requireProjectPath(prj, base));
+        real = await fs.realpath(requireProjectPath(prj, [...base, ...relSegs]));
     } catch {
         throw new Error(`文件不存在: ${p}`);
     }
+
     const rel = relative(root, real);
     if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
         throw new Error(`路径越界: ${p}`);
@@ -214,8 +282,10 @@ async function resolveInside(dir: string, p: string): Promise<string> {
 }
 
 /** 递归列出文件(不跟随符号链接,跳过隐藏文件和 SKILL.md 自身) */
-async function listFiles(root: string): Promise<string[]> {
+async function listFiles(prj: IProjectContext, base: string[]): Promise<string[]> {
+    const root = requireProjectPath(prj, base);
     const out: string[] = [];
+
     const walk = async (dir: string): Promise<void> => {
         const entries = (await fs.readdir(dir, { withFileTypes: true }))
             .sort((a, b) => a.name.localeCompare(b.name));
@@ -231,6 +301,7 @@ async function listFiles(root: string): Promise<string[]> {
             }
         }
     };
+
     await walk(root);
     return out;
 }

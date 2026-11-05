@@ -1,3 +1,5 @@
+// file: index.ts
+import { IProjectContext } from "$libs/project/type.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import Logger from "electron-log/main.js";
 import { getErrorMessage } from "radashi";
@@ -5,8 +7,6 @@ import { ICapaFunctor } from "../type.js";
 import { PacAgent } from "./agent/index.js";
 import { compilePacAgent } from "./compiler.js";
 import type { CompiledPacAgent } from "./type.js";
-
-type PacProject = IRunnerContext["prj"];
 
 /**
  * PAC (Prompt-as-Code) 本地能力运行环境。
@@ -24,6 +24,12 @@ type PacProject = IRunnerContext["prj"];
  *
  * 用户提示词模板:内联 userTemplate 字符串,或 userTemplatePath 指向另一份 md 文件,
  * 均未声明时默认模板为 "{{_BI_input}}"。
+ *
+ * **路径机制**:入口由 base 字符串数组定位 `${base}/index.md`；所有相对路径文件
+ * 统一通过 prj.getPath([...base, ...relPaths]) 解析；prj.getPath 只返回路径，不检查存在性。
+ *
+ * prj 不在编译期缓存：编译期通过函数参数沿调用链传递；运行期一律使用 ctx.prj
+ * （如技能工具的 Tool 在 materializeTools 时用 ctx.prj 完成构建）。
  *
  * **根 agent 的输入/输出**:根 agent 不接受结构化 inputs/outputs——其输入是用户原始录入
  * (文本/文档/语音…),输出直接响应用户。编译期若根文件声明了 inputs/outputs,告警并忽略。
@@ -73,7 +79,7 @@ type PacProject = IRunnerContext["prj"];
  *   字符串 → modelPattern;对象 → getSmartModel 的 options 透传。
  *   模型 id (providerId/modelId) 在 trace 节点 description 与 message.meta 中汇报。
  *
- * **文件缺失:** pac/index.md 不存在时不报错,构造一个"直通 agent"
+ * **文件缺失:** `${base}/index.md` 不存在时不报错,构造一个"直通 agent"
  * (无系统提示词、无工具,userTemplate = {{_BI_input}}),等价于把用户原始录入直送 LLM。
  *
  * 编译期一次性构建整棵树(纯函数,与 ctx 无关);
@@ -85,14 +91,22 @@ export class PACFunctor implements ICapaFunctor {
     private compileError: string | null = null;
     private inflight: Promise<void> | null = null;
 
-    constructor(readonly type: string) { }
+    constructor(
+        readonly type: string,
+        /** 定位入口用的根分段路径；必传，不提供 "pac" 默认值。 */
+        private base: string[],
+    ) { }
 
     get id() {
         return `localAgent:${this.type}`;
     }
 
-    compile(_prj: PacProject): Promise<void> {
-        this.inflight ??= this.doCompile().finally(() => {
+    /**
+     * 编译入口。base 为定位 `${base}/index.md` 的分段路径。
+     * 若编译已在进行/已完成，返回同一 Promise；重复调用传入不同 base 时以最近一次为准。
+     */
+    compile(prj: IProjectContext): Promise<void> {
+        this.inflight ??= this.doCompile(prj, this.base).finally(() => {
             this.inflight = null;
         });
         return this.inflight;
@@ -102,9 +116,9 @@ export class PACFunctor implements ICapaFunctor {
         return this.agent !== null;
     }
 
-    private async doCompile(): Promise<void> {
+    private async doCompile(prj: IProjectContext, base: string[]): Promise<void> {
         try {
-            const compiled = await compilePacAgent(this.type);
+            const compiled = await compilePacAgent(this.type, base, undefined, prj);
             this.agent = new PacAgent(compiled);
             this.compileError = null;
             Logger.debug(
@@ -121,6 +135,7 @@ export class PACFunctor implements ICapaFunctor {
 
     async run(ctx: IRunnerContext): Promise<void> {
         if (ctx.isAborted) return;
+        // 懒编译时使用构造时传入的 this.base；若宿主希望以不同 base 编译，应先调 compile(prj, base)。
         if (!this.agent) await this.compile(ctx.prj);
         if (!this.agent) {
             ctx.error(`[PAC] agent 未就绪(${this.type}): ${this.compileError ?? "未知原因"}`);
@@ -128,7 +143,7 @@ export class PACFunctor implements ICapaFunctor {
         }
         try {
             const result = await this.agent.run(ctx);
-            ctx.notify("", result);
+            // ctx.notify("", result);
             ctx.debug(`[PAC] 运行结果(${this.type}):`, result);
         } catch (e) {
             const msg = `[PAC] 运行失败(${this.type}): ${getErrorMessage(e)}`;
@@ -147,7 +162,7 @@ function countSub(c: CompiledPacAgent): number {
 /* ────────────────────────────────────────────────────────── */
 
 export { buildAgentTool, PacAgent, type PacRunState } from "./agent/index.js";
-export { buildAgentId, compilePacAgent, createCompileCache, resolvePacPath } from "./compiler.js";
+export { buildAgentId, compilePacAgent, createCompileCache, resolveProjectPath } from "./compiler.js";
 export {
     BI_PREFIX,
     classifyVars,

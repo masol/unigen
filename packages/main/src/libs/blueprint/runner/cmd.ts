@@ -1,10 +1,11 @@
-import { runInnerFlow } from '$libs/innerflow/index.js';
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { ProjectDbKeys } from '$libs/utils/db/dbkeys.js';
-import { throwPrecondition } from '$libs/utils/err.js';
+import { throwNotfound, throwPrecondition } from '$libs/utils/err.js';
 import { delay } from '$libs/utils/promise.js';
 import type { CommandInfo, IRunnerContext } from '$types/blueprint/context.js';
 import { SpanStatusCode } from '@opentelemetry/api';
+import Logger from 'electron-log/main.js';
+import { getErrorMessage } from 'radashi';
 import { parse, ParseEntry } from 'shell-quote';
 import yargsParser from 'yargs-parser';
 import { BaseRunner, withSpan } from './base.js';
@@ -88,6 +89,19 @@ export function parseCommandWithBody(userInput: string): CommandInfo {
 
 // 命令执行器。解析命令字符串并加以执行。
 export class CmdRunner extends BaseRunner {
+    #running: Promise<void> | null = null;
+
+    get isRunning(): boolean {
+        return this.#running !== null;
+    }
+
+    async waitFinish(): Promise<void> {
+        const running = this.#running;
+        if (running) {
+            await running.catch(() => undefined);
+        }
+    }
+
     private async runCmdEntry(ctx: IRunnerContext) {
         // 首先检查是否有
         const kvKey4cap = `entry_${ctx.cmd.command}`;
@@ -99,8 +113,7 @@ export class CmdRunner extends BaseRunner {
         return await this.runCap(capId, ctx);
     }
 
-    // 仅供flow.runCommand调用。
-    async dispatch(ctx: IRunnerContext): Promise<void> {
+    private async dispatchCmds(ctx: IRunnerContext): Promise<void> {
         switch (ctx.cmd.command) {
             case 'export':
                 await doExport(ctx);
@@ -131,27 +144,52 @@ export class CmdRunner extends BaseRunner {
         }
     }
 
-    async run(userInput: string, ctx: IRunnerContext): Promise<void> {
+    async run(userInput: string, ctx: IRunnerContext, args?: Record<string, unknown>): Promise<void> {
+        if (this.#running) {
+            throwPrecondition("CmdRunner 实例不支持并发执行多个命令，请为每个命令创建独立实例。");
+        }
+
+        const running = this.execute(userInput, ctx, args);
+        this.#running = running;
+        try {
+            await running;
+        } finally {
+            if (this.#running === running) {
+                this.#running = null;
+            }
+        }
+    }
+
+    private async execute(userInput: string, ctx: IRunnerContext, args?: Record<string, unknown>): Promise<void> {
         const cmdInfo = parseCommandWithBody(userInput);
         ctx.cmd = cmdInfo;
+        ctx.cmd.args = { ...ctx.cmd.args, ...args };
         const prjdb: PrjDB = PrjDB.ensure(ctx.prj);
-        if (!cmdInfo.isCommand) {
-            const capId = prjdb.get<string>(ProjectDbKeys.entry_common);
-            if (!capId) {
-                if (ctx.prj.agent) {
-                    return await this.runCap(ctx.prj.agent, ctx);
-                }
-                // return await this.runCap(localTypeName(ctx.prj.type), ctx);
-                return await runInnerFlow(ctx, "common")
-            }
-            return await this.runCap(capId, ctx);
-        }
         return withSpan(`CmdRunner.run`, async (span) => {
             span.setAttribute("command.userInput", userInput);
             span.addEvent("task_started", { message: `开始分遣命令: ${ctx.cmd.command}` });
-            await this.dispatch(ctx);
-            span.addEvent("command_run_success");
-            span.setStatus({ code: SpanStatusCode.OK });
+            try {
+                if (cmdInfo.isCommand) {
+                    await this.dispatchCmds(ctx);
+                } else {
+                    const capId = prjdb.get<string>(ProjectDbKeys.entry_common);
+                    if (!capId) {
+                        if (ctx.prj.agent) {
+                            return await this.runCap(ctx.prj.agent, ctx);
+                        }
+                        throwNotfound("版本错误？未发现Project的默认Agent.")
+                    }
+                    await this.runCap(capId, ctx);
+                }
+                span.addEvent("command_run_success");
+            } catch (e) {
+                span.addEvent("command_run_failed");
+                const errMsg = getErrorMessage(e);
+                span.setAttribute("command.errMessage", errMsg);
+                Logger.error(`执行命令出错:`, errMsg);
+            } finally {
+                span.setStatus({ code: SpanStatusCode.OK });
+            }
         });
     }
 }

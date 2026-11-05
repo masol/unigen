@@ -1,3 +1,5 @@
+// file: type.ts
+import type { IProjectContext } from "$libs/project/type.js";
 import type { ToolMeta } from "$libs/tooldb/index.js";
 import type { McpServerConfig } from "$libs/tooldb/type.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
@@ -25,9 +27,14 @@ export interface LocalMcpConfig {
     alias?: string;
 }
 
-/** local 内部构造的工具(目前仅技能工具) */
+/**
+ * 编译期构造的工具描述。
+ * - `tool`: 编译期可完全确定、运行时无外部依赖的工具
+ * - `build`: 需要运行期上下文(如 prj)才能完成的工具工厂；由 materializeTools 调用
+ */
 export interface LocalToolSpec {
-    tool: Tool;
+    tool?: Tool;
+    build?: (prj: IProjectContext) => Tool;
     description: string;
     inputSchema: z.ZodType;
 }
@@ -64,8 +71,8 @@ export interface ToolRef {
 export interface SkillInfo {
     name: string;
     description: string;
-    dir: string;
-    entry: string;
+    /** 技能目录相对项目根的分段路径，运行时通过 prj.getPath([...base, file]) 解析文件 */
+    base: string[];
 }
 
 /**
@@ -159,7 +166,7 @@ export interface PacFrontMatter {
 export interface CompiledPacAgent {
     /**
      * 稳定 agent id,用于 HistoryStore 定位本 agent 的历史。
-     * 一般是相对 rootPath 的源文件路径(去 .md 后缀,分隔符用 '/'),
+     * 一般是相对 rootBase 的源文件路径(去 .md 后缀,分隔符用 '/'),
      * 例如 "index"、"sub/foo"。passthrough 使用 "__passthrough__/<prjType>"。
      */
     id: string;
@@ -188,8 +195,10 @@ export interface CompiledPacAgent {
     /** 集中处理后的运行配置,见 settings.ts */
     settings: ResolvedSettings;
 
-    basePath: string;
-    rootPath: string;
+    /** 当前 agent 源文件所在目录相对项目根的分段路径 */
+    base: string[];
+    /** PAC 根目录相对项目根的分段路径 */
+    rootBase: string[];
     sourcePath: string;
 }
 
@@ -201,13 +210,18 @@ export interface VarBuckets {
     all: string[];
 }
 
-/** 编译期缓存:同一文件只编译一次 + 循环引用检测 */
+/**
+ * 编译期缓存:同一文件只编译一次 + 循环引用检测。
+ *
+ * **不缓存 prj**：prj 通过编译期参数逐层显式传入，运行期一律用 ctx.prj。
+ */
 export interface CompileCache {
     compiled: Map<string, CompiledPacAgent>;
     compiling: Set<string>;
-    rootPath: string;
-    /** 顶层调用首次定位到的入口文件(绝对路径),用于识别"根 agent" */
-    rootEntry?: string;
+    /** PAC 根目录相对项目根的分段路径 */
+    rootBase: string[];
+    /** 顶层入口文件相对项目根的分段路径，用于识别"根 agent" */
+    rootEntry?: string[];
 }
 
 /** Agent 运行时接口,与 BaseAgent 对齐 */
