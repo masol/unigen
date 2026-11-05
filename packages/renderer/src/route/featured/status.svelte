@@ -15,7 +15,6 @@
   import { onMount } from "svelte";
   import EditorStatusBar from "../page/editor/EditorStatusBar.svelte";
   import FlowStatusBar from "../page/flow/FlowStatusBar.svelte";
-  import RunState from "../RunState.svelte";
 
   import Brand from "./header/brand.svelte";
 
@@ -120,7 +119,7 @@
         {/if}
         <span>{projectStore.activity?.statusText}</span>
       </button>
-      <RunState />
+      <!-- <RunState /> -->
     </div>
 
     <!-- ╭─── / StatusBarProject ───╮ -->

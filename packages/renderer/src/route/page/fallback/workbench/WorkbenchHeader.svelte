@@ -1,7 +1,7 @@
 <!-- 工作台头部：任务名 · 会话ID · 打开目录 -->
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { messageStore } from "$lib/store/local/msg.svelte";
+  import { sessionStore } from "$lib/store/local/session.store.svelte";
   import { projectStore } from "$lib/store/project.svelte";
   import { safeApi } from "$lib/utils/api";
   import {
@@ -14,7 +14,7 @@
   let copied = $state(false);
   let openingFolder = $state(false);
 
-  let sessionId = $derived(messageStore.sessionId ?? "");
+  let sessionId = $derived(sessionStore.activeSessionId ?? "");
   let shortSession = $derived(sessionId ? sessionId.slice(0, 8) : "");
 
   async function openFolder() {
@@ -82,15 +82,15 @@
       </div>
     </div>
 
-    <!-- 右：打开项目目录 -->
+    <!-- 右：打开任务目录 -->
     <div class="flex shrink-0 items-center gap-1.5">
       <Button
         variant="ghost"
         size="sm"
         onclick={openFolder}
         disabled={openingFolder || !projectStore.path}
-        title="打开项目目录"
-        aria-label="打开项目目录"
+        title="打开任务目录"
+        aria-label="打开任务目录"
         class="gap-1.5 rounded-xl"
       >
         <IconFolderOpen size={16} stroke={1.5} />

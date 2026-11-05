@@ -1,3 +1,4 @@
+import { clarifyTool } from './tools/clarify.js';
 import { renderImageTool } from "./tools/renderimage.js";
 import type { ToolDefinition } from "./type.js";
 
@@ -19,5 +20,6 @@ import type { ToolDefinition } from "./type.js";
 export function getBuiltinTools(): ToolDefinition<unknown, unknown>[] {
     return [
         renderImageTool as ToolDefinition<unknown, unknown>,
+        clarifyTool as ToolDefinition<unknown, unknown>,
     ];
 }

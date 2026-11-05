@@ -267,7 +267,7 @@ class ProjectStore {
         }
         const confirm = await confirmStore.request({
             title: "目录非空",
-            message: `项目目录${realPathname}非空，还要继续创建吗？这将清空目录全部内容。`,
+            message: `任务目录${realPathname}非空，还要继续创建吗？这将清空目录全部内容。`,
             confirmLabel: "清空并创建",
             destructive: true
         });

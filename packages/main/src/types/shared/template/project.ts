@@ -49,9 +49,11 @@ export const projectApiSchema = z.enum(["icon"]);
  */
 export const projectActivityDataSchema = z.object({
     icon: z.string(),
+    /// 如果设置，为markdown内容，此时，打开/创建此类型的任务时，会以对话框方式通知用户。用于重要信息说明。
     status: z.string().optional(),
+    /// 在状态栏右侧的简短显示--通常用于指示此项目类型--可以与entry中的name相同。
     statusText: z.string(),
-    // 欢迎字符串。如果无内容，检查类型目录下welcome.md，如果存在，则返回其内容。
+    // 欢迎字符串。如果无内容，检查类型目录下welcome.md，如果存在，则返回其内容。否则退化为原始的固定字符串。
     welcome: z.string().optional(),
     activities: z.array(leftSidebarItemJSONSchema),
     header: z.object({

@@ -1,11 +1,8 @@
 // agents.manager.ts
 import { CommonContext } from '$libs/common/context.js';
-import { configService } from '$libs/store/index.js';
 import { throwNotfound, throwUnprcessable } from '$libs/utils/err.js';
-import pMap from 'p-map';
 import { BaseAgent } from './base.js';
-import { DeliverableClassify } from './deliverable.js';
-import { TargetLoop } from './targetloop.js';
+// import { TargetLoop } from './targetloop.js';
 
 export class AgentsManager {
     private agents = new Map<string, BaseAgent>();
@@ -37,24 +34,24 @@ export class AgentsManager {
 
 
     async registerAll(): Promise<void> {
-        const names = [{
-            name: ["target"],
-            Cls: TargetLoop
-        },
-        {
-            name: ["deliverable", "classify"],
-            Cls: DeliverableClassify
-        }]
-        if (this.agents.size === 0) {
-            await pMap(names, async (item) => {
-                // Logger.debug("register item=", item.name)
-                const agent = new item.Cls();
-                await agent.init(item.name);
-                this.register(item.name.join('/'), agent);
-            }, {
-                concurrency: configService().get("concurrency")
-            })
-        }
+        // const names = [{
+        //     name: ["target"],
+        //     Cls: TargetLoop
+        // },
+        // {
+        //     name: ["deliverable", "classify"],
+        //     Cls: DeliverableClassify
+        // }]
+        // if (this.agents.size === 0) {
+        //     await pMap(names, async (item) => {
+        //         // Logger.debug("register item=", item.name)
+        //         const agent = new item.Cls();
+        //         await agent.init(item.name);
+        //         this.register(item.name.join('/'), agent);
+        //     }, {
+        //         concurrency: configService().get("concurrency")
+        //     })
+        // }
     }
 }
 
