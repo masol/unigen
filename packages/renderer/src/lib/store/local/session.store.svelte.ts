@@ -279,14 +279,17 @@ class SessionStore {
         this.setSearchQuery('')
     }
 
-    async setActiveSession(id: string): Promise<void> {
-        if (id === this.#activeSessionId) return;
+    async setActiveSession(id: string): Promise<boolean> {
+        if (id === this.#activeSessionId) return false;
         log.debug(`[SessionStore] setActiveSession() called, id=${id}`)
-        await safeApi().project.set({
+        const bOk = await safeApi().project.set({
             key: DbKeys.sessionId,
             value: id
         })
+        // 发生错误，set返回undefined.
+        if (!bOk) return false;
         await this.onSessionChange(id);
+        return true;
     }
 }
 

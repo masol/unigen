@@ -6,6 +6,7 @@
   import { sessionStore } from "$lib/store/local/session.store.svelte";
   import autoAnimate from "@formkit/auto-animate";
   import VirtualList from "@humanspeak/svelte-virtual-list";
+  import { SvelteSet } from "svelte/reactivity";
   import SessionEmpty from "./session.empty.svelte";
   import SessionGroup from "./session.group.svelte";
   import SessionItem from "./session.item.svelte";
@@ -25,8 +26,12 @@
   const BUFFER_SIZE = 30;
 
   // 折叠态由列表层维护，被折叠的 group 其 sessions 不入列，
-  // 从源头规避 VirtualList 内部的高度突变
-  let collapsedGroups = $state(new Set<string>());
+  // 从源头规避 VirtualList 内部的高度突变。
+  //
+  // 注意：$state(new Set()) 并不会让 Set 成为响应式代理——Svelte 5 的 $state
+  // 只深度代理普通对象和数组，Map/Set/Date 等内置类型需要 SvelteSet /
+  // SvelteMap。原生 Set 上的 add/delete 无法触发依赖追踪，因此用 SvelteSet。
+  const collapsedGroups = new SvelteSet<string>();
 
   const shouldVirtualize = $derived(
     sessionStore.sessions.length >= VIRTUALIZATION_THRESHOLD,

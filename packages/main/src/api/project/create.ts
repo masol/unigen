@@ -177,7 +177,8 @@ const set = os
     }))
     .handler(async ({ input, context }) => {
         const ctx = context as RpcContext;
-        return PrjDB.ensure(ctx.project).set(input.key, input.value);
+        PrjDB.ensure(ctx.project).set(input.key, input.value);
+        return true;
     });
 
 
