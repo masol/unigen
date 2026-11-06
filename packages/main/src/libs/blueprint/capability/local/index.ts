@@ -49,7 +49,7 @@ export type CompileStatus = "idle" | "compiling" | "ready" | "failed";
  *   reasoning          默认 "provider-default";可选 none/minimal/low/medium/high/xhigh/max
  *   persist            默认 true;false 时运行期不写 messages 表(仅 trace 汇报)
  *   history            默认加载全部历史;0 禁用;N>0 最多最近 N 条
- *   maxSteps           默认 10
+ *   maxSteps           默认 30
  *   timeout            默认 provider 默认;可写数字(总超时毫秒)或对象
  *                      { totalMs?, stepMs?, firstChunkMs?, chunkMs? }
  *   temperature        可选;非负数

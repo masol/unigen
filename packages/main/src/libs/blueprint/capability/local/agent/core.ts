@@ -33,6 +33,7 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
                 counters: new Map(),
                 thinkingStates: new Map(),
                 idRegistry: new TraceIdRegistry(),
+                subAgentHistories: new Map(),
                 persist,
             };
 
@@ -72,6 +73,7 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
                 counters: new Map(),
                 thinkingStates: new Map(),
                 idRegistry: new TraceIdRegistry(),
+                subAgentHistories: new Map(),
                 persist,
             };
         }

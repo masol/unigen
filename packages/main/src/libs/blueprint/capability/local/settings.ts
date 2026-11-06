@@ -23,14 +23,14 @@ import type {
 
 /**
  * 默认值:
- *   history: null → 加载全部历史。工具型子 agent 建议显式声明 history: 0 关闭,
- *            避免结构化 JSON user 消息无限累积。
+ *   history: null → 根 agent 加载全部历史；子 agent 等效 0（不保留跨调用历史）。
+ *            工具型子 agent 建议显式声明 history: 0 关闭。
  *   timeout: undefined → 使用 provider 默认。
  *   reasoning: "provider-default" → 使用 provider 默认推理行为。
  *   persist: true → 写入 messages 表。
  */
 const DEFAULTS: ResolvedSettings = {
-    maxSteps: 10,
+    maxSteps: 30,
     streaming: true,
     reasoning: "provider-default",
     persist: true,
@@ -72,11 +72,14 @@ export function resolveSettings(fm: PacFrontMatter): ResolvedSettings {
     })();
 
     // history 语义:
+    //   -1       → 全部历史
     //   0        → 禁用历史
     //   N>0      → 最多最近 N 条
-    //   null/未声明/非法 → 全部历史(默认)
+    //   null/未声明/非法 → 默认值（根 agent 全部；子 agent 等效 0）
     let history: number | null;
-    if (fm.history === 0) {
+    if (fm.history === -1) {
+        history = -1;
+    } else if (fm.history === 0) {
         history = 0;
     } else if (typeof fm.history === "number" && Number.isFinite(fm.history) && fm.history > 0) {
         history = Math.floor(fm.history);

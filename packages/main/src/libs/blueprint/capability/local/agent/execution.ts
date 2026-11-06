@@ -16,7 +16,13 @@ import type { CompiledPacAgent, JsonValue } from "../type.js";
 import { MessageDeltaBuffer } from "./buffer.js";
 import { createToolCallbacks } from "./callbacks.js";
 import { generateAgent, streamAgent } from "./executor.js";
-import { loadPriorMessages } from "./history.js";
+import {
+    appendSubAgentHistory,
+    loadPriorMessages,
+    loadSubAgentPriorMessages,
+    resolveSubAgentHistoryLimit,
+    SYSTEM_FAILURE_MARKER,
+} from "./history.js";
 import {
     createInputNode,
     finishAgentTrace,
@@ -85,7 +91,8 @@ export async function executeAgent(
     const settings = compiled.settings;
     const persist = state.persist;
     const shouldStream = isRoot ? settings.streaming : true;
-    const histEnabled = settings.history !== 0;
+    const subHistoryLimit = isRoot ? null : resolveSubAgentHistoryLimit(settings.history);
+    const histEnabled = isRoot ? settings.history !== 0 : subHistoryLimit !== 0;
 
     // 2. 模型选择
     const modelOptions = resolveModelOptions(ctx);
@@ -194,19 +201,29 @@ export async function executeAgent(
         agentExecutor,
     );
 
-    const system = await renderSystemPrompt(compiled, ctx, inputs, effectiveDefaults, isRoot);
-    const userText = await buildUserPrompt(compiled, ctx, inputs, effectiveDefaults, isRoot);
+    const system = await renderSystemPrompt(
+        compiled, ctx, state, inputs, effectiveDefaults, isRoot,
+    );
+    const userText = await buildUserPrompt(
+        compiled, ctx, state, inputs, effectiveDefaults, isRoot,
+    );
     const userMessage: ModelMessage = { role: "user", content: userText };
 
-    // 历史来自 PrjDB.messages,排除本轮两条占位 (当前 user / 正在生成的 assistant)
-    const prior = await loadPriorMessages(
-        ctx,
-        compiled.id,
-        settings.history,
-        histEnabled,
-        isRoot,
-        [ctx.msgId, state.messageId],
-    );
+    // 根 agent 历史来自 PrjDB.messages；子 agent 历史来自当前 PacRunState 的内存 Map。
+    // 子 agent 的 history: null 等效 0，history: -1 才表示全部。
+    // 子 agent 采取「读快照 → 执行 → 同步 append 一对」的并发模型：
+    // 这里只读快照，执行完毕（成功/失败/中断）后统一追加一对 user/assistant，
+    // append 函数体内无 await，天然原子，因此并发同 agentId 调用不会互相覆盖。
+    const prior = isRoot
+        ? await loadPriorMessages(
+            ctx,
+            compiled.id,
+            settings.history,
+            histEnabled,
+            true,
+            [ctx.msgId, state.messageId],
+        )
+        : loadSubAgentPriorMessages(state, compiled.id, subHistoryLimit);
     const messages: ModelMessage[] = [...prior, userMessage];
 
     ctx.debug(
@@ -382,8 +399,23 @@ export async function executeAgent(
     }
 
     // 7. 清理与完成
+    //
+    // 子 agent 历史提交的时序（保证 "executeAgent 返回" 时历史已落定）：
+    //   - 中断：append SYSTEM_FAILURE_MARKER（成对，避免孤立 user）
+    //   - 失败：append SYSTEM_FAILURE_MARKER 后 throw（父 agent 收到异常）
+    //   - 成功：append finalText
+    // 所有 append 均为同步原子操作，不持有任何锁。
     if (ctx.isAborted) {
         handleAbort(ctx, prjdb, state, agentCtx, stepPath, compiled.name, isRoot);
+        if (!isRoot) {
+            appendSubAgentHistory(
+                state,
+                compiled.id,
+                subHistoryLimit,
+                userMessage,
+                SYSTEM_FAILURE_MARKER,
+            );
+        }
         return { text: "", usage: undefined };
     }
 
@@ -405,7 +437,26 @@ export async function executeAgent(
     }
 
     if (failure !== undefined) {
+        if (!isRoot) {
+            appendSubAgentHistory(
+                state,
+                compiled.id,
+                subHistoryLimit,
+                userMessage,
+                SYSTEM_FAILURE_MARKER,
+            );
+        }
         throw failure;
+    }
+
+    if (!isRoot) {
+        appendSubAgentHistory(
+            state,
+            compiled.id,
+            subHistoryLimit,
+            userMessage,
+            finalText,
+        );
     }
 
     ctx.debug(`[PAC][step=${stepPath}] 完成 ${compiled.name}`, {

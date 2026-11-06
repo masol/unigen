@@ -79,6 +79,13 @@ export interface PacRunState {
     /** 内部语义键 → UUID 的注册表（每次 run 独立实例） */
     idRegistry: TraceIdRegistry;
     /**
+     * 子 agent 的内存级历史，按 compiled.id 索引。
+     *
+     * 仅子 agent 使用；根 agent 的历史真源仍是 PrjDB.messages。
+     * 生命周期与当前 PacRunState 一致，不跨根 run 持久化。
+     */
+    subAgentHistories: Map<string, ModelMessage[]>;
+    /**
      * 是否持久化消息与 trace 到数据库。
      * false 时：不写 messages 表，也不写 trace 表；
      * 但 ctx.report 实时事件照常发送，前端仍能看到完整过程。
