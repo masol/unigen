@@ -22,7 +22,7 @@ class ConfigStore {
     #theme = $state<AppConfig['theme']>('system') // 原始值（三选一枚举） → $state
     #lang = $state<string>('zh-CN')              // 原始值 → $state
     #embedModel = $state<string>('')                   // 原始值 → $state
-    #localModel = $state<string>('')                   // 原始值 → $state
+    #rerankModel = $state<string>('')                   // 原始值 → $state
     #providers = $state<Provider[]>([])           // 复合对象整体替换 → $state.raw
     #task_dir = $state<string>("")           // 复合对象整体替换 → $state.raw
     #autoupdate = $state<boolean>(true)
@@ -52,7 +52,7 @@ class ConfigStore {
     get theme() { return this.#theme }
     get lang() { return this.#lang }
     get embedModel() { return this.#embedModel }
-    get localModel() { return this.#localModel }
+    get localModel() { return this.#rerankModel }
     get providers() { return this.#providers }
     get autoupdate() { return this.#autoupdate }
     get disableHA() { return this.#disableHA }
@@ -125,8 +125,8 @@ class ConfigStore {
             case 'embed_model':
                 this.#embedModel = value as AppConfig['embed_model'];
                 break;
-            case 'local_model':
-                this.#localModel = value as AppConfig['local_model'];
+            case 'rerank_model':
+                this.#rerankModel = value as AppConfig['rerank_model'];
                 break;
             case 'models':
                 this.#providers = value as AppConfig['models'];
@@ -212,7 +212,7 @@ class ConfigStore {
             evtbus.emit("lang:changed", config.lang)
         }
         this.#embedModel = config.embed_model
-        this.#localModel = config.local_model
+        this.#rerankModel = config.rerank_model
         this.#providers = config.models
         this.#autoupdate = config.autoupdate
         this.#disableHA = config.disableHA
@@ -414,21 +414,21 @@ class ConfigStore {
     }
 
     /** 设置本地模型名称--被解释为嵌入模型。 */
-    async setLocalModel(value: string): Promise<void> {
-        log.debug(`[ConfigStore] setLocalModel() called, value=${value}`)
+    async setReranModel(value: string): Promise<void> {
+        log.debug(`[ConfigStore] setReranModel() called, value=${value}`)
         this.#savingCount++
         this.#saveError = null
         try {
             await api().config.set({
-                key: 'local_model',
+                key: 'rerank_model',
                 value
             })
-            this.#localModel = value
+            this.#rerankModel = value
             this.#lastSaved = Date.now()
-            log.info(`[ConfigStore] local_model set to "${value}"`)
+            log.info(`[ConfigStore] rerank_model set to "${value}"`)
         } catch (err) {
             this.#saveError = err instanceof Error ? err.message : String(err)
-            log.error('[ConfigStore] setLocalModel() failed', err)
+            log.error('[ConfigStore] setReranModel() failed', err)
             toast.error(this.#saveError);
         } finally {
             this.#savingCount--

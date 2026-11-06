@@ -22,5 +22,9 @@ export const secondSchema: Schema<SecondConfig> = {
                 }
             },
         }
+    },
+    "search_inited": {
+        type: 'boolean',
+        default: false,
     }
 };

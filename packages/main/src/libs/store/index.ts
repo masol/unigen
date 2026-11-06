@@ -3,6 +3,7 @@ import { getCurrentProject } from '$libs/utils/api/index.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
 import type { ITelemetryService } from '$libs/utils/telemetry/telemetry.interface.js';
 import { AppConfig } from '$types/appconfig.js';
+import { Provider } from '$types/index.js';
 import { app } from 'electron';
 import Store from 'electron-store';
 import { join } from 'path';
@@ -93,6 +94,14 @@ class ConfigService {
      */
     get<K extends keyof AppConfig>(key: K): AppConfig[K] {
         return this.store.get(key);
+    }
+
+    getProvider(providerId: string): Provider | undefined {
+        const models = this.get("models");
+        if (!models) {
+            return;
+        }
+        return models.find(m => m.id == providerId);
     }
 
     /**

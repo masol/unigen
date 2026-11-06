@@ -90,7 +90,7 @@
       const confirmed = await confirmStore.request({
         title: "需要重建数据",
         message:
-          "嵌入模型变更，所有历史项目，打开时都需要重建存储数据，您确定要变更嵌入模型吗？",
+          "嵌入模型变更，需要重建全部工具，技能以及知识库的嵌入向量，您确定要变更嵌入模型吗？",
         variant: "question",
       });
       // 取消：什么都不做。embeddingModel 是 derived,
@@ -128,7 +128,7 @@
         rerankFetched = true;
         if (rerankModels.length === 0) {
           if (configStore.localModel.length > 0) {
-            configStore.setLocalModel("");
+            configStore.setReranModel("");
           }
         } else {
           rerankModels.push({
@@ -148,7 +148,7 @@
   function handleRerankChange(realValue: string) {
     const value = realValue.trim();
     if (value !== configStore.localModel) {
-      configStore.setLocalModel(value);
+      configStore.setReranModel(value);
     }
   }
   async function openRerankDirectory() {

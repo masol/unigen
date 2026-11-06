@@ -57,7 +57,7 @@ export const configSchema: Schema<AppConfig> = {
         type: 'string',
         default: ""
     },
-    local_model: {
+    rerank_model: {
         type: "string",
         default: ""
     },

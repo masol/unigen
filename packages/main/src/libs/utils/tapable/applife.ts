@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { EmbedSwitchPayload } from '$libs/searchsrv/index.js';
 import type { App } from 'electron';
 import Logger from 'electron-log/main.js';
 import { Hookable, type HookCallback } from 'hookable';
@@ -21,6 +22,7 @@ class AppLife {
      * 同时也可以使用 `appLife.beforeQuit.untap('name')` 或 `appLife.beforeQuit.untapAll()`。
      */
     public beforeQuit = new AsyncParallelHook();
+    public onEmbedSwitch = new AsyncParallelHook<[EmbedSwitchPayload]>();
 
     /**
      * 原生 Hookable 实例，供需要细粒度控制的场景使用。
@@ -30,7 +32,7 @@ class AppLife {
     public bootstrapped: TrackableDeferred<void> = new TrackableDeferred<void>();
 
     private isCleanedUp = false;
-    private static readonly BEFORE_QUIT = 'beforeQuit';
+    private static readonly BEFORE_QUIT = 'beforeQuit' as const;
 
     public init(app: App, timeoutMs: number = 30000): void {
         app.on('before-quit', async (e) => {

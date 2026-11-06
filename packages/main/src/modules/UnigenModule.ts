@@ -1,4 +1,5 @@
 import { intereg } from '$libs/blueprint/index.js';
+import { openGlobalSearch } from '$libs/searchsrv/index.js';
 import { configService } from '$libs/store/index.js';
 import { initGlobalToolDB } from '$libs/tooldb/bootstrap.js';
 import { puppeteerInst } from '$libs/utils/puppeteer/index.js';
@@ -32,6 +33,7 @@ class UnigenModule implements AppModule {
             ensureDir(themeFile()),
             telemetryService.initialize(configService().get("telemetry")),
             puppeteerInst.init(),
+            openGlobalSearch(),
             tooldbPromise
         ]);
         configService().oTel = telemetryService;

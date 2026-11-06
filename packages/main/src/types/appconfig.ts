@@ -9,7 +9,7 @@ export interface AppConfig {
     maximized: boolean;
     // model_endpoint: string; // 模型的下载点。(包括ugvector下载embeding以及ollmacpp自动下载模型)
     embed_model: string; // ugvector使用的模型名称(external:XXX为外部模型，非本地模型)
-    local_model: string; // 废弃使用本地LLM模型(可以通过llama-cpp或LM Studio等本地桥接)，本字段改为rerank配置。
+    rerank_model: string; // 废弃使用本地LLM模型(可以通过llama-cpp或LM Studio等本地桥接)，本字段改为rerank配置。
     task_dir: string; // 任务存储目录，默认是用户应用目录下的user_tasks
     autoupdate: boolean;
     parallelRun: boolean;
@@ -30,5 +30,6 @@ export interface AppConfig {
 
 // 无需备份与恢复的第二配置。
 export interface SecondConfig {
-    recents: RecentProject[]
+    recents: RecentProject[],
+    search_inited: boolean
 }

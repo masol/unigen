@@ -20,6 +20,10 @@ class ProjectManager {
             )
             console.log('[ProjectManager] 清理资源完成。');
         });
+
+        appLife.onEmbedSwitch.tapPromise("ProjectManager", async () => {
+            Logger.debug("[ProjectManager] 处理嵌入模型切换事件。")
+        })
     }
 
     getByPath(path: string): ProjectContainer | undefined {
