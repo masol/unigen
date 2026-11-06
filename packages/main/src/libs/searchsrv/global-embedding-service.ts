@@ -1,10 +1,13 @@
+import { configService } from "$libs/store/index.js";
+import evtbus from "$libs/utils/evtbus.js";
 import { appLife } from "$libs/utils/tapable/applife.js";
 import Logger from "electron-log/main.js";
-import type {
-    EmbeddingFailure,
-    EmbeddingState,
-    EmbeddingStatus,
-    EmbedSwitchPayload,
+import {
+    parseEmbedModel,
+    type EmbeddingFailure,
+    type EmbeddingState,
+    type EmbeddingStatus,
+    type EmbedSwitchPayload,
 } from "./embedding/embedding-manager.js";
 import { GlobalSearchDB } from "./global-search-db.js";
 
@@ -12,14 +15,24 @@ const GLOBAL_EMBEDDING_SERVICE_KEY = Symbol.for(
     "unigen.singleton.globalEmbeddingService",
 );
 
+function readConfiguredEmbedModelKey(): string {
+    const raw = String(configService().get("embed_model") ?? "").trim();
+    if (!raw) return "";
+    return parseEmbedModel(raw)?.modelKey ?? raw;
+}
+
 export class GlobalEmbeddingService {
     static get instance(): GlobalEmbeddingService {
         return getGlobalEmbeddingService();
     }
 
-    onSwitched: (state: EmbeddingState) => void | Promise<void> = () => { };
+    #refreshing: Promise<void> | null = null;
 
-    onError: (error: unknown) => void = () => { };
+    constructor() {
+        evtbus.on("embed-changed", () => {
+            void this.#handleEmbedChanged();
+        });
+    }
 
     get switching(): boolean {
         return GlobalSearchDB.instance.rebuilding;
@@ -44,49 +57,62 @@ export class GlobalEmbeddingService {
     }
 
     async open(): Promise<void> {
-        try {
-            const db = GlobalSearchDB.instance;
-            await db.open();
+        const db = GlobalSearchDB.instance;
+        await db.open();
 
-            const state = db.embeddingState;
-            if (state) {
-                await this.onSwitched(state);
-                await this.#notifyProjects(null, state);
-            } else if (db.embeddingDegraded) {
-                Logger.warn(
-                    "[Search] Embedding 已临时禁用，检索退化为全文检索。",
-                    db.embeddingFailure,
-                );
-            }
-        } catch (error) {
-            this.onError(error);
-            throw error;
+        const state = db.embeddingState;
+        if (state) {
+            await this.#notifyProjects(null, state);
+        } else if (db.embeddingDegraded) {
+            Logger.warn(
+                "[Search] Embedding 已临时禁用，检索退化为全文检索。",
+                db.embeddingFailure,
+            );
         }
     }
 
-    async refresh(): Promise<void> {
-        try {
-            const db = GlobalSearchDB.instance;
-            const previous = db.embeddingState;
-            await db.refreshEmbedding();
+    async #handleEmbedChanged(): Promise<void> {
+        while (this.#refreshing) {
+            await this.#refreshing.catch(() => undefined);
+        }
 
-            const state = db.embeddingState;
-            if (state) {
-                await this.onSwitched(state);
-                await this.#notifyProjects(previous, state);
-            } else if (db.embeddingDegraded) {
-                Logger.warn(
-                    "[Search] Embedding 加载失败，已临时禁用，检索退化为全文检索。",
-                    db.embeddingFailure,
-                );
-            } else {
-                Logger.warn(
-                    "[Search] 当前未配置 embed_model，向量检索不可用；FTS 仍可工作。",
-                );
-            }
+        const configured = readConfiguredEmbedModelKey();
+        const current =
+            this.state?.modelKey ??
+            this.failure?.modelKey ??
+            "";
+
+        if (configured === current) {
+            return;
+        }
+
+        this.#refreshing = this.#refresh();
+        try {
+            await this.#refreshing;
         } catch (error) {
-            this.onError(error);
-            throw error;
+            Logger.error("[Search] Embedding 刷新失败。", error);
+        } finally {
+            this.#refreshing = null;
+        }
+    }
+
+    async #refresh(): Promise<void> {
+        const db = GlobalSearchDB.instance;
+        const previous = db.embeddingState;
+        await db.refreshEmbedding();
+
+        const state = db.embeddingState;
+        if (state) {
+            await this.#notifyProjects(previous, state);
+        } else if (db.embeddingDegraded) {
+            Logger.warn(
+                "[Search] Embedding 加载失败，已临时禁用，检索退化为全文检索。",
+                db.embeddingFailure,
+            );
+        } else {
+            Logger.warn(
+                "[Search] 当前未配置 embed_model，向量检索不可用；FTS 仍可工作。",
+            );
         }
     }
 

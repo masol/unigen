@@ -33,6 +33,7 @@ export function getGlobalEmbeddingService(): GlobalEmbeddingService {
 }
 
 export async function openGlobalSearch(): Promise<GlobalSearchDB> {
+    getGlobalEmbeddingService() // 懒加载，防止未初始化，从而未挂载事件回调。
     const db = getSearchDB();
     await db.open();
     return db;

@@ -1,5 +1,6 @@
 // electron/store/configStore.ts
 import { getCurrentProject } from '$libs/utils/api/index.js';
+import evtbus from '$libs/utils/evtbus.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
 import type { ITelemetryService } from '$libs/utils/telemetry/telemetry.interface.js';
 import { AppConfig } from '$types/appconfig.js';
@@ -79,6 +80,8 @@ class ConfigService {
      * 如果配置不符合 schema 规范，会直接向外抛出异常
      */
     setAll(config: AppConfig): void {
+        const old = this.store.store.embed_model;
+        const changed = (config.embed_model !== this.store.store.embed_model)
         this.store.store = config;
         const prj = getCurrentProject();
         broadcast({
@@ -86,6 +89,9 @@ class ConfigService {
             srcId: prj?.wid || -1,
             payload: config,
         });
+        if (changed) {
+            evtbus.emit("embed-changed", { old, new: config.embed_model })
+        }
     }
 
     /**
@@ -110,9 +116,14 @@ class ConfigService {
      * 不进行内部异常捕获，若 schema 校验失败，异常将直接向上抛出由外部处理
      */
     set<K extends keyof AppConfig>(key: K, value: AppConfig[K]): void {
+        const embed_changed = (key === "embed_model" && this.store.store.embed_model !== value)
+        const old = this.store.store.embed_model;
         this.store.set(key, value);
         if (this.oTel && key === 'telemetry') {
             this.oTel.reconfigure(value as string);
+        }
+        if (embed_changed) {
+            evtbus.emit("embed-changed", { old, new: value as string })
         }
         const prj = getCurrentProject();
         broadcast({

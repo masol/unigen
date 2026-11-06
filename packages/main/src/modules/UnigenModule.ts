@@ -28,7 +28,6 @@ class UnigenModule implements AppModule {
 
         // 不再自动判断所处位置，而是暴露选项，让用户选择。根据选项值来决定更新服务器，下载服务器等信息。
         // ipInfo.init().catch(e => Logger.error(`[IPINFO] 获取国家代码出错：${getErrorMessage(e)}`))
-
         await Promise.all([
             ensureDir(themeFile()),
             telemetryService.initialize(configService().get("telemetry")),

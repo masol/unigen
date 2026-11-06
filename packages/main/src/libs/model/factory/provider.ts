@@ -1,3 +1,4 @@
+// packages/main/src/libs/model/factory/provider.ts
 import { throwPrecondition, throwUnprcessable } from '$libs/utils/err.js';
 import type { Provider } from '$types/index.js';
 import { ProviderProtocol } from '$types/shared/model.js';
@@ -114,6 +115,7 @@ function createProviderByProtocol(
         case 'alibaba':
             return createAlibaba({
                 baseURL,
+                embeddingBaseURL: 'https://dashscope.aliyuncs.com/api/v1',
                 apiKey
             });
         // case 'huggingface':
@@ -146,7 +148,7 @@ function createProviderByProtocol(
 
 //provider: $llama-cpp： node-llama-cpp: 以$开头的Provider为内建Provider.
 export function createProvider(provider: Provider): ProviderV4 {
-    const apiKey = provider.apiKey ?? "";
+    const apiKey = provider.apiKey?.trim() ?? "";
     const baseURL = provider.baseUrl.trim();
     const protocol = provider.protocol || ProviderProtocol.OpenAI;
 

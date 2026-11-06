@@ -38,13 +38,13 @@ export interface EmbeddingChange {
     current: EmbeddingState | null;
 }
 
-interface ParsedEmbedModel {
+export interface ParsedEmbedModel {
     modelKey: string;
     modelId: string;
     providerId?: string;
 }
 
-function parseEmbedModel(raw: string): ParsedEmbedModel | null {
+export function parseEmbedModel(raw: string): ParsedEmbedModel | null {
     const trimmed = raw.trim();
     if (!trimmed) return null;
 

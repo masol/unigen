@@ -60,6 +60,7 @@
     "hookable": "^6.1.1",
     "lru-cache": "^11.5.1",
     "memoize": "^11.0.0",
+    "mitt": "^3.0.1",
     "node-llama-cpp": "^3.22.3",
     "p-map": "^7.0.5",
     "p-queue": "^10.0.0",

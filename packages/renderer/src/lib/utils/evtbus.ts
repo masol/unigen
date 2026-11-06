@@ -42,11 +42,14 @@ class EventBus {
 
     once<K extends keyof Events>(event: K, handler: (payload: Events[K]) => void) {
         let called = false;
-        const wrapped: typeof handler = (payload) => {
+        const wrapped = (payload: Events[K]) => {
             if (called) return;
             called = true;
-            handler(payload);
-            this._emitter.off(event, wrapped);
+            try {
+                handler(payload);
+            } finally {
+                this._emitter.off(event, wrapped);
+            }
         };
         this._emitter.on(event, wrapped);
     }
