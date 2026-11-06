@@ -8,7 +8,7 @@ export const BLANK_PROJECT_TYPE_ID = 'blank';
 export const BLANK_PROJECT_TYPE: ProjectType = {
     id: BLANK_PROJECT_TYPE_ID,
     name: '直通项目',
-    description: '对话透传给模型，适合自定义工作流或直接与模型交互。',
+    description: '对话透传给模型。',
     icon: 'IconSquarePlus',
 };
 
