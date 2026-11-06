@@ -6,8 +6,9 @@ import type { VarBuckets } from "../type.js";
  *  _BI_input   : 用户当前录入(文本/语音/文件路径等的 JSON 序列化)
  *  _BI_history : 历史消息的 JSON 序列化(字符串,给模板展开用)
  *  _BI_tool    : 工具目录(编译期生成)
- *  _BI_skill   : 技能清单(编译期生成)
  *  _T_xxx      : KV 存储变量,运行期读 PrjDB,支持 front matter.setDefault 默认值
+ *
+ * 注:技能不再由编译期一等公民承担;如需 skill 能力,通过 tools 声明的内建工具完成。
  */
 export const BI_PREFIX = "_BI_";
 export const STORAGE_PREFIX = "_T_";
@@ -15,7 +16,6 @@ export const STORAGE_PREFIX = "_T_";
 export const INPUT_VAR = `${BI_PREFIX}input`;
 export const HISTORY_VAR = `${BI_PREFIX}history`;
 export const TOOL_DOC_VAR = `${BI_PREFIX}tool`;
-export const SKILL_DOC_VAR = `${BI_PREFIX}skill`;
 
 export function emptyBuckets(): VarBuckets {
     return { bi: [], storage: [], unknown: [], all: [] };

@@ -16,9 +16,10 @@ export type JsonValue =
  * - builtin / search / mcp_global: 全局工具库(tooldb)
  * - mcp_local: PAC 文件中声明的局部 MCP 连接
  * - agent: 子 agent
- * - skill: 技能工具(load_skill / read_skill_file)
+ *
+ * 注:技能能力不再作为编译期一等公民,统一走 tool 接口(builtin / mcp 等)。
  */
-export type ToolOrigin = "builtin" | "search" | "mcp_global" | "mcp_local" | "agent" | "skill";
+export type ToolOrigin = "builtin" | "search" | "mcp_global" | "mcp_local" | "agent";
 
 /** 局部 MCP 配置(仅本 agent 使用,编译期探测元数据,运行期重连) */
 export interface LocalMcpConfig {
@@ -68,13 +69,6 @@ export interface ToolRef {
     declaredAs?: PacToolConfig;
 }
 
-export interface SkillInfo {
-    name: string;
-    description: string;
-    /** 技能目录相对项目根的分段路径，运行时通过 prj.getPath([...base, file]) 解析文件 */
-    base: string[];
-}
-
 /**
  * getSmartModel 选项(与 $libs/model 的签名对齐)。
  */
@@ -105,14 +99,39 @@ export type PacTimeoutConfig = number | {
     chunkMs?: number;
 };
 
-/** 集中处理后的运行配置,所有开关都有默认值 */
+/**
+ * 推理级别。语义对齐 Vercel AI SDK:
+ *   - provider-default: 使用 provider 默认行为(省略时的默认值)
+ *   - none:            禁用推理(最低推理级别,如果不能禁用)
+ *   - minimal:         最小推理
+ *   - low:             快速、简洁推理
+ *   - medium:          平衡推理
+ *   - high:            深度推理
+ *   - xhigh:           极高级推理
+ *   - max:             最大推理
+ */
+export type ReasoningLevel =
+    | "provider-default"
+    | "none"
+    | "minimal"
+    | "low"
+    | "medium"
+    | "high"
+    | "xhigh"
+    | "max";
+
+/**
+ * 集中处理后的运行配置,所有开关都有默认值。
+ */
 export interface ResolvedSettings {
     /** 单个 agent 步数上限,默认 10 */
     maxSteps: number;
     /** 根 agent 是否流式输出(仅根生效),默认 true */
     streaming: boolean;
-    /** 是否启用思考 providerOptions,默认 true;实际效果取决于底层模型 */
-    thinking: boolean;
+    /** 推理级别,默认 "provider-default" */
+    reasoning: ReasoningLevel;
+    /** 是否在 messages 表持久化消息,默认 true */
+    persist: boolean;
     /**
      * 历史消息策略:
      *   null : 全部历史(默认)
@@ -122,6 +141,14 @@ export interface ResolvedSettings {
     history: number | null;
     /** 本次调用的超时配置;undefined 表示使用 provider 默认 */
     timeout?: PacTimeoutConfig;
+    /** 采样温度;undefined 表示使用 provider 默认 */
+    temperature?: number;
+    /** 输出 token 上限;undefined 表示使用 provider 默认 */
+    maxOutputTokens?: number;
+    /** 工具调用并发上限;undefined 表示由 SDK 决定 */
+    toolCallConcurrency?: number;
+    /** 是否启用 strict tool calling;undefined 表示不显式指定 */
+    strict?: boolean;
 }
 
 /**
@@ -145,19 +172,27 @@ export interface PacFrontMatter {
     userTemplate?: string;
     /** 外部用户模板文件,解析规则同 agent path */
     userTemplatePath?: string;
-    /** 技能目录(单个或集合),路径规则同 agent path */
-    skills?: string[] | string;
     /** _T_ 变量默认值声明表 */
     setDefault?: Record<string, JsonValue>;
 
     /** 默认 true;false 关闭根流式 */
     streaming?: boolean;
-    /** 默认 true;false 关闭思考 */
-    thinking?: boolean;
+    /** 推理级别;默认 "provider-default" */
+    reasoning?: ReasoningLevel;
+    /** 默认 true;false 时不写 messages 表(仅 trace 仍然汇报) */
+    persist?: boolean;
     /** 默认全部;0 禁用历史;N>0 最多最近 N 条 */
     history?: number | null;
     /** 本次调用的超时配置,支持数字或细粒度对象;见 PacTimeoutConfig */
     timeout?: PacTimeoutConfig;
+    /** 采样温度,建议 0~2 */
+    temperature?: number;
+    /** 输出 token 上限 */
+    maxOutputTokens?: number;
+    /** 工具调用并发上限 */
+    toolCallConcurrency?: number;
+    /** strict tool calling */
+    strict?: boolean;
 }
 
 /**
@@ -185,9 +220,6 @@ export interface CompiledPacAgent {
 
     toolRefs: ToolRef[];
     toolDoc: string;
-
-    skills: SkillInfo[];
-    skillDoc: string;
 
     vars: VarBuckets;
     ownDefaults: Readonly<Record<string, JsonValue>>;

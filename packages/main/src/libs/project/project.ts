@@ -67,7 +67,7 @@ export class ProjectContainer implements IProjectContext {
     async reloadAgent(): Promise<void>  // 重新加载本地Agent.
     {
         if (!this.#agent) {
-            this.#agent = new PACFunctor(this.#type, ['pac']);
+            this.#agent = new PACFunctor(this.#type, ['pac', 'index.md']);
         }
         return await this.#agent.compile(this);
     }

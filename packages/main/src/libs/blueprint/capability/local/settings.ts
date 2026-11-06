@@ -3,7 +3,7 @@ import type { IRunnerContext } from "$types/blueprint/context.js";
 import Logger from "electron-log/main.js";
 import type {
     JsonValue, ModelSelectOptions, PacFrontMatter,
-    PacTimeoutConfig, ResolvedSettings,
+    PacTimeoutConfig, ReasoningLevel, ResolvedSettings,
 } from "./type.js";
 
 /**
@@ -26,14 +26,33 @@ import type {
  *   history: null → 加载全部历史。工具型子 agent 建议显式声明 history: 0 关闭,
  *            避免结构化 JSON user 消息无限累积。
  *   timeout: undefined → 使用 provider 默认。
+ *   reasoning: "provider-default" → 使用 provider 默认推理行为。
+ *   persist: true → 写入 messages 表。
  */
 const DEFAULTS: ResolvedSettings = {
     maxSteps: 10,
     streaming: true,
-    thinking: true,
+    reasoning: "provider-default",
+    persist: true,
     history: null,
     timeout: undefined,
 };
+
+/** 合法推理级别,顺序与文档一致 */
+export const REASONING_LEVELS: readonly ReasoningLevel[] = [
+    "provider-default",
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+] as const;
+
+function isReasoningLevel(v: unknown): v is ReasoningLevel {
+    return typeof v === "string" && (REASONING_LEVELS as readonly string[]).includes(v);
+}
 
 /** FM 常量开关 → ResolvedSettings。未知/非法字段用默认值。 */
 export function resolveSettings(fm: PacFrontMatter): ResolvedSettings {
@@ -43,7 +62,14 @@ export function resolveSettings(fm: PacFrontMatter): ResolvedSettings {
             : DEFAULTS.maxSteps;
 
     const streaming = typeof fm.streaming === "boolean" ? fm.streaming : DEFAULTS.streaming;
-    const thinking = typeof fm.thinking === "boolean" ? fm.thinking : DEFAULTS.thinking;
+    const persist = typeof fm.persist === "boolean" ? fm.persist : DEFAULTS.persist;
+
+    const reasoning: ReasoningLevel = (() => {
+        if (fm.reasoning === undefined) return DEFAULTS.reasoning;
+        if (isReasoningLevel(fm.reasoning)) return fm.reasoning;
+        Logger.warn(`[PAC] front matter.reasoning 非法值,已忽略:`, fm.reasoning);
+        return DEFAULTS.reasoning;
+    })();
 
     // history 语义:
     //   0        → 禁用历史
@@ -59,8 +85,23 @@ export function resolveSettings(fm: PacFrontMatter): ResolvedSettings {
     }
 
     const timeout = parseTimeout(fm.timeout);
+    const temperature = parseNonNegativeNumber(fm.temperature, "temperature");
+    const maxOutputTokens = parsePositiveInt(fm.maxOutputTokens, "maxOutputTokens");
+    const toolCallConcurrency = parsePositiveInt(fm.toolCallConcurrency, "toolCallConcurrency");
+    const strict = parseBoolean(fm.strict, "strict");
 
-    return { maxSteps, streaming, thinking, history, timeout };
+    return {
+        maxSteps,
+        streaming,
+        reasoning,
+        persist,
+        history,
+        timeout,
+        temperature,
+        maxOutputTokens,
+        toolCallConcurrency,
+        strict,
+    };
 }
 
 /** 严格解析 timeout:非法/负数/0 一律忽略并告警。 */
@@ -91,6 +132,31 @@ function parseTimeout(raw: PacFrontMatter["timeout"]): PacTimeoutConfig | undefi
     }
 
     Logger.warn(`[PAC] front matter.timeout 类型非法,已忽略:`, raw);
+    return undefined;
+}
+
+function parseNonNegativeNumber(raw: unknown, field: string): number | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) {
+        Logger.warn(`[PAC] front matter.${field} 必须是非负数,已忽略:`, raw);
+        return undefined;
+    }
+    return raw;
+}
+
+function parsePositiveInt(raw: unknown, field: string): number | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    if (typeof raw !== "number" || !Number.isFinite(raw) || !Number.isInteger(raw) || raw <= 0) {
+        Logger.warn(`[PAC] front matter.${field} 必须是正整数,已忽略:`, raw);
+        return undefined;
+    }
+    return raw;
+}
+
+function parseBoolean(raw: unknown, field: string): boolean | undefined {
+    if (raw === undefined) return undefined;
+    if (typeof raw === "boolean") return raw;
+    Logger.warn(`[PAC] front matter.${field} 必须是布尔值,已忽略:`, raw);
     return undefined;
 }
 

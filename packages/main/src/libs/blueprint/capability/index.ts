@@ -33,7 +33,7 @@ function loadCode(capa: Capability): ICapaFunctor | null {
 }
 
 function loadLocaltype(type: string): ICapaFunctor | null {
-    return new PACFunctor(type);
+    return new PACFunctor(type, [type]);
 }
 
 function loadLLMNode(capa: Capability): ICapaFunctor | null {

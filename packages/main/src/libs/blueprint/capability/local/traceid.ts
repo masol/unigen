@@ -8,7 +8,6 @@
 //   search结果  : "search:<llmName>"             例: search:web_search
 //   全局MCP     : "mcp:<serverId>:<工具名>"      例: mcp:brave:search
 //   局部MCP     : "mcplocal:<alias>:<工具名>"    例: mcplocal:local:analyze
-//   技能工具    : "skill:<工具名>"               例: skill:load_skill
 //   通用步骤    : "step:<uuid>"                  例: step:550e8400-e29b-41d4-a716-446655440000
 //   序号后缀    : 若超过首次调用追加 "#<n>"      例: agent|sub/foo#2（同一agent第2次调用）
 
@@ -78,10 +77,6 @@ export function toolTraceId(ref: ToolRef, seq: number): string {
             const toolName = ref.mcpLocal?.tool.name ?? ref.key;
             const alias = config?.alias ?? "local";
             base = `mcplocal:${alias}:${toolName}`;
-            break;
-        }
-        case "skill": {
-            base = `skill:${ref.key}`;
             break;
         }
         case "agent": {

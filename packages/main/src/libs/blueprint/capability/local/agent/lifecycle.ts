@@ -49,7 +49,9 @@ export function startAgentTrace(
         streaming: true,
     };
 
-    prjdb.upsertTrace(state.messageId, parentTraceId ?? null, node);
+    if (state.persist) {
+        prjdb.upsertTrace(state.messageId, parentTraceId ?? null, node);
+    }
 
     ctx.report({
         type: "trace.start",
@@ -83,7 +85,9 @@ export function createInputNode(
         finishedAt: now,
     };
 
-    prjdb.upsertTrace(state.messageId, agentTraceNodeId, node);
+    if (state.persist) {
+        prjdb.upsertTrace(state.messageId, agentTraceNodeId, node);
+    }
 
     ctx.report({
         type: "trace.start",
@@ -120,10 +124,12 @@ export function handleAbort(
     const now = Date.now();
 
     if (agentCtx.reasoningNodeId) {
-        prjdb.patchTrace(agentCtx.reasoningNodeId, {
-            status: "error",
-            finishedAt: now,
-        });
+        if (state.persist) {
+            prjdb.patchTrace(agentCtx.reasoningNodeId, {
+                status: "error",
+                finishedAt: now,
+            });
+        }
         ctx.report({
             type: "trace.end",
             messageId: state.messageId,
@@ -136,10 +142,12 @@ export function handleAbort(
     }
 
     if (agentCtx.outputNodeId) {
-        prjdb.patchTrace(agentCtx.outputNodeId, {
-            status: "error",
-            finishedAt: now,
-        });
+        if (state.persist) {
+            prjdb.patchTrace(agentCtx.outputNodeId, {
+                status: "error",
+                finishedAt: now,
+            });
+        }
         ctx.report({
             type: "trace.end",
             messageId: state.messageId,
@@ -151,11 +159,13 @@ export function handleAbort(
         } as TraceStreamEvent);
     }
 
-    prjdb.patchTrace(agentCtx.agentTraceNodeId, {
-        status: "error",
-        finishedAt: now,
-        description: "已中断",
-    });
+    if (state.persist) {
+        prjdb.patchTrace(agentCtx.agentTraceNodeId, {
+            status: "error",
+            finishedAt: now,
+            description: "已中断",
+        });
+    }
 
     ctx.report({
         type: "trace.end",
@@ -187,10 +197,12 @@ export function handleFailure(
     const now = Date.now();
 
     if (agentCtx.reasoningNodeId) {
-        prjdb.patchTrace(agentCtx.reasoningNodeId, {
-            status: "error",
-            finishedAt: now,
-        });
+        if (state.persist) {
+            prjdb.patchTrace(agentCtx.reasoningNodeId, {
+                status: "error",
+                finishedAt: now,
+            });
+        }
         ctx.report({
             type: "trace.end",
             messageId: state.messageId,
@@ -203,10 +215,12 @@ export function handleFailure(
     }
 
     if (agentCtx.outputNodeId) {
-        prjdb.patchTrace(agentCtx.outputNodeId, {
-            status: "error",
-            finishedAt: now,
-        });
+        if (state.persist) {
+            prjdb.patchTrace(agentCtx.outputNodeId, {
+                status: "error",
+                finishedAt: now,
+            });
+        }
         ctx.report({
             type: "trace.end",
             messageId: state.messageId,
@@ -219,11 +233,14 @@ export function handleFailure(
     }
 
     const errMsg = String(failure instanceof Error ? failure.message : failure);
-    prjdb.patchTrace(agentCtx.agentTraceNodeId, {
-        status: "error",
-        finishedAt: now,
-        description: `错误: ${errMsg}`,
-    });
+
+    if (state.persist) {
+        prjdb.patchTrace(agentCtx.agentTraceNodeId, {
+            status: "error",
+            finishedAt: now,
+            description: `错误: ${errMsg}`,
+        });
+    }
 
     ctx.report({
         type: "trace.end",
@@ -244,10 +261,13 @@ export function finishAgentTrace(
     agentTraceNodeId: string,
 ): void {
     const now = Date.now();
-    prjdb.patchTrace(agentTraceNodeId, {
-        status: "success",
-        finishedAt: now,
-    });
+
+    if (state.persist) {
+        prjdb.patchTrace(agentTraceNodeId, {
+            status: "success",
+            finishedAt: now,
+        });
+    }
 
     ctx.report({
         type: "trace.end",
@@ -284,9 +304,11 @@ export function finishRootMessage(
         } as MessageStreamEvent);
     }
 
-    prjdb.finishMessage(state.messageId, {
-        content: finalText,
-        isError: !!failure,
-        agent: agentIdentity,
-    });
+    if (state.persist) {
+        prjdb.finishMessage(state.messageId, {
+            content: finalText,
+            isError: !!failure,
+            agent: agentIdentity,
+        });
+    }
 }

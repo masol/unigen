@@ -2,7 +2,7 @@ import type { IRunnerContext } from "$types/blueprint/context.js";
 import Logger from "electron-log/main.js";
 import Handlebars, { type TemplateDelegate } from "handlebars";
 import {
-    HISTORY_VAR, INPUT_VAR, SKILL_DOC_VAR, TOOL_DOC_VAR,
+    HISTORY_VAR, INPUT_VAR, TOOL_DOC_VAR,
     loadInputVar, loadStorageVars,
 } from "./context/index.js";
 import type { CompiledPacAgent, JsonValue } from "./type.js";
@@ -58,9 +58,10 @@ function getDelegates(c: CompiledPacAgent) {
 /** FM 中已被框架消费的字段,渲染时不再暴露到模板上下文根。 */
 const RESERVED = new Set([
     "name", "description", "inputs", "outputs",
-    "tools", "maxSteps", "skills",
+    "tools", "maxSteps",
     "userTemplate", "userTemplatePath",
-    "setDefault", "streaming", "thinking", "history",
+    "setDefault", "streaming", "reasoning", "persist", "history",
+    "timeout", "temperature", "maxOutputTokens", "toolCallConcurrency", "strict",
 ]);
 
 function stripReserved(fm: Record<string, unknown>): Record<string, unknown> {
@@ -110,8 +111,6 @@ async function buildContext(
     for (const name of c.vars.bi) {
         if (name === TOOL_DOC_VAR) {
             biVars[name] = c.toolDoc;
-        } else if (name === SKILL_DOC_VAR) {
-            biVars[name] = c.skillDoc;
         } else if (name === INPUT_VAR) {
             biVars[name] = await loadInputVar(ctx, inputs, allowBodyFallback);
         } else if (name === HISTORY_VAR) {

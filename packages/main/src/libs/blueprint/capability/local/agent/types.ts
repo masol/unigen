@@ -78,6 +78,12 @@ export interface PacRunState {
     thinkingStates: Map<string, AgentThinkingState>;
     /** 内部语义键 → UUID 的注册表（每次 run 独立实例） */
     idRegistry: TraceIdRegistry;
+    /**
+     * 是否持久化消息与 trace 到数据库。
+     * false 时：不写 messages 表，也不写 trace 表；
+     * 但 ctx.report 实时事件照常发送，前端仍能看到完整过程。
+     */
+    persist: boolean;
 }
 
 export interface ToolCallTraceInfo {
@@ -101,6 +107,10 @@ export interface GenerateCallArgs {
     messages: ModelMessage[];
     abortSignal: AbortSignal;
     timeout?: unknown;
+    temperature?: number;
+    maxOutputTokens?: number;
+    toolCallConcurrency?: number;
+    strict?: boolean;
 }
 
 export interface ToolExecStartEvent {
@@ -121,15 +131,6 @@ export interface ToolExecEndEvent {
     | { type: "tool-result"; output: unknown }
     | { type: "tool-error"; error: unknown };
 }
-
-/**
- * 各 provider 的 thinking 配置常量（运行时值）
- */
-export const THINKING_PROVIDER_OPTIONS: Readonly<Record<string, unknown>> = Object.freeze({
-    anthropic: { thinking: { type: "enabled", budgetTokens: 10000 } },
-    openai: { reasoningEffort: "medium" },
-    google: { thinkingConfig: { includeThoughts: true } },
-});
 
 /**
  * Agent 执行器接口 - 用于打破循环依赖

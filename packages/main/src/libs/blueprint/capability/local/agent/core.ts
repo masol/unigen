@@ -2,6 +2,7 @@
 
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
+import { randomUUID } from "node:crypto";
 import type { CompiledPacAgent, IPacAgent, JsonValue } from "../type.js";
 import { executeAgent } from "./execution.js";
 import { closeLocalMcpClients } from "./tools.js";
@@ -24,17 +25,15 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
         const mcpClients: McpClientCache = new Map();
         try {
             const prjdb = PrjDB.ensure(ctx.prj);
-            const messageId = prjdb.saveMessage({
-                sessionId: ctx.sessId,
-                role: "assistant",
-                content: "",
-            });
+            const persist = this.compiled.settings.persist;
+            const messageId = this.createAssistantMessageId(prjdb, ctx, persist);
 
             const state: PacRunState = {
                 messageId,
                 counters: new Map(),
                 thinkingStates: new Map(),
                 idRegistry: new TraceIdRegistry(),
+                persist,
             };
 
             const result = await executeAgent(
@@ -66,16 +65,14 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
         const prjdb = PrjDB.ensure(ctx.prj);
 
         if (!state) {
-            const messageId = prjdb.saveMessage({
-                sessionId: ctx.sessId,
-                role: "assistant",
-                content: "",
-            });
+            const persist = this.compiled.settings.persist;
+            const messageId = this.createAssistantMessageId(prjdb, ctx, persist);
             state = {
                 messageId,
                 counters: new Map(),
                 thinkingStates: new Map(),
                 idRegistry: new TraceIdRegistry(),
+                persist,
             };
         }
 
@@ -108,6 +105,21 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
     ): Promise<string> {
         const subAgent = new PacAgent(compiled);
         return subAgent.runWithInputs(ctx, inputs, inheritedDefaults, options, mcpClients, state);
+    }
+
+    private createAssistantMessageId(
+        prjdb: PrjDB,
+        ctx: IRunnerContext,
+        persist: boolean,
+    ): string {
+        if (!persist) {
+            return randomUUID();
+        }
+        return prjdb.saveMessage({
+            sessionId: ctx.sessId,
+            role: "assistant",
+            content: "",
+        });
     }
 
     private inputsFromCtx(ctx: IRunnerContext): Record<string, unknown> {

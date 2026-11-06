@@ -23,15 +23,6 @@ export function createToolCallbacks(
         if (ref?.agent) {
             // 子 agent 的 trace 生命周期由其自身在 execution.ts 中管理;
             // 这里保留一个记录项以便 onToolExecutionEnd 识别"这是子 agent, 跳过".
-            // 注意: traceId 字段在后续流程中不会被消费,仅用于类型完备.
-            // const agentId = ref.agent.id;
-            // const seq = nextSeq(state.counters, `agent:${agentId}`);
-            // const internalKey = `agent:${agentId}:${seq}`;
-            // const traceId = state.idRegistry.getOrCreate(internalKey);
-            // toolCallTraces.set(e.toolCall.toolCallId, {
-            //     traceId,
-            //     isAgent: true,
-            // });
             return;
         }
 
@@ -54,7 +45,9 @@ export function createToolCallbacks(
             detail: paramsDetail,
             streaming: true,
         };
-        prjdb.upsertTrace(state.messageId, agentTraceNodeId, toolNode);
+        if (state.persist) {
+            prjdb.upsertTrace(state.messageId, agentTraceNodeId, toolNode);
+        }
 
         const toolStartEvt: TraceStreamEvent = {
             type: "trace.start",
@@ -92,13 +85,14 @@ export function createToolCallbacks(
             }
         })();
 
-        prjdb.appendTraceDetail(traceInfo.traceId, resultDetail);
-
-        prjdb.patchTrace(traceInfo.traceId, {
-            status,
-            finishedAt: Date.now(),
-            description,
-        });
+        if (state.persist) {
+            prjdb.appendTraceDetail(traceInfo.traceId, resultDetail);
+            prjdb.patchTrace(traceInfo.traceId, {
+                status,
+                finishedAt: Date.now(),
+                description,
+            });
+        }
 
         const toolEndEvt: TraceStreamEvent = {
             type: "trace.end",

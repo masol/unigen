@@ -35,7 +35,6 @@ import type {
     RunOptions,
     ToolCallTraceInfo,
 } from "./types.js";
-import { THINKING_PROVIDER_OPTIONS } from "./types.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyToolLoopAgent = ToolLoopAgent<any, any, any, any>;
@@ -84,6 +83,7 @@ export async function executeAgent(
         ...compiled.ownDefaults,
     };
     const settings = compiled.settings;
+    const persist = state.persist;
     const shouldStream = isRoot ? settings.streaming : true;
     const histEnabled = settings.history !== 0;
 
@@ -132,37 +132,37 @@ export async function executeAgent(
                 ctx.cmd.args = { ...histArgs, ...currentArgs };
             }
 
-            prjdb.deleteMessagesAfter(ctx.sessId, histMsg.timestamp);
-
-            // inputs = {
-            //     ...(isPlainObject(ctx.cmd.args) ? ctx.cmd.args : {}),
-            //     ...(histMsg.files ? { files: histMsg.files } : {}),
-            // };
+            if (persist) {
+                prjdb.deleteMessagesAfter(ctx.sessId, histMsg.timestamp);
+            }
         } else {
-            prjdb.updateSessionTitle(ctx.sessId, truncate(ctx.cmd?.body || ConstUntitled))
-            // 正常运行：保存用户消息
-            const cmdArgs = isPlainObject(ctx.cmd?.args) ? ctx.cmd.args : undefined;
-            prjdb.saveMessage({
-                id: userMsgId,
-                sessionId: ctx.sessId,
-                role: "user",
-                content: ctx.cmd?.body || "",
-                files: ctx.files || [],
-                timestamp: Date.now(),
-                mode: ctx.mode === "cmd" ? "cmd" : null,
-                extra: cmdArgs ? { args: cmdArgs } : {},
-            });
+            if (persist) {
+                prjdb.updateSessionTitle(ctx.sessId, truncate(ctx.cmd?.body || ConstUntitled))
+                const cmdArgs = isPlainObject(ctx.cmd?.args) ? ctx.cmd.args : undefined;
+                prjdb.saveMessage({
+                    id: userMsgId,
+                    sessionId: ctx.sessId,
+                    role: "user",
+                    content: ctx.cmd?.body || "",
+                    files: ctx.files || [],
+                    timestamp: Date.now(),
+                    mode: ctx.mode === "cmd" ? "cmd" : null,
+                    extra: cmdArgs ? { args: cmdArgs } : {},
+                });
+            }
         }
 
         // 为 Root 创建助手消息记录 (若不存在)
-        prjdb.saveMessage({
-            id: state.messageId,
-            sessionId: ctx.sessId,
-            role: "assistant",
-            content: "",
-            timestamp: Date.now(),
-            mode: ctx.mode === "cmd" ? "cmd" : null,
-        });
+        if (persist) {
+            prjdb.saveMessage({
+                id: state.messageId,
+                sessionId: ctx.sessId,
+                role: "assistant",
+                content: "",
+                timestamp: Date.now(),
+                mode: ctx.mode === "cmd" ? "cmd" : null,
+            });
+        }
 
         startRootMessage(ctx, state, agentIdentity);
     }
@@ -212,8 +212,9 @@ export async function executeAgent(
     ctx.debug(
         `[PAC][step=${stepPath}] 进入 ${compiled.name} ` +
         `(isRoot=${isRoot}, tools=${Object.keys(tools).length}, shouldStream=${shouldStream}, ` +
-        `thinking=${settings.thinking}, history=${prior.length}, ` +
-        `maxSteps=${settings.maxSteps}, timeout=${JSON.stringify(settings.timeout)})`,
+        `reasoning=${settings.reasoning}, history=${prior.length}, ` +
+        `maxSteps=${settings.maxSteps}, timeout=${JSON.stringify(settings.timeout)}, ` +
+        `persist=${persist})`,
         { inputs },
     );
 
@@ -226,7 +227,13 @@ export async function executeAgent(
     );
 
     // 5. 构建 Agent
-    const providerOptions = settings.thinking ? THINKING_PROVIDER_OPTIONS : undefined;
+    // 顶层 reasoning 由 AI SDK 跨 provider 映射到原生推理等级，不再手写预算/effort。
+    // Google 需要额外 includeThoughts 才会以 reasoning-delta 返回思考内容，
+    // 属于 display 设置，与顶层 reasoning 组合使用（见 AI SDK reasoning 文档）。
+    const providerOptions = settings.reasoning === "provider-default"
+        ? undefined
+        : { google: { thinkingConfig: { includeThoughts: true } } };
+
     const toolCallTraces = new Map<string, ToolCallTraceInfo>();
     const callbacks = createToolCallbacks(
         compiled,
@@ -243,7 +250,12 @@ export async function executeAgent(
         instructions: system,
         stopWhen: isStepCount(settings.maxSteps),
         tools,
-        providerOptions,
+        reasoning: settings.reasoning,
+        ...(providerOptions !== undefined ? { providerOptions } : {}),
+        ...(settings.temperature !== undefined ? { temperature: settings.temperature } : {}),
+        ...(settings.maxOutputTokens !== undefined ? { maxOutputTokens: settings.maxOutputTokens } : {}),
+        ...(settings.toolCallConcurrency !== undefined ? { toolCallConcurrency: settings.toolCallConcurrency } : {}),
+        ...(settings.strict !== undefined ? { strict: settings.strict } : {}),
         onToolExecutionStart: callbacks.onToolExecutionStart,
         onToolExecutionEnd: callbacks.onToolExecutionEnd,
         onError: (ev: { error: unknown }) => {
@@ -265,7 +277,7 @@ export async function executeAgent(
                     agent,
                     messages,
                     ctx,
-                    settings.timeout,
+                    settings,
                     state,
                     agentTraceNodeId,
                     deltaBuffer,
@@ -288,7 +300,7 @@ export async function executeAgent(
             }
 
             if (!streamSuccess) {
-                const r = await generateAgent(agent, messages, ctx, settings.timeout);
+                const r = await generateAgent(agent, messages, ctx, settings);
                 finalText = r.text;
                 usage = r.usage;
 
@@ -306,7 +318,9 @@ export async function executeAgent(
                         streaming: false,
                         finishedAt: now,
                     };
-                    prjdb.upsertTrace(state.messageId, agentTraceNodeId, outputNode);
+                    if (persist) {
+                        prjdb.upsertTrace(state.messageId, agentTraceNodeId, outputNode);
+                    }
                     ctx.report({
                         type: "trace.start",
                         messageId: state.messageId,
@@ -325,7 +339,7 @@ export async function executeAgent(
                 }
             }
         } else {
-            const r = await generateAgent(agent, messages, ctx, settings.timeout);
+            const r = await generateAgent(agent, messages, ctx, settings);
             finalText = r.text;
             usage = r.usage;
 
@@ -343,7 +357,9 @@ export async function executeAgent(
                     streaming: false,
                     finishedAt: now,
                 };
-                prjdb.upsertTrace(state.messageId, agentTraceNodeId, outputNode);
+                if (persist) {
+                    prjdb.upsertTrace(state.messageId, agentTraceNodeId, outputNode);
+                }
                 ctx.report({
                     type: "trace.start",
                     messageId: state.messageId,
@@ -371,7 +387,10 @@ export async function executeAgent(
         return { text: "", usage: undefined };
     }
 
-    deltaBuffer.flush(prjdb, state.messageId);
+    deltaBuffer.flush(
+        persist ? prjdb : undefined,
+        persist ? state.messageId : undefined,
+    );
 
     if (failure) {
         handleFailure(ctx, prjdb, state, agentCtx, failure);
