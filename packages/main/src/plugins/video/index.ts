@@ -40,7 +40,7 @@ export class Plugin extends PluginBase {
         const imported = prjdb.get<boolean>(ProjectDbKeys.imported);
         if (!imported) {
             // 尚未导入知识库。开始导入。
-            await knowledgeCenter.initProject(prj, "video");
+            await knowledgeCenter.initProject(prj, ["video", "cap"]);
 
             prjdb.set(ProjectDbKeys.entry_capa, entryId);
             prjdb.set(ProjectDbKeys.imported, true);

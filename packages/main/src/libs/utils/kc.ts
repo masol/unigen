@@ -41,8 +41,8 @@ class KnowledgeCenter {
     /** 发行包自带的只读资源根目录，优先级低 */
     public readonly resourcePath: string;
 
-    /** 插件缓存，null 表示尚未加载 */
-    private plugins: ProjectType[] | null = null;
+    /** 类型缓存，null 表示尚未加载 */
+    private types: ProjectType[] | null = null;
 
     constructor() {
         this.kcPath = join(app.getPath('userData'), KnowlegeDirName);
@@ -67,10 +67,10 @@ class KnowledgeCenter {
      * 3. 按后缀分为 mg / capa(+code) / kv / other 四类；
      * 4. 四类并行处理：前三类由知识中心内部处理，other 交给外部回调。
      *
-     * @param subDir       子目录名
+     * @param subDir       子目录路径段数组（按层级传入，内部用 path.join 拼接以适配不同操作系统）
      * @param onOtherFiles other 类别（第四类）的处理回调
      */
-    public async initProject(prj: IProjectContext, subDir: string, onOtherFiles?: OtherFilesHandler): Promise<void> {
+    public async initProject(prj: IProjectContext, subDir: string[], onOtherFiles?: OtherFilesHandler): Promise<void> {
         const files: CollectedFile[] = await this.collectFiles(subDir);
 
         // 分类
@@ -80,7 +80,7 @@ class KnowledgeCenter {
         }
 
         Logger.log(
-            `[KnowledgeCenter] initProject "${subDir}"：mg=${groups.mg.length} ` +
+            `[KnowledgeCenter] initProject "${subDir.join('/')}"：mg=${groups.mg.length} ` +
             `capa=${groups.capa.length} kv=${groups.kv.length} other=${groups.other.length}`,
         );
 
@@ -98,8 +98,7 @@ class KnowledgeCenter {
      * - 目录不存在则自动创建（含多级）；
      * - 文件已存在则直接覆盖。
      *
-     * @param subDir       子目录名
-     * @param relativePath 相对 subDir 的相对路径（含文件名）
+     * @param subPaths     相对 kcPath 的路径段（最后一段为文件名）
      * @param content      要写入的字符串内容
      */
     public async writeFile(content: string, ...subPaths: string[]): Promise<void> {
@@ -144,14 +143,14 @@ class KnowledgeCenter {
      * 2. 对每个子目录检查是否同时存在 type.json 和 entry.json；
      * 3. 读取 entry.json，用 zod 校验为 ProjectType，不合法则报警废弃；
      * 4. 以 id 去重，kcPath 覆盖 resourcePath（后者优先级低）；
-     *    同一目录内 id 重复则报警并随机（后扫描到的）覆盖。
+     *    同一目录内 id 重复则报警并以后扫描到的覆盖。
      *
      * @param bForce 为 false 且缓存有效时直接返回缓存；为 true 强制重新加载
      * @returns 去重后的 ProjectType 数组
      */
     public async loadPlugins(bForce: boolean = false): Promise<ProjectType[]> {
-        if (!bForce && this.plugins !== null) {
-            return this.plugins;
+        if (!bForce && this.types !== null) {
+            return this.types;
         }
 
         // id -> { meta, root }；后写入的覆盖先写入的
@@ -202,38 +201,36 @@ class KnowledgeCenter {
                 }
                 const meta = parsed.data;
 
-                // 同一 root 内 id 重复：报警并随机（后扫描到的）覆盖
+                // 同一 root 内 id 重复：报警并以后扫描到的覆盖
                 const existing = merged.get(meta.id);
                 if (existing && existing.root === root) {
-                    Logger.warn(`[KnowledgeCenter] 同目录下插件 id 重复，随机覆盖: id=${meta.id}`, entryJsonPath);
+                    Logger.warn(`[KnowledgeCenter] 同目录下插件 id 重复，后扫描覆盖: id=${meta.id}`, entryJsonPath);
                 }
 
                 merged.set(meta.id, { meta, root });
             }
         }
 
-        this.plugins = [...merged.values()].map(({ meta }) => meta);
+        this.types = [...merged.values()].map(({ meta }) => meta);
 
-        Logger.log(`[KnowledgeCenter] loadPlugins：共加载 ${this.plugins.length} 个插件`);
+        Logger.log(`[KnowledgeCenter] loadPlugins：共加载 ${this.types.length} 个插件`);
 
-        return this.plugins;
+        return this.types;
     }
 
     // ────────────────────────── 收集 & 分类 ──────────────────────────
 
     /**
-     * 扫描 resourcePath/subDir 与 fullPath/subDir，收集全部文件。
-     * fullPath 中的文件覆盖 resourcePath 中相同相对路径的文件。
+     * 扫描 resourcePath 与 kcPath 下由 subDir 路径段拼接出的目录，收集全部文件。
+     * kcPath 中的文件覆盖 resourcePath 中相同相对路径的文件。
      */
-    private async collectFiles(subDir: string): Promise<CollectedFile[]> {
+    private async collectFiles(subDir: string[]): Promise<CollectedFile[]> {
         // relativePath -> fullPath；后写入的覆盖先写入的
         const merged = new Map<string, string>();
 
         // 顺序即优先级：resource 低，fullPath 高（后者覆盖前者）
-        const roots: string[] = [join(this.resourcePath, subDir), join(this.kcPath, subDir)];
+        const roots: string[] = [join(this.resourcePath, ...subDir), join(this.kcPath, ...subDir)];
 
-        // 忽略任意层级的 pac 目录（`pac/**` 覆盖顶层，`**/pac/**` 覆盖深层）
-        const IGNORE_PAC = ['pac/**', '**/pac/**'];
         for (const root of roots) {
             if (!(await pathExists(root))) {
                 Logger.warn('[KnowledgeCenter] 目录不存在，跳过', root);
@@ -244,7 +241,6 @@ class KnowledgeCenter {
                 cwd: root,
                 onlyFiles: true,
                 dot: true,
-                ignore: IGNORE_PAC,
             });
 
             for (const relativePath of relatives) {

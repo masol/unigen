@@ -1,3 +1,4 @@
+import { CapDirName } from "$libs/const.js";
 import { configService } from "$libs/store/index.js";
 import { secondConfig } from "$libs/store/second.js";
 import { knowledgeCenter } from "$libs/utils/kc.js";
@@ -67,7 +68,7 @@ export async function createProject(prj: IProjectContext, type: string, icon: st
             await lance.open();
         }
 
-        await knowledgeCenter.initProject(prj, type);
+        await knowledgeCenter.initProject(prj, [type, CapDirName]);
     } catch (e) {
         // 异常路径：强制关闭数据库并清理目录，让用户可以重试
         pdb.forceClose();

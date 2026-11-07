@@ -22,6 +22,13 @@ class ProjectManager {
         });
 
         appLife.onEmbedSwitch.tapPromise("ProjectManager", async () => {
+            await pMap(this.projects, async (prj) => {
+                void (prj);
+                // @todo: 这里调用prj的lance来刷新。
+                // return await prj.lanc
+            }, {
+                concurrency: configService().get("concurrency")
+            })
             Logger.debug("[ProjectManager] 处理嵌入模型切换事件。")
         })
     }

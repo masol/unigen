@@ -33,7 +33,8 @@ export class ToolTable extends SearchTableBase<ToolRow> {
     }
 
     protected ftsColumns(): string[] {
-        return ["name", "description", "text"];
+        // tool 没有正文，只检索 name 和 description
+        return ["name", "description"];
     }
 
     async syncTools(items: ToolInput[]): Promise<void> {
@@ -43,7 +44,10 @@ export class ToolTable extends SearchTableBase<ToolRow> {
                 id: item.id,
                 name: item.name,
                 description: item.description,
-                text: item.text ?? `${item.name}\n${item.description}`,
+                // text 是 schema 必填字段，仅作占位；FTS 不索引它
+                text: [item.name, item.description]
+                    .filter((part) => part.trim().length > 0)
+                    .join("\n"),
                 metadata: JSON.stringify(item.metadata ?? {}),
                 created_at: now,
                 updated_at: now,
@@ -52,10 +56,8 @@ export class ToolTable extends SearchTableBase<ToolRow> {
     }
 
     /**
-     * tool 默认混合搜索：name/description/text 参与 FTS。
-     *
-     * name 权重提升依赖 LanceDB FTS boost 能力；当前 API 不确定，
-     * 因此这里不硬编码权重。
+     * tool 检索只依赖 name + description。
+     * tool 没有正文，无需聚合；直接返回完整工具条目。
      */
     async searchTools(
         queryText: string,

@@ -11,6 +11,7 @@ import type { LanceRuntime } from "./lance-runtime.js";
 export const TOOL_TABLE = "tool";
 export const SKILL_TABLE = "skill";
 export const KB_PREFIX = "kb_";
+export const KB_CATALOG_TABLE = "kb_catalog";
 
 function vectorField(vecSize: number): Field {
     return new Field(
@@ -60,6 +61,19 @@ export function getKbSchema(vecSize: number): Schema {
     ]);
 }
 
+/** 知识库目录：AI 先搜 name/description 决定读哪个库 */
+export function getKbCatalogSchema(vecSize: number): Schema {
+    return new Schema([
+        new Field("id", new Utf8(), false),
+        vectorField(vecSize),
+        new Field("name", new Utf8(), false),
+        new Field("description", new Utf8(), false),
+        new Field("text", new Utf8(), false),
+        new Field("created_at", new Utf8(), false),
+        new Field("updated_at", new Utf8(), false),
+    ]);
+}
+
 export type FtsConfig = ReturnType<LanceRuntime["Index"]["fts"]>;
 
 export function createFtsConfig(lance: LanceRuntime): FtsConfig {
@@ -67,7 +81,6 @@ export function createFtsConfig(lance: LanceRuntime): FtsConfig {
         fts(opts?: Record<string, unknown>): FtsConfig;
     };
 
-    // 1) 首选 Jieba：中文效果最好，但需要语言模型文件
     try {
         return Index.fts({ baseTokenizer: "jieba/default" });
     } catch (error) {
@@ -77,7 +90,6 @@ export function createFtsConfig(lance: LanceRuntime): FtsConfig {
         );
     }
 
-    // 2) 次选 ICU：内建多语言分词，无需模型，对中文/混合语言友好
     try {
         return Index.fts({ baseTokenizer: "icu" });
     } catch (error) {
@@ -87,6 +99,5 @@ export function createFtsConfig(lance: LanceRuntime): FtsConfig {
         );
     }
 
-    // 3) 最后兜底 simple
     return Index.fts();
 }
