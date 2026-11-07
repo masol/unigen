@@ -167,12 +167,12 @@ export class EmbeddingManager {
     }
 
     /**
-     * 清除已应用状态。
-     *
-     * 当 embed_model 被清空或 Embedding 降级时，检索库会退化为 FTS，
-     * 此时写入的数据只有零向量。必须清除 applied state，保证之后恢复
-     * 同一个 Embedding 模型时也会触发重建，避免零向量被用于向量检索。
-     */
+         * 清除已应用状态。
+         *
+         * 注意：`SearchDbBase` 在禁用/降级时已不再调用本方法——保留旧索引，
+         * 以便恢复同一 Embedding 模型时无需重建。仅当调用方希望强制下次
+         * 恢复时重建（例如启用严格校验），才需显式调用。
+         */
     async clearApplied(): Promise<void> {
         await this.#store.save({
             modelKey: "",

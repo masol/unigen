@@ -1,5 +1,4 @@
-import { app } from "electron";
-import { join } from "node:path";
+import { lanceModelDir } from "$libs/utils/sys/dir.js";
 
 export type LanceRuntime = Awaited<typeof import("@lancedb/lancedb")>;
 
@@ -10,10 +9,7 @@ export async function getLanceRuntime(): Promise<LanceRuntime> {
     const cached = g[KEY];
     if (cached) return cached;
 
-    process.env.LANCE_LANGUAGE_MODEL_HOME = join(
-        app.getPath("userData"),
-        "lance-models",
-    );
+    process.env.LANCE_LANGUAGE_MODEL_HOME = lanceModelDir();
 
     const runtime = await import("@lancedb/lancedb");
     g[KEY] = runtime;

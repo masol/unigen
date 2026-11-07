@@ -233,7 +233,7 @@ class KnowledgeCenter {
 
         for (const root of roots) {
             if (!(await pathExists(root))) {
-                Logger.warn('[KnowledgeCenter] 目录不存在，跳过', root);
+                // Logger.warn('[KnowledgeCenter] 目录不存在，跳过', root);
                 continue;
             }
 

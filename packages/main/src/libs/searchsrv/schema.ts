@@ -82,7 +82,9 @@ export function createFtsConfig(lance: LanceRuntime): FtsConfig {
     };
 
     try {
+        // if (await pathExists((lanceModelDir('jieba', 'default')){
         return Index.fts({ baseTokenizer: "jieba/default" });
+        // }
     } catch (error) {
         Logger.warn(
             "[Search] Jieba tokenizer 不可用（语言模型未安装或加载失败），降级为 icu。",

@@ -130,10 +130,11 @@ export abstract class SearchDbBase {
         const current = await this.#ensureEmbedding();
 
         if (!current) {
-            // 未配置 / 降级：检索已退化为 FTS。
-            // 必须清除 applied state，保证禁用期间写入的零向量不会在
-            // 恢复同一个 Embedding 模型时被误用于向量检索。
-            await this.#clearAppliedSafe();
+            // 未配置 / 降级：检索已退化为 FTS，保留旧索引，不重建。
+            // 不清除 applied state：恢复同一 Embedding 模型时无需重建。
+            // 注意：禁用期间写入的数据会以零向量入库，恢复后这些零向量
+            // 会参与向量检索（相似度低，通常排在后面）。如需严格避免，
+            // 应在禁用期间避免写入。
             await this.onEmbeddingReady();
             return;
         }
@@ -207,17 +208,6 @@ export abstract class SearchDbBase {
         } catch (error) {
             Logger.warn(
                 "[Search] 记录 Embedding 应用状态失败，下次启动将重新校验。",
-                error,
-            );
-        }
-    }
-
-    async #clearAppliedSafe(): Promise<void> {
-        try {
-            await this.embedding.clearApplied();
-        } catch (error) {
-            Logger.warn(
-                "[Search] 清除 Embedding 应用状态失败，下次启动将重新校验。",
                 error,
             );
         }
