@@ -1,4 +1,8 @@
+import { KcDirName, SkillsDirName } from "$libs/const.js";
+import { dataCenter } from "$libs/utils/sys/data.js";
 import Logger from "electron-log/main.js";
+import { pathExists } from "fs-extra";
+import pMap from "p-map";
 import { lanceGlobalDir } from "../utils/sys/dir.js";
 import type { EmbeddingState } from "./embedding/embedding-manager.js";
 import { KB_PREFIX, SKILL_TABLE, TOOL_TABLE } from "./schema.js";
@@ -47,6 +51,32 @@ export class GlobalSearchDB extends SearchDbBase {
             throw new Error("[Search] 知识库注册表未就绪。");
         }
         return this.#kb;
+    }
+
+    public async syncSystemSkills(): Promise<void> {
+        const skTable = this.skill;
+        if (!skTable) return;
+        await pMap([dataCenter.pathInRes(SkillsDirName), dataCenter.pathInData(SkillsDirName)],
+            async (path) => {
+                if (await pathExists(path)) {
+                    await skTable.syncSkillsFromDirectory(path)
+                }
+            }, {
+            concurrency: 8
+        })
+    }
+
+    public async syncSystemKC(): Promise<void> {
+        const kcTable = this.kb;
+        if (!kcTable) return;
+        await pMap([dataCenter.pathInRes(KcDirName), dataCenter.pathInData(KcDirName)],
+            async (path) => {
+                if (await pathExists(path)) {
+                    await kcTable.syncKnowledgeBasesFromDirectory(path)
+                }
+            }, {
+            concurrency: 8
+        })
     }
 
     /**

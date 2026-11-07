@@ -42,6 +42,14 @@ class DataCenter {
         return this.tplMetas?.find((tpl) => tpl.id == type) || null;
     }
 
+    public pathInRes(...args: string[]): string {
+        return join(this.resourcePath, ...args)
+    }
+
+    public pathInData(...args: string[]): string {
+        return join(this.dataPath, ...args)
+    }
+
     /**
      * 返回插件（type）对应的目录路径。
      * 现在插件存放在 knowledge 目录下，以子目录形式组织。

@@ -1,6 +1,7 @@
 import { intereg } from '$libs/blueprint/index.js';
-import { openGlobalSearch } from '$libs/searchsrv/index.js';
+import { getGlobalSearchDB, openGlobalSearch } from '$libs/searchsrv/index.js';
 import { configService } from '$libs/store/index.js';
+import { secondConfig } from '$libs/store/second.js';
 import { initGlobalToolDB } from '$libs/tooldb/bootstrap.js';
 import { puppeteerInst } from '$libs/utils/puppeteer/index.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
@@ -10,6 +11,19 @@ import { nativeTheme } from 'electron';
 import { ensureDir } from 'fs-extra';
 import type { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../types/ModuleContext.js';
+
+async function initSearch(): Promise<void> {
+    if (secondConfig().get("search_inited")) {
+        return
+    }
+    const db = getGlobalSearchDB();
+    await Promise.all([
+        db.syncSystemKC(),
+        db.syncSystemSkills(),
+        // 调用tool的注册，把tool加入到检索中心去。
+    ])
+    secondConfig().set("search_inited", true);
+}
 
 class UnigenModule implements AppModule {
     async enable({ app }: ModuleContext): Promise<void> {
@@ -36,6 +50,11 @@ class UnigenModule implements AppModule {
             tooldbPromise
         ]);
         configService().oTel = telemetryService;
+
+        //阶段2初始化，依赖上面的初始化的，比如依赖GlobalSearch的tool注册。
+        await Promise.all([
+            initSearch()
+        ])
     }
 }
 
