@@ -7,8 +7,8 @@ export const BLANK_PROJECT_TYPE_ID = 'blank';
 /** 工作流工坊类型定义（本地内置，不依赖服务器返回） */
 export const BLANK_PROJECT_TYPE: ProjectType = {
     id: BLANK_PROJECT_TYPE_ID,
-    name: '直通项目',
-    description: '对话透传给模型，适合自定义工作流或直接与模型交互。',
+    name: '直通对话',
+    description: '不支持工具、技能及知识库，对话透传给模型。',
     icon: 'IconSquarePlus',
 };
 
