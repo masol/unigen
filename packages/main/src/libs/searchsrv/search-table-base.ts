@@ -2,6 +2,7 @@ import type { Query, Table, VectorQuery } from "@lancedb/lancedb";
 import type { Schema } from "apache-arrow";
 import Logger from "electron-log/main.js";
 import { throwPrecondition } from "../utils/err.js";
+import { getGlobalRerankService } from "./global-rerank-service.js";
 import { createFtsConfig } from "./schema.js";
 import type { SearchDbBase } from "./search-db-base.js";
 import type { SearchOptions, SearchRow } from "./types.js";
@@ -11,6 +12,12 @@ import type { SearchOptions, SearchRow } from "./types.js";
  * FTS 仍可正常工作，向量字段写入零向量；后续配置 embedding 会整体重建。
  */
 const PLACEHOLDER_VEC_SIZE = 1;
+
+/**
+ * 启用 Rerank 时，先多取若干候选，再交给 Rerank 精排。
+ * 3 倍是检索场景中较常见的候选扩展倍数。
+ */
+const RERANK_CANDIDATE_MULTIPLIER = 3;
 
 type RenameableConnection = {
     renameTable?: (from: string, to: string) => Promise<void>;
@@ -293,8 +300,53 @@ export abstract class SearchTableBase<
     }
 
     async search(queryText: string, opts: SearchOptions = {}): Promise<T[]> {
-        const query = await this.buildQuery(queryText, opts);
-        return (await query.toArray()) as T[];
+        const limit = opts.limit ?? 10;
+        const rerank = getGlobalRerankService();
+        const rerankEnabled = await rerank.isEnabled();
+
+        const candidateLimit = rerankEnabled
+            ? Math.max(limit, limit * RERANK_CANDIDATE_MULTIPLIER)
+            : limit;
+
+        const query = await this.buildQuery(queryText, {
+            ...opts,
+            limit: candidateLimit,
+        });
+        const rows = (await query.toArray()) as T[];
+
+        if (!rerankEnabled || rows.length === 0) {
+            return rows.slice(0, limit);
+        }
+
+        try {
+            const documents = rows.map((row) =>
+                String(row.text ?? ""),
+            );
+
+            if (documents.some((text) => text.length === 0)) {
+                return rows.slice(0, limit);
+            }
+
+            const result = await rerank.rerank(queryText, documents, {
+                topN: limit,
+            });
+
+            const ranked = result.ranking
+                .map((item) => rows[item.originalIndex])
+                .filter((row): row is T => Boolean(row));
+
+            if (ranked.length === 0) {
+                return rows.slice(0, limit);
+            }
+
+            return ranked.slice(0, limit);
+        } catch (error) {
+            Logger.warn(
+                `[Search] 表 [${this.name}] Rerank 失败，本次使用未重排结果。`,
+                error,
+            );
+            return rows.slice(0, limit);
+        }
     }
 
     async buildQuery(

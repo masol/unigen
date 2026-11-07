@@ -65,6 +65,7 @@ export function createSession(
             id,
             title,
             titleManual,
+            pinned: false,
             createdAt: now,
             updatedAt: now,
             lastMessageAt: null,
@@ -144,6 +145,20 @@ export function updateSessionTitle(
 }
 
 /**
+ * 更新会话置顶状态。
+ * 该字段仅供客户端界面使用，服务端不参与业务排序/判断。
+ * 不刷新 updatedAt，避免仅 UI 置顶影响服务端按 updatedAt 的列表排序。
+ */
+export function updateSessionPinned(
+    db: DrizzleDBType,
+    id: string,
+    pinned: boolean
+): void {
+    if (!id) throwPrecondition("updateSessionPinned: id is required");
+    db.update(sessions).set({ pinned }).where(eq(sessions.id, id)).run();
+}
+
+/**
  * 删除会话 + 其下所有 messages + 所有 traces (手工级联)
  */
 export function deleteSession(db: DrizzleDBType, id: string): void {
@@ -168,6 +183,7 @@ function rowToSession(row: typeof sessions.$inferSelect): ChatSession {
         id: row.id,
         title: row.title,
         titleManual: row.titleManual,
+        pinned: row.pinned,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         lastMessageAt: row.lastMessageAt ?? undefined,

@@ -26,6 +26,7 @@ const mitt: MittFactory = (
  */
 export type MainEvents = {
     "embed-changed": { old: string | null, new: string | null };
+    "rerank-changed": { old: string | null, new: string | null };
 };
 
 export type MainEventName = keyof MainEvents;

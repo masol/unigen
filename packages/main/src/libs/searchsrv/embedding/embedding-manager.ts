@@ -29,7 +29,8 @@ export interface EmbeddingFailure {
 
 export interface EmbedSwitchPayload {
     previous: EmbeddingState | null;
-    current: EmbeddingState;
+    /** 为 null 表示 Embedding 被禁用或降级，检索已退化为全文检索 */
+    current: EmbeddingState | null;
 }
 
 export interface EmbeddingChange {
@@ -70,8 +71,14 @@ export function parseEmbedModel(raw: string): ParsedEmbedModel | null {
 export class EmbeddingManager {
     #op: EmbedingOp | null = null;
     #state: EmbeddingState | null = null;
-    #loading: Promise<EmbeddingState | null> | null = null;
+    #loading: Promise<{ op: EmbedingOp; state: EmbeddingState }> | null = null;
     #store = createEmbeddingStateStore();
+
+    /**
+     * 配置代际。每次配置变化 / 主动禁用 / 降级都会递增，
+     * 用于丢弃“加载期间配置已变”的过期结果，避免覆盖最新状态。
+     */
+    #generation = 0;
 
     /** 最近一次从配置解析出的 modelKey，用于失败时回溯来源 */
     #configuredModelKey: string | null = null;
@@ -112,11 +119,14 @@ export class EmbeddingManager {
     /**
      * 标记当前 Embedding 为临时禁用（等同于未配置 embed_model）。
      *
+     * - 递增 generation，使进行中的加载结果过期
      * - 清空 op/state，ready 变为 false
      * - 记录 failure，status 变为 degraded
      * - 下一次 ensureReady() 会按配置重新尝试加载（自愈）
      */
     invalidate(error?: unknown): void {
+        this.#generation++;
+
         const modelKey =
             this.#state?.modelKey ??
             this.#configuredModelKey ??
@@ -156,38 +166,100 @@ export class EmbeddingManager {
         });
     }
 
+    /**
+     * 清除已应用状态。
+     *
+     * 当 embed_model 被清空或 Embedding 降级时，检索库会退化为 FTS，
+     * 此时写入的数据只有零向量。必须清除 applied state，保证之后恢复
+     * 同一个 Embedding 模型时也会触发重建，避免零向量被用于向量检索。
+     */
+    async clearApplied(): Promise<void> {
+        await this.#store.save({
+            modelKey: "",
+            dimension: 0,
+            updatedAt: new Date().toISOString(),
+        });
+    }
+
+    /**
+     * 确保当前配置的 Embedding 已就绪。
+     *
+     * 通过 generation + 共享 loading 处理“加载进行中配置又变了”的竞态：
+     * - 加载完成后 generation 不匹配：丢弃结果，按最新配置重新加载
+     * - 并发调用共享同一个 loading；若配置已变，等待结束后重新评估
+     * - 配置被清空/非法时递增 generation，使进行中的加载结果过期
+     */
     async ensureReady(): Promise<EmbeddingState | null> {
-        const raw = String(configService().get("embed_model") ?? "").trim();
-        if (!raw) {
-            // 用户主动关闭：这是 disabled，不是 degraded
-            this.#op = null;
-            this.#state = null;
-            this.#configuredModelKey = null;
-            this.#failure = null;
-            return null;
-        }
+        for (; ;) {
+            const raw = String(
+                configService().get("embed_model") ?? "",
+            ).trim();
 
-        const parsed = parseEmbedModel(raw);
-        if (!parsed) {
-            this.#configuredModelKey = raw;
-            throwPrecondition(`[Search] 非法 embed_model 配置: "${raw}"`);
-        }
+            if (!raw) {
+                // 用户主动关闭：这是 disabled，不是 degraded
+                this.#generation++;
+                this.#op = null;
+                this.#state = null;
+                this.#configuredModelKey = null;
+                this.#failure = null;
+                return null;
+            }
 
-        this.#configuredModelKey = parsed.modelKey;
+            const parsed = parseEmbedModel(raw);
+            if (!parsed) {
+                this.#generation++;
+                this.#configuredModelKey = raw;
+                throwPrecondition(
+                    `[Search] 非法 embed_model 配置: "${raw}"`,
+                );
+            }
 
-        if (this.#op && this.#state?.modelKey === parsed.modelKey) {
-            return this.#state;
-        }
+            this.#configuredModelKey = parsed.modelKey;
 
-        if (this.#loading) {
-            return this.#loading;
-        }
+            if (this.#op && this.#state?.modelKey === parsed.modelKey) {
+                return this.#state;
+            }
 
-        this.#loading = this.#load(parsed);
-        try {
-            return await this.#loading;
-        } finally {
-            this.#loading = null;
+            if (this.#loading) {
+                try {
+                    await this.#loading;
+                } catch (error) {
+                    // 共享加载失败：配置未变时直接抛出，避免重复加载
+                    if (this.#configuredModelKey === parsed.modelKey) {
+                        throw error;
+                    }
+                }
+                // 加载结束或配置已变：重新评估当前配置
+                continue;
+            }
+
+            const generation = ++this.#generation;
+            const loading = this.#load(parsed);
+            this.#loading = loading;
+
+            try {
+                const { op, state } = await loading;
+
+                if (this.#generation !== generation) {
+                    // 加载期间配置已变，丢弃本次结果
+                    continue;
+                }
+
+                this.#op = op;
+                this.#state = state;
+                this.#failure = null; // 成功加载即解除降级
+                return state;
+            } catch (error) {
+                if (this.#generation !== generation) {
+                    // 过期加载失败：忽略，按当前配置重新加载
+                    continue;
+                }
+                throw error;
+            } finally {
+                if (this.#loading === loading) {
+                    this.#loading = null;
+                }
+            }
         }
     }
 
@@ -225,7 +297,9 @@ export class EmbeddingManager {
         }
     }
 
-    async #load(parsed: ParsedEmbedModel): Promise<EmbeddingState> {
+    async #load(
+        parsed: ParsedEmbedModel,
+    ): Promise<{ op: EmbedingOp; state: EmbeddingState }> {
         let provider: Provider | undefined;
 
         if (parsed.providerId) {
@@ -246,11 +320,7 @@ export class EmbeddingManager {
             updatedAt: new Date().toISOString(),
         };
 
-        this.#op = op;
-        this.#state = state;
-        this.#failure = null; // 成功加载即解除降级
-
-        return state;
+        return { op, state };
     }
 
     async #probeDimension(op: EmbedingOp): Promise<number> {

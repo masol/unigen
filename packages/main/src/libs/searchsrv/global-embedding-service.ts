@@ -104,7 +104,10 @@ export class GlobalEmbeddingService {
         const state = db.embeddingState;
         if (state) {
             await this.#notifyProjects(previous, state);
-        } else if (db.embeddingDegraded) {
+            return;
+        }
+
+        if (db.embeddingDegraded) {
             Logger.warn(
                 "[Search] Embedding 加载失败，已临时禁用，检索退化为全文检索。",
                 db.embeddingFailure,
@@ -114,11 +117,17 @@ export class GlobalEmbeddingService {
                 "[Search] 当前未配置 embed_model，向量检索不可用；FTS 仍可工作。",
             );
         }
+
+        // 从可用变为不可用（用户禁用或加载失败降级）时，通知项目级检索库
+        // 退化为全文检索；一直处于禁用状态时不重复通知。
+        if (previous || db.embeddingDegraded) {
+            await this.#notifyProjects(previous, null);
+        }
     }
 
     async #notifyProjects(
         previous: EmbeddingState | null,
-        current: EmbeddingState,
+        current: EmbeddingState | null,
     ): Promise<void> {
         const payload: EmbedSwitchPayload = { previous, current };
         await appLife.onEmbedSwitch.promise(payload);

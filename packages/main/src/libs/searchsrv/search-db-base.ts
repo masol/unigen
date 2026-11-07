@@ -129,13 +129,21 @@ export abstract class SearchDbBase {
         const previous = await this.#readAppliedState();
         const current = await this.#ensureEmbedding();
 
-        const changed =
-            !!current &&
-            (!previous ||
-                previous.modelKey !== current.modelKey ||
-                previous.dimension !== current.dimension);
+        if (!current) {
+            // 未配置 / 降级：检索已退化为 FTS。
+            // 必须清除 applied state，保证禁用期间写入的零向量不会在
+            // 恢复同一个 Embedding 模型时被误用于向量检索。
+            await this.#clearAppliedSafe();
+            await this.onEmbeddingReady();
+            return;
+        }
 
-        if (changed && current) {
+        const changed =
+            !previous ||
+            previous.modelKey !== current.modelKey ||
+            previous.dimension !== current.dimension;
+
+        if (changed) {
             this.#rebuilding = true;
             try {
                 await this.queue.add(async () => {
@@ -163,10 +171,7 @@ export abstract class SearchDbBase {
         }
 
         await this.onEmbeddingReady();
-
-        if (current) {
-            await this.#markAppliedSafe();
-        }
+        await this.#markAppliedSafe();
     }
 
     async #readAppliedState(): Promise<EmbeddingState | null> {
@@ -202,6 +207,17 @@ export abstract class SearchDbBase {
         } catch (error) {
             Logger.warn(
                 "[Search] 记录 Embedding 应用状态失败，下次启动将重新校验。",
+                error,
+            );
+        }
+    }
+
+    async #clearAppliedSafe(): Promise<void> {
+        try {
+            await this.embedding.clearApplied();
+        } catch (error) {
+            Logger.warn(
+                "[Search] 清除 Embedding 应用状态失败，下次启动将重新校验。",
                 error,
             );
         }

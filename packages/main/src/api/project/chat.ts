@@ -107,11 +107,24 @@ const newMessage = os
         return result;
     });
 
+const pinSession = os
+    .input(z.object({
+        id: z.string(),
+        pin: z.boolean()
+    }))
+    .output(z.void())
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        const prjdb = PrjDB.ensure(ctx.project);
+        const result = prjdb.updateSessionPinned(input.id, input.pin);
+        return result;
+    });
 
 export default {
     listSessions,
     deleteSession,
     createSession,
+    pinSession,
     updateSessTitle,
     listMessage,
     newMessage

@@ -80,8 +80,11 @@ class ConfigService {
      * 如果配置不符合 schema 规范，会直接向外抛出异常
      */
     setAll(config: AppConfig): void {
-        const old = this.store.store.embed_model;
-        const changed = (config.embed_model !== this.store.store.embed_model)
+        const embedOld = this.store.store.embed_model;
+        const embedChanged = (config.embed_model !== this.store.store.embed_model)
+        const rerankOld = this.store.store.rerank_model;
+        const rerankChanged = (config.rerank_model !== this.store.store.rerank_model)
+
         this.store.store = config;
         const prj = getCurrentProject();
         broadcast({
@@ -89,8 +92,11 @@ class ConfigService {
             srcId: prj?.wid || -1,
             payload: config,
         });
-        if (changed) {
-            evtbus.emit("embed-changed", { old, new: config.embed_model })
+        if (embedChanged) {
+            evtbus.emit("embed-changed", { old: embedOld, new: config.embed_model })
+        }
+        if (rerankChanged) {
+            evtbus.emit("rerank-changed", { old: rerankOld, new: config.rerank_model })
         }
     }
 
@@ -117,14 +123,19 @@ class ConfigService {
      */
     set<K extends keyof AppConfig>(key: K, value: AppConfig[K]): void {
         const embed_changed = (key === "embed_model" && this.store.store.embed_model !== value)
-        const old = this.store.store.embed_model;
+        const rerank_changed = (key === "rerank_model" && this.store.store.rerank_model !== value)
+        const embed_old = this.store.store.embed_model;
+        const rerank_old = this.store.store.rerank_model;
         this.store.set(key, value);
+        if (embed_changed) {
+            evtbus.emit("embed-changed", { old: embed_old, new: value as string })
+        } else if (rerank_changed) {
+            evtbus.emit("rerank-changed", { old: rerank_old, new: value as string })
+        }
         if (this.oTel && key === 'telemetry') {
             this.oTel.reconfigure(value as string);
         }
-        if (embed_changed) {
-            evtbus.emit("embed-changed", { old, new: value as string })
-        }
+
         const prj = getCurrentProject();
         broadcast({
             name: 'cfg:set',

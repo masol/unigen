@@ -89,6 +89,7 @@ class SessionStore {
     readonly groupedSessions = $derived.by((): TimeGroup[] => {
         const now = i18nStore.dayjs();
         const groups: TimeGroup[] = [
+            { id: 'pinned', label: '置顶', sessions: [] },
             { id: 'today', label: '今天', sessions: [] },
             { id: 'yesterday', label: '昨天', sessions: [] },
             { id: 'week', label: '7 天内', sessions: [] },
@@ -102,14 +103,19 @@ class SessionStore {
         )
 
         for (const session of sorted) {
+            if (session.pinned) {
+                groups[0].sessions.push(session)
+                continue
+            }
+
             const ts = i18nStore.dayjs(session.lastMessageAt ?? session.updatedAt)
             const diffDays = now.diff(ts, 'day')
 
-            if (diffDays === 0) groups[0].sessions.push(session)
-            else if (diffDays === 1) groups[1].sessions.push(session)
-            else if (diffDays <= 7) groups[2].sessions.push(session)
-            else if (diffDays <= 30) groups[3].sessions.push(session)
-            else groups[4].sessions.push(session)
+            if (diffDays === 0) groups[1].sessions.push(session)
+            else if (diffDays === 1) groups[2].sessions.push(session)
+            else if (diffDays <= 7) groups[3].sessions.push(session)
+            else if (diffDays <= 30) groups[4].sessions.push(session)
+            else groups[5].sessions.push(session)
         }
 
         return groups.filter((g) => g.sessions.length > 0)
@@ -226,6 +232,23 @@ class SessionStore {
             return false
         } finally {
             this.#isUpdating = false
+        }
+    }
+
+    async setPinned(id: string, pinned: boolean): Promise<boolean> {
+        log.debug(`[SessionStore] setPinned() called, id=${id}, pinned=${pinned}`)
+        const session = this.#sessions.find((s) => s.id === id)
+        if (!session) return false
+        if (session.pinned === pinned) return true
+
+        try {
+            await safeApi().project.pinSession({ id, pin: pinned })
+            session.pinned = pinned
+            log.info(`[SessionStore] session pinned updated, id=${id}, pinned=${pinned}`)
+            return true
+        } catch (err) {
+            log.error(`[SessionStore] setPinned() failed, id=${id}`, err)
+            return false
         }
     }
 

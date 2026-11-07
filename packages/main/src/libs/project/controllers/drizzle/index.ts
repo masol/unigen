@@ -66,6 +66,7 @@ import {
     patchTrace,
     saveMessage,
     saveTraces,
+    updateSessionPinned,
     updateSessionTitle,
     upsertTrace
 } from './chat.js';
@@ -269,6 +270,10 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
      */
     updateSessionTitle(id: string, title: string, manual: boolean = false): void {
         updateSessionTitle(this.ensureDB(), id, title, manual);
+    }
+
+    updateSessionPinned(id: string, pinned: boolean): void {
+        updateSessionPinned(this.ensureDB(), id, pinned);
     }
 
     deleteSession(id: string): void {

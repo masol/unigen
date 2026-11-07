@@ -1,28 +1,38 @@
 import { configService } from '$libs/store/index.js';
 import { throwPrecondition } from '$libs/utils/err.js';
 import { appLife } from '$libs/utils/tapable/applife.js';
-import { EmbedManyResult, EmbedResult } from 'ai';
+import type { EmbedManyResult, EmbedResult } from 'ai';
 import Logger from 'electron-log/main.js';
-import type { Llama, LlamaEmbeddingContext, LlamaModel } from 'node-llama-cpp';
-import { getLlama } from 'node-llama-cpp';
+import type { LlamaEmbeddingContext, LlamaModel } from 'node-llama-cpp';
 import pMap from 'p-map';
-import { EmbedingImpl, EmbedingOptions } from '../type.js';
+import type { EmbedingImpl, EmbedingOptions } from '../type.js';
+import { getLlamaInstance } from './llama-service.js';
 
-// 建议将模型对应的上下文大小作为配置项管理，或根据模型文件名推断
-const DEFAULT_CONTEXT_SIZE = 2048; // 调整为你的嵌入模型训练长度
+const DEFAULT_CONTEXT_SIZE = 2048;
 
-class LocalEmbeding {
+class LocalEmbeding implements EmbedingImpl {
     embeddingModel: LlamaModel | null = null;
-    llamaInstance: Llama | null = null;
     embeddingContext: LlamaEmbeddingContext | null = null;
+    private loadedModelPath: string | null = null;
+    private loadedContextSize: number | null = null;
     private unregisterBeforeQuit: (() => void) | null = null;
 
-    constructor() {
-        this.unregisterBeforeQuit = appLife.beforeQuit.tapPromise('LocalEmbeding', async () => {
-            Logger.debug('[LocalEmbeding] 正在清理资源...');
-            await this.dispose(); // dispose 需要是 async
-            Logger.debug('[LocalEmbeding] 清理资源完成。');
-        });
+    /**
+     * 幂等注册退出清理钩子。
+     * 放在 init() 入口而非 constructor，确保：
+     *  - 真正用到本地 embedding 时才注册钩子（懒加载语义）；
+     *  - 手动 dispose() 后再次 init() 能重新注册。
+     */
+    private ensureBeforeQuitHook(): void {
+        if (this.unregisterBeforeQuit) return;
+        this.unregisterBeforeQuit = appLife.beforeQuit.tapPromise(
+            'LocalEmbeding',
+            async () => {
+                Logger.debug('[LocalEmbeding] 正在清理资源...');
+                await this.dispose();
+                Logger.debug('[LocalEmbeding] 清理资源完成。');
+            },
+        );
     }
 
     async dispose(): Promise<void> {
@@ -56,72 +66,130 @@ class LocalEmbeding {
                 this.embeddingModel = null;
             }
         }
-        // llamaInstance 的清理取决于库的设计，通常 loadModel 的模型释放后，
-        // llamaInstance 可能仍可复用。如需彻底释放，可考虑在此也调用 dispose。
+        this.loadedModelPath = null;
+        this.loadedContextSize = null;
     }
 
-    private async embed(value: string, _opts?: EmbedingOptions): Promise<EmbedResult> {
-        if (!this.embeddingContext) {
-            throwPrecondition("本地嵌入引擎未能正确初始化。");
+    embed = async (
+        value: string,
+        _opts?: EmbedingOptions,
+    ): Promise<EmbedResult> => {
+        const ctx = this.embeddingContext;
+        if (!ctx) {
+            throwPrecondition('本地嵌入引擎未能正确初始化。');
         }
-        const embedding = await this.embeddingContext.getEmbeddingFor(value);
+        if (!value) {
+            // 空字符串短路，避免向模型提交空输入
+            return { value, embedding: [], usage: { tokens: 0 }, warnings: [] };
+        }
+        const embedding = await ctx.getEmbeddingFor(value);
         return {
             value,
             embedding: [...embedding.vector],
             usage: { tokens: 0 },
-            warnings: []
+            warnings: [],
         };
-    }
+    };
 
-    private async embedMany(values: string[], _opts?: EmbedingOptions): Promise<EmbedManyResult> {
-        if (!this.embeddingContext) {
-            throwPrecondition("本地嵌入引擎未能正确初始化。");
+    embedMany = async (
+        values: string[],
+        _opts?: EmbedingOptions,
+    ): Promise<EmbedManyResult> => {
+        const ctx = this.embeddingContext;
+        if (!ctx) {
+            throwPrecondition('本地嵌入引擎未能正确初始化。');
         }
-        // 使用 pMap 控制并发，但 getEmbeddingFor 本身可能已由库内部批处理优化。
-        // 如果库的批处理效率更高，可以直接用 Promise.all，让库来调度。
-        const concurrency = configService().get("concurrency") ?? 4;
+        if (!values.length) {
+            return {
+                values: [],
+                embeddings: [],
+                usage: { tokens: 0 },
+                warnings: [],
+            };
+        }
+        const concurrency = configService().get('concurrency') ?? 4;
         const embeddingObjects = await pMap(
             values,
-            async (text) => this.embeddingContext!.getEmbeddingFor(text),
-            { concurrency }
+            (text) => ctx.getEmbeddingFor(text),
+            { concurrency },
         );
         return {
             values,
-            embeddings: embeddingObjects.map(item => [...item.vector]),
+            embeddings: embeddingObjects.map((item) => [...item.vector]),
             usage: { tokens: 0 },
-            warnings: []
+            warnings: [],
         };
-    }
+    };
 
     async init(modelPath: string, contextSize?: number): Promise<EmbedingImpl> {
+        // 首次真正使用本地能力时注册退出钩子。
+        this.ensureBeforeQuitHook();
+
+        // 幂等：路径与有效上下文均一致时直接复用。
+        if (
+            this.embeddingContext &&
+            this.embeddingModel &&
+            this.loadedModelPath === modelPath
+        ) {
+            const modelMax =
+                this.embeddingModel.trainContextSize ?? DEFAULT_CONTEXT_SIZE;
+            const desired = Math.min(contextSize ?? modelMax, modelMax);
+            if (this.loadedContextSize === desired) {
+                Logger.debug('[LocalEmbeding] 复用已加载的模型:', modelPath);
+                return this;
+            }
+        }
+
         await this.disposeImpl();
 
-        if (!this.llamaInstance) {
-            this.llamaInstance = await getLlama();
-        }
-        Logger.debug("load model=", modelPath);
+        // Llama 实例由 llama-service 全局持有，embedding / rerank 共享同一份。
+        const llama = await getLlamaInstance();
+        Logger.debug('[LocalEmbeding] 加载模型:', modelPath);
+
         try {
-            this.embeddingModel = await this.llamaInstance.loadModel({ modelPath });
+            this.embeddingModel = await llama.loadModel({ modelPath });
         } catch (error) {
             Logger.error(`加载嵌入模型失败: ${modelPath}`, error);
-            throw error; // 让调用方感知失败，便于降级处理
+            await this.disposeImpl();
+            throw error;
         }
 
-        // 关键修正：使用明确的 contextSize，而不是 'auto'
-        const effectiveContextSize = contextSize ?? DEFAULT_CONTEXT_SIZE;
-        this.embeddingContext = await this.embeddingModel.createEmbeddingContext({
-            contextSize: effectiveContextSize,
-            // 可选：batchSize 通常设置得较大以提升吞吐，但需与 contextSize 匹配
-            // batchSize: effectiveContextSize, 
-        });
+        const modelMax =
+            this.embeddingModel.trainContextSize ?? DEFAULT_CONTEXT_SIZE;
+        const effectiveContextSize = Math.min(
+            contextSize ?? modelMax,
+            modelMax,
+        );
 
-        Logger.info(`嵌入上下文已创建, contextSize=${effectiveContextSize}`);
-
-        return {
-            embed: this.embed.bind(this),
-            embedMany: this.embedMany.bind(this)
-        };
+        try {
+            this.embeddingContext = await this.embeddingModel.createEmbeddingContext(
+                {
+                    contextSize: effectiveContextSize,
+                },
+            );
+            this.loadedModelPath = modelPath;
+            this.loadedContextSize = effectiveContextSize;
+            Logger.info(`嵌入上下文已创建, contextSize=${effectiveContextSize}`);
+            return this;
+        } catch (error) {
+            Logger.error('创建嵌入上下文失败:', error);
+            await this.disposeImpl();
+            throw error;
+        }
     }
 }
 
-export const localEmbeding = new LocalEmbeding();
+const KEY = Symbol.for('unigen.singleton.localEmbeding');
+
+/**
+ * 懒加载单例：首次调用时创建实例。
+ * 使用 Symbol.for + globalThis 保证多份编译产物共享同一实例。
+ * 退出清理钩子在 init() 中注册，因此仅在实际使用本地 embedding 后生效。
+ */
+export function getLocalEmbeding(): LocalEmbeding {
+    const g = globalThis as Record<symbol, LocalEmbeding | undefined>;
+    if (!g[KEY]) {
+        g[KEY] = new LocalEmbeding();
+    }
+    return g[KEY]!;
+}

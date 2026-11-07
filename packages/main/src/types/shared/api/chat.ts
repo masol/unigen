@@ -17,6 +17,8 @@ export const chatSessionSchema = z.object({
     title: z.string(),
     /** 用户是否手动修改过标题；一旦为 true，自动标题逻辑不再触发 */
     titleManual: z.boolean(),
+    /** 客户端界面置顶；服务端仅持久化，不参与业务排序/判断 */
+    pinned: z.boolean(),
     /** 会话创建时间 epoch ms */
     createdAt: epochMs,
     /** 会话属性最后变更 epoch ms (改标题、消息到达等) */
@@ -292,7 +294,7 @@ export const newChatMessageSchema = z.object({
     */
     mode: z.enum(["cmd"]).nullish(),
     /** 消息级扩展载荷：user 存 args / assistant 存 config */
-    extra: messageExtraSchema.optional(),    
+    extra: messageExtraSchema.optional(),
     /** 不传则取 Date.now() */
     timestamp: z.number().optional(),
     agent: agentIdentitySchema.optional(),

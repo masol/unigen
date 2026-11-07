@@ -24,6 +24,10 @@ export const sessions = sqliteTable(
         titleManual: integer('title_manual', { mode: 'boolean' })
             .notNull()
             .default(false),
+        /** 客户端界面置顶；服务端仅持久化，不参与业务排序/判断 */
+        pinned: integer('pinned', { mode: 'boolean' })
+            .notNull()
+            .default(false),
         createdAt: integer('created_at').notNull().$defaultFn(() => Date.now()),
         updatedAt: integer('updated_at')
             .notNull()

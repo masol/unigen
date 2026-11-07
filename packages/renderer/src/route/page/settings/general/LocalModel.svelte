@@ -12,11 +12,13 @@
     IconFolderOpen,
     IconLoader2,
   } from "@tabler/icons-svelte";
+  import { onMount } from "svelte";
 
   // ═══════════════════════════════════════════════════════════
-  // Reactive bindings — configStore 是唯一真相，两个值都 derive
+  // Reactive bindings
   // ═══════════════════════════════════════════════════════════
   let embeddingModel = $derived(configStore.embedModel);
+  let rerankModel = $derived(configStore.localModel);
 
   // ═══════════════════════════════════════════════════════════
   // Model lists state
@@ -24,16 +26,24 @@
   let embeddingModels = $state<
     Array<{ value: string; label: string; note: string }>
   >([]);
-
   let embeddingLoading = $state(false);
-
   let embeddingFetched = $state(false);
-  let rerankModel = $derived(configStore.localModel);
+
   let rerankModels = $state<
     Array<{ value: string; label: string; note: string }>
   >([]);
-  let rerankFetched = $state(false);
   let rerankLoading = $state(false);
+  let rerankFetched = $state(false);
+
+  // ═══════════════════════════════════════════════════════════
+  // 每次进入重置缓存标记（热更新 / 组件复用场景下保险）
+  // ═══════════════════════════════════════════════════════════
+  onMount(() => {
+    embeddingFetched = false;
+    embeddingLoading = false;
+    rerankFetched = false;
+    rerankLoading = false;
+  });
 
   // ═══════════════════════════════════════════════════════════
   // Computed selected items for display
@@ -42,9 +52,12 @@
     embeddingModels.find((m) => m.value === embeddingModel)?.label ||
       embeddingModel,
   );
+  let selectedRerankLabel = $derived(
+    rerankModels.find((m) => m.value === rerankModel)?.label || rerankModel,
+  );
 
   // ═══════════════════════════════════════════════════════════
-  // Load models on first open
+  // Embedding
   // ═══════════════════════════════════════════════════════════
   async function handleEmbeddingOpen(open: boolean) {
     if (open && !embeddingFetched && !embeddingLoading) {
@@ -66,8 +79,22 @@
             }
           });
         });
+
+        // ✅ 始终提供"不使用"选项，格式与 rerank 对齐
+        if (!embeddingModels.some((m) => m.value === "")) {
+          embeddingModels.push({
+            value: "",
+            label: "不使用嵌入模型",
+            note: "会失去语义检索能力，降级为纯全文检索。",
+          });
+        }
         embeddingFetched = true;
-        if (embeddingModels.length === 0 && configStore.embedModel.length > 0) {
+
+        // 当前值已不在列表中 → 回退（空值选项已在列表内，故不会误清空）
+        if (
+          configStore.embedModel.length > 0 &&
+          !embeddingModels.some((m) => m.value === configStore.embedModel)
+        ) {
           configStore.setEmbedModel("");
         }
       } catch (error) {
@@ -79,13 +106,9 @@
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // Model selection handlers
-  // ═══════════════════════════════════════════════════════════
   async function handleEmbeddingChange(value: string) {
-    if (value === configStore.embedModel) return true;
+    if (value === configStore.embedModel) return;
 
-    // 已有旧值时才弹确认
     if (configStore.embedModel.length > 0) {
       const confirmed = await confirmStore.request({
         title: "需要重建数据",
@@ -93,76 +116,11 @@
           "嵌入模型变更，需要重建全部工具，技能以及知识库的嵌入向量，您确定要变更嵌入模型吗？",
         variant: "question",
       });
-      // 取消：什么都不做。embeddingModel 是 derived,
-      // Select 会跟随 configStore 自动回退到旧值。
-      if (!confirmed) return false;
+      if (!confirmed) return;
     }
-
     await configStore.setEmbedModel(value);
-    return true;
   }
 
-  let selectedRerankLabel = $derived(
-    rerankModels.find((m) => m.value === rerankModel)?.label || rerankModel,
-  );
-  async function handleTextOpen(open: boolean) {
-    if (open && !rerankFetched && !rerankLoading) {
-      rerankLoading = true;
-      try {
-        rerankModels = (await api().config.getReranks()).map((item) => ({
-          value: item.value,
-          label: item.label,
-          note: "",
-        }));
-        configStore.providers.forEach((provider) => {
-          provider.models.forEach((model) => {
-            if (model.abilities.includes(FUNCTION_TAGS.rerank)) {
-              embeddingModels.push({
-                value: `::${provider.id}::${model.id}`,
-                label: model.id,
-                note: "远程重排模型",
-              });
-            }
-          });
-        });
-        rerankFetched = true;
-        if (rerankModels.length === 0) {
-          if (configStore.localModel.length > 0) {
-            configStore.setReranModel("");
-          }
-        } else {
-          rerankModels.push({
-            value: "",
-            label: "不使用重排模型",
-            note: "缺失重排，会降低召回准确率，降低任务质量。",
-          });
-        }
-      } catch (error) {
-        console.error("Failed to fetch text models:", error);
-        rerankModels = [];
-      } finally {
-        rerankLoading = false;
-      }
-    }
-  }
-  function handleRerankChange(realValue: string) {
-    const value = realValue.trim();
-    if (value !== configStore.localModel) {
-      configStore.setReranModel(value);
-    }
-  }
-  async function openRerankDirectory() {
-    const targetPath = await api().system.getPath({
-      name: "rerank",
-      create: true,
-    });
-    if (targetPath) {
-      await api().system.showItemInFolder({ path: targetPath });
-    }
-  }
-  // ═══════════════════════════════════════════════════════════
-  // Open model directory
-  // ═══════════════════════════════════════════════════════════
   async function openEmbeddingModelDirectory() {
     const targetPath = await api().system.getPath({
       name: "embeding",
@@ -172,10 +130,77 @@
       await api().system.showItemInFolder({ path: targetPath });
     }
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // Rerank
+  // ═══════════════════════════════════════════════════════════
+  async function handleTextOpen(open: boolean) {
+    if (open && !rerankFetched && !rerankLoading) {
+      rerankLoading = true;
+      try {
+        rerankModels = (await api().config.getReranks()).map((item) => ({
+          value: item.value,
+          label: item.label,
+          note: "本地模型",
+        }));
+        configStore.providers.forEach((provider) => {
+          provider.models.forEach((model) => {
+            if (model.abilities.includes(FUNCTION_TAGS.rerank)) {
+              rerankModels.push({
+                value: `::${provider.id}::${model.id}`,
+                label: model.id,
+                note: "远程重排模型",
+              });
+            }
+          });
+        });
+
+        // 始终提供"不使用"选项，不依赖是否已有本地模型
+        if (!rerankModels.some((m) => m.value === "")) {
+          rerankModels.push({
+            value: "",
+            label: "不使用重排模型",
+            note: "缺失重排会降低召回准确率与任务质量。",
+          });
+        }
+        rerankFetched = true;
+
+        // 当前值已不在列表中 → 回退
+        if (
+          configStore.localModel.length > 0 &&
+          !rerankModels.some((m) => m.value === configStore.localModel)
+        ) {
+          configStore.setReranModel("");
+        }
+      } catch (error) {
+        console.error("Failed to fetch text models:", error);
+        rerankModels = [];
+      } finally {
+        rerankLoading = false;
+      }
+    }
+  }
+
+  function handleRerankChange(realValue: string) {
+    const value = realValue.trim();
+    if (value !== configStore.localModel) {
+      configStore.setReranModel(value);
+    }
+  }
+
+  async function openRerankDirectory() {
+    const targetPath = await api().system.getPath({
+      name: "rerank",
+      create: true,
+    });
+    if (targetPath) {
+      await api().system.showItemInFolder({ path: targetPath });
+    }
+  }
 </script>
 
 <section class="space-y-4">
-  <h2 class="text-lg font-medium text-foreground px-1">模型配置</h2>
+  <h2 class="text-lg font-medium text-foreground px-1">搜索配置</h2>
   <div
     class="rounded-2xl border border-border/50 bg-card shadow-sm overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-border"
   >
