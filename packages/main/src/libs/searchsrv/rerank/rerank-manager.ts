@@ -17,7 +17,6 @@ export interface RerankState {
 }
 
 export interface RerankFailure {
-    /** 触发失败的模型 key；解析失败时为原始配置值，未配置时为空串 */
     modelKey: string;
     message: string;
     at: string;
@@ -29,6 +28,11 @@ export interface ParsedRerankModel {
     modelId: string;
     providerId?: string;
 }
+
+type ResolvedConfig =
+    | { kind: "disabled" }
+    | { kind: "invalid"; raw: string }
+    | { kind: "ready"; parsed: ParsedRerankModel };
 
 export function parseRerankModel(raw: string): ParsedRerankModel | null {
     const trimmed = raw.trim();
@@ -57,17 +61,9 @@ export class RerankManager {
     #op: RerankOp | null = null;
     #state: RerankState | null = null;
     #loading: Promise<{ op: RerankOp; state: RerankState }> | null = null;
-
-    /**
-     * 配置代际。每次配置变化 / 主动禁用 / 降级都会递增，
-     * 用于丢弃“加载期间配置已变”的过期结果。
-     */
+    #loadingModelKey: string | null = null;
     #generation = 0;
-
-    /** 最近一次从配置解析出的 modelKey，用于失败时回溯来源 */
     #configuredModelKey: string | null = null;
-
-    /** 配置了但加载/调用失败的信息；非空即表示临时禁用 */
     #failure: RerankFailure | null = null;
 
     get ready(): boolean {
@@ -92,14 +88,6 @@ export class RerankManager {
         return this.#failure;
     }
 
-    /**
-     * 标记当前 Rerank 为临时禁用（等同于未配置 rerank_model）。
-     *
-     * - 递增 generation，使进行中的加载结果过期
-     * - 清空 op/state，ready 变为 false
-     * - 记录 failure，status 变为 degraded
-     * - 下一次 ensureReady() 会按配置重新尝试加载（自愈）
-     */
     invalidate(error?: unknown): void {
         this.#generation++;
 
@@ -128,42 +116,26 @@ export class RerankManager {
         );
     }
 
-    /**
-     * 确保当前配置的 Rerank 已就绪。
-     *
-     * 通过 generation + 共享 loading 处理“加载进行中配置又变了”的竞态：
-     * - 加载完成后 generation 不匹配：丢弃结果，按最新配置重新加载
-     * - 并发调用共享同一个 loading；若配置已变，等待结束后重新评估
-     * - 配置被清空/非法时递增 generation，使进行中的加载结果过期
-     */
     async ensureReady(): Promise<RerankState | null> {
         for (; ;) {
-            const raw = String(
-                configService().get("rerank_model") ?? "",
-            ).trim();
+            const config = this.#resolveConfig();
 
-            if (!raw) {
-                // 用户主动关闭：这是 disabled，不是 degraded
-                this.#generation++;
-                this.#op = null;
-                this.#state = null;
-                this.#configuredModelKey = null;
-                this.#failure = null;
+            if (config.kind === "disabled") {
+                this.#resetDisabled();
                 return null;
             }
 
-            const parsed = parseRerankModel(raw);
-            if (!parsed) {
+            if (config.kind === "invalid") {
                 this.#generation++;
-                this.#configuredModelKey = raw;
-
+                this.#configuredModelKey = config.raw;
                 const error = new Error(
-                    `[Search] 非法 rerank_model 配置: "${raw}"`,
+                    `[Search] 非法 rerank_model 配置: "${config.raw}"`,
                 );
                 this.invalidate(error);
                 throw error;
             }
 
+            const { parsed } = config;
             this.#configuredModelKey = parsed.modelKey;
 
             if (this.#op && this.#state?.modelKey === parsed.modelKey) {
@@ -171,43 +143,35 @@ export class RerankManager {
             }
 
             if (this.#loading) {
-                try {
-                    await this.#loading;
-                } catch (error) {
-                    // 共享加载失败：配置未变时直接抛出，避免重复加载
-                    if (this.#configuredModelKey === parsed.modelKey) {
-                        throw error;
-                    }
-                }
-                // 加载结束或配置已变：重新评估当前配置
+                await this.#awaitSharedLoading(parsed.modelKey);
                 continue;
             }
 
             const generation = ++this.#generation;
             const loading = this.#load(parsed);
             this.#loading = loading;
+            this.#loadingModelKey = parsed.modelKey;
 
             try {
                 const { op, state } = await loading;
 
                 if (this.#generation !== generation) {
-                    // 加载期间配置已变，丢弃本次结果
                     continue;
                 }
 
                 this.#op = op;
                 this.#state = state;
-                this.#failure = null; // 成功加载即解除降级
+                this.#failure = null;
                 return state;
             } catch (error) {
                 if (this.#generation !== generation) {
-                    // 过期加载失败：忽略，按当前配置重新加载
                     continue;
                 }
                 throw error;
             } finally {
                 if (this.#loading === loading) {
                     this.#loading = null;
+                    this.#loadingModelKey = null;
                 }
             }
         }
@@ -239,9 +203,40 @@ export class RerankManager {
         try {
             return await this.#op.rerank(query, documents, opts);
         } catch (error) {
-            // 运行时失败（服务不可用、网络、本地模型异常等）：临时禁用
             this.invalidate(error);
             throw error;
+        }
+    }
+
+    #resolveConfig(): ResolvedConfig {
+        const raw = String(
+            configService().get("rerank_model") ?? "",
+        ).trim();
+
+        if (!raw) return { kind: "disabled" };
+
+        const parsed = parseRerankModel(raw);
+        if (!parsed) return { kind: "invalid", raw };
+
+        return { kind: "ready", parsed };
+    }
+
+    #resetDisabled(): void {
+        this.#generation++;
+        this.#op = null;
+        this.#state = null;
+        this.#configuredModelKey = null;
+        this.#failure = null;
+    }
+
+    async #awaitSharedLoading(expectedModelKey: string): Promise<void> {
+        const loadingModelKey = this.#loadingModelKey;
+        try {
+            await this.#loading;
+        } catch (error) {
+            if (loadingModelKey === expectedModelKey) {
+                throw error;
+            }
         }
     }
 

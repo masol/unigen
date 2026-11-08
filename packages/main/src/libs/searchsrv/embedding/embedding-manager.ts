@@ -11,16 +11,9 @@ import {
 
 export type { EmbeddingState } from "./embed-state-store.js";
 
-/**
- * Embedding 运行状态：
- * - disabled：未配置 embed_model，FTS 正常工作
- * - ready：模型已加载，向量检索可用
- * - degraded：配置了但加载/调用失败，已临时禁用，检索退化为 FTS
- */
 export type EmbeddingStatus = "disabled" | "ready" | "degraded";
 
 export interface EmbeddingFailure {
-    /** 触发失败的模型 key；解析失败时为原始配置值，未配置时为空串 */
     modelKey: string;
     message: string;
     at: string;
@@ -29,7 +22,6 @@ export interface EmbeddingFailure {
 
 export interface EmbedSwitchPayload {
     previous: EmbeddingState | null;
-    /** 为 null 表示 Embedding 被禁用或降级，检索已退化为全文检索 */
     current: EmbeddingState | null;
 }
 
@@ -44,6 +36,11 @@ export interface ParsedEmbedModel {
     modelId: string;
     providerId?: string;
 }
+
+type ResolvedConfig =
+    | { kind: "disabled" }
+    | { kind: "invalid"; raw: string }
+    | { kind: "ready"; parsed: ParsedEmbedModel };
 
 export function parseEmbedModel(raw: string): ParsedEmbedModel | null {
     const trimmed = raw.trim();
@@ -72,18 +69,10 @@ export class EmbeddingManager {
     #op: EmbedingOp | null = null;
     #state: EmbeddingState | null = null;
     #loading: Promise<{ op: EmbedingOp; state: EmbeddingState }> | null = null;
+    #loadingModelKey: string | null = null;
     #store = createEmbeddingStateStore();
-
-    /**
-     * 配置代际。每次配置变化 / 主动禁用 / 降级都会递增，
-     * 用于丢弃“加载期间配置已变”的过期结果，避免覆盖最新状态。
-     */
     #generation = 0;
-
-    /** 最近一次从配置解析出的 modelKey，用于失败时回溯来源 */
     #configuredModelKey: string | null = null;
-
-    /** 配置了但加载/调用失败的信息；非空即表示临时禁用 */
     #failure: EmbeddingFailure | null = null;
 
     get ready(): boolean {
@@ -94,7 +83,6 @@ export class EmbeddingManager {
         return this.#state;
     }
 
-    /** 后续代码应优先使用 status / degraded 判断是否降级 */
     get status(): EmbeddingStatus {
         if (this.ready) return "ready";
         if (this.#failure) return "degraded";
@@ -116,14 +104,6 @@ export class EmbeddingManager {
         return this.#state.dimension;
     }
 
-    /**
-     * 标记当前 Embedding 为临时禁用（等同于未配置 embed_model）。
-     *
-     * - 递增 generation，使进行中的加载结果过期
-     * - 清空 op/state，ready 变为 false
-     * - 记录 failure，status 变为 degraded
-     * - 下一次 ensureReady() 会按配置重新尝试加载（自愈）
-     */
     invalidate(error?: unknown): void {
         this.#generation++;
 
@@ -166,13 +146,6 @@ export class EmbeddingManager {
         });
     }
 
-    /**
-         * 清除已应用状态。
-         *
-         * 注意：`SearchDbBase` 在禁用/降级时已不再调用本方法——保留旧索引，
-         * 以便恢复同一 Embedding 模型时无需重建。仅当调用方希望强制下次
-         * 恢复时重建（例如启用严格校验），才需显式调用。
-         */
     async clearApplied(): Promise<void> {
         await this.#store.save({
             modelKey: "",
@@ -181,39 +154,24 @@ export class EmbeddingManager {
         });
     }
 
-    /**
-     * 确保当前配置的 Embedding 已就绪。
-     *
-     * 通过 generation + 共享 loading 处理“加载进行中配置又变了”的竞态：
-     * - 加载完成后 generation 不匹配：丢弃结果，按最新配置重新加载
-     * - 并发调用共享同一个 loading；若配置已变，等待结束后重新评估
-     * - 配置被清空/非法时递增 generation，使进行中的加载结果过期
-     */
     async ensureReady(): Promise<EmbeddingState | null> {
         for (; ;) {
-            const raw = String(
-                configService().get("embed_model") ?? "",
-            ).trim();
+            const config = this.#resolveConfig();
 
-            if (!raw) {
-                // 用户主动关闭：这是 disabled，不是 degraded
-                this.#generation++;
-                this.#op = null;
-                this.#state = null;
-                this.#configuredModelKey = null;
-                this.#failure = null;
+            if (config.kind === "disabled") {
+                this.#resetDisabled();
                 return null;
             }
 
-            const parsed = parseEmbedModel(raw);
-            if (!parsed) {
+            if (config.kind === "invalid") {
                 this.#generation++;
-                this.#configuredModelKey = raw;
+                this.#configuredModelKey = config.raw;
                 throwPrecondition(
-                    `[Search] 非法 embed_model 配置: "${raw}"`,
+                    `[Search] 非法 embed_model 配置: "${config.raw}"`,
                 );
             }
 
+            const { parsed } = config;
             this.#configuredModelKey = parsed.modelKey;
 
             if (this.#op && this.#state?.modelKey === parsed.modelKey) {
@@ -221,43 +179,35 @@ export class EmbeddingManager {
             }
 
             if (this.#loading) {
-                try {
-                    await this.#loading;
-                } catch (error) {
-                    // 共享加载失败：配置未变时直接抛出，避免重复加载
-                    if (this.#configuredModelKey === parsed.modelKey) {
-                        throw error;
-                    }
-                }
-                // 加载结束或配置已变：重新评估当前配置
+                await this.#awaitSharedLoading(parsed.modelKey);
                 continue;
             }
 
             const generation = ++this.#generation;
             const loading = this.#load(parsed);
             this.#loading = loading;
+            this.#loadingModelKey = parsed.modelKey;
 
             try {
                 const { op, state } = await loading;
 
                 if (this.#generation !== generation) {
-                    // 加载期间配置已变，丢弃本次结果
                     continue;
                 }
 
                 this.#op = op;
                 this.#state = state;
-                this.#failure = null; // 成功加载即解除降级
+                this.#failure = null;
                 return state;
             } catch (error) {
                 if (this.#generation !== generation) {
-                    // 过期加载失败：忽略，按当前配置重新加载
                     continue;
                 }
                 throw error;
             } finally {
                 if (this.#loading === loading) {
                     this.#loading = null;
+                    this.#loadingModelKey = null;
                 }
             }
         }
@@ -270,7 +220,6 @@ export class EmbeddingManager {
         try {
             await this.ensureReady();
         } catch (error) {
-            // 配置非法 / 加载失败：标记 degraded，调用方可据此降级到 FTS
             this.invalidate(error);
             throw error;
         }
@@ -291,9 +240,40 @@ export class EmbeddingManager {
             }
             return vectors;
         } catch (error) {
-            // 运行时失败（服务不可用、网络等）：临时禁用，后续检索走 FTS
             this.invalidate(error);
             throw error;
+        }
+    }
+
+    #resolveConfig(): ResolvedConfig {
+        const raw = String(
+            configService().get("embed_model") ?? "",
+        ).trim();
+
+        if (!raw) return { kind: "disabled" };
+
+        const parsed = parseEmbedModel(raw);
+        if (!parsed) return { kind: "invalid", raw };
+
+        return { kind: "ready", parsed };
+    }
+
+    #resetDisabled(): void {
+        this.#generation++;
+        this.#op = null;
+        this.#state = null;
+        this.#configuredModelKey = null;
+        this.#failure = null;
+    }
+
+    async #awaitSharedLoading(expectedModelKey: string): Promise<void> {
+        const loadingModelKey = this.#loadingModelKey;
+        try {
+            await this.#loading;
+        } catch (error) {
+            if (loadingModelKey === expectedModelKey) {
+                throw error;
+            }
         }
     }
 

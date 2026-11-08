@@ -19,6 +19,9 @@ const PLACEHOLDER_VEC_SIZE = 1;
  */
 const RERANK_CANDIDATE_MULTIPLIER = 3;
 
+/** RRF 平滑常数默认值，与 LanceDB RRFReranker 默认值保持一致 */
+const DEFAULT_RRF_K = 60;
+
 type RenameableConnection = {
     renameTable?: (from: string, to: string) => Promise<void>;
 };
@@ -121,10 +124,6 @@ export abstract class SearchTableBase<
         }
     }
 
-    /**
-     * 从表 arrow schema 的 vector 字段读取维度。
-     * LanceDB 的 table.schema 是返回 Promise<Schema> 的函数，必须 await。
-     */
     private async readVectorSize(table: Table): Promise<number> {
         try {
             const schema = await table.schema();
@@ -154,8 +153,19 @@ export abstract class SearchTableBase<
         return this.table;
     }
 
+    /**
+     * 构造写入记录。
+     *
+     * 嵌入异常（服务不可用、网络失败、维度不一致等）不得打断入库：
+     * 捕获后降级为零向量占位，FTS 索引仍会正常建立；检索侧会因
+     * `embedReady` 失效或 `vecSize !== embedSize` 自动走全文检索。
+     */
     protected async buildRecords(
         items: SearchRow[],
+        opts: {
+            fallbackVecSize?: number;
+            useEmbedding?: boolean;
+        } = {},
     ): Promise<Record<string, unknown>[]> {
         const texts = items.map((item) => String(item.text ?? "").trim());
         if (texts.some((text) => text.length === 0)) {
@@ -164,43 +174,63 @@ export abstract class SearchTableBase<
             );
         }
 
+        const wantEmbedding = opts.useEmbedding !== false;
         let vectors: number[][];
+        let usedFallback = false;
 
-        if (this.host.embedReady) {
-            vectors = await this.host.doEmbedding(texts, "document");
+        if (wantEmbedding && this.host.embedReady) {
+            try {
+                vectors = await this.host.doEmbedding(texts, "document");
+            } catch (error) {
+                Logger.warn(
+                    `[Search] 表 [${this.name}] 写入时 Embedding 失败，改用零向量占位，FTS 仍可用。`,
+                    error,
+                );
+                const size =
+                    opts.fallbackVecSize ?? (await this.resolveVectorSize());
+                vectors = texts.map(() => new Array(size).fill(0));
+                usedFallback = true;
+            }
         } else {
-            // 未配置 embed_model：用零向量占位，保持 schema 兼容
-            const size = await this.resolveVectorSize();
+            const size =
+                opts.fallbackVecSize ?? (await this.resolveVectorSize());
             vectors = texts.map(() => new Array(size).fill(0));
+            usedFallback = true;
         }
 
         return items.map((item, index) => ({
             ...item,
             text: texts[index],
             vector: vectors[index],
+            metadata: usedFallback
+                ? markZeroVector(item.metadata)
+                : item.metadata,
         }));
     }
 
     async add(items: SearchRow[]): Promise<void> {
         if (items.length === 0) return;
 
-        if (this.host.embedReady) {
-            const vecSize = await this.resolveVectorSize();
-            if (vecSize !== this.host.embedSize) {
-                throwPrecondition(
-                    `[Search] 表 [${this.name}] 向量维度(${vecSize})与当前 Embedding 维度(${this.host.embedSize})不一致，请先重建索引。`,
-                );
-            }
+        const vecSize = await this.resolveVectorSize();
+
+        let useEmbedding = this.host.embedReady;
+        if (useEmbedding && vecSize !== this.host.embedSize) {
+            Logger.warn(
+                `[Search] 表 [${this.name}] 向量维度(${vecSize})与当前 Embedding 维度(${this.host.embedSize})不一致，本次写入使用零向量占位，FTS 仍可用。`,
+            );
+            useEmbedding = false;
         }
 
-        const records = await this.buildRecords(items);
+        const records = await this.buildRecords(items, {
+            fallbackVecSize: vecSize,
+            useEmbedding,
+        });
         await this.ensureTable().add(records);
         await this.ensureIndexes();
     }
 
     async replaceAll(items: SearchRow[]): Promise<void> {
         if (items.length === 0) {
-            // 清空数据但不重建表：保留 schema / 索引
             await this.ensureTable().delete("true");
             return;
         }
@@ -215,7 +245,10 @@ export abstract class SearchTableBase<
                 : await this.resolveVectorSize();
 
             const staging = await this.createTableNamed(stagingName, vecSize);
-            const records = await this.buildRecords(items);
+            const records = await this.buildRecords(items, {
+                fallbackVecSize: vecSize,
+                useEmbedding: this.host.embedReady,
+            });
             await staging.add(records);
             await this.ensureIndexes(staging);
 
@@ -227,7 +260,11 @@ export abstract class SearchTableBase<
 
             await this.dropTableIfExists(stagingName);
             await this.drop();
-            await this.init();
+
+            // 显式按 records 的维度重建表，避免 buildRecords 期间嵌入状态
+            // 变化导致 init() 选错占位维度、与 records 维度错位而再次写入失败。
+            this.#vecSize = vecSize;
+            this.table = await this.createTableNamed(this.name, vecSize);
             await this.ensureTable().add(records);
             await this.ensureIndexes();
         } catch (error) {
@@ -302,7 +339,8 @@ export abstract class SearchTableBase<
     async search(queryText: string, opts: SearchOptions = {}): Promise<T[]> {
         const limit = opts.limit ?? 10;
         const rerank = getGlobalRerankService();
-        const rerankEnabled = await rerank.isEnabled();
+        const rerankEnabled =
+            !opts.disableRerank && (await rerank.isEnabled());
 
         const candidateLimit = rerankEnabled
             ? Math.max(limit, limit * RERANK_CANDIDATE_MULTIPLIER)
@@ -359,6 +397,7 @@ export abstract class SearchTableBase<
             ftsColumn,
             filter,
             select,
+            excludeZeroVectors = true,
         } = opts;
 
         const q = (queryText ?? "").trim();
@@ -382,6 +421,14 @@ export abstract class SearchTableBase<
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let query: any = table.query();
 
+        // 向量检索时过滤零向量占位行（基于 vector 列，兼容 LanceDB where 能力）
+        const zeroFilter = excludeZeroVectors && canUseVector
+            ? zeroVectorFilter()
+            : null;
+        const combinedFilter = [filter, zeroFilter]
+            .filter(Boolean)
+            .join(" AND ");
+
         switch (effectiveMode) {
             case "fts": {
                 query = query.fullTextSearch(q, { columns: ftsColumns });
@@ -390,9 +437,15 @@ export abstract class SearchTableBase<
             case "hybrid": {
                 try {
                     const [vector] = await this.host.doEmbedding([q], "query");
+                    const rrfK = opts.rrfK ?? DEFAULT_RRF_K;
+                    // LanceDB hybrid 链式调用：fullTextSearch + nearestTo 后
+                    // 使用内置 RRFReranker 做排名融合，而非向量偏置排序。
+                    const rr = await this.host.lanceInst.rerankers
+                        .RRFReranker.create(rrfK);
                     query = query
                         .fullTextSearch(q, { columns: ftsColumns })
-                        .nearestTo(vector);
+                        .nearestTo(vector)
+                        .rerank(rr);
                 } catch (error) {
                     Logger.warn(
                         `[Search] 表 [${this.name}] 混合检索失败，本次退化为全文检索。`,
@@ -418,7 +471,7 @@ export abstract class SearchTableBase<
             }
         }
 
-        if (filter) query = query.where(filter);
+        if (combinedFilter) query = query.where(combinedFilter);
         if (select?.length) query = query.select(select);
 
         return query.limit(limit) as Query | VectorQuery;
@@ -443,4 +496,38 @@ export abstract class SearchTableBase<
             );
         }
     }
+}
+
+// ------------------------------------------------------------
+// 零向量标记与过滤
+// ------------------------------------------------------------
+
+const ZERO_VECTOR_META_KEY = "__zeroVector";
+
+function markZeroVector(metadata: unknown): string {
+    if (typeof metadata === "string" && metadata) {
+        try {
+            const parsed = JSON.parse(metadata) as Record<string, unknown>;
+            parsed[ZERO_VECTOR_META_KEY] = true;
+            return JSON.stringify(parsed);
+        } catch {
+            // 非 JSON 字符串：保留原值，不强行改写
+            return metadata;
+        }
+    }
+    return JSON.stringify({ [ZERO_VECTOR_META_KEY]: true });
+}
+
+/**
+ * 基于 vector 列判断零向量。
+ *
+ * LanceDB 的 where 只能基于列，无法直接判断 JSON metadata。
+ * 零向量占位行的 vector 全为 0，用 array_sum 或等价函数可识别。
+ * 若当前 LanceDB 版本不支持该函数，调用方可通过
+ * SearchOptions.excludeZeroVectors=false 关闭，恢复旧行为。
+ */
+function zeroVectorFilter(): string {
+    // LanceDB SQL 支持 array_has / array_sum 等数组函数；
+    // 这里用 array_sum 判断全零，兼容 FixedSizeList 向量列。
+    return "array_sum(vector) != 0";
 }
