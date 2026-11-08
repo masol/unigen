@@ -274,4 +274,19 @@ export class KbRegistry {
         const catalog = await this.ensureCatalog();
         return catalog.searchCatalog(queryText, opts);
     }
+
+    /** 按 id 获取知识库目录项，不依赖该知识库表是否已加载。 */
+    async getCatalogEntry(id: string): Promise<KbCatalogRow | null> {
+        const catalog = await this.ensureCatalog();
+        return catalog.getById(id);
+    }
+
+    /**
+     * 全量知识库目录项，按 name/id 稳定排序。
+     * 用于 query_all_knowledge 等需要返回稳定名称的场景，不依赖已加载表。
+     */
+    async listCatalogEntries(): Promise<KbCatalogRow[]> {
+        const catalog = await this.ensureCatalog();
+        return catalog.listEntries();
+    }
 }

@@ -3,6 +3,7 @@ import type { Schema } from "apache-arrow";
 import Logger from "electron-log/main.js";
 import { throwPrecondition } from "../utils/err.js";
 import { getGlobalRerankService } from "./global-rerank-service.js";
+import { ZERO_VECTOR_META_KEY } from "./metadata-keys.js";
 import { createFtsConfig } from "./schema.js";
 import type { SearchDbBase } from "./search-db-base.js";
 import type { SearchOptions, SearchRow } from "./types.js";
@@ -336,6 +337,20 @@ export abstract class SearchTableBase<
         return (await this.ensureTable().query().toArray()) as T[];
     }
 
+    protected async findById(id: string): Promise<T | null> {
+        const trimmed = id.trim();
+        if (!trimmed) return null;
+
+        const escaped = trimmed.replace(/'/g, "''");
+        const rows = (await this.ensureTable()
+            .query()
+            .where(`id = '${escaped}'`)
+            .limit(1)
+            .toArray()) as T[];
+
+        return rows[0] ?? null;
+    }
+
     async search(queryText: string, opts: SearchOptions = {}): Promise<T[]> {
         const limit = opts.limit ?? 10;
         const rerank = getGlobalRerankService();
@@ -370,8 +385,16 @@ export abstract class SearchTableBase<
             });
 
             const ranked = result.ranking
-                .map((item) => rows[item.originalIndex])
-                .filter((row): row is T => Boolean(row));
+                .map((item): T | null => {
+                    const row = rows[item.originalIndex];
+                    if (!row) return null;
+
+                    const score = readRerankScore(item);
+                    return score === undefined
+                        ? row
+                        : { ...row, rerankScore: score };
+                })
+                .filter((row): row is T => row !== null);
 
             if (ranked.length === 0) {
                 return rows.slice(0, limit);
@@ -499,10 +522,27 @@ export abstract class SearchTableBase<
 }
 
 // ------------------------------------------------------------
-// 零向量标记与过滤
+// Rerank 分数与零向量标记
 // ------------------------------------------------------------
 
-const ZERO_VECTOR_META_KEY = "__zeroVector";
+function readRerankScore(value: unknown): number | undefined {
+    if (!value || typeof value !== "object") return undefined;
+
+    const record = value as Record<string, unknown>;
+    for (const key of [
+        "score",
+        "rerankScore",
+        "relevanceScore",
+        "relevance_score",
+    ]) {
+        const raw = record[key];
+        if (typeof raw === "number" && Number.isFinite(raw)) {
+            return raw;
+        }
+    }
+
+    return undefined;
+}
 
 function markZeroVector(metadata: unknown): string {
     if (typeof metadata === "string" && metadata) {

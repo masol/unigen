@@ -27,7 +27,7 @@ export type CompileStatus = "idle" | "compiling" | "ready" | "failed";
  *     setDefault / streaming / reasoning / persist / history / timeout /
  *     temperature / maxOutputTokens / toolCallConcurrency / strict
  *   - 正文是 Handlebars 系统提示词模板,支持四类变量:
- *       {{_BI_tool}}     工具目录(未引用时自动追加到正文末尾)
+ *       {{_BI_tool}}     工具目录(仅在模板显式引用时渲染；不自动追加)
  *       {{_BI_input}}    用户原始录入
  *       {{_BI_history}}  历史消息 JSON(字符串,给模板展开用;不含本轮 user 消息)
  *       {{_T_xxx}}       内部存储变量,可通过 setDefault 设默认值

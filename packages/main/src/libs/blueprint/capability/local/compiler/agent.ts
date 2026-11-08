@@ -5,7 +5,6 @@ import { basename } from "node:path";
 import { z } from "zod";
 import {
     INPUT_VAR,
-    TOOL_DOC_VAR,
     classifyVars,
 } from "../context/index.js";
 import { buildToolDoc, jsonSchemaToZod, renderOutputSemantics } from "../schema.js";
@@ -132,7 +131,9 @@ async function compileOne(
         ...mainDefaults,
     });
 
-    // Stage 7: 变量扫描与模板补全。
+    // Stage 7: 变量扫描与输出要点补全。
+    // 工具目录不再自动追加：只有模板显式引用 {{_BI_tool}} 时，
+    // 运行期 buildContext 才会把 toolDoc 放入渲染上下文。
     const scanAll = () =>
         classifyVars([
             ...scanTemplateVars(systemTemplate),
@@ -140,12 +141,6 @@ async function compileOne(
         ]);
 
     let vars = scanAll();
-
-    if (toolRefs.length > 0 && !vars.bi.includes(TOOL_DOC_VAR)) {
-        Logger.debug(`[PAC] ${name}: 模板未引用 {{${TOOL_DOC_VAR}}},自动追加工具目录`);
-        systemTemplate = `${systemTemplate}\n\n## 可用工具\n\n{{${TOOL_DOC_VAR}}}\n`;
-        vars = scanAll();
-    }
 
     if (outputSchema) {
         const semantics = await renderOutputSemantics(outputSchema);

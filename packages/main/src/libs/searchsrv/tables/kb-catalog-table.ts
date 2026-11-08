@@ -13,6 +13,8 @@ export interface KbCatalogRow extends Record<string, unknown> {
     /** 由 name + description 拼接，仅用于 embedding，不对外暴露语义。 */
     text: string;
     vector?: number[];
+    /** 检索时若启用 Rerank，会附带精排分数；未启用时不存在。 */
+    rerankScore?: number;
     created_at?: string;
     updated_at?: string;
 }
@@ -91,5 +93,34 @@ export class KbCatalogTable extends SearchTableBase<KbCatalogRow> {
             mode: "hybrid",
             ...opts,
         });
+    }
+
+    /** 按 id 获取目录项。 */
+    async getById(id: string): Promise<KbCatalogRow | null> {
+        return this.findById(id);
+    }
+
+    /**
+     * 全量目录项，按 name/id 稳定排序。
+     * 只取目录字段，不读取 vector，避免无谓开销。
+     */
+    async listEntries(): Promise<KbCatalogRow[]> {
+        const rows = (await this.ensureTable()
+            .query()
+            .select([
+                "id",
+                "name",
+                "description",
+                "text",
+                "created_at",
+                "updated_at",
+            ])
+            .toArray()) as KbCatalogRow[];
+
+        return rows.sort(
+            (a, b) =>
+                a.name.localeCompare(b.name) ||
+                a.id.localeCompare(b.id),
+        );
     }
 }

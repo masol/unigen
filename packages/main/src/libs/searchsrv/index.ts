@@ -17,6 +17,12 @@ export { KbTable } from "./tables/kb-table.js";
 export { SkillTable } from "./tables/skill-table.js";
 export { ToolTable } from "./tables/tool-table.js";
 
+export {
+    SKILL_BODY_META_KEY,
+    SKILL_DIR_META_KEY,
+    ZERO_VECTOR_META_KEY
+} from "./metadata-keys.js";
+
 export type {
     SearchMode,
     SearchOptions,
@@ -32,6 +38,15 @@ export type {
     RerankState,
     RerankStatus
 } from "./rerank/rerank-manager.js";
+
+export type { KbCatalogRow } from "./tables/kb-catalog-table.js";
+export type {
+    KbChunkInput,
+    KbChunkRow,
+    KbDocumentInput
+} from "./tables/kb-table.js";
+export type { SkillInput, SkillRow } from "./tables/skill-table.js";
+export type { ToolInput, ToolRow } from "./tables/tool-table.js";
 
 export function getGlobalSearchDB(): GlobalSearchDB {
     return getSearchDB();

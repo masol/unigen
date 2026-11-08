@@ -1,5 +1,9 @@
 // tables/skill-table.ts
 import type { Schema } from "apache-arrow";
+import {
+    SKILL_BODY_META_KEY,
+    SKILL_DIR_META_KEY,
+} from "../metadata-keys.js";
 import { getSkillSchema, SKILL_TABLE } from "../schema.js";
 import type { SearchDbBase } from "../search-db-base.js";
 import { SearchTableBase } from "../search-table-base.js";
@@ -30,12 +34,11 @@ export interface SkillRow extends Record<string, unknown> {
     text: string;
     vector?: number[];
     metadata?: string;
+    /** 检索时若启用 Rerank，会附带精排分数；未启用时不存在。 */
+    rerankScore?: number;
     created_at?: string;
     updated_at?: string;
 }
-
-const BODY_META_KEY = "__skillBody";
-const DIR_META_KEY = "skillDir";
 
 export class SkillTable extends SearchTableBase<SkillRow> {
     constructor(host: SearchDbBase, name = SKILL_TABLE) {
@@ -68,10 +71,10 @@ export class SkillTable extends SearchTableBase<SkillRow> {
                     metadata: JSON.stringify({
                         ...(item.metadata ?? {}),
                         ...(item.dir !== undefined
-                            ? { [DIR_META_KEY]: item.dir }
+                            ? { [SKILL_DIR_META_KEY]: item.dir }
                             : {}),
                         ...(item.text?.trim()
-                            ? { [BODY_META_KEY]: item.text.trim() }
+                            ? { [SKILL_BODY_META_KEY]: item.text.trim() }
                             : {}),
                     }),
                     created_at: now,
@@ -104,6 +107,17 @@ export class SkillTable extends SearchTableBase<SkillRow> {
     }
 
     /**
+     * 按 id 获取完整 skill 条目。
+     *
+     * 返回前会从 metadata 中还原正文，并剥离 __skillBody，
+     * 调用方无需再解析 metadata。
+     */
+    async getById(id: string): Promise<SkillRow | null> {
+        const row = await this.findById(id);
+        return row ? this.toSkillRow(row) : null;
+    }
+
+    /**
      * skill 检索返回完整条目。
      *
      * 索引和召回阶段仅使用 name + description；正文不参与 embedding/FTS。
@@ -121,14 +135,16 @@ export class SkillTable extends SearchTableBase<SkillRow> {
             ...opts,
         });
 
-        return rows.map((row) => {
-            const body = readBody(row.metadata);
-            return {
-                ...row,
-                text: body ?? row.text,
-                metadata: stripBody(row.metadata),
-            };
-        });
+        return rows.map((row) => this.toSkillRow(row));
+    }
+
+    private toSkillRow(row: SkillRow): SkillRow {
+        const body = readBody(row.metadata);
+        return {
+            ...row,
+            text: body ?? row.text,
+            metadata: stripBody(row.metadata),
+        };
     }
 }
 
@@ -136,7 +152,7 @@ function readBody(metadata: unknown): string | null {
     if (typeof metadata !== "string" || !metadata) return null;
     try {
         const parsed = JSON.parse(metadata) as Record<string, unknown>;
-        const body = parsed[BODY_META_KEY];
+        const body = parsed[SKILL_BODY_META_KEY];
         return typeof body === "string" && body.length > 0 ? body : null;
     } catch {
         return null;
@@ -147,7 +163,7 @@ function stripBody(metadata: unknown): string {
     if (typeof metadata !== "string" || !metadata) return "{}";
     try {
         const parsed = JSON.parse(metadata) as Record<string, unknown>;
-        delete parsed[BODY_META_KEY];
+        delete parsed[SKILL_BODY_META_KEY];
         return JSON.stringify(parsed);
     } catch {
         return metadata;

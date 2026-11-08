@@ -8,20 +8,21 @@ let initialized = false;
 
 /**
  * 应用启动期的一次性入口。
- * - 注入 builtins / 目录加载(目录由调用方决定);
- * - 对齐 MCP 到当前持久化配置;
+ * - 注入 builtins；
+ * - 对齐 MCP 到当前持久化配置；
  * - 注册 beforeQuit 清理钩子。
+ *
+ * 目录工具加载已移除。工具检索入 searchsrv 由外部在初始化流程中
+ * 调用 syncToolsToSearchDB() 完成。
  */
 export async function initGlobalToolDB(
     mcpServers?: McpServerConfig[],
-    toolDirs?: string[],
 ): Promise<{ failed: string[] }> {
     if (initialized) return { failed: [] };
     initialized = true;
 
     const { mcpFailed } = await globalToolDB.init({
         builtins: getBuiltinTools(),
-        toolDirs,
         mcpServers,
     });
 

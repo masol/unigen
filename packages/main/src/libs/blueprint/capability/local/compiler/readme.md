@@ -4,16 +4,16 @@
 
 ## 文件职责
 
-| 文件 | 职责 |
-| --- | --- |
-| `index.ts` | `compilePacAgent`：顶层入口，负责缓存创建、入口缺失时降级为直通 agent |
-| `agent.ts` | `compileFile` / `compileOne`：单个 agent 文件的七阶段编译 |
-| `frontmatter.ts` | 读取文件、解析 front matter、校验正文非空 |
-| `paths.ts` | 路径分段解析、越界校验、`CompileCache`、`buildAgentId`、工具名去重 |
-| `tools.ts` | `loadToolRefs`：把 front matter 的 tools 声明解析为 `ToolRef[]` |
-| `user-template.ts` | 解析 `userTemplate` / `userTemplatePath` 及其 front matter |
-| `passthrough.ts` | 构造入口文件缺失时的直通 agent |
-| `body.ts` | 正文后处理钩子（预留，未实现） |
+| 文件               | 职责                                                                  |
+| ------------------ | --------------------------------------------------------------------- |
+| `index.ts`         | `compilePacAgent`：顶层入口，负责缓存创建、入口缺失时降级为直通 agent |
+| `agent.ts`         | `compileFile` / `compileOne`：单个 agent 文件的七阶段编译             |
+| `frontmatter.ts`   | 读取文件、解析 front matter、校验正文非空                             |
+| `paths.ts`         | 路径分段解析、越界校验、`CompileCache`、`buildAgentId`、工具名去重    |
+| `tools.ts`         | `loadToolRefs`：把 front matter 的 tools 声明解析为 `ToolRef[]`       |
+| `user-template.ts` | 解析 `userTemplate` / `userTemplatePath` 及其 front matter            |
+| `passthrough.ts`   | 构造入口文件缺失时的直通 agent                                        |
+| `body.ts`          | 正文后处理钩子（预留，未实现）                                        |
 
 相关但不在本目录的文件：`../schema.ts`（JSON Schema ↔ Zod、工具目录、输出语义）、`../settings.ts`（settings 解析、默认值、模型选项）、`../template.ts`（变量扫描与 Handlebars 渲染）、`../context/`（内置变量与存储变量）、`../loader.ts` + `../mcp.ts`（外部工具加载）。
 
@@ -50,10 +50,10 @@ compilePacAgent(prjType, entry, cache?, prj?)
    - 都未声明时默认 `{{_BI_input}}`；
    - 用户模板的 `setDefault` 与主 agent 的 `setDefault` 合并，主 agent 优先。
 
-随后是**变量扫描与模板补全**：
+随后是**变量扫描与输出要点补全**：
 
 - `scanTemplateVars` 用 Handlebars AST 收集系统模板 + 用户模板中的变量，`classifyVars` 分为 `bi` / `storage` / `unknown` 三桶。
-- 若声明了工具但模板没引用 `{{_BI_tool}}`，自动在系统模板末尾追加「## 可用工具 + {{_BI_tool}}」。
+- 工具目录不再自动追加。只有模板显式引用 `{{_BI_tool}}` 时，运行期 `buildContext` 才会把 `toolDoc` 放入渲染上下文；工具定义本身由 AI SDK 在调用时提供给模型。
 - 若有 `outputSchema`，`renderOutputSemantics` 把它渲染为「最终回复要点」追加到系统模板，引导 LLM 在自然语言中覆盖这些字段，而不是强制 JSON 输出。
 
 最后 `resolveSettings(fm)` 归一化所有运行开关，产出 `CompiledPacAgent`。
