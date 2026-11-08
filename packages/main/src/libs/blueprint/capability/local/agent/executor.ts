@@ -8,6 +8,7 @@ import Logger from "electron-log/main.js";
 import type { ResolvedSettings } from "../type.js";
 import { MessageDeltaBuffer } from "./buffer.js";
 import type { AgentThinkingState, GenerateCallArgs, PacRunState, StreamResult } from "./types.js";
+import { formatDurationMs } from "./utils.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyToolLoopAgent = ToolLoopAgent<any, any, any, any>;
@@ -91,6 +92,7 @@ export async function streamAgent(
     const res = await agent.stream(buildCallArgs(messages, ctx, settings) as never);
     const textBuf: string[] = [];
     let outputNodeId: string | undefined;
+    let outputStartedAt: number | undefined;
 
     const thinkingState = getThinkingState(state, agentTraceNodeId);
     // 父内部键：用于派生 reasoning / output 子节点的内部键。
@@ -103,16 +105,25 @@ export async function streamAgent(
         if (!thinkingState.currentReasoningNodeId) return;
         const now = Date.now();
         const id = thinkingState.currentReasoningNodeId;
+        const startedAt = thinkingState.currentReasoningStartedAt;
+        const patch = {
+            status,
+            finishedAt: now,
+            ...(startedAt !== undefined
+                ? { description: `耗时: ${formatDurationMs(now - startedAt)}` }
+                : {}),
+        };
         if (state.persist) {
-            prjdb.patchTrace(id, { status, finishedAt: now });
+            prjdb.patchTrace(id, patch);
         }
         ctx.report({
             type: "trace.end",
             messageId: state.messageId,
             nodeId: id,
-            patch: { status, finishedAt: now },
+            patch,
         } as TraceStreamEvent);
         thinkingState.currentReasoningNodeId = undefined;
+        thinkingState.currentReasoningStartedAt = undefined;
     };
 
     const ensureReasoningNode = () => {
@@ -121,6 +132,7 @@ export async function streamAgent(
             `${parentInternalKey}:reasoning:${thinkingState.reasoningCount}`;
         thinkingState.currentReasoningNodeId =
             state.idRegistry.getOrCreate(reasoningInternalKey);
+        thinkingState.currentReasoningStartedAt = Date.now();
 
         const node = {
             id: thinkingState.currentReasoningNodeId,
@@ -161,6 +173,7 @@ export async function streamAgent(
     const ensureOutputNode = () => {
         if (outputNodeId || !needOutputNode) return;
         outputNodeId = state.idRegistry.getOrCreate(`${parentInternalKey}:output`);
+        outputStartedAt = Date.now();
         const outputNode = {
             id: outputNodeId,
             kind: "output" as const,
@@ -314,14 +327,21 @@ export async function streamAgent(
 
     const now = Date.now();
     if (outputNodeId && !ctx.isAborted) {
+        const patch = {
+            status: "success" as const,
+            finishedAt: now,
+            ...(outputStartedAt !== undefined
+                ? { description: `耗时: ${formatDurationMs(now - outputStartedAt)}` }
+                : {}),
+        };
         if (state.persist) {
-            prjdb.patchTrace(outputNodeId, { status: "success", finishedAt: now });
+            prjdb.patchTrace(outputNodeId, patch);
         }
         ctx.report({
             type: "trace.end",
             messageId: state.messageId,
             nodeId: outputNodeId,
-            patch: { status: "success", finishedAt: now },
+            patch,
         } as TraceStreamEvent);
     }
 

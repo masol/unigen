@@ -34,34 +34,13 @@
           : undefined,
   );
 
-  let now = $state(Date.now());
-  $effect(() => {
-    if (!running) return;
-    now = Date.now();
-    const id = setInterval(() => (now = Date.now()), 1000);
-    return () => clearInterval(id);
-  });
-
-  let autoDuration = $derived.by<string | undefined>(() => {
-    if (!node.startedAt) return undefined;
-    const end = node.finishedAt ?? now;
-    const ms = Math.max(0, end - node.startedAt);
-    if (ms < 1000) return `${ms}ms`;
-    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-    const s = Math.floor(ms / 1000);
-    return `${Math.floor(s / 60)}m ${s % 60}s`;
-  });
-
-  let descriptionText = $derived.by(() => {
-    if (node.kind === "agent") return undefined;
-    return node.description ?? autoDuration;
-  });
+  let descriptionText = $derived(node.description);
 
   let hasDetail = $derived(
     node.detail !== undefined && node.detail !== null && node.detail.length > 0,
   );
 
-  // 🔴 修复类型错误：直接在判断中使用守卫，避免 $derived 类型收窄失效
+  // 修复类型错误：直接在判断中使用守卫，避免 $derived 类型收窄失效
   let children = $derived.by(() => {
     if (!hasTraceChildren(node)) return [];
     return node.children;
@@ -123,6 +102,10 @@
         {#if node.agent.model}
           <span class="mx-1 text-border">·</span>
           <span class="font-mono">{node.agent.model}</span>
+        {/if}
+        {#if descriptionText}
+          <span class="mx-1 text-border">·</span>
+          <span>{descriptionText}</span>
         {/if}
       </Trace.Description>
     {:else if descriptionText}

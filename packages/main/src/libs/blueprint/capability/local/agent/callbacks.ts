@@ -6,6 +6,7 @@ import type { TraceStreamEvent } from "$types/shared/chat.js";
 import { nextSeq } from "../traceid.js";
 import type { CompiledPacAgent } from "../type.js";
 import type { PacRunState, ToolCallTraceInfo, ToolExecEndEvent, ToolExecStartEvent } from "./types.js";
+import { formatDurationMs } from "./utils.js";
 
 export function createToolCallbacks(
     compiled: CompiledPacAgent,
@@ -69,10 +70,11 @@ export function createToolCallbacks(
 
         const status =
             e.toolOutput.type === "tool-error" ? ("error" as const) : ("success" as const);
+        const durationText = formatDurationMs(e.toolExecutionMs, { maxDecimalPoints: 3 });
         const description =
             e.toolOutput.type === "tool-error"
-                ? `错误: ${String(e.toolOutput.error ?? "未知错误")}`
-                : `耗时: ${e.toolExecutionMs}ms`;
+                ? `错误: ${String(e.toolOutput.error ?? "未知错误")} | 耗时: ${durationText}`
+                : `耗时: ${durationText}`;
 
         const resultDetail = (() => {
             if (e.toolOutput.type === "tool-error") {

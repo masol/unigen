@@ -68,6 +68,8 @@ export interface AgentThinkingState {
     reasoningCount: number;
     /** 当前活跃的 reasoning 节点 ID（UUID） */
     currentReasoningNodeId?: string;
+    /** 当前活跃 reasoning 节点的开始时间（epoch ms），用于结束时报耗时 */
+    currentReasoningStartedAt?: number;
 }
 
 export interface PacRunState {

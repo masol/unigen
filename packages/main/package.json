@@ -61,6 +61,7 @@
     "graphology-dag": "^0.4.1",
     "handlebars": "^4.7.9",
     "hookable": "^6.1.1",
+    "humanize-duration": "^3.35.1",
     "lru-cache": "^11.5.1",
     "memoize": "^11.0.0",
     "mitt": "^3.0.1",
@@ -83,6 +84,7 @@
   "devDependencies": {
     "@app/electron-versions": "*",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/humanize-duration": "^3.27.4",
     "@types/mdast": "^4.0.4",
     "@types/three": "^0.185.1",
     "@types/yargs-parser": "^21.0.3",

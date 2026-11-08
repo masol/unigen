@@ -271,15 +271,18 @@ class MessageStore {
             case "trace.end": {
                 const node = this.#findTraceNode(event.messageId, event.nodeId);
                 if (!node) break;
-                node.streaming = false;
+
+                // 应用 trace.end 携带的完整 patch：
+                // 协议中 description（含耗时/错误信息）、status、finishedAt 等
+                // 都可能随 end 一起下发，不能只挑 status/finishedAt，
+                // 否则实时视图会缺失 description（数据库加载时才可见）。
+                if (event.patch) {
+                    Object.assign(node, event.patch);
+                }
                 if (event.detail != null) node.detail = event.detail;
 
-                if (event.patch?.status) {
-                    node.status = event.patch?.status
-                }
-                if (event.patch?.finishedAt) {
-                    node.finishedAt = event.patch?.finishedAt
-                }
+                // trace 已结束，最后统一置为终止态
+                node.streaming = false;
 
                 // 兜底终止逻辑：如果后端未设置终态，此处补齐
                 if (node.status === "running" || node.status === "pending") {

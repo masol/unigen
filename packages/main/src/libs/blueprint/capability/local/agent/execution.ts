@@ -115,6 +115,7 @@ export async function executeAgent(
     const agentCtx: AgentContext = {
         agentTraceNodeId,
         agentIdentity,
+        startedAt: Date.now(),
     };
 
     if (isRoot) {
@@ -427,7 +428,7 @@ export async function executeAgent(
     if (failure) {
         handleFailure(ctx, prjdb, state, agentCtx, failure);
     } else {
-        finishAgentTrace(ctx, prjdb, state, agentTraceNodeId);
+        finishAgentTrace(ctx, prjdb, state, agentCtx);
     }
 
     if (isRoot) {

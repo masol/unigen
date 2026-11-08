@@ -4,10 +4,12 @@ import type { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import type { AgentIdentity, MessageStreamEvent, TraceStreamEvent } from "$types/shared/chat.js";
 import type { PacRunState } from "./types.js";
+import { formatDurationMs } from "./utils.js";
 
 export interface AgentContext {
     agentTraceNodeId: string;
     agentIdentity: AgentIdentity;
+    startedAt: number;
     inputNodeId?: string;
     reasoningNodeId?: string;
     outputNodeId?: string;
@@ -122,6 +124,7 @@ export function handleAbort(
     ctx.debug(`[PAC][step=${stepPath}] ${agentName} 已中断`);
 
     const now = Date.now();
+    const description = `已中断 | 耗时: ${formatDurationMs(now - agentCtx.startedAt)}`;
 
     if (agentCtx.reasoningNodeId) {
         if (state.persist) {
@@ -163,7 +166,7 @@ export function handleAbort(
         prjdb.patchTrace(agentCtx.agentTraceNodeId, {
             status: "error",
             finishedAt: now,
-            description: "已中断",
+            description,
         });
     }
 
@@ -174,7 +177,7 @@ export function handleAbort(
         patch: {
             status: "error",
             finishedAt: now,
-            description: "已中断",
+            description,
         },
     } as TraceStreamEvent);
 
@@ -233,12 +236,13 @@ export function handleFailure(
     }
 
     const errMsg = String(failure instanceof Error ? failure.message : failure);
+    const description = `错误: ${errMsg} | 耗时: ${formatDurationMs(now - agentCtx.startedAt)}`;
 
     if (state.persist) {
         prjdb.patchTrace(agentCtx.agentTraceNodeId, {
             status: "error",
             finishedAt: now,
-            description: `错误: ${errMsg}`,
+            description,
         });
     }
 
@@ -249,7 +253,7 @@ export function handleFailure(
         patch: {
             status: "error",
             finishedAt: now,
-            description: `错误: ${errMsg}`,
+            description,
         },
     } as TraceStreamEvent);
 }
@@ -258,24 +262,29 @@ export function finishAgentTrace(
     ctx: IRunnerContext,
     prjdb: PrjDB,
     state: PacRunState,
-    agentTraceNodeId: string,
+    agentCtx: AgentContext,
 ): void {
     const now = Date.now();
+    const description =
+        `模型: ${agentCtx.agentIdentity.model?.replace("::", "/")} | ` +
+        `耗时: ${formatDurationMs(now - agentCtx.startedAt)}`;
 
     if (state.persist) {
-        prjdb.patchTrace(agentTraceNodeId, {
+        prjdb.patchTrace(agentCtx.agentTraceNodeId, {
             status: "success",
             finishedAt: now,
+            description,
         });
     }
 
     ctx.report({
         type: "trace.end",
         messageId: state.messageId,
-        nodeId: agentTraceNodeId,
+        nodeId: agentCtx.agentTraceNodeId,
         patch: {
             status: "success",
             finishedAt: now,
+            description,
         },
     } as TraceStreamEvent);
 }
