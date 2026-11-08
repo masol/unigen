@@ -85,19 +85,34 @@ export function createToolCallbacks(
             }
         })();
 
+        const now = Date.now();
+
         if (state.persist) {
             prjdb.appendTraceDetail(traceInfo.traceId, resultDetail);
             prjdb.patchTrace(traceInfo.traceId, {
                 status,
-                finishedAt: Date.now(),
+                finishedAt: now,
                 description,
             });
         }
+
+        // 工具结果以非流式方式一次性上报，避免只在数据库可见而实时 trace 缺失结果。
+        ctx.report({
+            type: "trace.detail.delta",
+            messageId: state.messageId,
+            nodeId: traceInfo.traceId,
+            delta: resultDetail,
+        } as TraceStreamEvent);
 
         const toolEndEvt: TraceStreamEvent = {
             type: "trace.end",
             messageId: state.messageId,
             nodeId: traceInfo.traceId,
+            patch: {
+                status,
+                finishedAt: now,
+                description,
+            },
         };
         ctx.report(toolEndEvt);
 

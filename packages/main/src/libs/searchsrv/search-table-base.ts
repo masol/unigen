@@ -226,15 +226,29 @@ export abstract class SearchTableBase<
             fallbackVecSize: vecSize,
             useEmbedding,
         });
+
+        Logger.debug(
+            `[Search] 表 [${this.name}] 追加写入 ${records.length} 行，` +
+            `vecSize=${vecSize}，requestedEmbedding=${useEmbedding}。`,
+        );
+
         await this.ensureTable().add(records);
         await this.ensureIndexes();
     }
 
     async replaceAll(items: SearchRow[]): Promise<void> {
         if (items.length === 0) {
+            Logger.debug(
+                `[Search] 表 [${this.name}] 全量替换为空，清空数据。`,
+            );
             await this.ensureTable().delete("true");
             return;
         }
+
+        Logger.debug(
+            `[Search] 表 [${this.name}] 全量替换开始，输入 ${items.length} 行，` +
+            `embedReady=${this.host.embedReady}。`,
+        );
 
         const stagingName = `${this.name}__rebuild_${Date.now()}_${Math.random()
             .toString(36)
@@ -251,11 +265,20 @@ export abstract class SearchTableBase<
                 useEmbedding: this.host.embedReady,
             });
             await staging.add(records);
+
+            Logger.debug(
+                `[Search] 表 [${this.name}] staging 写入 ${records.length} 行，` +
+                `vecSize=${vecSize}，embedReady=${this.host.embedReady}。`,
+            );
+
             await this.ensureIndexes(staging);
 
             const swapped = await this.trySwapStaging(stagingName);
             if (swapped) {
                 this.#vecSize = await this.readVectorSize(this.ensureTable());
+                Logger.debug(
+                    `[Search] 表 [${this.name}] 全量替换完成，行数=${records.length}。`,
+                );
                 return;
             }
 
@@ -267,6 +290,12 @@ export abstract class SearchTableBase<
             this.#vecSize = vecSize;
             this.table = await this.createTableNamed(this.name, vecSize);
             await this.ensureTable().add(records);
+
+            Logger.debug(
+                `[Search] 表 [${this.name}] fallback 重建写入 ${records.length} 行，` +
+                `vecSize=${vecSize}。`,
+            );
+
             await this.ensureIndexes();
         } catch (error) {
             await this.dropTableIfExists(stagingName);
@@ -420,7 +449,6 @@ export abstract class SearchTableBase<
             ftsColumn,
             filter,
             select,
-            excludeZeroVectors = true,
         } = opts;
 
         const q = (queryText ?? "").trim();
@@ -444,13 +472,12 @@ export abstract class SearchTableBase<
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let query: any = table.query();
 
-        // 向量检索时过滤零向量占位行（基于 vector 列，兼容 LanceDB where 能力）
-        const zeroFilter = excludeZeroVectors && canUseVector
-            ? zeroVectorFilter()
-            : null;
-        const combinedFilter = [filter, zeroFilter]
-            .filter(Boolean)
-            .join(" AND ");
+        // 注意：不要在这里用 LanceDB SQL 函数判断零向量。
+        // 当前运行时不支持 array_sum，拼进 where 会导致所有向量/混合检索
+        // 直接失败（Invalid function 'array_sum'）。
+        // 零向量占位行相似度低，通常排在候选末尾；稳定性优先，
+        // 这里只使用调用方显式传入的 filter。
+        const combinedFilter = filter?.trim() ? filter : "";
 
         switch (effectiveMode) {
             case "fts": {
@@ -556,18 +583,4 @@ function markZeroVector(metadata: unknown): string {
         }
     }
     return JSON.stringify({ [ZERO_VECTOR_META_KEY]: true });
-}
-
-/**
- * 基于 vector 列判断零向量。
- *
- * LanceDB 的 where 只能基于列，无法直接判断 JSON metadata。
- * 零向量占位行的 vector 全为 0，用 array_sum 或等价函数可识别。
- * 若当前 LanceDB 版本不支持该函数，调用方可通过
- * SearchOptions.excludeZeroVectors=false 关闭，恢复旧行为。
- */
-function zeroVectorFilter(): string {
-    // LanceDB SQL 支持 array_has / array_sum 等数组函数；
-    // 这里用 array_sum 判断全零，兼容 FixedSizeList 向量列。
-    return "array_sum(vector) != 0";
 }

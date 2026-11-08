@@ -675,30 +675,46 @@ export const searchSkillsToolDef: ToolDefinition<
     inputSchema: searchSkillsInputSchema,
     outputSchema: skillSearchOutputSchema,
     execute: async ({ query, limit }) => {
-        const finalLimit = limit ?? DEFAULT_LIMIT;
-        const candidates = await searchSkillsAcross(query, finalLimit);
+        try {
+            const finalLimit = limit ?? DEFAULT_LIMIT;
+            const candidates = await searchSkillsAcross(query, finalLimit);
 
-        const reranked = await rerankCandidates(
-            query,
-            candidates,
-            (item) => `${item.row.name}\n${item.row.description}`,
-            finalLimit,
-        );
+            const reranked = await rerankCandidates(
+                query,
+                candidates,
+                (item) => `${item.row.name}\n${item.row.description}`,
+                finalLimit,
+            );
 
-        const skills = reranked.map(({ item, score }) => ({
-            ref: makeRef(item.scope, String(item.row.id)),
-            scope: item.scope,
-            id: String(item.row.id),
-            name: String(item.row.name),
-            description: String(item.row.description),
-            path: String(item.row.path ?? ""),
-            ...(score !== null ? { rerankScore: score } : {}),
-        }));
+            const skills = reranked.map(({ item, score }) => ({
+                ref: makeRef(item.scope, String(item.row.id)),
+                scope: item.scope,
+                id: String(item.row.id),
+                name: String(item.row.name),
+                description: String(item.row.description),
+                path: String(item.row.path ?? ""),
+                ...(score !== null ? { rerankScore: score } : {}),
+            }));
 
-        return {
-            skills,
-            hint: skills.length > 0 ? undefined : NO_SKILL_HINT,
-        };
+            return {
+                skills,
+                hint: skills.length > 0 ? undefined : NO_SKILL_HINT,
+            };
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            Logger.warn(
+                "[ToolDB] search_skills 检索失败，返回空结果。",
+                error,
+            );
+            return {
+                skills: [],
+                hint:
+                    `检索 Skill 失败：${message}。` +
+                    "请确认项目级/全局检索库已打开且 Skill 目录已同步；" +
+                    "如为暂时性错误可稍后重试。",
+            };
+        }
     },
 };
 
@@ -745,35 +761,51 @@ export const searchKnowledgeBasesToolDef: ToolDefinition<
     inputSchema: searchKnowledgeBasesInputSchema,
     outputSchema: kbSearchOutputSchema,
     execute: async ({ query, limit }) => {
-        const finalLimit = limit ?? DEFAULT_LIMIT;
-        const candidates = await searchKnowledgeCatalogAcross(
-            query,
-            finalLimit,
-        );
+        try {
+            const finalLimit = limit ?? DEFAULT_LIMIT;
+            const candidates = await searchKnowledgeCatalogAcross(
+                query,
+                finalLimit,
+            );
 
-        const reranked = await rerankCandidates(
-            query,
-            candidates,
-            (item) => `${item.row.name}\n${item.row.description}`,
-            finalLimit,
-        );
+            const reranked = await rerankCandidates(
+                query,
+                candidates,
+                (item) => `${item.row.name}\n${item.row.description}`,
+                finalLimit,
+            );
 
-        const knowledgeBases = reranked.map(({ item, score }) => ({
-            ref: makeRef(item.scope, String(item.row.id)),
-            scope: item.scope,
-            id: String(item.row.id),
-            name: String(item.row.name),
-            description: String(item.row.description),
-            ...(score !== null ? { rerankScore: score } : {}),
-        }));
+            const knowledgeBases = reranked.map(({ item, score }) => ({
+                ref: makeRef(item.scope, String(item.row.id)),
+                scope: item.scope,
+                id: String(item.row.id),
+                name: String(item.row.name),
+                description: String(item.row.description),
+                ...(score !== null ? { rerankScore: score } : {}),
+            }));
 
-        return {
-            knowledgeBases,
-            hint:
-                knowledgeBases.length > 0
-                    ? undefined
-                    : NO_KB_HINT,
-        };
+            return {
+                knowledgeBases,
+                hint:
+                    knowledgeBases.length > 0
+                        ? undefined
+                        : NO_KB_HINT,
+            };
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            Logger.warn(
+                "[ToolDB] search_knowledge_bases 检索失败，返回空结果。",
+                error,
+            );
+            return {
+                knowledgeBases: [],
+                hint:
+                    `检索知识库目录失败：${message}。` +
+                    "请确认项目级/全局检索库已打开且知识库目录已同步；" +
+                    "如为暂时性错误可稍后重试。",
+            };
+        }
     },
 };
 

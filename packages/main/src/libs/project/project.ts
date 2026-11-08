@@ -2,6 +2,7 @@
 
 import { PACFunctor } from "$libs/blueprint/capability/local/index.js";
 import type { ICapaFunctor } from "$libs/blueprint/capability/type.js";
+import { AgentDirName, CmdsDirName, KcDirName, SkillsDirName } from "$libs/const.js";
 import { configService } from "$libs/store/index.js";
 import { secondConfig } from "$libs/store/second.js";
 import { throwUnprcessable } from "$libs/utils/err.js";
@@ -67,7 +68,7 @@ export class ProjectContainer implements IProjectContext {
     async reloadAgent(): Promise<void>  // 重新加载本地Agent.
     {
         if (!this.#agent) {
-            this.#agent = new PACFunctor(this.#type, ['pac', 'index.md']);
+            this.#agent = new PACFunctor(this.#type, [AgentDirName, 'index.md']);
         }
         return await this.#agent.compile(this);
     }
@@ -186,7 +187,7 @@ export class ProjectContainer implements IProjectContext {
 
     private async assetsFromType(type: string) {
         await pMap(
-            ['pac', 'cmds', 'skills'],
+            [AgentDirName, CmdsDirName, SkillsDirName, KcDirName],
             async (subDir) => {
                 const srcPath = await knowledgeCenter.getFile(type, subDir);
 

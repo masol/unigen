@@ -107,17 +107,23 @@ class KnowledgeCenter {
         await writeFile(fullPath, content, 'utf-8');
     }
 
-    // 按照优先级次序，获取文件，返回全路径，如果文件不存在，则返回null.
+    // 按照kcPath优先于resourcePath的次序，获取文件，返回全路径，如果文件不存在，则返回null.
     public async getFile(...subPaths: string[]): Promise<string | null> {
-        const fullPath: string = join(this.kcPath, ...subPaths);
-        if (await pathExists(fullPath)) {
-            return fullPath;
-        }
-        const resPath = join(this.resourcePath, ...subPaths);
-        if (await pathExists(resPath)) {
-            return resPath;
-        }
-        return null;
+        // 候选路径按优先级排列：kcPath 优先
+        const candidates: string[] = [
+            join(this.kcPath, ...subPaths),
+            join(this.resourcePath, ...subPaths),
+        ];
+
+        // 并行检查两个路径是否存在
+        const results = await pMap(
+            candidates,
+            async (fullPath) => ((await pathExists(fullPath)) ? fullPath : null),
+            { concurrency: candidates.length },
+        );
+
+        // pMap 保持结果与输入顺序一致，因此 find 天然优先返回 kcPath
+        return results.find((p): p is string => p !== null) ?? null;
     }
 
     public async readJSON<T = unknown>(subDir: string, relativePath: string): Promise<T | null> {

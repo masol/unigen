@@ -3,6 +3,7 @@ import { getGlobalSearchDB, openGlobalSearch } from '$libs/searchsrv/index.js';
 import { configService } from '$libs/store/index.js';
 import { secondConfig } from '$libs/store/second.js';
 import { initGlobalToolDB } from '$libs/tooldb/bootstrap.js';
+import { syncToolsToSearchDB } from '$libs/tooldb/search-sync.js';
 import { puppeteerInst } from '$libs/utils/puppeteer/index.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
 import { themeFile } from '$libs/utils/sys/dir.js';
@@ -13,13 +14,14 @@ import type { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../types/ModuleContext.js';
 
 async function initSearch(): Promise<void> {
-    if (secondConfig().get("search_inited")) {
-        return
-    }
+    // if (secondConfig().get("search_inited")) {
+    //     return
+    // }
     const db = getGlobalSearchDB();
     await Promise.all([
         db.syncSystemKC(),
         db.syncSystemSkills(),
+        syncToolsToSearchDB(),
         // 调用tool的注册，把tool加入到检索中心去。
     ])
     secondConfig().set("search_inited", true);

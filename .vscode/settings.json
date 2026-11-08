@@ -4,6 +4,16 @@
     "source.organizeImports": "explicit"
   },
   "workbench.colorCustomizations": {
+    "tab.inactiveBackground": "#584fae",
+    "tab.inactiveForeground": "#ffffff",
+    "tab.activeBorder": "#584fae",
+    "tab.activeBorderTop": "#584fae",
+    "tab.activeBackground": "#a10e74",
+    "tab.activeForeground": "#ffffff",
+    "tab.unfocusedActiveBackground": "#5b0714",
+    "tab.unfocusedActiveForeground": "#ffffff",
+    "tab.unfocusedInactiveBackground": "#1a6ba0",
+    "tab.unfocusedInactiveForeground": "#ffffff",
     "activityBar.activeBackground": "#ff6433",
     "activityBar.background": "#ff6433",
     "activityBar.foreground": "#15202b",
