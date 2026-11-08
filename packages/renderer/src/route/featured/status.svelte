@@ -16,7 +16,6 @@
   import EditorStatusBar from "../page/editor/EditorStatusBar.svelte";
   import FlowStatusBar from "../page/flow/FlowStatusBar.svelte";
 
-  import Brand from "./header/brand.svelte";
 
   // ═══════════════════════════════════════════════════════════
   // App meta — 软件名 / 版本号 / 作者 / 联系邮箱
@@ -149,7 +148,6 @@
         <IconMail class="size-3.5" stroke={1.5} />
         <span>{AUTHOR}</span>
       </button>
-      <Brand />
     </div>
 
     <!-- ╭─── / StatusBarIdle ───╮ -->
