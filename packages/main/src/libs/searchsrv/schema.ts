@@ -1,3 +1,4 @@
+// schema.ts
 import {
     Field,
     FixedSizeList,
@@ -6,7 +7,7 @@ import {
     Utf8,
 } from "apache-arrow";
 import Logger from "electron-log/main.js";
-import type { LanceRuntime } from "./lance-runtime.js";
+import { isJiebaTokenizerAvailable, type LanceRuntime } from "./lance-runtime.js";
 
 export const TOOL_TABLE = "tool";
 export const SKILL_TABLE = "skill";
@@ -81,15 +82,15 @@ export function createFtsConfig(lance: LanceRuntime): FtsConfig {
         fts(opts?: Record<string, unknown>): FtsConfig;
     };
 
-    try {
-        // if (await pathExists((lanceModelDir('jieba', 'default')){
-        return Index.fts({ baseTokenizer: "jieba/default" });
-        // }
-    } catch (error) {
-        Logger.warn(
-            "[Search] Jieba tokenizer 不可用（语言模型未安装或加载失败），降级为 icu。",
-            error,
-        );
+    if (isJiebaTokenizerAvailable()) {
+        try {
+            return Index.fts({ baseTokenizer: "jieba/default" });
+        } catch (error) {
+            Logger.warn(
+                "[Search] Jieba tokenizer 不可用（语言模型加载失败），降级为 icu。",
+                error,
+            );
+        }
     }
 
     try {

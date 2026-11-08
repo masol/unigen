@@ -1,3 +1,4 @@
+// search-table-base.ts
 import type { Query, Table, VectorQuery } from "@lancedb/lancedb";
 import type { Schema } from "apache-arrow";
 import Logger from "electron-log/main.js";
@@ -22,6 +23,22 @@ const RERANK_CANDIDATE_MULTIPLIER = 3;
 
 /** RRF 平滑常数默认值，与 LanceDB RRFReranker 默认值保持一致 */
 const DEFAULT_RRF_K = 60;
+
+const RENAME_UNSUPPORTED_KEY = Symbol.for(
+    "unigen.singleton.renameTableUnsupported",
+);
+
+interface RenameTableState {
+    unsupported: boolean;
+}
+
+function getRenameTableState(): RenameTableState {
+    const g = globalThis as unknown as Record<
+        symbol,
+        RenameTableState | undefined
+    >;
+    return (g[RENAME_UNSUPPORTED_KEY] ??= { unsupported: false });
+}
 
 type RenameableConnection = {
     renameTable?: (from: string, to: string) => Promise<void>;
@@ -304,8 +321,14 @@ export abstract class SearchTableBase<
     }
 
     private async trySwapStaging(stagingName: string): Promise<boolean> {
+        const state = getRenameTableState();
+        if (state.unsupported) {
+            return false;
+        }
+
         const db = this.host.db as unknown as RenameableConnection;
         if (typeof db.renameTable !== "function") {
+            state.unsupported = true;
             return false;
         }
 
@@ -327,10 +350,18 @@ export abstract class SearchTableBase<
             }
             return true;
         } catch (error) {
-            Logger.warn(
-                `[Search] 表 [${this.name}] staging 交换失败，回退重建:`,
-                error,
-            );
+            if (isRenameTableUnsupportedError(error)) {
+                state.unsupported = true;
+                Logger.warn(
+                    "[Search] 当前 LanceDB 不支持 renameTable，后续全量替换将直接走重建路径。",
+                    error,
+                );
+            } else {
+                Logger.warn(
+                    `[Search] 表 [${this.name}] staging 交换失败，回退重建:`,
+                    error,
+                );
+            }
 
             try {
                 const now = await this.host.db.tableNames();
@@ -583,4 +614,11 @@ function markZeroVector(metadata: unknown): string {
         }
     }
     return JSON.stringify({ [ZERO_VECTOR_META_KEY]: true });
+}
+
+function isRenameTableUnsupportedError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /rename_table.*not supported|renameTable.*not supported/i.test(
+        message,
+    );
 }
