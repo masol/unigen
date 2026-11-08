@@ -6,6 +6,8 @@ import { randomUUID } from 'crypto';
 import Logger from 'electron-log/main.js';
 import { copy, ensureDir, pathExists } from 'fs-extra';
 import { readdir, rm } from 'fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import pMap from 'p-map';
 import { extname, join } from 'path';
 import { z } from 'zod';
@@ -83,10 +85,23 @@ const getURL = os
     .output(z.string())
     .handler(async ({ input, context }) => {
         const ctx = context as RpcContext;
-        const fullPath = ctx.project.getPath(input, true);
-        return path2URL(fullPath)
-    });
 
+        // 1. 绝对路径（含 Windows 盘符）→ 直接转换
+        if (path.isAbsolute(input)) {
+            return path2URL(input);
+        }
+
+        // 2. file: 协议 → 取出路径，再按相对/绝对处理
+        if (input.toLowerCase().startsWith('file:')) {
+            const filePath = fileURLToPath(input);
+            return path.isAbsolute(filePath)
+                ? path2URL(filePath)
+                : path2URL(ctx.project.getPath(filePath, true));
+        }
+
+        // 3. 相对路径 → 走 project.getPath 解析
+        return path2URL(ctx.project.getPath(input, true));
+    });
 
 export default {
     listMetaRes,

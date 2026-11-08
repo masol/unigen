@@ -54,6 +54,7 @@
     type HtmlRenderers,
   } from "@humanspeak/svelte-markdown";
   import Link from "./ext/Link.svelte";
+  import Media from "./ext/Media.svelte";
   import Thinking from "./ext/Thinking.svelte";
 
   let {
@@ -73,9 +74,10 @@
   let error = $derived(isError ?? message.isError ?? false);
   let proseClass = $derived(error ? errorProse : normalProse);
 
-  // renderers：预置链接 & <thinking>，外部可覆盖
+  // renderers：预置链接、图片媒体 & <thinking>，外部可覆盖
   let renderers = $derived<MarkdownRenderers>({
     link: Link,
+    image: Media,
     ...renderersProp,
     html: {
       ...Html,
