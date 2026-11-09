@@ -5,6 +5,7 @@ export const RunnerParamSchema = z.object({
     sessId: z.string(),
     seq: z.number(),
     msgId: z.string(),
+    timestamp: z.number(),
     mode: z.enum(["cmd", "rerun"]).nullish(),
     files: z.array(z.string()).optional(),
 })

@@ -10,8 +10,8 @@
     IconSlash,
   } from "@tabler/icons-svelte";
   import { onMount, tick } from "svelte";
-  import ChatCommandMenu from "./ChatCommandMenu.svelte";
-  import { chatCommands, filterCommands, type ChatCommand } from "./commands";
+  import ChatCommandMenu from "./chat-input/ChatCommandMenu.svelte";
+  import { chatCommands, filterCommands, type ChatCommand } from "./chat-input/commands";
 
   let {
     value = $bindable(""),

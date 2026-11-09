@@ -401,6 +401,7 @@ class MessageStore {
                     msg: userMessage.content,
                     msgId: userMessage.id,
                     files: userMessage.files ?? [],
+                    timestamp: userMessage.timestamp,
                     seq,
                     mode,
                     sessId: sessionStore.activeSessionId

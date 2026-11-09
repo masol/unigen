@@ -13,6 +13,10 @@ import { resolveModelOptions } from "../settings.js";
 import { buildUserPrompt, renderSystemPrompt } from "../template.js";
 import { nextSeq } from "../traceid.js";
 import type { CompiledPacAgent, JsonValue } from "../type.js";
+import {
+    ATTACHMENT_READ_TOOL_NAME,
+    createAttachmentMarkdownTool,
+} from "./attachments.js";
 import { MessageDeltaBuffer } from "./buffer.js";
 import { createToolCallbacks } from "./callbacks.js";
 import { generateAgent, streamAgent } from "./executor.js";
@@ -153,7 +157,8 @@ export async function executeAgent(
                     role: "user",
                     content: ctx.cmd?.body || "",
                     files: ctx.files || [],
-                    timestamp: Date.now(),
+                    // 如果ctx未提供UserMessage的timestamp，可能会导致用户请求在对应AI发言之后！
+                    timestamp: ctx.timestamp || Date.now(),
                     mode: ctx.mode === "cmd" ? "cmd" : null,
                     extra: cmdArgs ? { args: cmdArgs } : {},
                 });
@@ -201,6 +206,22 @@ export async function executeAgent(
         agentTraceNodeId,
         agentExecutor,
     );
+
+    // 仅主 agent 注入动态附件读取工具。子 agent 不注入。
+    // 工具名独立为 ATTACHMENT_READ_TOOL_NAME，不会覆盖 tooldb 的 file_to_markdown；
+    // 若用户已配置同名工具，跳过注入并告警，绝不覆盖已有工具。
+    if (isRoot) {
+        const attachmentTool = createAttachmentMarkdownTool(ctx);
+        if (attachmentTool) {
+            if (tools[ATTACHMENT_READ_TOOL_NAME]) {
+                Logger.error(
+                    `[PAC] 主 agent 已存在同名工具 ${ATTACHMENT_READ_TOOL_NAME}，跳过动态附件工具注入`,
+                );
+            } else {
+                tools[ATTACHMENT_READ_TOOL_NAME] = attachmentTool;
+            }
+        }
+    }
 
     const system = await renderSystemPrompt(
         compiled, ctx, state, inputs, effectiveDefaults, isRoot,

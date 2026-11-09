@@ -3,6 +3,7 @@ import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
 import { WindowService } from '$libs/utils/window.js'
 import { FileFilterPreset } from '$types/shared/api/sys.js'
 import { os } from '@orpc/server'
+import type { OpenDialogOptions } from 'electron'
 import { app, dialog, shell } from 'electron'
 import { Hook, LogMessage, Transport } from 'electron-log'
 import Logger from 'electron-log/main'
@@ -19,7 +20,7 @@ import { nextIncrementalName } from '$libs/utils/sys/fs.js'
 import { appLife } from '$libs/utils/tapable/applife.js'
 import { projectTypeSchema } from '$types/shared/template/prjtype.js'
 import pTimeout from 'p-timeout'
-import { RpcContext } from '../type.js'
+import type { RpcContext } from '../type.js'
 
 // ─── Zod Schemas ─────────────────────────────────────────────
 const fileFilterPresetSchema = z.enum(FileFilterPreset)
@@ -37,6 +38,41 @@ const filtersInputSchema = z.union([
     z.array(customFilterSchema),
 ]).optional()
 
+type FiltersInput = z.infer<typeof filtersInputSchema>
+
+const dialogInputBaseSchema = z.object({
+    title: z.string().optional(),
+    defaultPath: z.string().optional(),
+    buttonLabel: z.string().optional(), // Custom label for the confirmation button, when left empty the default label will be used.
+    message: z.string().optional(), // Message to display above input boxes.
+})
+
+type DialogInputBase = z.infer<typeof dialogInputBaseSchema>
+
+const openFileInputSchema = dialogInputBaseSchema.extend({
+    multi: z.boolean().optional(),
+    showHiddenFiles: z.boolean().optional(),
+    directory: z.boolean().optional(),
+    filters: filtersInputSchema,
+})
+
+const selectDirectoryInputSchema = dialogInputBaseSchema
+
+const saveFileInputSchema = dialogInputBaseSchema.extend({
+    data: z.string(),
+    noDialog: z.boolean().optional(),
+    defaultName: z.string().optional().default('untitled.json'),
+    filters: filtersInputSchema,
+})
+
+const saveBinaryFileInputSchema = dialogInputBaseSchema.extend({
+    /** base64 编码的数据(不含 data-uri 前缀) */
+    base64: z.string(),
+    noDialog: z.boolean().optional(),
+    defaultName: z.string().optional().default('untitled.bin'),
+    filters: filtersInputSchema,
+})
+
 const saveResultSchema = z.object({
     success: z.boolean(),
     canceled: z.boolean().optional(),
@@ -46,9 +82,7 @@ const saveResultSchema = z.object({
 // ─── 工具函数 ─────────────────────────────────────────────────
 
 /** 预置 → Electron FileFilter[] */
-function resolveFilters(
-    input?: FileFilterPreset | { name: string; extensions: string[] }[],
-): Electron.FileFilter[] | undefined {
+function resolveFilters(input?: FiltersInput): Electron.FileFilter[] | undefined {
     if (!input) return undefined
     if (Array.isArray(input)) return input
 
@@ -67,6 +101,59 @@ function resolveFilters(
     return map[input] ?? undefined
 }
 
+function resolveFiltersOrDefault(input?: FiltersInput): Electron.FileFilter[] {
+    return resolveFilters(input) ?? [{ name: 'All Files', extensions: ['*'] }]
+}
+
+type DialogOptions = Pick<OpenDialogOptions, 'title' | 'defaultPath' | 'buttonLabel' | 'message'>
+
+function buildDialogOptions(input?: DialogInputBase): DialogOptions {
+    const opts: DialogOptions = {}
+    if (input?.title !== undefined) {
+        opts.title = input.title
+    }
+    if (input?.buttonLabel !== undefined) {
+        opts.buttonLabel = input.buttonLabel
+    }
+    if (input?.defaultPath !== undefined) {
+        opts.defaultPath = input.defaultPath
+    }
+    if (input?.message !== undefined) {
+        opts.message = input.message
+    }
+    return opts
+}
+
+type SavePathInput = DialogInputBase & {
+    noDialog?: boolean
+    defaultName: string
+    filters?: FiltersInput
+}
+
+async function selectSavePath(
+    context: RpcContext,
+    input: SavePathInput,
+): Promise<{ canceled: true } | { canceled: false; filePath: string }> {
+    if (input.noDialog) {
+        return { canceled: false, filePath: input.defaultName }
+    }
+
+    const { canceled, filePath } = await WindowService.instance.withModalWindow(context, (parent) => {
+        return dialog.showSaveDialog(parent, {
+            ...buildDialogOptions(input),
+            defaultPath: input.defaultPath ?? input.defaultName,
+            filters: resolveFiltersOrDefault(input.filters),
+            properties: ['showOverwriteConfirmation'],
+        })
+    })
+
+    if (canceled || !filePath) {
+        return { canceled: true }
+    }
+
+    return { canceled: false, filePath }
+}
+
 // ─── RPC 接口 ─────────────────────────────────────────────────
 
 /**
@@ -74,21 +161,14 @@ function resolveFilters(
  * - filters: 可选的文件类型过滤
  */
 const openFile = os
-    .input(
-        z.object({
-            multi: z.boolean().optional(),
-            showHiddenFiles: z.boolean().optional(),
-            directory: z.boolean().optional(),
-            filters: filtersInputSchema,
-        }),
-    )
+    .input(openFileInputSchema)
     .output(z.array(z.string()))
     .handler(async ({ input, context }) => {
         const { filters, multi, showHiddenFiles, directory } = input
-        const resolvedFilters = resolveFilters(filters) ?? [{ name: 'All Files', extensions: ['*'] }]
+        const resolvedFilters = resolveFiltersOrDefault(filters)
 
         const { canceled, filePaths } = await WindowService.instance.withModalWindow(context, (parent) => {
-            const props: Array<"showHiddenFiles" | "openFile" | "openDirectory" | "multiSelections" | "createDirectory" | "promptToCreate" | "noResolveAliases" | "treatPackageAsDirectory" | "dontAddToRecent"> = [];
+            const props: NonNullable<OpenDialogOptions['properties']> = []
             if (multi) {
                 props.push('multiSelections')
             }
@@ -102,13 +182,14 @@ const openFile = os
             }
 
             return dialog.showOpenDialog(parent, {
+                ...buildDialogOptions(input),
                 filters: resolvedFilters,
                 properties: ['dontAddToRecent', ...props],
             })
         })
 
         if (canceled) {
-            throwCancel("用户取消");
+            throwCancel("用户取消")
         }
 
         return filePaths
@@ -121,12 +202,7 @@ const openFile = os
  * 返回 { canceled, path },取消时 path 为 undefined。
  */
 const selectDirectory = os
-    .input(
-        z.object({
-            defaultPath: z.string().optional(),
-            title: z.string().optional(),
-        }).optional(),
-    )
+    .input(selectDirectoryInputSchema.optional())
     .output(
         z.object({
             canceled: z.boolean(),
@@ -136,8 +212,7 @@ const selectDirectory = os
     .handler(async ({ input, context }) => {
         const { canceled, filePaths } = await WindowService.instance.withModalWindow(context, (parent) => {
             return dialog.showOpenDialog(parent, {
-                title: input?.title,
-                defaultPath: input?.defaultPath,
+                ...buildDialogOptions(input),
                 properties: ['openDirectory', 'createDirectory', 'dontAddToRecent'],
             })
         })
@@ -156,41 +231,19 @@ const selectDirectory = os
  * - filters: 可选的文件类型过滤
  */
 const saveFile = os
-    .input(
-        z.object({
-            data: z.string(),
-            noDialog: z.boolean().optional(),
-            defaultName: z.string().optional().default('untitled.json'),
-            filters: filtersInputSchema,
-        }),
-    )
+    .input(saveFileInputSchema)
     .output(saveResultSchema)
     .handler(async ({ input, context }) => {
-        const { data, defaultName, filters, noDialog } = input
+        const { data } = input
+        const savePath = await selectSavePath(context as RpcContext, input)
 
-        let writePath = defaultName;
-
-        if (!noDialog) {
-            const resolvedFilters = resolveFilters(filters) ?? [{ name: 'All Files', extensions: ['*'] }]
-
-            const { canceled, filePath } = await WindowService.instance.withModalWindow(context, (parent) => {
-                return dialog.showSaveDialog(parent, {
-
-                    defaultPath: defaultName,
-                    filters: resolvedFilters,
-                    properties: ['showOverwriteConfirmation'],
-                })
-            })
-
-            if (canceled || !filePath) {
-                return { success: false, canceled: true }
-            }
-            writePath = filePath;
+        if (savePath.canceled) {
+            return { success: false, canceled: true }
         }
 
-        if (writePath && data) {
-            await writeFile(writePath, data, 'utf-8')
-            return { success: true, canceled: false, filePath: writePath }
+        if (savePath.filePath && data) {
+            await writeFile(savePath.filePath, data, 'utf-8')
+            return { success: true, canceled: false, filePath: savePath.filePath }
         }
         return { success: false }
     })
@@ -199,42 +252,20 @@ const saveFile = os
  * 保存二进制文件(base64 输入)
  */
 const saveBinaryFile = os
-    .input(
-        z.object({
-            /** base64 编码的数据(不含 data-uri 前缀) */
-            base64: z.string(),
-            noDialog: z.boolean().optional(),
-            defaultName: z.string().optional().default('untitled.bin'),
-            filters: filtersInputSchema,
-        }),
-    )
+    .input(saveBinaryFileInputSchema)
     .output(saveResultSchema)
     .handler(async ({ input, context }) => {
-        const { base64, defaultName, filters, noDialog } = input
+        const { base64 } = input
+        const savePath = await selectSavePath(context as RpcContext, input)
 
-
-        let writePath = defaultName;
-        if (!noDialog) {
-            const resolvedFilters = resolveFilters(filters) ?? [{ name: 'All Files', extensions: ['*'] }]
-
-            const { canceled, filePath } = await WindowService.instance.withModalWindow(context, (parent) => {
-                return dialog.showSaveDialog(parent, {
-                    defaultPath: defaultName,
-                    filters: resolvedFilters,
-                    properties: ['showOverwriteConfirmation'],
-                });
-            })
-
-            if (canceled || !filePath) {
-                return { success: false, canceled: true }
-            }
-            writePath = filePath;
+        if (savePath.canceled) {
+            return { success: false, canceled: true }
         }
 
-        if (writePath && base64) {
+        if (savePath.filePath && base64) {
             const buffer = Buffer.from(base64, 'base64')
-            await writeFile(writePath, buffer)
-            return { success: true, canceled: false, filePath: writePath }
+            await writeFile(savePath.filePath, buffer)
+            return { success: true, canceled: false, filePath: savePath.filePath }
         }
         return { success: false }
     })
@@ -253,7 +284,7 @@ const openExternal = os
 /**
  * 使用系统默认程序打开本地文件(如用 Finder/Explorer 打开图片、PDF 等)
  */
-const OPEN_TIMEOUT_MS = 10_000; // 10秒超时
+const OPEN_TIMEOUT_MS = 10_000 // 10秒超时
 
 const openPath = os
     .input(z.object({ path: z.string(), timeout: z.number().optional() }))
@@ -271,18 +302,19 @@ const openPath = os
                     milliseconds: input.timeout ?? OPEN_TIMEOUT_MS,
                     message: `打开文件超时: ${input.path}`,
                 },
-            );
+            )
             if (errorMessage) {
-                Logger.error(`无法使用系统默认应用打开请求的文件:${input.path}, 错误: ${errorMessage}`);
-                return { success: false, errorMessage };
+                Logger.error(`无法使用系统默认应用打开请求的文件:${input.path}, 错误: ${errorMessage}`)
+                return { success: false, errorMessage }
             }
-            return { success: true };
+            return { success: true }
         } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            Logger.error(`打开文件异常:${input.path}, ${message}`);
-            return { success: false, errorMessage: message };
+            const message = error instanceof Error ? error.message : String(error)
+            Logger.error(`打开文件异常:${input.path}, ${message}`)
+            return { success: false, errorMessage: message }
         }
-    });
+    })
+
 /**
  * 在文件管理器中显示 / 高亮文件
  */
@@ -290,9 +322,9 @@ const showItemInFolder = os
     .input(z.object({ path: z.union([z.string(), z.array(z.string())]) }))
     .output(z.boolean())
     .handler(async ({ input, context }) => {
-        const ctx = context as RpcContext;
-        const path = Array.isArray(input.path) ? join(...input.path) : input.path;
-        const fullPath = isAbsolute(path) ? path : ctx.project.getPath(path);
+        const ctx = context as RpcContext
+        const path = Array.isArray(input.path) ? join(...input.path) : input.path
+        const fullPath = isAbsolute(path) ? path : ctx.project.getPath(path)
         shell.showItemInFolder(fullPath)
         Logger.info(`使用系统资源管理器显示文件(目录):${fullPath}`)
         return true
@@ -312,113 +344,112 @@ const version = os
         return __APP_VERSION__
     })
 
-
 const getPath = os
     .input(z.object({ name: z.string(), sub: z.array(z.string()).optional(), create: z.boolean().optional() }))
     .output(z.string())
     .handler(async ({ input }) => {
-        let basePath;
+        let basePath
         switch (input.name) {
             case 'llm':
             case 'rerank':
-                basePath = join(rerankPath(), ...input.sub ?? [])
-                break;
+                basePath = join(rerankPath(), ...(input.sub ?? []))
+                break
             case 'embeding':
-                basePath = join(embedingPath(), ...input.sub ?? [])
-                break;
+                basePath = join(embedingPath(), ...(input.sub ?? []))
+                break
             case 'kc':
-                basePath = knowledgeCenter.kcPath;
-                break;
+                basePath = knowledgeCenter.kcPath
+                break
             case 'logs':
                 return Logger.transports.file.getFile().path
             default:
                 try {
                     // @ts-expect-error 无类型。
-                    const tempPath = app.getPath(input.name);
-                    basePath = join(tempPath, ...input.sub ?? [])
+                    const tempPath = app.getPath(input.name)
+                    basePath = join(tempPath, ...(input.sub ?? []))
                 } catch (e) {
-                    void e;
+                    void e
                     return ""
                 }
         }
         if (basePath && input.create) {
             await ensureDir(basePath)
         }
-        return basePath;
+        return basePath
     })
 
 const streamLogs = os
     .input(z.object({}).optional())
     .handler(async function* ({ context, signal }) {
         // @ts-expect-error 不改进类型了。
-        const externalSignal: AbortSignal | undefined = signal ?? context?.signal;
+        const externalSignal: AbortSignal | undefined = signal ?? context?.signal
 
-        const queue: LogMessage[] = [];
-        let notifyWaiting: (() => void) | null = null;
+        const queue: LogMessage[] = []
+        let notifyWaiting: (() => void) | null = null
 
         const logHook: Hook = (message: LogMessage, transport?: Transport, transportName?: string) => {
             if (transportName === 'file') {
-                queue.push(message);
+                queue.push(message)
                 if (notifyWaiting) {
-                    notifyWaiting();
-                    notifyWaiting = null;
+                    notifyWaiting()
+                    notifyWaiting = null
                 }
             }
-            return message;
-        };
-        Logger.hooks.push(logHook);
+            return message
+        }
+        Logger.hooks.push(logHook)
 
         const cleanup = () => {
-            const idx = Logger.hooks.indexOf(logHook);
-            if (idx !== -1) Logger.hooks.splice(idx, 1);
+            const idx = Logger.hooks.indexOf(logHook)
+            if (idx !== -1) Logger.hooks.splice(idx, 1)
             if (notifyWaiting) {
-                notifyWaiting();
-                notifyWaiting = null;
+                notifyWaiting()
+                notifyWaiting = null
             }
-        };
+        }
 
-        const onAbort = () => cleanup();
-        if (externalSignal?.aborted) return cleanup();
-        externalSignal?.addEventListener('abort', onAbort);
+        const onAbort = () => cleanup()
+        if (externalSignal?.aborted) return cleanup()
+        externalSignal?.addEventListener('abort', onAbort)
 
         try {
             while (!externalSignal?.aborted) {
                 if (queue.length > 0) {
-                    yield queue.shift()!;
+                    yield queue.shift()!
                 } else {
                     await new Promise<void>((resolve) => {
-                        notifyWaiting = resolve;
-                    });
+                        notifyWaiting = resolve
+                    })
                 }
             }
         } finally {
-            cleanup();
-            externalSignal?.removeEventListener('abort', onAbort);
-            Logger.debug("logstream terminate successfully.", externalSignal);
+            cleanup()
+            externalSignal?.removeEventListener('abort', onAbort)
+            Logger.debug("logstream terminate successfully.", externalSignal)
         }
-    });
+    })
 
 const bootstrapped = os
     .input(z.void())
     .output(z.void())
     .handler(async () => {
-        await appLife.bootstrapped.promise;
+        await appLife.bootstrapped.promise
     })
 
+// 获取系统当前安装的所有项目类型。
 const prjTypes = os
     .input(z.boolean().optional())
     .output(z.array(projectTypeSchema))
     .handler(async ({ input }) => {
-        return dataCenter.loadTplMetas(input);
-    });
-
+        return dataCenter.loadTplMetas(input)
+    })
 
 const validTaskName = os
     .input(z.void())
     .output(z.string())
     .handler(async () => {
-        return await nextIncrementalName(configService().get("task_dir"), "untitled");
-    });
+        return await nextIncrementalName(configService().get("task_dir"), "untitled")
+    })
 
 export default {
     openFile,

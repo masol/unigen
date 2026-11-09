@@ -17,6 +17,7 @@ export class RunnerContext implements IRunnerContext {
     readonly files: string[];
     readonly msgId: string;
     readonly sessId: string;
+    readonly timestamp: number;
     #varMap: Map<string, unknown> = new Map();
     #mode: CmdMode;
 
@@ -48,6 +49,7 @@ export class RunnerContext implements IRunnerContext {
         this.msgId = command.msgId;
         this.sessId = command.sessId;
         this.#mode = (command.mode ?? null);
+        this.timestamp = command.timestamp;
 
         this.seq = seq ? seq : runSeq--;
         this.prj = prj;

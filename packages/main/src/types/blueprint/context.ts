@@ -21,12 +21,16 @@ export interface IRunnerContext {
 
     // 指示本次会话的id.
     readonly sessId: string;
-    // 为执行者准备的任务级存储--只在本次任务中有效。
+    /**
+     * 为执行者准备的任务级存储--只在本次任务中有效。
+     * 已使用的变量名:
+     * timestamp : 用户调用时传入的timestamp,属于用户消息的timestamp--user messsage在客户端创建.
+     */
     readonly store: Record<string, unknown>;
-    readonly msgId: string;
-    readonly files: string[];
-    // rerun | cmd | ''
-    readonly mode: CmdMode;
+    readonly msgId: string; // 此变量是否移入store?
+    readonly files: string[]; // 此变量是否移入store?
+    readonly mode: CmdMode; // 此变量是否移入store?
+    readonly timestamp: number; // 客户端消息的创建时间，此变量是否移入store?
 
     /** 快照检查点：判断当前工作流是否已经被终止 */
     readonly isAborted: boolean;
@@ -48,7 +52,7 @@ export interface IRunnerContext {
     // 为mode打的补丁，为了支持rerun。如果加载到cmd,需要重置mode.
     setMode(mode: CmdMode): void;
 
-    getVar(name: string): unknown|null;
+    getVar(name: string): unknown | null;
     setVar(name: string, value: unknown): void;
 
     /**

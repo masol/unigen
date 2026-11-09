@@ -3,9 +3,8 @@
   import { messageStore } from "$lib/store/local/msg.svelte";
   import { toast } from "svelte-sonner";
   import { fade } from "svelte/transition";
-  import ChatInput from "./ChatInput.svelte";
+  import { ChatInput, type ChatCommand } from "./chat-input";
   import ChatMessageList from "./ChatMessageList.svelte";
-  import type { ChatCommand } from "./commands";
   import TypingDots from "./TypingDots.svelte";
   import WorkbenchHeader from "./WorkbenchHeader.svelte";
 
@@ -22,7 +21,7 @@
     blurActive();
   });
 
-  async function handleSend() {
+  async function handleSend(files: string[] = []) {
     const content = inputValue.trim();
     if (!content || messageStore.isLoading || messageStore.isReloading) return;
 
@@ -34,8 +33,14 @@
       return;
     }
 
-    const userMsg = messageStore.addMessage({ role: "user", content });
+    const userMsg = messageStore.addMessage({ role: "user", content, files });
     inputValue = "";
+
+    if (files.length > 0) {
+      // 文件完整路径随消息发送；持久化到消息记录需扩展 ChatMessage/AIResponse
+      console.debug("[chat] 附件文件:", files);
+    }
+
     await messageStore.AIResponse(userMsg);
   }
 
@@ -50,10 +55,6 @@
       inputValue = "";
       void handleClear();
     }
-  }
-
-  function handleAttach() {
-    toast.warning("附加文件功能尚未实现");
   }
 
   function handleRecord() {
@@ -87,7 +88,6 @@
       bind:value={inputValue}
       onSend={handleSend}
       onCommand={handleCommand}
-      onAttach={handleAttach}
       onRecord={handleRecord}
     />
   </main>

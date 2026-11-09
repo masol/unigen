@@ -1,5 +1,6 @@
 // packages/main/src/libs/tooldb/builtins.ts
 import { clarifyTool } from "./tools/clarify.js";
+import { fileMarkdownToolDef } from "./tools/file-markdown.js";
 import { invokeToolDef } from "./tools/meta-tools/invoke.js";
 import {
     loadSkillToolDef,
@@ -32,6 +33,7 @@ export function getBuiltinTools(): ToolDefinition<unknown, unknown>[] {
         searchKnowledgeBasesToolDef as ToolDefinition<unknown, unknown>,
         queryKnowledgeToolDef as ToolDefinition<unknown, unknown>,
         queryAllKnowledgeToolDef as ToolDefinition<unknown, unknown>,
+        fileMarkdownToolDef as ToolDefinition<unknown, unknown>,
         renderImageTool as ToolDefinition<unknown, unknown>,
         clarifyTool as ToolDefinition<unknown, unknown>,
     ];
