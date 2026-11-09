@@ -41,7 +41,7 @@ export function createToolCallbacks(
             id: toolTraceNodeId,
             kind: "tool" as const,
             status: "running" as const,
-            title: `调用工具: ${key}`,
+            title: `工具: ${key}`,
             toolName: key,
             detail: paramsDetail,
             streaming: true,
