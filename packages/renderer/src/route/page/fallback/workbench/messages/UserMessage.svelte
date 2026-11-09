@@ -6,6 +6,7 @@
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import type { ChatMessage } from "$lib/store/local/chat.types";
   import { messageStore } from "$lib/store/local/msg.svelte";
+  import autoAnimate from "@formkit/auto-animate";
   import {
     IconCheck,
     IconChevronDown,
@@ -49,7 +50,8 @@
 
 <ContextMenu.Root>
   <ContextMenu.Trigger class="block">
-    <div class="group/msg flex min-w-0 flex-col gap-1.5">
+    <!-- 展开/收起时对内容块 ↔ 折叠按钮之间的增删使用 autoAnimate 平滑过渡 -->
+    <div class="group/msg flex min-w-0 flex-col gap-1.5" use:autoAnimate>
       <MessageHeader role="user">
         {#snippet identity()}
           <span class="text-xs font-medium text-muted-foreground">你</span>

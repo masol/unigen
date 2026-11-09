@@ -16,6 +16,8 @@
     IconRobot,
     IconTool,
   } from "@tabler/icons-svelte";
+  import { cubicOut } from "svelte/easing";
+  import { slide } from "svelte/transition";
   import Self from "./TraceNode.svelte";
 
   let {
@@ -142,24 +144,38 @@
 {/snippet}
 
 {#if expandable}
+  <!-- 关键改动：不再依赖 Trace.CollapsibleContent 的内置动画，
+       改用 Svelte 原生 slide 接管开合，确保打开与关闭两个方向都有流畅过渡 -->
   <Trace.Collapsible {open} onOpenChange={(v) => (userOpen = v)}>
     <Trace.CollapsibleTrigger>
       {@render line()}
     </Trace.CollapsibleTrigger>
-    <Trace.CollapsibleContent
-      class="whitespace-pre-wrap *:data-[slot=trace-collapsible-content-inner]:mt-1"
-    >
-      {#if hasDetail}
-        <MarkdownView message={{ content: node.detail ?? "" }} {streaming} />
-      {/if}
-      {#if hasChildren}
-        <div class:mt-2={hasDetail} class="flex flex-col gap-1">
-          {#each children as child (child.id)}
-            <Self node={child} depth={depth + 1} {autoExpand} />
-          {/each}
-        </div>
-      {/if}
-    </Trace.CollapsibleContent>
+    {#if open}
+      <div
+        class="whitespace-pre-wrap"
+        transition:slide={{ duration: 200, easing: cubicOut }}
+      >
+        {#if hasDetail}
+          <div class="mt-1">
+            <MarkdownView
+              message={{ content: node.detail ?? "" }}
+              {streaming}
+            />
+          </div>
+        {/if}
+        {#if hasChildren}
+          <div
+            class:mt-2={hasDetail}
+            class:mt-1={!hasDetail}
+            class="flex flex-col gap-1"
+          >
+            {#each children as child (child.id)}
+              <Self node={child} depth={depth + 1} {autoExpand} />
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
   </Trace.Collapsible>
 {:else if node.kind === "source"}
   <a href={node.url} target="_blank" rel="noreferrer">

@@ -1,10 +1,11 @@
-<!-- 消息列表：虚拟滚动 + 自动跟随底部 + 回到底部 -->
+<!-- 消息列表：虚拟滚动 + 自动跟随底部 + 轮次快速导航 -->
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { messageStore } from "$lib/store/local/msg.svelte";
   import SvelteVirtualChat from "@humanspeak/svelte-virtual-chat";
   import { IconArrowDown } from "@tabler/icons-svelte";
   import { tick } from "svelte";
+  import ChatRoundNav, { type RoundEntry } from "./ChatRoundNav.svelte";
   import AssistantMessage from "./messages/AssistantMessage.svelte";
   import EmptyState from "./messages/EmptyState.svelte";
   import UserMessage from "./messages/UserMessage.svelte";
@@ -27,6 +28,53 @@
   });
 
   let showJumpButton = $derived(!following && messageStore.messages.length > 0);
+
+  // 从全部消息中抽取「用户轮次」序列，供右侧导航使用
+  let rounds = $derived.by<RoundEntry[]>(() => {
+    const list: RoundEntry[] = [];
+    messageStore.messages.forEach((msg, index) => {
+      if (msg.role !== "user") return;
+      const flat = msg.content.trim().replace(/\s+/g, " ");
+      if (!flat) return;
+      list.push({
+        id: msg.id,
+        index,
+        round: list.length + 1,
+        preview: flat.length > 30 ? flat.slice(0, 30) + "…" : flat,
+      });
+    });
+    return list;
+  });
+
+  /**
+   * 跳转到指定轮次。
+   * 优先按消息 id 定位（对齐用户可见轮次更稳妥），
+   * 若当前版本未暴露 scrollToMessage，则退回按索引定位。
+   * 两者的具体 API 名称请对照你所使用的 svelte-virtual-chat 版本；
+   * 若签名不同（例如 scrollToIndex({ index, smooth })），在此处微调即可。
+   */
+  function scrollToRound(round: RoundEntry) {
+    const api = chat as unknown as
+      | {
+          scrollToMessage?: (
+            id: string,
+            options?: { smooth?: boolean },
+          ) => void;
+          scrollToIndex?: (
+            index: number,
+            options?: { smooth?: boolean },
+          ) => void;
+        }
+      | undefined;
+    if (!api) return;
+    if (typeof api.scrollToMessage === "function") {
+      api.scrollToMessage(round.id, { smooth: true });
+      return;
+    }
+    if (typeof api.scrollToIndex === "function") {
+      api.scrollToIndex(round.index, { smooth: true });
+    }
+  }
 
   function jumpToBottom() {
     following = true;
@@ -67,6 +115,9 @@
       {/snippet}
     </SvelteVirtualChat>
   {/if}
+
+  <!-- 轮次快速导航（右侧垂直居中） -->
+  <ChatRoundNav {rounds} onSelect={scrollToRound} />
 
   {#if showJumpButton}
     <div class="pointer-events-none absolute bottom-4 right-4 animate-slide-up">

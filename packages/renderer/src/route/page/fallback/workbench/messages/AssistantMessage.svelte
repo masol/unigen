@@ -5,6 +5,7 @@
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import type { ChatMessage } from "$lib/store/local/chat.types";
   import { messageStore } from "$lib/store/local/msg.svelte";
+  import autoAnimate from "@formkit/auto-animate";
   import {
     IconCheck,
     IconChevronDown,
@@ -84,20 +85,18 @@
 
 <ContextMenu.Root>
   <ContextMenu.Trigger class="block">
-    <div class="group/msg flex min-w-0 flex-col gap-2">
+    <!-- 展开/收起时对 header ↔ trace ↔ 内容块 之间的增删使用 autoAnimate 平滑过渡 -->
+    <div class="group/msg flex min-w-0 flex-col gap-2" use:autoAnimate>
       <!-- Header：Robot图标 → AI → 按钮区 -->
       <div class="flex min-w-0 items-center gap-2">
-        <!-- Robot 图标 - 直接用圆形背景包裹 -->
         <div
           class="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
         >
           <IconRobot size={15} stroke={1.5} />
         </div>
 
-        <!-- AI 文字 - 固定显示 -->
         <span class="shrink-0 text-xs font-medium text-foreground">AI</span>
 
-        <!-- 功能按钮区 - hover显示 -->
         <div
           class="flex min-w-0 items-center gap-0.5 opacity-0 transition-opacity duration-200 group-hover/msg:opacity-100"
         >
