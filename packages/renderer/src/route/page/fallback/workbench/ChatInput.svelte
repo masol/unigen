@@ -2,15 +2,12 @@
   import { Button } from "$lib/components/ui/button";
   import { messageStore } from "$lib/store/local/msg.svelte";
   import {
-    IconArrowsMaximize,
-    IconArrowsMinimize,
     IconLoader2,
     IconMicrophone,
     IconPaperclip,
     IconPlayerStopFilled,
     IconSend,
     IconSlash,
-    IconTrash,
   } from "@tabler/icons-svelte";
   import { onMount, tick } from "svelte";
   import ChatCommandMenu from "./ChatCommandMenu.svelte";
@@ -20,22 +17,18 @@
     value = $bindable(""),
     placeholder = "Enter 换行，Ctrl+Enter 发送",
     commands = chatCommands,
-    canClear = false,
     onSend = () => {},
     onCommand = () => {},
     onAttach = () => {},
     onRecord = () => {},
-    onClear = () => {},
   }: {
     value?: string;
     placeholder?: string;
     commands?: ChatCommand[];
-    canClear?: boolean;
     onSend?: () => void;
     onCommand?: (cmd: ChatCommand) => void;
     onAttach?: () => void;
     onRecord?: () => void;
-    onClear?: () => void;
   } = $props();
 
   let textarea = $state<HTMLTextAreaElement>();
@@ -57,12 +50,6 @@
   let effectivePlaceholder = $derived(
     reloading ? "正在同步会话…" : placeholder,
   );
-
-  let allCollapsed = $derived.by(() => {
-    const msgs = messageStore.messages;
-    if (msgs.length === 0) return false;
-    return msgs.every((msg) => messageStore.collapsedMessages[msg.id] === true);
-  });
 
   $effect(() => {
     if (disabled) showCommands = false;
@@ -143,10 +130,6 @@
         textarea.selectionStart = textarea.selectionEnd = value.length;
       }
     });
-  }
-
-  function toggleAllMessages() {
-    messageStore.toggleAllMessages();
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -250,32 +233,6 @@
         >
           <IconSlash size={18} stroke={1.5} />
         </button>
-        <button
-          type="button"
-          onclick={() => !disabled && canClear && onClear()}
-          disabled={disabled || !canClear}
-          title="清空对话"
-          aria-label="清空对话"
-          class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
-        >
-          <IconTrash size={18} stroke={1.5} />
-        </button>
-        {#if messageStore.messages.length > 0}
-          <button
-            type="button"
-            onclick={toggleAllMessages}
-            {disabled}
-            title={allCollapsed ? "展开全部消息" : "收起全部消息"}
-            aria-label={allCollapsed ? "展开全部消息" : "收起全部消息"}
-            class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          >
-            {#if allCollapsed}
-              <IconArrowsMaximize size={18} stroke={1.5} />
-            {:else}
-              <IconArrowsMinimize size={18} stroke={1.5} />
-            {/if}
-          </button>
-        {/if}
       </div>
 
       <Button

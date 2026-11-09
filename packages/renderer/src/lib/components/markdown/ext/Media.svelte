@@ -139,7 +139,7 @@
       </span>
     </div>
   {:else if kind === "video"}
-    <div class="w-full overflow-hidden rounded-xl">
+    <div class="mx-auto w-full max-w-xl overflow-hidden rounded-xl">
       <VideoPlayer source={resolved} />
     </div>
   {:else}
@@ -148,7 +148,7 @@
         <ImageZoom.Trigger
           src={resolved}
           alt={altText || resolved}
-          class="max-h-[70vh] max-w-full cursor-zoom-in rounded-lg object-contain"
+          class="h-auto max-h-64 w-auto max-w-full cursor-zoom-in rounded-lg object-contain"
         />
       {/key}
     </div>

@@ -1,0 +1,8 @@
+{
+    "icon": "IconAiAgents",
+    "statusText": "动态智能体",
+    "header": {
+        "title": "动态智能体",
+        "detail": "渐进式工具、技能及知识库的全自动决策与加载。"
+    }
+}

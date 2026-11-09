@@ -1,6 +1,0 @@
-{
-    "name": "直通智能体",
-    "id": "agent",
-    "icon": "IconAiAgent",
-    "description": "支持渐进式工具、技能及知识库，依赖模型的规划能力。"
-}

@@ -62,7 +62,7 @@
 </script>
 
 <div class="flex h-full w-full flex-col overflow-hidden bg-background">
-  <WorkbenchHeader />
+  <WorkbenchHeader onClear={handleClear} />
 
   <main class="flex min-h-0 flex-1 flex-col">
     <div class="min-h-0 flex-1 overflow-hidden">
@@ -85,12 +85,10 @@
 
     <ChatInput
       bind:value={inputValue}
-      canClear={messageStore.hasMessages}
       onSend={handleSend}
       onCommand={handleCommand}
       onAttach={handleAttach}
       onRecord={handleRecord}
-      onClear={handleClear}
     />
   </main>
 </div>

@@ -1,4 +1,5 @@
 
+import { MetaDirname } from "$libs/const.js";
 import { configService } from "$libs/store/index.js";
 import { path2URL } from "$libs/utils/sys/appfile.js";
 import { os } from "@orpc/server";
@@ -20,7 +21,7 @@ const listMetaRes = os
     .output(z.array(z.string()))
     .handler(async ({ input, context }) => {
         const ctx = context as RpcContext;
-        const visualrefDir = ctx.project.getPath(input);
+        const visualrefDir = ctx.project.getPath([MetaDirname, ...input]);
         if (await pathExists(visualrefDir)) {
             const result = await readdir(visualrefDir);
             return result.map(item => join(visualrefDir, item));
@@ -37,7 +38,7 @@ const addMetaRes = os
     .output(z.array(z.string()))
     .handler(async ({ input, context }) => {
         const ctx = context as RpcContext;
-        const visualrefDir = ctx.project.getPath(input.dir);
+        const visualrefDir = ctx.project.getPath([MetaDirname, ...input.dir]);
         await ensureDir(visualrefDir)
 
         const result = await pMap(
@@ -62,7 +63,7 @@ const rmMetaRes = os
     }))
     .handler(async ({ input, context }) => {
         const ctx = context as RpcContext;
-        const visualrefDir = ctx.project.getPath(input.dir);
+        const visualrefDir = ctx.project.getPath([MetaDirname, ...input.dir]);
         await pMap(
             input.paths,
             async (src) => {
@@ -96,11 +97,11 @@ const getURL = os
             const filePath = fileURLToPath(input);
             return path.isAbsolute(filePath)
                 ? path2URL(filePath)
-                : path2URL(ctx.project.getPath(filePath, true));
+                : path2URL(ctx.project.getPath([...filePath]));
         }
 
         // 3. 相对路径 → 走 project.getPath 解析
-        return path2URL(ctx.project.getPath(input, true));
+        return path2URL(ctx.project.getPath([...input]));
     });
 
 export default {

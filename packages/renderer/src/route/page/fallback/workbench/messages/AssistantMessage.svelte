@@ -10,15 +10,11 @@
     IconChevronDown,
     IconChevronUp,
     IconCopy,
-    IconEye,
-    IconEyeOff,
     IconGitBranch,
-    IconLoader2,
     IconRefresh,
     IconRobot,
     IconTrash,
   } from "@tabler/icons-svelte";
-  import { toast } from "svelte-sonner";
   import TypingDots from "../TypingDots.svelte";
   import AgentTrace from "../trace/AgentTrace.svelte";
 
@@ -26,23 +22,40 @@
 
   let copied = $state(false);
   let collapsed = $derived(messageStore.collapsedMessages[message.id] === true);
-  let traceVisible = $state(true);
 
   let hasContent = $derived(message.content.length > 0);
   let hasTraces = $derived((message.traces?.length ?? 0) > 0);
-  let showShimmer = $derived(message.streaming && !hasContent && !hasTraces);
 
-  // 递归检测trace树中是否存在running节点
-  function hasRunningTrace(traces?: typeof message.traces): boolean {
+  // 是否实际渲染 trace 由全局开关统一控制
+  let showingTraces = $derived(hasTraces && messageStore.tracesVisible);
+
+  // 无内容且（无 trace 或 trace 被全局隐藏）时才显示 shimmer
+  let showShimmer = $derived(
+    message.streaming && !hasContent && !showingTraces,
+  );
+
+  // 递归检测 trace 树中是否存在仍在运行的节点
+  function hasRunningTrace(traces?: ChatMessage["traces"]): boolean {
     if (!traces || traces.length === 0) return false;
     for (const node of traces) {
-      if (node.status === "running") return true;
+      if (node.status === "running" && node.streaming !== false) return true;
       if (node.kind === "agent" && hasRunningTrace(node.children)) return true;
     }
     return false;
   }
 
   let traceRunning = $derived(hasRunningTrace(message.traces));
+
+  /**
+   * 思考骨架自动展开条件（主流 Agent 模式）：
+   * - 消息正在流式生成（历史加载的消息 streaming 为 false → 全部收起）；
+   * - 尚未输出正文内容（一旦开始输出正文 → 全部收起）；
+   * - 思考仍在进行中（存在 running trace，思考结束 → 全部收起）。
+   * 三者同时成立时，才允许自动展开有子节点的 trace 节点。
+   */
+  let autoExpand = $derived(
+    message.streaming === true && message.content.length === 0 && traceRunning,
+  );
 
   function copy() {
     if (!hasContent) return;
@@ -56,41 +69,25 @@
     messageStore.toggleMessage(message.id);
   }
 
-  function toggleTrace() {
-    traceVisible = !traceVisible;
-  }
-
   function regenerate() {
-    const store = messageStore as unknown as {
-      regenerate?: (id: string) => Promise<void>;
-    };
-    if (store.regenerate) store.regenerate(message.id);
-    else toast.warning("regenerate 尚未实现");
+    void messageStore.regenerate(message.id);
   }
 
   function forkFromHere() {
-    const store = messageStore as unknown as {
-      forkFrom?: (id: string) => Promise<void>;
-    };
-    if (store.forkFrom) store.forkFrom(message.id);
-    else toast.warning("forkFrom 尚未实现");
+    void messageStore.forkFrom(message.id);
   }
 
   function deleteMessage() {
-    const store = messageStore as unknown as {
-      deleteMessage?: (id: string) => void;
-    };
-    if (store.deleteMessage) store.deleteMessage(message.id);
-    else toast.warning("deleteMessage 尚未实现");
+    messageStore.deleteMessage(message.id);
   }
 </script>
 
 <ContextMenu.Root>
   <ContextMenu.Trigger class="block">
     <div class="group/msg flex min-w-0 flex-col gap-2">
-      <!-- Header：Robot图标 → AI → 按钮区 → agent名称，全部在一行 -->
+      <!-- Header：Robot图标 → AI → 按钮区 -->
       <div class="flex min-w-0 items-center gap-2">
-        <!-- Robot 图标 - 直接用圆形背景包裹，不用 Chat.BubbleAvatar -->
+        <!-- Robot 图标 - 直接用圆形背景包裹 -->
         <div
           class="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
         >
@@ -100,29 +97,10 @@
         <!-- AI 文字 - 固定显示 -->
         <span class="shrink-0 text-xs font-medium text-foreground">AI</span>
 
-        <!-- 功能按钮区 + agent名称 - hover显示 -->
+        <!-- 功能按钮区 - hover显示 -->
         <div
           class="flex min-w-0 items-center gap-0.5 opacity-0 transition-opacity duration-200 group-hover/msg:opacity-100"
         >
-          {#if hasTraces}
-            <Button
-              variant="ghost"
-              size="icon"
-              onclick={toggleTrace}
-              class="size-6 shrink-0 rounded-lg text-muted-foreground transition-all duration-200 hover:text-foreground"
-              aria-label={traceVisible ? "隐藏进度" : "显示进度"}
-              title={traceVisible ? "隐藏进度" : "显示进度"}
-            >
-              {#if traceVisible}
-                <IconEye size={14} stroke={1.5} />
-              {:else if traceRunning}
-                <IconLoader2 size={14} stroke={1.5} class="animate-spin" />
-              {:else}
-                <IconEyeOff size={14} stroke={1.5} />
-              {/if}
-            </Button>
-          {/if}
-
           <Button
             variant="ghost"
             size="icon"
@@ -151,19 +129,6 @@
               <IconCopy size={14} stroke={1.5} />
             {/if}
           </Button>
-
-          <!-- {#if message.agent?.name && message.agent.name !== "AI"}
-            <span class="shrink-0 text-xs text-muted-foreground">
-              ({message.agent.name})
-            </span>
-          {/if}
-          {#if message.agent?.model}
-            <span
-              class="min-w-0 truncate font-mono text-xs text-muted-foreground"
-            >
-              {message.agent.model}
-            </span>
-          {/if} -->
         </div>
       </div>
 
@@ -177,8 +142,8 @@
           <span>消息已折叠 · 点击展开</span>
         </button>
       {:else}
-        {#if hasTraces && traceVisible}
-          <AgentTrace nodes={message.traces ?? []} />
+        {#if showingTraces}
+          <AgentTrace nodes={message.traces ?? []} {autoExpand} />
         {/if}
 
         {#if hasContent}

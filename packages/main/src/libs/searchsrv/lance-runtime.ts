@@ -33,7 +33,7 @@ async function probeJiebaTokenizer(): Promise<boolean> {
             state.available = available;
 
             if (!available) {
-                Logger.info(
+                Logger.warn(
                     `[Search] Jieba tokenizer 模型目录不存在，FTS 将使用 icu: ${dir}`,
                 );
             }

@@ -9,7 +9,7 @@ export interface IProjectContext {
     reloadAgent(): Promise<void>;  // 重新加载本地Agent.
     getCmd(cmdName: string): ICapaFunctor | null;
     reloadCmd(cmdName?: string): Promise<void>; // 重新加载本地cmd--如果未指定名称，加载全部。
-    getPath(partName: string | string[], root?: boolean): string;
+    getPath(partName: string | string[]): string;
     notify(evtName: string, payload: unknown, srcId?: number): boolean;
     register<T extends IProjectController>(token: ServiceToken<T>): void;
     getService<T extends IProjectController>(token: ServiceToken<T>): T | null;

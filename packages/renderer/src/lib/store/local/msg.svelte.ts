@@ -73,6 +73,13 @@ class MessageStore {
 
     collapsedMessages = $state<Record<string, boolean>>({});
 
+    /**
+     * 全局思考信息（trace）显示开关。
+     * 由 WorkbenchHeader 统一控制全部消息的 trace 显隐，
+     * AssistantMessage 通过读取该字段决定是否渲染 AgentTrace。
+     */
+    tracesVisible = $state(true);
+
     hasMessages = $derived(this.messages.length > 0);
     lastMessage = $derived(
         this.messages.length > 0
@@ -134,6 +141,34 @@ class MessageStore {
         delete this.collapsedMessages[id];
     }
 
+    /**
+     * 正式声明「重新生成」能力。
+     * 当前尚未实现，先以 toast 提示占位，避免调用方通过
+     * `messageStore as unknown as {...}` 做结构性探测。
+     */
+    async regenerate(messageId: string): Promise<void> {
+        void messageId;
+        toast.warning("重新生成功能尚未实现");
+    }
+
+    /**
+     * 正式声明「从此分叉」能力。
+     * 当前尚未实现，先以 toast 提示占位。
+     */
+    async forkFrom(messageId: string): Promise<void> {
+        void messageId;
+        toast.warning("从此分叉功能尚未实现");
+    }
+
+    /**
+     * 正式声明「从此重新发送」能力。
+     * 当前尚未实现，先以 toast 提示占位。
+     */
+    async resendFrom(messageId: string): Promise<void> {
+        void messageId;
+        toast.warning("重新发送功能尚未实现");
+    }
+
     setLoading(loading: boolean) {
         this.isLoading = loading;
     }
@@ -151,6 +186,10 @@ class MessageStore {
         this.messages.forEach((m) => {
             this.collapsedMessages[m.id] = target;
         });
+    }
+
+    toggleTracesVisible() {
+        this.tracesVisible = !this.tracesVisible;
     }
 
     // ── Tree traversal helpers ──────────────────────────────────

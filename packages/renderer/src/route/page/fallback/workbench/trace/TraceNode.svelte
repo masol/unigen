@@ -18,10 +18,17 @@
   } from "@tabler/icons-svelte";
   import Self from "./TraceNode.svelte";
 
-  let { node, depth = 1 }: { node: TraceNode; depth?: number } = $props();
+  let {
+    node,
+    depth = 1,
+    autoExpand = false,
+  }: {
+    node: TraceNode;
+    depth?: number;
+    autoExpand?: boolean;
+  } = $props();
 
   // running 状态判定：streaming === false 时强制视作已终止
-  let running = $derived(node.status === "running" && node.streaming !== false);
   let streaming = $derived(node.streaming === true);
 
   let traceStatus = $derived<"running" | "error" | "pending" | undefined>(
@@ -52,8 +59,18 @@
 
   let showDepthBadge = $derived(depth >= 3);
 
+  /**
+   * 自动展开策略（主流 Agent 模式）：
+   * - 默认折叠；
+   * - 仅当外部允许自动展开（autoExpand === true，即消息处于思考阶段且尚未输出正文）
+   *   且该节点有子节点时，才自动展开，以显示 trace 骨架；
+   * - 子节点自身同样受 autoExpand 门控，但一旦消息开始输出正文或思考结束，
+   *   autoExpand 变为 false，未被用户手动操作过的节点将全部收起；
+   * - 用户显式操作（userOpen）优先于自动策略。
+   */
   let userOpen = $state<boolean | undefined>(undefined);
-  let open = $derived(userOpen ?? (streaming || running || hasDetail));
+  let autoOpen = $derived(autoExpand && hasChildren);
+  let open = $derived(userOpen ?? autoOpen);
 </script>
 
 {#snippet leadingIcon()}
@@ -138,7 +155,7 @@
       {#if hasChildren}
         <div class:mt-2={hasDetail} class="flex flex-col gap-1">
           {#each children as child (child.id)}
-            <Self node={child} depth={depth + 1} />
+            <Self node={child} depth={depth + 1} {autoExpand} />
           {/each}
         </div>
       {/if}

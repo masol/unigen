@@ -21,9 +21,11 @@ export interface IRunnerContext {
 
     // 指示本次会话的id.
     readonly sessId: string;
+    // 为执行者准备的任务级存储--只在本次任务中有效。
     readonly store: Record<string, unknown>;
     readonly msgId: string;
     readonly files: string[];
+    // rerun | cmd | ''
     readonly mode: CmdMode;
 
     /** 快照检查点：判断当前工作流是否已经被终止 */

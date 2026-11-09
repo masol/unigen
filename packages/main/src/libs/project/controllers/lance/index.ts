@@ -1,4 +1,4 @@
-import { KcDirName, SkillsDirName } from "$libs/const.js";
+import { KcDirName, MetaDirname, SkillsDirName } from "$libs/const.js";
 import type { KbRegistry } from "$libs/searchsrv/tables/kb-registry.js";
 import type { SkillTable } from "$libs/searchsrv/tables/skill-table.js";
 import Logger from "electron-log/main.js";
@@ -63,8 +63,8 @@ export class LanceDB extends BaseProjectController {
 
             const search = new ProjectSearchDB(
                 dbDir,
-                this.ctx.getPath(KcDirName),
-                this.ctx.getPath(SkillsDirName),
+                this.ctx.getPath([MetaDirname, KcDirName]),
+                this.ctx.getPath([MetaDirname, SkillsDirName]),
             );
             this.#search = search;
 

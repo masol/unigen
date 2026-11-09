@@ -2,7 +2,7 @@
 
 import { PACFunctor } from "$libs/blueprint/capability/local/index.js";
 import type { ICapaFunctor } from "$libs/blueprint/capability/type.js";
-import { AgentDirName, CmdsDirName, KcDirName, SkillsDirName } from "$libs/const.js";
+import { AgentDirName, CmdsDirName, KcDirName, MetaDirname, SkillsDirName } from "$libs/const.js";
 import { configService } from "$libs/store/index.js";
 import { secondConfig } from "$libs/store/second.js";
 import { throwUnprcessable } from "$libs/utils/err.js";
@@ -21,7 +21,7 @@ import { z } from "zod";
 import { closeProject, createProject, openProject } from "./helper/create.js";
 import type { IProjectPlugin } from "./plugin.js";
 import { registProjectBuildin } from "./register.js";
-import { type IProjectContext, type IProjectController, metaDirName, ServiceToken } from "./type.js";
+import { type IProjectContext, type IProjectController, ServiceToken } from "./type.js";
 
 export class ProjectContainer implements IProjectContext {
     // 项目根目录。
@@ -68,7 +68,7 @@ export class ProjectContainer implements IProjectContext {
     async reloadAgent(): Promise<void>  // 重新加载本地Agent.
     {
         if (!this.#agent) {
-            this.#agent = new PACFunctor(this.#type, [AgentDirName, 'index.md']);
+            this.#agent = new PACFunctor(this.#type, [MetaDirname, AgentDirName, 'index.md']);
         }
         return await this.#agent.compile(this);
     }
@@ -98,12 +98,7 @@ export class ProjectContainer implements IProjectContext {
         return instance ? (instance as T) : null;
     }
 
-    getPath(partName: string | string[], root = false): string {
-        // 保留原有特殊逻辑：直接返回 meta 目录名（忽略 root 参数）
-        if (partName === 'meta') {
-            return join(this.#path, metaDirName);
-        }
-
+    getPath(partName: string | string[]): string {
         // 统一转为数组，方便后续处理
         const parts = Array.isArray(partName) ? partName : [partName];
 
@@ -111,11 +106,8 @@ export class ProjectContainer implements IProjectContext {
         // 正斜杠在 Windows 和 Unix 上均被识别为路径分隔符，避免跨平台不一致
         const normalizedParts = parts.map(p => p.replace(/\\/g, '/'));
 
-        // 根据 root 决定是否包含 meta 子目录
-        const base = root ? [] : [metaDirName];
-
         // 使用 Node.js 的 path.join 拼接并自动规范化（处理 . 和 ..）
-        return join(this.#path, ...base, ...normalizedParts);
+        return join(this.#path, ...normalizedParts);
     }
 
     /**
@@ -146,12 +138,12 @@ export class ProjectContainer implements IProjectContext {
     }
 
     async loadUI(): Promise<ProjectActivityData> {
-        const uiFile = this.getPath("type.json");
+        const uiFile = this.getPath([MetaDirname, "type.json"]);
         const uiJSON = await fsExtra.readJSON(uiFile);
         const prjdata = this.validatePrjData(uiFile, uiJSON);
         if (!prjdata.welcome) {
             //加载项目的welcome.
-            const welcomeFile = this.getPath("welcome.md");
+            const welcomeFile = this.getPath([MetaDirname, "welcome.md"]);
             try {
                 prjdata.welcome = await fs.readFile(welcomeFile, { encoding: "utf-8" });
             } catch {
@@ -168,9 +160,9 @@ export class ProjectContainer implements IProjectContext {
             await this.close();
             this.#path = resolvedPath;
             const prjdata = await this.loadUI();
-            const type = await fs.readFile(this.getPath("type.txt"), "utf-8");
+            const type = await fs.readFile(this.getPath([MetaDirname, "type.txt"]), "utf-8");
             if (!type) {
-                throwUnprcessable(`任务类型文件${this.getPath("type.txt")}不存在或为空。`)
+                throwUnprcessable(`任务类型文件${this.getPath([MetaDirname, "type.txt"])}不存在或为空。`)
             }
             this.#type = type;
 
@@ -195,7 +187,7 @@ export class ProjectContainer implements IProjectContext {
                     return;
                 }
 
-                const destPath = this.getPath(subDir);
+                const destPath = this.getPath([MetaDirname, subDir]);
 
                 // 递归拷贝目录，覆盖已有内容
                 await fsExtra.copy(srcPath, destPath, {
@@ -225,8 +217,8 @@ export class ProjectContainer implements IProjectContext {
             const prjdata = this.validatePrjData(typePath, typejson);
             await createProject(this, type, prjdata.icon, bForce);
             await Promise.all([
-                fsExtra.copyFile(typePath, this.getPath("type.json")),
-                fs.writeFile(this.getPath("type.txt"), type),
+                fsExtra.copyFile(typePath, this.getPath([MetaDirname, "type.json"])),
+                fs.writeFile(this.getPath([MetaDirname, "type.txt"]), type),
                 this.assetsFromType(type)
             ])
             await this.reloadAgent();

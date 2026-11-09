@@ -1,0 +1,6 @@
+{
+    "name": "动态智能体",
+    "id": "_agent",
+    "icon": "IconAiAgents",
+    "description": "类似Hermes，渐进式工具、技能及知识库的全自动决策与加载。"
+}

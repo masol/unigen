@@ -16,7 +16,6 @@
     IconTrash,
     IconUser,
   } from "@tabler/icons-svelte";
-  import { toast } from "svelte-sonner";
   import MessageHeader from "./MessageHeader.svelte";
 
   let { message }: { message: ChatMessage } = $props();
@@ -36,27 +35,15 @@
   }
 
   function resendFromHere() {
-    const store = messageStore as unknown as {
-      resendFrom?: (id: string) => Promise<void>;
-    };
-    if (store.resendFrom) store.resendFrom(message.id);
-    else toast.warning("resendFrom 尚未实现");
+    void messageStore.resendFrom(message.id);
   }
 
   function forkFromHere() {
-    const store = messageStore as unknown as {
-      forkFrom?: (id: string) => Promise<void>;
-    };
-    if (store.forkFrom) store.forkFrom(message.id);
-    else toast.warning("forkFrom 尚未实现");
+    void messageStore.forkFrom(message.id);
   }
 
   function deleteMessage() {
-    const store = messageStore as unknown as {
-      deleteMessage?: (id: string) => void;
-    };
-    if (store.deleteMessage) store.deleteMessage(message.id);
-    else toast.warning("deleteMessage 尚未实现");
+    messageStore.deleteMessage(message.id);
   }
 </script>
 

@@ -1,0 +1,6 @@
+{
+    "name": "静态智能体",
+    "id": "_static_agent",
+    "icon": "IconAiAgent",
+    "description": "类似OpenClaw,用户主动选择技能、工具及知识库。"
+}
