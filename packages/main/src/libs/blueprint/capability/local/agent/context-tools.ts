@@ -1,42 +1,23 @@
 // packages/main/src/libs/blueprint/capability/local/agent/context-tools.ts
-
 import { LanceDB } from "$libs/project/controllers/lance/index.js";
 import type { ProjectSearchDB } from "$libs/project/controllers/lance/project-search-db.js";
-import { getGlobalRerankService } from "$libs/searchsrv/global-rerank-service.js";
 import type { KbCatalogRow } from "$libs/searchsrv/tables/kb-catalog-table.js";
-import type { KbChunkRow } from "$libs/searchsrv/tables/kb-table.js";
 import type { SkillRow } from "$libs/searchsrv/tables/skill-table.js";
+import {
+    loadSkillById,
+    queryKnowledgeByIds,
+} from "$libs/tooldb/tools/meta-tools/rag.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { tool, type Tool } from "ai";
 import Logger from "electron-log/main.js";
-import pMap from "p-map";
 import { z } from "zod";
 import type { CompiledPacAgent } from "../type.js";
 
 export const LOAD_LOCAL_SKILL_TOOL_NAME = "load_locskill";
 export const QUERY_LOCAL_KB_TOOL_NAME = "query_lockc";
 
-const KB_CANDIDATE_MULTIPLIER = 3;
-const KB_SEARCH_CONCURRENCY = 4;
 const KB_DEFAULT_LIMIT = 5;
 const KB_MAX_LIMIT = 20;
-
-const KB_SELECT_COLUMNS = [
-    "id",
-    "text",
-    "title",
-    "source",
-    "metadata",
-    "created_at",
-    "updated_at",
-];
-
-interface LocalKbHit extends KbChunkRow {
-    kbId: string;
-    kbName: string;
-    kbDescription: string;
-    rerankScore?: number;
-}
 
 function readStringList(
     raw: unknown,
@@ -168,21 +149,39 @@ async function attachSkillTool(
     tools[LOAD_LOCAL_SKILL_TOOL_NAME] = tool({
         description: buildSkillToolDescription(skills),
         inputSchema: z.object({
-            id: idSchema.describe("要加载的本地技能 id，必须使用描述中列出的完整 id"),
+            id: idSchema.describe("要加载的 Skill id，必须使用描述中列出的完整 id"),
+            path: z
+                .string()
+                .trim()
+                .min(1)
+                .optional()
+                .describe(
+                    "第二次调用时使用。首次只传 id，返回 Skill 正文；" +
+                    "当 Skill 正文/描述要求加载扩展文件时，以相同 id + 该扩展文件相对 Skill 目录的路径再次调用，" +
+                    "此时返回的是该扩展文件的 Markdown 内容（而非 Skill 正文）。",
+                ),
         }),
         execute: async (input) => {
-            const id = (input as { id: string }).id;
-            const row = byId.get(id) ?? (await search.skill.getById(id));
-            if (!row) {
-                throw new Error(`本地技能不存在: ${id}`);
+            const { id, path: relativePath } = input as {
+                id: string;
+                path?: string;
+            };
+
+            const result = await loadSkillById(id, relativePath);
+            if (!result.found) {
+                throw new Error(result.error ?? `本地技能不存在: ${id}`);
+            }
+
+            if (relativePath) {
+                return result.text ?? "";
             }
 
             return [
-                `# ${row.name}`,
+                `# ${result.name ?? id}`,
                 "",
-                row.description,
+                result.description ?? "",
                 "",
-                row.text,
+                result.text ?? "",
             ].join("\n");
         },
     });
@@ -202,19 +201,21 @@ function buildSkillToolDescription(skills: SkillRow[]): string {
         .join("\n");
 
     return [
-        "加载本 agent 可用的本地技能正文。",
+        "加载本 agent 可用的 Skill。",
         "",
-        `本次可用技能 ${skills.length} 个：`,
+        `本次可用 Skill ${skills.length} 个：`,
         "",
-        "| 技能 id | 名称 | 描述 |",
+        "| Skill id | 名称 | 描述 |",
         "| --- | --- | --- |",
         rows,
         "",
         "调用规则：",
-        "- 当任务需要该技能的具体步骤、约束、示例或完整说明时调用本工具。",
-        "- 参数 id 必须使用上表中的完整技能 id，不要自行拼接或猜测。",
-        "- 一次只加载当前需要的技能，避免一次性加载全部正文。",
-        "- 返回内容是技能 Markdown 正文，直接阅读理解后继续执行任务。",
+        "- 当任务需要该 Skill 的具体步骤、约束、示例或完整说明时调用本工具。",
+        "- 参数 id 必须使用上表中的完整 Skill id，不要自行拼接或猜测。",
+        "- 一次只加载当前需要的 Skill，避免一次性加载全部正文。",
+        "- 首次调用只传 id，返回 Skill 正文。",
+        "- 若 Skill 正文/描述要求加载扩展文件，以相同 id 加 path 再次调用；path 是该扩展文件相对 Skill 目录的路径，此时返回该扩展文件的 Markdown 内容（而非 Skill 正文）。",
+        "- 返回内容是 Markdown，直接阅读理解后继续执行任务。",
     ].join("\n");
 }
 
@@ -252,10 +253,19 @@ async function attachKbTool(
 
     if (entries.length === 0) return;
 
+    const idEnum = z.enum(
+        entries.map((entry) => entry.id) as [string, ...string[]],
+    );
+
     tools[QUERY_LOCAL_KB_TOOL_NAME] = tool({
         description: buildKbToolDescription(entries),
         inputSchema: z.object({
             query: z.string().min(1).describe("自然语言查询"),
+            id: idEnum
+                .optional()
+                .describe(
+                    "可选。已知目标知识库时传入其 id，只检索该库；不确定时不要传，工具会在全部可用库中检索。",
+                ),
             limit: z
                 .number()
                 .int()
@@ -265,85 +275,20 @@ async function attachKbTool(
                 .describe(`返回条数，默认 ${KB_DEFAULT_LIMIT}，最大 ${KB_MAX_LIMIT}`),
         }),
         execute: async (input) => {
-            const { query, limit: rawLimit } = input as {
+            const { query, id, limit: rawLimit } = input as {
                 query: string;
+                id?: string;
                 limit?: number;
             };
             const limit = Math.min(
                 KB_MAX_LIMIT,
                 Math.max(1, Math.floor(rawLimit ?? KB_DEFAULT_LIMIT)),
             );
-            const candidateLimit = limit * KB_CANDIDATE_MULTIPLIER;
 
-            const groups = await pMap(
-                entries,
-                async (entry): Promise<LocalKbHit[]> => {
-                    try {
-                        const table = await search.kb.ensure(entry.id);
-                        const rows = await table.searchChunks(query, {
-                            disableRerank: true,
-                            limit: candidateLimit,
-                            select: KB_SELECT_COLUMNS,
-                        });
+            const ids = id ? [id] : entries.map((entry) => entry.id);
+            const chunks = await queryKnowledgeByIds(ids, query, limit);
 
-                        return rows.map((row) => ({
-                            ...row,
-                            kbId: entry.id,
-                            kbName: entry.name,
-                            kbDescription: entry.description,
-                        }));
-                    } catch (error) {
-                        Logger.warn(
-                            `[PAC] ${compiled.name}: 查询知识库失败，已跳过: ${entry.id}`,
-                            error,
-                        );
-                        return [];
-                    }
-                },
-                { concurrency: KB_SEARCH_CONCURRENCY },
-            );
-
-            const all = groups.flat();
-            if (all.length === 0) {
-                return JSON.stringify([], null, 2);
-            }
-
-            const rerank = getGlobalRerankService();
-            const rerankEnabled = await rerank.isEnabled();
-
-            if (rerankEnabled) {
-                try {
-                    const documents = all.map((row) => String(row.text ?? ""));
-                    if (documents.every((text) => text.length > 0)) {
-                        const result = await rerank.rerank(query, documents, {
-                            topN: limit,
-                        });
-
-                        const ranked = result.ranking
-                            .map((item): LocalKbHit | null => {
-                                const row = all[item.originalIndex];
-                                if (!row) return null;
-
-                                const score = readRerankScore(item);
-                                return score === undefined
-                                    ? row
-                                    : { ...row, rerankScore: score };
-                            })
-                            .filter((row): row is LocalKbHit => row !== null);
-
-                        if (ranked.length > 0) {
-                            return JSON.stringify(ranked.slice(0, limit), null, 2);
-                        }
-                    }
-                } catch (error) {
-                    Logger.warn(
-                        `[PAC] ${compiled.name}: 知识库查询结果 Rerank 失败，使用未重排结果。`,
-                        error,
-                    );
-                }
-            }
-
-            return JSON.stringify(all.slice(0, limit), null, 2);
+            return JSON.stringify(chunks, null, 2);
         },
     });
 
@@ -362,7 +307,8 @@ function buildKbToolDescription(entries: KbCatalogRow[]): string {
         .join("\n");
 
     return [
-        "检索本 agent 可用的本地知识库。",
+        "检索本 agent 可用的知识库。",
+        "知识库存放用户专有/私有知识、事实、偏好、项目约束等；当回答需要这些背景信息时使用。",
         "",
         `本次可用知识库 ${entries.length} 个：`,
         "",
@@ -372,31 +318,9 @@ function buildKbToolDescription(entries: KbCatalogRow[]): string {
         "",
         "调用参数：",
         "- `query`：自然语言查询，必填。",
+        "- `id`：可选。已知目标知识库时传入其 id，只检索该库；不确定时不要传，工具会在全部可用库中检索。",
         `- \`limit\`：返回条数，可选，默认 ${KB_DEFAULT_LIMIT}，最大 ${KB_MAX_LIMIT}。`,
         "",
-        "行为说明：",
-        "- 多个知识库会并行检索，并禁用各库内部 Rerank。",
-        "- 合并候选后，如果全局 Rerank 可用，会统一精排并返回 topN。",
-        "- 返回 JSON 数组，每项通常包含 kbId、kbName、kbDescription、id、text、title、source、metadata、rerankScore 等字段。",
-        "- 请根据知识库描述选择相关库；不要查询明显无关的知识库。",
+        "返回 JSON 数组，每项通常包含 kbId、kbName、chunkId、text、title、source、metadata 等字段。",
     ].join("\n");
-}
-
-function readRerankScore(value: unknown): number | undefined {
-    if (!value || typeof value !== "object") return undefined;
-
-    const record = value as Record<string, unknown>;
-    for (const key of [
-        "score",
-        "rerankScore",
-        "relevanceScore",
-        "relevance_score",
-    ]) {
-        const raw = record[key];
-        if (typeof raw === "number" && Number.isFinite(raw)) {
-            return raw;
-        }
-    }
-
-    return undefined;
 }

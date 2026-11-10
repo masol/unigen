@@ -1,6 +1,7 @@
 // packages/main/src/libs/tooldb/tools/meta-tools/rag.ts
 import { LanceDB } from "$libs/project/controllers/lance/index.js";
 import { getRunnerContext } from "$libs/project/controllers/runner.js";
+import { loadTextFileStrict } from "$libs/searchsrv/file-text-loader.js";
 import type {
     KbCatalogRow,
     KbChunkRow,
@@ -12,6 +13,8 @@ import {
     getGlobalSearchDB,
 } from "$libs/searchsrv/index.js";
 import Logger from "electron-log/main.js";
+import fs from "node:fs";
+import path from "node:path";
 import pMap from "p-map";
 import { z } from "zod";
 import { buildAiTool } from "../../builder.js";
@@ -29,15 +32,15 @@ const CANDIDATE_MULTIPLIER = 3;
 const SEARCH_CONCURRENCY = 4;
 
 const NO_SKILL_HINT =
-    "没有找到匹配的 Skill。请先确认技能目录是否已同步；" +
-    "如确实需要新能力，请换一个能力描述重新检索，不要用同义关键词反复重试。";
+    "没有找到匹配的 Skill。请换一种能力描述，或确认该能力是否已作为 Skill 提供；" +
+    "不要用同义关键词反复重试。";
 
 const NO_KB_HINT =
-    "没有找到匹配的知识库目录。请先确认知识库目录及 meta.json 是否已同步；" +
-    "如果明确知道知识库 ref，也可以直接调用 query_knowledge。";
+    "没有找到匹配的知识库。请换一种知识主题描述；" +
+    "如果明确知道知识库 id，也可以直接调用 query_knowledge。";
 
 const NO_KB_CHUNK_HINT =
-    "没有检索到知识库片段。可能是知识库为空、文件读取失败，或查询与内容不匹配。";
+    "没有检索到知识库片段。可能是知识库为空，或查询与内容不匹配。";
 
 type Scope = "project" | "global";
 
@@ -58,14 +61,7 @@ interface ScopedChunk {
     row: KbChunkRow;
 }
 
-interface Ranked<T> {
-    item: T;
-    score: number | null;
-}
-
 interface ChunkOutput {
-    ref: string;
-    scope: Scope;
     kbId: string;
     kbName?: string;
     chunkId: string;
@@ -73,25 +69,24 @@ interface ChunkOutput {
     title: string;
     source: string;
     metadata?: unknown;
-    rerankScore?: number;
 }
 
-function makeRef(scope: Scope, id: string): string {
-    return scope === "project" ? `prj::${id}` : id;
+export interface LoadSkillResult {
+    found: boolean;
+    id?: string;
+    name?: string;
+    description?: string;
+    path?: string;
+    text?: string;
+    metadata?: Record<string, unknown>;
+    error?: string;
+    hint?: string;
 }
 
-function parseRef(ref: string): { scope: Scope; id: string } {
-    const trimmed = ref.trim();
-    if (trimmed.startsWith("prj::")) {
-        return {
-            scope: "project",
-            id: trimmed.slice("prj::".length),
-        };
-    }
-    return {
-        scope: "global",
-        id: trimmed,
-    };
+interface FoundKb {
+    scope: Scope;
+    entry: KbCatalogRow;
+    table: KbTable;
 }
 
 function parseMetadata(raw: unknown): Record<string, unknown> {
@@ -105,30 +100,6 @@ function parseMetadata(raw: unknown): Record<string, unknown> {
     } catch {
         return {};
     }
-}
-
-/**
- * 从 Rerank 结果条目中提取分数。
- *
- * 兼容不同实现的字段名；均缺失时返回 null，最终不写入 rerankScore，
- * 以保持"可选"的语义，避免把 undefined 写进输出。
- */
-function extractRerankScore(item: unknown): number | null {
-    if (!item || typeof item !== "object") return null;
-
-    const record = item as Record<string, unknown>;
-    for (const key of [
-        "score",
-        "rerankScore",
-        "relevanceScore",
-        "relevance_score",
-    ]) {
-        const value = record[key];
-        if (typeof value === "number" && Number.isFinite(value)) {
-            return value;
-        }
-    }
-    return null;
 }
 
 async function getProjectLance(): Promise<LanceDB | null> {
@@ -158,9 +129,8 @@ async function rerankCandidates<T>(
     items: T[],
     getText: (item: T) => string,
     limit: number,
-): Promise<Ranked<T>[]> {
-    const fallback = (): Ranked<T>[] =>
-        items.slice(0, limit).map((item) => ({ item, score: null }));
+): Promise<T[]> {
+    const fallback = (): T[] => items.slice(0, limit);
 
     if (items.length === 0) return [];
     if (items.length === 1) return fallback();
@@ -187,11 +157,11 @@ async function rerankCandidates<T>(
             topN: limit,
         });
 
-        const ranked: Ranked<T>[] = [];
+        const ranked: T[] = [];
         for (const r of result.ranking) {
             const item = items[r.originalIndex];
             if (!item) continue;
-            ranked.push({ item, score: extractRerankScore(r) });
+            ranked.push(item);
             if (ranked.length >= limit) break;
         }
 
@@ -241,7 +211,13 @@ async function searchSkillsAcross(
         concurrency: 2,
     });
 
-    return groups.flat();
+    const seen = new Set<string>();
+    return groups.flat().filter(({ row }) => {
+        const id = String(row.id);
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+    });
 }
 
 async function searchKnowledgeCatalogAcross(
@@ -283,54 +259,186 @@ async function searchKnowledgeCatalogAcross(
         concurrency: 2,
     });
 
-    return groups.flat();
+    const seen = new Set<string>();
+    return groups.flat().filter(({ row }) => {
+        const id = String(row.id);
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+    });
 }
 
-async function findSkillRow(
-    scope: Scope,
-    id: string,
-): Promise<SkillRow | null> {
-    if (scope === "project") {
-        const project = await getProjectLance();
-        return project ? project.search.skill.getById(id) : null;
-    }
+/**
+ * 无条件列出全部可用知识库目录（按 project → global 顺序，去重，截断到 limit）。
+ * 用于 search_knowledge_bases 的 query 为空场景。
+ */
+async function listAllKnowledgeBases(
+    limit: number,
+): Promise<ScopedKbCatalog[]> {
+    const project = await getProjectLance();
     const global = getOpenedGlobalSearch();
-    return global ? global.skill.getById(id) : null;
+
+    const out: ScopedKbCatalog[] = [];
+    const seen = new Set<string>();
+
+    const collect = (
+        entries: KbCatalogRow[],
+        scope: Scope,
+    ): boolean => {
+        for (const row of entries) {
+            const id = String(row.id);
+            if (seen.has(id)) continue;
+            seen.add(id);
+            out.push({ scope, row });
+            if (out.length >= limit) return false;
+        }
+        return true;
+    };
+
+    if (project) {
+        if (!collect(await project.search.kb.listCatalogEntries(), "project")) {
+            return out;
+        }
+    }
+    if (global) {
+        collect(await global.kb.listCatalogEntries(), "global");
+    }
+
+    return out;
 }
 
-async function loadSkillByRef(ref: string): Promise<{
-    ref: string;
-    scope: Scope;
-    id: string;
-    name: string;
-    description: string;
-    path: string;
-    text: string;
-    metadata: Record<string, unknown>;
-} | null> {
-    const { scope, id } = parseRef(ref);
-    const row = await findSkillRow(scope, id);
-    if (!row) return null;
+async function findSkillRowById(id: string): Promise<ScopedSkill | null> {
+    const project = await getProjectLance();
+    if (project) {
+        const row = await project.search.skill.getById(id);
+        if (row) return { scope: "project", row };
+    }
 
-    return {
-        ref: makeRef(scope, String(row.id)),
-        scope,
+    const global = getOpenedGlobalSearch();
+    if (global) {
+        const row = await global.skill.getById(id);
+        if (row) return { scope: "global", row };
+    }
+
+    return null;
+}
+
+function resolveExistingPath(raw: string): string {
+    if (path.isAbsolute(raw)) return raw;
+    try {
+        const ctx = getRunnerContext();
+        return ctx.prj.getPath(raw);
+    } catch {
+        return path.resolve(raw);
+    }
+}
+
+function resolveSkillBaseDir(skillPath: string): string {
+    const trimmed = skillPath.trim();
+    if (!trimmed) {
+        throw new Error("该 Skill 没有可用的目录路径，无法加载扩展文件。");
+    }
+
+    const abs = resolveExistingPath(trimmed);
+    let stat: fs.Stats;
+    try {
+        stat = fs.statSync(abs);
+    } catch {
+        throw new Error(`Skill 路径不存在: ${abs}`);
+    }
+
+    return stat.isDirectory() ? abs : path.dirname(abs);
+}
+
+function resolveSkillExtensionPath(
+    skillPath: string,
+    relativePath: string,
+): string {
+    const rel = relativePath.trim();
+    if (!rel) {
+        throw new Error("path 不能为空。");
+    }
+    if (path.isAbsolute(rel)) {
+        throw new Error("path 必须是相对于 Skill 目录的相对路径。");
+    }
+
+    const base = resolveSkillBaseDir(skillPath);
+    const abs = path.resolve(base, rel);
+    const relative = path.relative(base, abs);
+
+    if (
+        relative === ".." ||
+        relative.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relative)
+    ) {
+        throw new Error("path 不能超出 Skill 目录。");
+    }
+
+    return abs;
+}
+
+/**
+ * 按 id 加载 Skill。
+ *
+ * - 不传 relativePath：返回 Skill 正文；
+ * - 传 relativePath：视作相对 Skill 目录的路径，读取该文件并转 Markdown 返回，
+ *   此时返回的是"扩展文件内容"，而不是 Skill 正文。
+ *
+ * 不对外暴露项目级/全局概念：id 来自 search_skills；内部按项目优先、全局兜底查找。
+ */
+export async function loadSkillById(
+    id: string,
+    relativePath?: string,
+): Promise<LoadSkillResult> {
+    const trimmedId = id.trim();
+    if (!trimmedId) {
+        return {
+            found: false,
+            error: "id 不能为空。",
+            hint: "请使用 search_skills 返回的 id。",
+        };
+    }
+
+    const found = await findSkillRowById(trimmedId);
+    if (!found) {
+        return {
+            found: false,
+            error: `未找到 Skill: ${trimmedId}`,
+            hint: "请先调用 search_skills 获取有效 id。",
+        };
+    }
+
+    const { row } = found;
+    const base: LoadSkillResult = {
+        found: true,
         id: String(row.id),
         name: String(row.name),
         description: String(row.description),
-        path: String(row.path ?? ""),
-        // SkillTable.getById 已把 __skillBody 还原到 text，
-        // 并从 metadata 中剥离该 key，下游不再需要感知具体 key。
-        text: String(row.text ?? ""),
         metadata: parseMetadata(row.metadata),
+    };
+
+    if (relativePath && relativePath.trim()) {
+        const absPath = resolveSkillExtensionPath(
+            String(row.path ?? ""),
+            relativePath,
+        );
+        const markdown = await loadTextFileStrict(absPath);
+        return {
+            ...base,
+            path: absPath,
+            text: markdown,
+        };
+    }
+
+    return {
+        ...base,
+        path: String(row.path ?? ""),
+        text: String(row.text ?? ""),
     };
 }
 
-function toChunkOutput(ranked: Ranked<ScopedChunk>): ChunkOutput {
-    const { item, score } = ranked;
+function toChunkOutput(item: ScopedChunk): ChunkOutput {
     return {
-        ref: makeRef(item.scope, item.kbId),
-        scope: item.scope,
         kbId: item.kbId,
         kbName: item.kbName || undefined,
         chunkId: String(item.row.id ?? ""),
@@ -338,53 +446,57 @@ function toChunkOutput(ranked: Ranked<ScopedChunk>): ChunkOutput {
         title: String(item.row.title ?? ""),
         source: String(item.row.source ?? ""),
         metadata: parseMetadata(item.row.metadata),
-        ...(score !== null ? { rerankScore: score } : {}),
     };
 }
 
-async function queryKnowledgeByRef(
-    ref: string,
+async function findKbById(id: string): Promise<FoundKb | null> {
+    const project = await getProjectLance();
+    if (project) {
+        const entry = await project.search.kb.getCatalogEntry(id);
+        if (entry) {
+            const table = project.search.kb.tryGet(id);
+            if (!table) {
+                throw new Error(`知识库未加载或不存在: ${id}`);
+            }
+            return { scope: "project", entry, table };
+        }
+    }
+
+    const global = getOpenedGlobalSearch();
+    if (global) {
+        const entry = await global.kb.getCatalogEntry(id);
+        if (entry) {
+            const table = global.kb.tryGet(id);
+            if (!table) {
+                throw new Error(`知识库未加载或不存在: ${id}`);
+            }
+            return { scope: "global", entry, table };
+        }
+    }
+
+    return null;
+}
+
+async function queryKnowledgeById(
+    id: string,
     query: string,
     limit: number,
-): Promise<{
-    ref: string;
-    scope: Scope;
-    kbId: string;
-    chunks: ChunkOutput[];
-}> {
-    const { scope, id } = parseRef(ref);
-
-    const registry =
-        scope === "project"
-            ? (await getProjectLance())?.search.kb
-            : getOpenedGlobalSearch()?.kb;
-
-    if (!registry) {
-        throw new Error(
-            scope === "project"
-                ? "项目级 LanceDB 不可用，无法检索知识库。"
-                : "全局检索库不可用，无法检索知识库。",
-        );
+): Promise<{ kbId: string; chunks: ChunkOutput[] }> {
+    const found = await findKbById(id);
+    if (!found) {
+        throw new Error(`知识库不存在: ${id}`);
     }
-
-    const table = registry.tryGet(id);
-    if (!table) {
-        throw new Error(`知识库未加载或不存在: ${ref}`);
-    }
-
-    const catalog = await registry.getCatalogEntry(id);
-    const kbName = catalog?.name ?? id;
 
     const candidateLimit = Math.max(limit * CANDIDATE_MULTIPLIER, limit);
-    const rows = await table.searchChunks(query, {
+    const rows = await found.table.searchChunks(query, {
         limit: candidateLimit,
         disableRerank: true,
     });
 
     const candidates: ScopedChunk[] = rows.map((row) => ({
-        scope,
-        kbId: id,
-        kbName,
+        scope: found.scope,
+        kbId: found.entry.id,
+        kbName: found.entry.name,
         row,
     }));
 
@@ -396,11 +508,69 @@ async function queryKnowledgeByRef(
     );
 
     return {
-        ref: makeRef(scope, id),
-        scope,
-        kbId: id,
+        kbId: found.entry.id,
         chunks: reranked.map(toChunkOutput),
     };
+}
+
+/**
+ * 在指定 id 集合内检索知识库片段。
+ *
+ * 供 local agent 的固定知识库工具复用；id 不存在或查询失败时跳过该库。
+ */
+export async function queryKnowledgeByIds(
+    ids: readonly string[],
+    query: string,
+    limit: number,
+): Promise<ChunkOutput[]> {
+    const uniqueIds = [
+        ...new Set(ids.map((id) => id.trim()).filter(Boolean)),
+    ];
+    if (uniqueIds.length === 0) return [];
+
+    const candidateLimit = Math.max(limit * CANDIDATE_MULTIPLIER, limit);
+
+    const groups = await pMap(
+        uniqueIds,
+        async (id): Promise<ScopedChunk[]> => {
+            try {
+                const found = await findKbById(id);
+                if (!found) {
+                    Logger.warn(`[ToolDB] 知识库不存在，已跳过: ${id}`);
+                    return [];
+                }
+
+                const rows = await found.table.searchChunks(query, {
+                    limit: candidateLimit,
+                    disableRerank: true,
+                });
+
+                return rows.map((row) => ({
+                    scope: found.scope,
+                    kbId: found.entry.id,
+                    kbName: found.entry.name,
+                    row,
+                }));
+            } catch (error) {
+                Logger.warn(
+                    `[ToolDB] 查询知识库失败，已跳过: ${id}`,
+                    error,
+                );
+                return [];
+            }
+        },
+        { concurrency: SEARCH_CONCURRENCY },
+    );
+
+    const candidates = groups.flat();
+    const reranked = await rerankCandidates(
+        query,
+        candidates,
+        (item) => String(item.row.text ?? ""),
+        limit,
+    );
+
+    return reranked.map(toChunkOutput);
 }
 
 /**
@@ -505,16 +675,11 @@ async function queryAllKnowledge(
     return reranked.map(toChunkOutput);
 }
 
-const scopeSchema = z.enum(["project", "global"]);
-
 const skillRefSchema = z.object({
-    ref: z.string(),
-    scope: scopeSchema,
     id: z.string(),
     name: z.string(),
     description: z.string(),
     path: z.string().optional(),
-    rerankScore: z.number().optional(),
 });
 
 const skillSearchOutputSchema = z.object({
@@ -524,8 +689,6 @@ const skillSearchOutputSchema = z.object({
 
 const loadSkillOutputSchema = z.object({
     found: z.boolean(),
-    ref: z.string().optional(),
-    scope: scopeSchema.optional(),
     id: z.string().optional(),
     name: z.string().optional(),
     description: z.string().optional(),
@@ -537,12 +700,9 @@ const loadSkillOutputSchema = z.object({
 });
 
 const kbRefSchema = z.object({
-    ref: z.string(),
-    scope: scopeSchema,
     id: z.string(),
     name: z.string(),
     description: z.string(),
-    rerankScore: z.number().optional(),
 });
 
 const kbSearchOutputSchema = z.object({
@@ -551,8 +711,6 @@ const kbSearchOutputSchema = z.object({
 });
 
 const chunkOutputSchema = z.object({
-    ref: z.string(),
-    scope: scopeSchema,
     kbId: z.string(),
     kbName: z.string().optional(),
     chunkId: z.string(),
@@ -560,12 +718,9 @@ const chunkOutputSchema = z.object({
     title: z.string(),
     source: z.string(),
     metadata: z.unknown().optional(),
-    rerankScore: z.number().optional(),
 });
 
 const queryKnowledgeOutputSchema = z.object({
-    ref: z.string().optional(),
-    scope: scopeSchema.optional(),
     kbId: z.string().optional(),
     chunks: z.array(chunkOutputSchema),
     error: z.string().optional(),
@@ -593,19 +748,29 @@ const searchSkillsInputSchema = z.object({
 });
 
 const loadSkillInputSchema = z.object({
-    ref: z
+    id: z
         .string()
         .min(1)
+        .describe("search_skills 返回的 Skill id。"),
+    path: z
+        .string()
+        .trim()
+        .min(1)
+        .optional()
         .describe(
-            "search_skills 返回的 ref。项目级形如 prj::skill:dir；全局级不带前缀。",
+            "第二次调用时使用。首次只传 id，返回 Skill 正文；" +
+            "当 Skill 正文/描述要求加载扩展文件时，以相同 id + 该扩展文件再次调用，" +
+            "此时返回的是该扩展文件的 Markdown 内容（而非 Skill 正文）。",
         ),
 });
 
 const searchKnowledgeBasesInputSchema = z.object({
     query: z
         .string()
-        .min(1)
-        .describe("用自然语言描述你要查找的知识主题。"),
+        .trim()
+        .describe(
+            "知识主题的自然语言描述。留空则返回全部可用知识库；非空时按相关度排序返回。",
+        ),
     limit: z
         .number()
         .int()
@@ -616,12 +781,10 @@ const searchKnowledgeBasesInputSchema = z.object({
 });
 
 const queryKnowledgeInputSchema = z.object({
-    ref: z
+    id: z
         .string()
         .min(1)
-        .describe(
-            "search_knowledge_bases 返回的知识库 ref。项目级形如 prj::<kbId>；全局级不带前缀。",
-        ),
+        .describe("search_knowledge_bases 返回的知识库 id。"),
     query: z
         .string()
         .min(1)
@@ -668,10 +831,9 @@ export const searchSkillsToolDef: ToolDefinition<
 > = {
     name: searchSkillsToolName,
     description:
-        "检索可用的 Skill（技能）。描述你想完成的能力或任务场景，而不是猜 Skill 名。" +
-        "会并行检索项目级与全局 Skill，合并后 Rerank，返回 ref/name/description 及可选 rerankScore。" +
-        "项目级 ref 以 prj:: 开头，全局级不带前缀。" +
-        "命中后请调用 load_skill 加载正文；不要凭 name 猜测 Skill 内容。",
+        "检索可用 Skill（技能）。用自然语言描述能力或任务场景，而不是猜 Skill 名。" +
+        "返回按相关度排序的 id、name、description。" +
+        "命中后调用 load_skill 并传 id 加载正文；不要凭 name 猜测 Skill 内容。",
     inputSchema: searchSkillsInputSchema,
     outputSchema: skillSearchOutputSchema,
     execute: async ({ query, limit }) => {
@@ -686,15 +848,15 @@ export const searchSkillsToolDef: ToolDefinition<
                 finalLimit,
             );
 
-            const skills = reranked.map(({ item, score }) => ({
-                ref: makeRef(item.scope, String(item.row.id)),
-                scope: item.scope,
-                id: String(item.row.id),
-                name: String(item.row.name),
-                description: String(item.row.description),
-                path: String(item.row.path ?? ""),
-                ...(score !== null ? { rerankScore: score } : {}),
-            }));
+            const skills = reranked.map((item) => {
+                const skillPath = String(item.row.path ?? "");
+                return {
+                    id: String(item.row.id),
+                    name: String(item.row.name),
+                    description: String(item.row.description),
+                    ...(skillPath ? { path: skillPath } : {}),
+                };
+            });
 
             return {
                 skills,
@@ -711,8 +873,7 @@ export const searchSkillsToolDef: ToolDefinition<
                 skills: [],
                 hint:
                     `检索 Skill 失败：${message}。` +
-                    "请确认项目级/全局检索库已打开且 Skill 目录已同步；" +
-                    "如为暂时性错误可稍后重试。",
+                    "可稍后重试；如持续失败，请换一种能力描述或确认 Skill 是否可用。",
             };
         }
     },
@@ -724,27 +885,27 @@ export const loadSkillToolDef: ToolDefinition<
 > = {
     name: loadSkillToolName,
     description:
-        "加载 search_skills 命中的 Skill 正文。必须使用 search_skills 返回的 ref。" +
-        "项目级 ref 以 prj:: 开头；全局级不带前缀。" +
+        "加载 search_skills 返回的 Skill。id 必须使用 search_skills 返回的 id。" +
+        "首次调用只传 id，返回 Skill 正文；" +
+        "若 Skill 正文/描述要求加载扩展文件，以相同 id 加 path 再次调用（path 是该扩展文件相对 Skill 目录的路径），" +
+        "此时返回的是该扩展文件的 Markdown 内容（而非 Skill 正文）。" +
         "不要凭 Skill 名猜测或编造正文。",
     inputSchema: loadSkillInputSchema,
     outputSchema: loadSkillOutputSchema,
-    execute: async ({ ref }) => {
-        const skill = await loadSkillByRef(ref);
-
-        if (!skill) {
+    execute: async ({ id, path: relativePath }) => {
+        try {
+            return await loadSkillById(id, relativePath);
+        } catch (error) {
             return {
                 found: false,
-                error: `未找到 Skill: ${ref}`,
+                error:
+                    error instanceof Error
+                        ? error.message
+                        : String(error),
                 hint:
-                    "请先调用 search_skills 获取有效 ref；项目级 ref 形如 prj::skill:dir，全局级不带前缀。",
+                    "请确认 id 来自 search_skills，且 path 是 Skill 目录内的相对路径。",
             };
         }
-
-        return {
-            found: true,
-            ...skill,
-        };
     },
 };
 
@@ -754,34 +915,47 @@ export const searchKnowledgeBasesToolDef: ToolDefinition<
 > = {
     name: searchKnowledgeBasesToolName,
     description:
-        "检索知识库目录，而不是直接检索知识库内容。描述你要查找的知识主题，" +
-        "会并行检索项目级与全局知识库目录，合并后 Rerank，返回知识库 ref/name/description 及可选 rerankScore。" +
-        "项目级 ref 以 prj:: 开头，全局级不带前缀。" +
-        "命中后请调用 query_knowledge 检索该库的具体 chunk。",
+        "检索知识库目录。query 为空时返回全部可用知识库；非空时按相关度排序返回。" +
+        "每项含 id、name、description。命中后调用 query_knowledge 并传 id 检索该库的具体片段。",
     inputSchema: searchKnowledgeBasesInputSchema,
     outputSchema: kbSearchOutputSchema,
     execute: async ({ query, limit }) => {
         try {
             const finalLimit = limit ?? DEFAULT_LIMIT;
+            const q = query.trim();
+
+            if (!q) {
+                const all = await listAllKnowledgeBases(finalLimit);
+                const knowledgeBases = all.map((item) => ({
+                    id: String(item.row.id),
+                    name: String(item.row.name),
+                    description: String(item.row.description),
+                }));
+                return {
+                    knowledgeBases,
+                    hint:
+                        knowledgeBases.length > 0
+                            ? undefined
+                            : NO_KB_HINT,
+                };
+            }
+
             const candidates = await searchKnowledgeCatalogAcross(
-                query,
+                q,
                 finalLimit,
             );
 
             const reranked = await rerankCandidates(
-                query,
+                q,
                 candidates,
                 (item) => `${item.row.name}\n${item.row.description}`,
                 finalLimit,
             );
 
-            const knowledgeBases = reranked.map(({ item, score }) => ({
-                ref: makeRef(item.scope, String(item.row.id)),
-                scope: item.scope,
+            const knowledgeBases = reranked.map((item) => ({
                 id: String(item.row.id),
                 name: String(item.row.name),
                 description: String(item.row.description),
-                ...(score !== null ? { rerankScore: score } : {}),
             }));
 
             return {
@@ -802,8 +976,7 @@ export const searchKnowledgeBasesToolDef: ToolDefinition<
                 knowledgeBases: [],
                 hint:
                     `检索知识库目录失败：${message}。` +
-                    "请确认项目级/全局检索库已打开且知识库目录已同步；" +
-                    "如为暂时性错误可稍后重试。",
+                    "可稍后重试；如持续失败，请换一种知识主题描述。",
             };
         }
     },
@@ -815,18 +988,21 @@ export const queryKnowledgeToolDef: ToolDefinition<
 > = {
     name: queryKnowledgeToolName,
     description:
-        "在指定知识库中检索具体 chunk。ref 必须来自 search_knowledge_bases。" +
-        "项目级 ref 以 prj:: 开头；全局级不带前缀。" +
-        "检索会先禁用内置 Rerank 扩大候选，再统一 Rerank 返回最终片段及可选 rerankScore。",
+        "在指定知识库中检索具体片段。id 必须使用 search_knowledge_bases 返回的 id。",
     inputSchema: queryKnowledgeInputSchema,
     outputSchema: queryKnowledgeOutputSchema,
-    execute: async ({ ref, query, limit }) => {
+    execute: async ({ id, query, limit }) => {
         try {
-            return await queryKnowledgeByRef(
-                ref,
+            const result = await queryKnowledgeById(
+                id,
                 query,
                 limit ?? DEFAULT_LIMIT,
             );
+
+            return {
+                kbId: result.kbId,
+                chunks: result.chunks,
+            };
         } catch (error) {
             return {
                 chunks: [],
@@ -835,8 +1011,7 @@ export const queryKnowledgeToolDef: ToolDefinition<
                         ? error.message
                         : String(error),
                 hint:
-                    "请先调用 search_knowledge_bases 获取有效知识库 ref；" +
-                    "项目级 ref 形如 prj::<kbId>，全局级不带前缀。",
+                    "请先调用 search_knowledge_bases 获取有效 id。",
             };
         }
     },
@@ -848,10 +1023,9 @@ export const queryAllKnowledgeToolDef: ToolDefinition<
 > = {
     name: queryAllKnowledgeToolName,
     description:
-        "不指定知识库，直接从全部项目级与全局知识库中检索 chunk，并统一 Rerank。" +
-        "适合不知道知识属于哪个库、或需要跨库召回的场景。" +
-        "如果已知目标库，优先使用 search_knowledge_bases + query_knowledge，以减少无关召回。" +
-        "返回的 chunk 带 kbName 与可选 rerankScore。",
+        "在全部可用知识库中检索与 query 相关的片段。" +
+        "知识库存放用户专有/私有知识、事实、偏好、项目约束等；" +
+        "当回答需要用户信息或项目背景，或需要确认某个事实/偏好/约定的来源时使用。",
     inputSchema: queryAllKnowledgeInputSchema,
     outputSchema: queryAllKnowledgeOutputSchema,
     execute: async ({ query, limit }) => {
@@ -876,7 +1050,7 @@ export const queryAllKnowledgeToolDef: ToolDefinition<
                         ? error.message
                         : String(error),
                 hint:
-                    "请确认项目级/全局检索库已打开，且知识库目录已同步。",
+                    "请确认知识库可用；如已知目标库，优先使用 search_knowledge_bases + query_knowledge。",
             };
         }
     },
