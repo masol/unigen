@@ -34,7 +34,7 @@
         项目类型
       </h1>
       <p class="text-sm text-muted-foreground">
-        管理本机已安装与在线获取的项目类型。
+        管理项目类型。
       </p>
     </div>
     <button

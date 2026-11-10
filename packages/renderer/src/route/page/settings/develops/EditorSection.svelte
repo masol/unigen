@@ -92,7 +92,7 @@
 <SettingsSection
   icon={IconCode}
   title="编辑器"
-  description="代码编辑器外观与行为"
+  description="管理AI动态代码"
 >
   <SettingRow title="字体大小" description="编辑器正文字号（px）">
     {#snippet control()}

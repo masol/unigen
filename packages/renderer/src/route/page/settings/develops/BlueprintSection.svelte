@@ -48,8 +48,9 @@
   });
 </script>
 
-<SettingsSection icon={IconTable} title="蓝图" description="表格分页与展示行为">
+<SettingsSection icon={IconTable} title="蓝图" description="管理AI的运行内存">
   <!-- 每页条目数 -->
+
   <SettingRow title="每页显示条目数" description="单页渲染的记录数量（6 - 20）">
     {#snippet control()}
       <div class="w-48">
@@ -100,36 +101,6 @@
         bind:checked={
           () => configStore.rmblueprint,
           (v) => configStore.setConfig("rmblueprint", v)
-        }
-      />
-    {/snippet}
-  </SettingRow>
-
-  <!-- 变动确认 -->
-  <SettingRow
-    title="变动确认"
-    description="在工作流变动(编辑、反思)之前，提醒用户可能的风险。"
-  >
-    {#snippet control()}
-      <Switch
-        bind:checked={
-          () => !configStore.silentSave,
-          (v) => configStore.setConfig("silentSave", !v)
-        }
-      />
-    {/snippet}
-  </SettingRow>
-
-  <!-- 并行执行 -->
-  <SettingRow
-    title="并行执行"
-    description="在助手调整工作流时，是否允许工作流执行。"
-  >
-    {#snippet control()}
-      <Switch
-        bind:checked={
-          () => configStore.parallelRun,
-          (v) => configStore.setConfig("parallelRun", v)
         }
       />
     {/snippet}

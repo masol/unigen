@@ -73,7 +73,7 @@ export const configSchema: Schema<AppConfig> = {
         type: "boolean",
         default: false,
     },
-    silentSave: {
+    showDevUI: {
         type: "boolean",
         default: false,
     },

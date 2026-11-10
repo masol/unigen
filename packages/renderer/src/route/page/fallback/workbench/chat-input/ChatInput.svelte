@@ -1,5 +1,10 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import {
+    commandsStore,
+    filterCommands,
+    type ChatCommand,
+  } from "$lib/store/local/commands.store.svelte";
   import { messageStore } from "$lib/store/local/msg.svelte";
   import { safeApi } from "$lib/utils/api";
   import {
@@ -13,19 +18,16 @@
   import AttachmentButton from "./AttachmentButton.svelte";
   import AttachmentMenu from "./AttachmentMenu.svelte";
   import ChatCommandMenu from "./ChatCommandMenu.svelte";
-  import { chatCommands, filterCommands, type ChatCommand } from "./commands";
 
   let {
     value = $bindable(""),
     placeholder = "Enter 换行，Ctrl+Enter 发送",
-    commands = chatCommands,
     onSend = () => {},
     onCommand = () => {},
     onRecord = () => {},
   }: {
     value?: string;
     placeholder?: string;
-    commands?: ChatCommand[];
     /** 发送时回传当前已选择文件的完整路径数组 */
     onSend?: (files: string[]) => void;
     onCommand?: (cmd: ChatCommand) => void;
@@ -45,12 +47,16 @@
   let files = $state<string[]>([]);
   let showAttachments = $state(false);
 
+  let commands = $derived(commandsStore.commands);
+  let hasCommands = $derived(commands.length > 0);
   let filtered = $derived(showCommands ? filterCommands(value, commands) : []);
   let sending = $derived(messageStore.isLoading);
   let reloading = $derived(messageStore.isReloading);
   let aborting = $derived(messageStore.isAborting);
   let deleting = $derived(messageStore.isDeleting);
   let disabled = $derived(sending || reloading || deleting);
+  let slashDisabled = $derived(disabled || !hasCommands);
+  let slashTitle = $derived(!hasCommands ? "当前项目类型未提供命令" : "命令");
   let canSend = $derived(value.trim().length > 0 && !disabled);
 
   let effectivePlaceholder = $derived(
@@ -170,7 +176,7 @@
   }
 
   function openCommands() {
-    if (disabled) return;
+    if (disabled || !hasCommands) return;
     showAttachments = false;
     value = "/";
     handleInput();
@@ -189,23 +195,25 @@
     }
     if (isComposing && event.key === "Enter") return;
 
-    if (showCommands && filtered.length > 0) {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        selectedIndex = (selectedIndex + 1) % filtered.length;
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        selectedIndex =
-          selectedIndex === 0 ? filtered.length - 1 : selectedIndex - 1;
-        return;
-      }
-      if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey) {
-        event.preventDefault();
-        const cmd = filtered[selectedIndex];
-        if (cmd) selectCommand(cmd);
-        return;
+    if (showCommands) {
+      if (filtered.length > 0) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          selectedIndex = (selectedIndex + 1) % filtered.length;
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          selectedIndex =
+            selectedIndex === 0 ? filtered.length - 1 : selectedIndex - 1;
+          return;
+        }
+        if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey) {
+          event.preventDefault();
+          const cmd = filtered[selectedIndex];
+          if (cmd) selectCommand(cmd);
+          return;
+        }
       }
       if (event.key === "Escape") {
         event.preventDefault();
@@ -223,12 +231,25 @@
 </script>
 
 <div class="relative shrink-0 border-t border-border/50 bg-muted/20 p-3">
-  {#if showCommands && filtered.length > 0 && !disabled}
-    <ChatCommandMenu
-      commands={filtered}
-      {selectedIndex}
-      onSelect={selectCommand}
-    />
+  {#if showCommands && !disabled}
+    {#if filtered.length > 0}
+      <ChatCommandMenu
+        commands={filtered}
+        {selectedIndex}
+        onSelect={selectCommand}
+      />
+    {:else}
+      <div
+        class="absolute bottom-full left-0 right-0 z-20 mb-2 rounded-lg border border-border bg-popover px-3 py-2 text-xs leading-relaxed text-muted-foreground shadow-lg"
+        role="note"
+      >
+        当前项目未提供命令。以
+        <span class="font-mono text-foreground">/</span>
+        开头的内容会被解释为命令，如不确定请勿以
+        <span class="font-mono text-foreground">/</span>
+        开头。
+      </div>
+    {/if}
   {/if}
 
   {#if showAttachments && files.length > 0 && !disabled}
@@ -285,9 +306,9 @@
         <button
           type="button"
           onclick={openCommands}
-          {disabled}
-          title="命令"
-          aria-label="打开命令菜单"
+          disabled={slashDisabled}
+          title={slashTitle}
+          aria-label={slashTitle}
           class="group flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground active:scale-90 active:bg-accent/80 disabled:cursor-not-allowed disabled:hover:bg-transparent"
         >
           <IconSlash

@@ -22,7 +22,7 @@ export interface AppConfig {
     lineHeight: number;
     lineNumbers: boolean;
     rmblueprint: boolean; // 是否允许删除blueprint三表中的成员，默认false.
-    silentSave: boolean; // 是否静默保存--在保存数据前提醒用户，默认为false(提醒用户).
+    showDevUI: boolean; // 是否显示开发用界面.
     keybindings: Record<string, string[]>;
     // 其他配置...
 }

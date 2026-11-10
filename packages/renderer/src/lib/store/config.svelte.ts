@@ -27,7 +27,7 @@ class ConfigStore {
     #task_dir = $state<string>("")           // 复合对象整体替换 → $state.raw
     #autoupdate = $state<boolean>(true)
     #disableHA = $state<boolean>(false)
-    #silentSave = $state<boolean>(false)
+    #showDevUI = $state<boolean>(false)
     #parallelRun = $state<boolean>(false)
     #telemetry = $state<string>("");
     #concurrency = $state<number>(12);
@@ -61,7 +61,7 @@ class ConfigStore {
     get lineHeight() { return this.#lineHeight }
     get lineNumbers() { return this.#lineNumbers }
     get rmblueprint() { return this.#rmblueprint }
-    get silentSave() { return this.#silentSave }
+    get showDevUI() { return this.#showDevUI }
     get parallelRun() { return this.#parallelRun }
     get telemetry() { return this.#telemetry }
     get concurrency() { return this.#concurrency }
@@ -155,8 +155,8 @@ class ConfigStore {
             case 'concurrency':
                 this.#concurrency = value as AppConfig['concurrency'];
                 break;
-            case 'silentSave':
-                this.#silentSave = value as AppConfig['silentSave'];
+            case 'showDevUI':
+                this.#showDevUI = value as AppConfig['showDevUI'];
                 break;
             case 'parallelRun':
                 this.#parallelRun = value as AppConfig['parallelRun'];
@@ -221,7 +221,7 @@ class ConfigStore {
         this.#lineHeight = config.lineHeight
         this.#lineNumbers = config.lineNumbers
         this.#rmblueprint = config.rmblueprint
-        this.#silentSave = config.silentSave
+        this.#showDevUI = config.showDevUI
         this.#parallelRun = config.parallelRun
         this.#telemetry = config.telemetry
         this.#concurrency = config.concurrency

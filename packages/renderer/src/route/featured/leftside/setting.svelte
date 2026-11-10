@@ -12,9 +12,8 @@
     IconFolders,
     IconKeyboard,
     IconPlug,
-    IconSearch,
     IconSettings,
-    IconSettingsOff,
+    IconSettingsOff
   } from "@tabler/icons-svelte";
   import { debounce } from "radashi";
   import { push, router } from "svelte-spa-router";
@@ -104,8 +103,8 @@
         },
         {
           id: "develops",
-          label: "开发",
-          description: "AI工作流改进工具的设置(右侧面板)",
+          label: "开发(需技术知识)",
+          description: "设置AI内存与动态代码管理工具",
           icon: IconCodePlus,
           path: "develops",
           keywords: ["开发", "监督", "审查", "AI协同"],
@@ -169,18 +168,18 @@
             "ElevenLabs",
           ],
         },
-        {
-          id: "api-search",
-          label: "搜索",
-          description: "搜索引擎与联网",
-          icon: IconSearch,
-          path: "api/search",
-          keywords: ["search", "联网", "搜索引擎", "Google", "Bing"],
-        },
+        // {
+        //   id: "api-search",
+        //   label: "搜索",
+        //   description: "搜索引擎与联网",
+        //   icon: IconSearch,
+        //   path: "api/search",
+        //   keywords: ["search", "联网", "搜索引擎", "Google", "Bing"],
+        // },
         {
           id: "api-mcp",
           label: "MCP",
-          description: "模型上下文协议",
+          description: "增加AI可使用工具，以扩展AI能力",
           icon: IconPlug,
           path: "api/mcp",
           keywords: ["MCP", "tool", "插件", "function calling"],

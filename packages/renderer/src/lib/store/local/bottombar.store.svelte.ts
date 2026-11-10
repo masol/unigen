@@ -1,15 +1,27 @@
+import { configStore } from "../config.svelte";
+
 type BottomTab = {
     id: string;
     label: string;
     badge: number;
 };
 
+const DEV_ONLY_TAB_IDS = new Set(["dag"]);
+
+
 function createBottomPanelStore() {
-    let activeTab = $state("logger");
-    const tabs = $state<BottomTab[]>([
+    let activeTabId = $state<string>("logger");
+    const activeTab = $derived<string>(
+        configStore.showDevUI ?
+            activeTabId :
+            DEV_ONLY_TAB_IDS.has(activeTabId) ? "logger" : activeTabId
+    );
+
+    const tabs = $derived<BottomTab[]>([
         { id: "logger", label: "日志", badge: 0 },
-        { id: "dag", label: "DAG", badge: 0 },
-        // { id: "media", label: "媒体", badge: 0 }
+        ...(configStore.showDevUI
+            ? [{ id: "dag", label: "DAG", badge: 0 }]
+            : []),
     ]);
 
     return {
@@ -20,7 +32,7 @@ function createBottomPanelStore() {
             return tabs;
         },
         setActiveTab(id: string) {
-            activeTab = id;
+            activeTabId = id;
         },
         setBadge(id: string, count: number) {
             const tab = tabs.find((t) => t.id === id);

@@ -1,7 +1,5 @@
-import { configStore } from '$lib/store/config.svelte';
 import { bottomPanelStore } from '$lib/store/local/bottombar.store.svelte';
 import { projectStore } from '$lib/store/project.svelte';
-import { confirmStore } from '$lib/store/ui/confirm.svelte';
 import { layoutStore } from '$lib/store/ui/layout.svelte';
 import { safeApi } from '$lib/utils/api';
 import Logger from 'electron-log/renderer';
@@ -172,15 +170,15 @@ export class EditorStore {
 
     async save() {
         if (this.busy) return;
-        if (!configStore.silentSave) {
-            const confirm = confirmStore.request({
-                title: "项目可能无法运行",
-                message: `${this.kindLabel}条目“${this.id}”的变动，可能导致本项目无法执行，确定要继续保存吗？。`,
-                confirmLabel: "保存",
-                destructive: true
-            })
-            if (!confirm) return;
-        }
+        // if (!configStore.showDevUI) {
+        //     const confirm = confirmStore.request({
+        //         title: "项目可能无法运行",
+        //         message: `${this.kindLabel}条目“${this.id}”的变动，可能导致本项目无法执行，确定要继续保存吗？。`,
+        //         confirmLabel: "保存",
+        //         destructive: true
+        //     })
+        //     if (!confirm) return;
+        // }
         this.busy = true;
         this.busyAction = 'save';
         try {

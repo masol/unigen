@@ -1,4 +1,8 @@
-// src/lib/components/chat/commands.ts
+// packages/renderer/src/lib/store/local/commands.store.svelte.ts
+import { configStore } from "$lib/store/config.svelte";
+import { hooks } from "$lib/utils/hook";
+import { default as log } from "electron-log/renderer";
+
 export type ChatCommand = {
     id: string;
     /** 插入到输入框的文本前缀，例如 "/translate" */
@@ -6,7 +10,7 @@ export type ChatCommand = {
     desc: string;
 };
 
-export const chatCommands: ChatCommand[] = [
+const DEV_COMMANDS: ChatCommand[] = [
     {
         id: "导出知识库", label: "/export", desc: `将项目知识库导出，支持如下参数:
 --kc 导出到知识库项目类型目录下。
@@ -56,7 +60,7 @@ export const chatCommands: ChatCommand[] = [
 /** 根据输入的查询词过滤命令（去掉开头的 "/"） */
 export function filterCommands(
     query: string,
-    source: ChatCommand[] = chatCommands,
+    source: ChatCommand[] = [],
 ): ChatCommand[] {
     const q = query.replace(/^\//, "").toLowerCase().trim();
     if (!q) return source;
@@ -65,3 +69,65 @@ export function filterCommands(
             c.label.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q),
     );
 }
+
+class CommandsStore {
+    #projectCommands = $state<ChatCommand[]>([]);
+    #isLoading = $state(false);
+    #error = $state<string | null>(null);
+
+    constructor() {
+        log.info("[CommandsStore] initialized");
+
+        hooks.hook("project:loaded", async () => {
+            await this.reload();
+        });
+    }
+
+    get isLoading() { return this.#isLoading; }
+    get error() { return this.#error; }
+
+    /**
+     * 当前可用命令：
+     * - showDevUI 为 true 时合并开发命令与项目命令；
+     * - 否则仅返回当前项目类型加载到的命令。
+     */
+    readonly commands = $derived.by((): ChatCommand[] =>
+        this.getAvailableCommands(),
+    );
+
+    readonly hasCommands = $derived(this.commands.length > 0);
+
+    private getAvailableCommands(): ChatCommand[] {
+        return configStore.showDevUI
+            ? [...this.#projectCommands, ...DEV_COMMANDS]
+            : this.#projectCommands;
+    }
+
+    private async reload(): Promise<void> {
+        this.#isLoading = true;
+        this.#error = null;
+
+        try {
+            this.#projectCommands = await this.loadAvailableCommands();
+            log.info(
+                `[CommandsStore] loaded ${this.#projectCommands.length} project commands`,
+            );
+        } catch (err) {
+            this.#projectCommands = [];
+            this.#error = err instanceof Error ? err.message : String(err);
+            log.error("[CommandsStore] reload() failed", err);
+        } finally {
+            this.#isLoading = false;
+        }
+    }
+
+    /** 预留：按当前项目类型加载可用命令；暂时返回空数组。 */
+    private async loadAvailableCommands(): Promise<ChatCommand[]> {
+        return [];
+    }
+}
+
+const KEY = Symbol.for("unigen.renderer.commandsStore");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const commandsStore: CommandsStore = ((globalThis as any)[KEY] ??=
+    new CommandsStore());

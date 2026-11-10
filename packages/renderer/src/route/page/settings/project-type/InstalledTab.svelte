@@ -90,7 +90,7 @@
         onclick={openDir}
         disabled={openingDir}
       >
-        <IconFolderOpen class="size-4" /> 打开插件目录
+        <IconFolderOpen class="size-4" /> 打开类型目录
       </Button>
       <Button
         variant="ghost"
@@ -121,7 +121,7 @@
             class="gap-1.5 rounded-lg"
             onclick={openDir}
           >
-            <IconFolderOpen class="size-4" /> 打开插件目录
+            <IconFolderOpen class="size-4" /> 打开类型目录
           </Button>
         {/if}
       {/snippet}
