@@ -1,3 +1,4 @@
+// packages/main/src/types/shared/api/chat.ts
 import { z } from "zod";
 
 export const listSessionsParamsSchema = z.object({
@@ -73,6 +74,53 @@ export type TraceNodeKind =
     | "input"
     | "output";
 
+/* ───── 模型用量：镜像 Vercel AI SDK v7 的 LanguageModelUsage ─────
+ *
+ * 真实结构（v7）：
+ *   {
+ *     inputTokens: 314,
+ *     outputTokens: 512,
+ *     totalTokens: 826,
+ *     inputTokenDetails:  { noCacheTokens, cacheReadTokens, cacheWriteTokens, ... },
+ *     outputTokenDetails: { textTokens, reasoningTokens, ... },
+ *   }
+ *
+ * 设计要点：
+ *   - 结构直接对齐 SDK，不做扁平化，避免客户端按 SDK 文档读取嵌套字段时失配；
+ *   - 每个对象都带 catchall，SDK 未来新增字段可原样透传，不被 zod 裁剪；
+ *   - 所有字段可选：仅作为 trace/message 节点的"可选附加载荷"，旧数据/旧客户端
+ *     不感知即可；读取侧统一把 null 转 undefined。
+ *
+ * 如需强类型，可 `import type { LanguageModelUsage } from "ai"` 直接替代本类型；
+ * 这里保留 zod 镜像的收益是：跨进程传输层可直接复用 schema 做运行时校验，
+ * 且不随 SDK 版本升级而收窄字段。
+ * ─────────────────────────────────────────────────────────────── */
+
+export const modelUsageSchema = z
+    .object({
+        inputTokens: z.number().optional(),
+        outputTokens: z.number().optional(),
+        totalTokens: z.number().optional(),
+        inputTokenDetails: z
+            .object({
+                noCacheTokens: z.number().optional(),
+                cacheReadTokens: z.number().optional(),
+                cacheWriteTokens: z.number().optional(),
+            })
+            .catchall(z.unknown())
+            .optional(),
+        outputTokenDetails: z
+            .object({
+                textTokens: z.number().optional(),
+                reasoningTokens: z.number().optional(),
+            })
+            .catchall(z.unknown())
+            .optional(),
+    })
+    .catchall(z.unknown());
+
+export type ModelUsage = z.infer<typeof modelUsageSchema>;
+
 interface TraceNodeBase {
     id: string;
     status: TraceStatus;
@@ -88,6 +136,8 @@ interface TraceNodeBase {
     detail?: string;
     /** 是否为流式节点（默认 true）；false 表示瞬间完整，无需 end */
     streaming?: boolean;
+    /** 可选：本节点关联的模型用量（Vercel AI SDK v7 usage）。仅实时通知与历史回放可附带，旧客户端忽略即可。 */
+    usage?: ModelUsage;
 }
 
 export interface TraceAgentNode extends TraceNodeBase {
@@ -179,6 +229,7 @@ const traceNodeBaseShape = {
     finishedAt: z.number().optional(),
     detail: z.string().optional(),
     streaming: z.boolean().optional(),
+    usage: modelUsageSchema.optional(),
 };
 
 export const traceAgentNodeSchema: z.ZodType<TraceAgentNode, TraceAgentNode> =

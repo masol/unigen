@@ -66,6 +66,7 @@ CREATE TABLE `traces` (
 	`finished_at` integer,
 	`created_at` integer DEFAULT 0 NOT NULL,
 	`extra` text,
+	`usage` text,
 	FOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint

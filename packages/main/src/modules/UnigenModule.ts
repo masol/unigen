@@ -14,9 +14,9 @@ import type { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../types/ModuleContext.js';
 
 async function initSearch(): Promise<void> {
-    // if (secondConfig().get("search_inited")) {
-    //     return
-    // }
+    if (secondConfig().get("search_inited")) {
+        return
+    }
     const db = getGlobalSearchDB();
     await Promise.all([
         db.syncSystemKC(),

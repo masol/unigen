@@ -32,14 +32,17 @@ export type { MessageExtra, SessionPatch, TraceAgentNode, TraceInputNode, TraceN
 
 /* ───────── Trace tree ───────── */
 
-import type { AgentIdentity, TraceNode, TraceStatus } from './api/chat.js';
+import type { AgentIdentity, ModelUsage, TraceNode, TraceStatus } from './api/chat.js';
 
-export { AgentIdentity, TraceNode, TraceStatus };
+export { AgentIdentity, ModelUsage, TraceNode, TraceStatus };
 
 /**
  * Trace 字段增量更新 patch。
  * 不包含 id/kind/parentId/messageId —— 这些不可变。
  * children 不走 patch，由 (id, parentId) 关系天然决定。
+ *
+ * usage 由 agent 节点在 trace.end 时一次性下发（整体替换语义，
+ * 与 Object.assign 合并方式一致）；历史回放时从 TraceNode.usage 读取。
  */
 export type TracePatch = Partial<{
     status: TraceStatus;
@@ -48,6 +51,7 @@ export type TracePatch = Partial<{
     detail: string;
     startedAt: number;
     finishedAt: number;
+    usage: ModelUsage;
 }>;
 
 

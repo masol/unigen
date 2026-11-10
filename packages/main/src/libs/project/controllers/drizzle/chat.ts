@@ -8,6 +8,7 @@
 //     支持流式增量写入 (upsertTrace / patchTrace / appendTraceDetail)，
 //     读取时对缺失父节点或非法关系做容错 (挂到根)，保证返回最小可用且结构完整。
 //   - FK 名义声明；运行期 pragma foreign_keys = OFF，故删除做手工级联。
+//   - trace.usage 独立列持久化，与 kind 解耦；旧数据为 null，读取转 undefined。
 
 import { ConstUntitled } from "$libs/const.js";
 import {
@@ -464,6 +465,7 @@ function rowToMessage(row: typeof messages.$inferSelect): ChatMessage {
  *   - 已存在重入：更新除 createdAt 之外的所有字段 (支持重放)
  *
  * 用于响应 trace.start 事件。parent 可以尚未落库，读取时容错处理。
+ * usage 作为独立列持久化，重入时同步更新，避免重放丢失。
  */
 export function upsertTrace(
     db: DrizzleDBType,
@@ -492,6 +494,7 @@ export function upsertTrace(
                 startedAt: row.startedAt,
                 finishedAt: row.finishedAt,
                 extra: row.extra,
+                usage: row.usage,
             },
         })
         .run();
@@ -501,6 +504,9 @@ export function upsertTrace(
  * 部分更新 trace 节点的可变字段。
  * 用于响应 trace.update 事件。
  * 若 nodeId 不存在则静默无动作 (事件乱序到达的容错)。
+ *
+ * 白名单按 TracePatch 的键通用放行：`usage` 作为独立列，只要 patch 携带即写入；
+ * 传 undefined 表示"本次不更新"，不支持显式清空（可选附加语义）。
  */
 export function patchTrace(
     db: DrizzleDBType,
@@ -637,6 +643,8 @@ function nodeToRow(
         startedAt: node.startedAt ?? null,
         finishedAt: node.finishedAt ?? null,
         extra,
+        // 方案 B：usage 独立列；无则写 null，读取侧转 undefined
+        usage: node.usage ?? null,
     };
 }
 
@@ -650,6 +658,8 @@ function rowToTraceNode(row: typeof traces.$inferSelect): TraceNode {
         detail: row.detail ?? undefined,
         startedAt: row.startedAt ?? undefined,
         finishedAt: row.finishedAt ?? undefined,
+        // 旧数据为 null → undefined，保持"可选附加"语义
+        usage: row.usage ?? undefined,
     };
     switch (row.kind) {
         case "agent":

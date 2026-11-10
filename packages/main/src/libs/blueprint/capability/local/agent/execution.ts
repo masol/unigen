@@ -6,6 +6,7 @@ import type { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import { throwNotfound } from "$libs/utils/err.js";
 import { truncate } from "$libs/utils/str.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
+import type { ModelUsage } from "$types/shared/chat.js";
 import { isStepCount, ToolLoopAgent, type ModelMessage } from "ai";
 import Logger from "electron-log/main.js";
 import { isPlainObject } from "radashi";
@@ -449,7 +450,7 @@ export async function executeAgent(
     if (failure) {
         handleFailure(ctx, prjdb, state, agentCtx, failure);
     } else {
-        finishAgentTrace(ctx, prjdb, state, agentCtx);
+        finishAgentTrace(ctx, prjdb, state, agentCtx, usage as ModelUsage | undefined);
     }
 
     if (isRoot) {

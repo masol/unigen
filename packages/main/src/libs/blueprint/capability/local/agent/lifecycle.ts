@@ -2,7 +2,7 @@
 
 import type { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
-import type { AgentIdentity, MessageStreamEvent, TraceStreamEvent } from "$types/shared/chat.js";
+import type { AgentIdentity, MessageStreamEvent, ModelUsage, TraceStreamEvent } from "$types/shared/chat.js";
 import type { PacRunState } from "./types.js";
 import { formatDurationMs } from "./utils.js";
 
@@ -36,16 +36,17 @@ export function startAgentTrace(
     state: PacRunState,
     agentTraceNodeId: string,
     agentName: string,
-    modelInfo: { providerId: string; modelId: string },
+    _modelInfo: { providerId: string; modelId: string },
     agentIdentity: AgentIdentity,
     parentTraceId: string | undefined,
 ): void {
+    // 不写 description：模型信息已由 agentIdentity.model 下发，客户端直接展示；
+    // 结束态再追加 "耗时: XXX"，是追加而非覆盖，避免开始/结束文案突变。
     const node = {
         id: agentTraceNodeId,
         kind: "agent" as const,
         status: "running" as const,
         title: agentName,
-        description: `模型: ${modelInfo.providerId}/${modelInfo.modelId}`,
         agent: agentIdentity,
         children: [],
         streaming: true,
@@ -263,29 +264,32 @@ export function finishAgentTrace(
     prjdb: PrjDB,
     state: PacRunState,
     agentCtx: AgentContext,
+    usage?: ModelUsage,
 ): void {
     const now = Date.now();
-    const description =
-        `模型: ${agentCtx.agentIdentity.model?.replace("::", "/")} | ` +
-        `耗时: ${formatDurationMs(now - agentCtx.startedAt)}`;
+    // 模型信息已随 trace.start 的 agent 节点（agentIdentity.model）下发，
+    // 这里只追加耗时，保持与开始态"无次要文本 → 追加耗时"的渐进关系。
+    const description = `耗时: ${formatDurationMs(now - agentCtx.startedAt)}`;
+
+    // DB 与实时事件共用同一个 patch：
+    // - usage 有值才附加，保持"可选"语义，不改变旧客户端与旧数据；
+    // - patchTrace 运行期按 Object.keys 通用放行，usage 会写入 traces.usage 列。
+    const patch = {
+        status: "success" as const,
+        finishedAt: now,
+        description,
+        ...(usage !== undefined ? { usage } : {}),
+    };
 
     if (state.persist) {
-        prjdb.patchTrace(agentCtx.agentTraceNodeId, {
-            status: "success",
-            finishedAt: now,
-            description,
-        });
+        prjdb.patchTrace(agentCtx.agentTraceNodeId, patch);
     }
 
     ctx.report({
         type: "trace.end",
         messageId: state.messageId,
         nodeId: agentCtx.agentTraceNodeId,
-        patch: {
-            status: "success",
-            finishedAt: now,
-            description,
-        },
+        patch,
     } as TraceStreamEvent);
 }
 

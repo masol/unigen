@@ -10,8 +10,9 @@
 //   - trace 的 kind 专属字段合并到 `extra` JSON 列，避免宽稀疏表。
 //   - trace 行入库顺序通过 `created_at` 维持，无需额外 orderIndex。
 //   - sessions.titleManual 标志用户是否手动改过标题，自动改题逻辑读它决定是否覆盖。
+//   - trace 的模型用量独立存 `usage` JSON 列（方案 B），不混入 `extra`，与 kind 解耦。
 
-import type { AgentIdentity, MessageExtra } from "$types/shared/chat.js";
+import type { AgentIdentity, MessageExtra, ModelUsage } from "$types/shared/chat.js";
 import { sql } from 'drizzle-orm';
 import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
@@ -113,6 +114,12 @@ export const traces = sqliteTable(
          *  首次 upsert 时写入，之后不再变更，用作兄弟节点的稳定排序键 */
         createdAt: integer('created_at').notNull().default(sql`0`),
         extra: text('extra', { mode: 'json' }).$type<TraceExtra | null>(),
+        /**
+         * 可选：本节点关联的模型用量 (Vercel AI SDK v7 usage)。
+         * JSON 存储，旧数据为 null；读取侧统一转 undefined，保持可选语义。
+         * 与 kind 无关（目前 agent 节点会写入），不混入 extra，避免污染 kind 专属字段。
+         */
+        usage: text('usage', { mode: 'json' }).$type<ModelUsage | null>(),
     },
     (table) => [
         index('idx_traces_message_id').on(table.messageId),
