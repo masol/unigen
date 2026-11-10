@@ -32,7 +32,11 @@
 
   let icon = $derived(projectStore.activity?.icon ?? "IconMessageCircle");
   let hasMessages = $derived(messageStore.hasMessages);
-  let busy = $derived(messageStore.isLoading || messageStore.isReloading);
+  let busy = $derived(
+    messageStore.isLoading ||
+      messageStore.isReloading ||
+      messageStore.isDeleting,
+  );
   let tracesVisible = $derived(messageStore.tracesVisible);
 
   let allCollapsed = $derived.by(() => {
@@ -76,9 +80,13 @@
         disabled={openingFolder || !projectStore.path}
         title="打开项目目录"
         aria-label="打开项目目录"
-        class="size-8 rounded-lg text-muted-foreground transition-all duration-200 hover:text-foreground"
+        class="group size-8 rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground active:scale-90 active:bg-accent/80"
       >
-        <IconFolderOpen size={16} stroke={1.5} />
+        <IconFolderOpen
+          size={16}
+          stroke={1.5}
+          class="transition-transform duration-200 group-active:scale-110"
+        />
       </Button>
 
       {#if hasMessages}
@@ -90,12 +98,20 @@
           title={tracesVisible ? "隐藏全部思考信息" : "显示全部思考信息"}
           aria-label={tracesVisible ? "隐藏全部思考信息" : "显示全部思考信息"}
           aria-pressed={tracesVisible}
-          class="size-8 rounded-lg text-muted-foreground transition-all duration-200 hover:text-foreground"
+          class="group size-8 rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground active:scale-90 active:bg-accent/80"
         >
           {#if tracesVisible}
-            <IconEye size={16} stroke={1.5} />
+            <IconEye
+              size={16}
+              stroke={1.5}
+              class="transition-transform duration-200 group-active:scale-110"
+            />
           {:else}
-            <IconEyeOff size={16} stroke={1.5} />
+            <IconEyeOff
+              size={16}
+              stroke={1.5}
+              class="transition-transform duration-200 group-active:scale-110"
+            />
           {/if}
         </Button>
 
@@ -106,12 +122,20 @@
           disabled={busy}
           title={allCollapsed ? "展开全部消息" : "收起全部消息"}
           aria-label={allCollapsed ? "展开全部消息" : "收起全部消息"}
-          class="size-8 rounded-lg text-muted-foreground transition-all duration-200 hover:text-foreground"
+          class="group size-8 rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground active:scale-90 active:bg-accent/80"
         >
           {#if allCollapsed}
-            <IconArrowsMaximize size={16} stroke={1.5} />
+            <IconArrowsMaximize
+              size={16}
+              stroke={1.5}
+              class="transition-transform duration-200 group-active:scale-110"
+            />
           {:else}
-            <IconArrowsMinimize size={16} stroke={1.5} />
+            <IconArrowsMinimize
+              size={16}
+              stroke={1.5}
+              class="transition-transform duration-200 group-active:scale-110"
+            />
           {/if}
         </Button>
 
@@ -122,9 +146,13 @@
           disabled={busy}
           title="清空对话"
           aria-label="清空对话"
-          class="size-8 rounded-lg text-muted-foreground transition-all duration-200 hover:bg-destructive/10 hover:text-destructive"
+          class="group size-8 rounded-lg text-muted-foreground transition-all duration-200 hover:bg-destructive/10 hover:text-destructive active:scale-90 active:bg-destructive/20"
         >
-          <IconTrash size={16} stroke={1.5} />
+          <IconTrash
+            size={16}
+            stroke={1.5}
+            class="transition-transform duration-200 group-active:scale-110"
+          />
         </Button>
       {/if}
     </div>

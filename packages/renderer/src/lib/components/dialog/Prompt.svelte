@@ -65,6 +65,7 @@
   }: Props = $props();
 
   // 输入值
+  // svelte-ignore state_referenced_locally
   let value = $state(initialValue);
 
   // 计算衍生状态

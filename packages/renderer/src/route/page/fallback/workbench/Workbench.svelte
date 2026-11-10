@@ -5,6 +5,7 @@
   import { fade } from "svelte/transition";
   import { ChatInput, type ChatCommand } from "./chat-input";
   import ChatMessageList from "./ChatMessageList.svelte";
+  import { confirmClearAll } from "./confirm.svelte";
   import TypingDots from "./TypingDots.svelte";
   import WorkbenchHeader from "./WorkbenchHeader.svelte";
 
@@ -23,7 +24,13 @@
 
   async function handleSend(files: string[] = []) {
     const content = inputValue.trim();
-    if (!content || messageStore.isLoading || messageStore.isReloading) return;
+    if (
+      !content ||
+      messageStore.isLoading ||
+      messageStore.isReloading ||
+      messageStore.isDeleting
+    )
+      return;
 
     blurActive();
 
@@ -45,9 +52,17 @@
   }
 
   async function handleClear() {
-    if (!messageStore.hasMessages || messageStore.isLoading) return;
+    if (
+      !messageStore.hasMessages ||
+      messageStore.isLoading ||
+      messageStore.isReloading ||
+      messageStore.isDeleting
+    )
+      return;
     blurActive();
-    messageStore.clear();
+    const ok = await confirmClearAll();
+    if (!ok) return;
+    await messageStore.clear();
   }
 
   function handleCommand(cmd: ChatCommand) {

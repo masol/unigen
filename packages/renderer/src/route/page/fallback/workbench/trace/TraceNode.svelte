@@ -30,11 +30,16 @@
     autoExpand?: boolean;
   } = $props();
 
-  // running 状态判定：streaming === false 时强制视作已终止
+  // streaming：后端是否仍在推送该节点。
+  // streaming === false 时强制视作已终止——即使 node.status 残留 "running"，
+  // 也不再视为运行中（否则中断后 spinner 会一直转、shimmer 一直闪）。
   let streaming = $derived(node.streaming === true);
 
+  // isRunning：真实运行中 = 状态为 running 且后端仍在推送。
+  let isRunning = $derived(node.status === "running" && streaming);
+
   let traceStatus = $derived<"running" | "error" | "pending" | undefined>(
-    node.status === "running"
+    isRunning
       ? "running"
       : node.status === "error"
         ? "error"
@@ -76,7 +81,7 @@
 </script>
 
 {#snippet leadingIcon()}
-  {#if node.status === "running"}
+  {#if isRunning}
     <IconLoader2 size={16} stroke={1.5} class="animate-spin" />
   {:else if node.status === "error"}
     <IconAlertTriangle size={16} stroke={1.5} />
@@ -143,37 +148,48 @@
   </Trace.Line>
 {/snippet}
 
+{#snippet detailContent()}
+  {#if hasDetail}
+    <div class="mt-1">
+      <MarkdownView message={{ content: node.detail ?? "" }} {streaming} />
+    </div>
+  {/if}
+  {#if hasChildren}
+    <div
+      class:mt-2={hasDetail}
+      class:mt-1={!hasDetail}
+      class="flex flex-col gap-1"
+    >
+      {#each children as child (child.id)}
+        <Self node={child} depth={depth + 1} {autoExpand} />
+      {/each}
+    </div>
+  {/if}
+{/snippet}
+
 {#if expandable}
-  <!-- 关键改动：不再依赖 Trace.CollapsibleContent 的内置动画，
-       改用 Svelte 原生 slide 接管开合，确保打开与关闭两个方向都有流畅过渡 -->
   <Trace.Collapsible {open} onOpenChange={(v) => (userOpen = v)}>
     <Trace.CollapsibleTrigger>
       {@render line()}
     </Trace.CollapsibleTrigger>
     {#if open}
+      <!--
+        保持原生 slide 的开合行为（原代码选择绕开 bits-ui 的 height 动画，
+        这里不改变这一决策）；仅在外层承载 overflow-hidden 以裁剪动画，
+        内层复刻 trace-collapsible-content 的竖线布局：
+        - ml-[calc(--spacing(2)_-_1px)]：竖线落在 trigger 图标中心正下方
+        - pl-4 / pr-1：内容与竖线之间保持呼吸感
+        - mt-2.5 / mb-1：与 trigger 之间、与下一个兄弟节点之间留白
+      -->
       <div
-        class="whitespace-pre-wrap"
+        class="overflow-hidden"
         transition:slide={{ duration: 200, easing: cubicOut }}
       >
-        {#if hasDetail}
-          <div class="mt-1">
-            <MarkdownView
-              message={{ content: node.detail ?? "" }}
-              {streaming}
-            />
-          </div>
-        {/if}
-        {#if hasChildren}
-          <div
-            class:mt-2={hasDetail}
-            class:mt-1={!hasDetail}
-            class="flex flex-col gap-1"
-          >
-            {#each children as child (child.id)}
-              <Self node={child} depth={depth + 1} {autoExpand} />
-            {/each}
-          </div>
-        {/if}
+        <div
+          class="ml-[calc(--spacing(2)-1px)] mt-2.5 mb-1 min-w-0 border-l pr-1 pl-4 leading-relaxed wrap-break-word text-muted-foreground"
+        >
+          {@render detailContent()}
+        </div>
       </div>
     {/if}
   </Trace.Collapsible>

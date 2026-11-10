@@ -53,6 +53,7 @@ import {
 import {
     appendMessageDelta,
     appendTraceDetail,
+    clearMessages,
     createSession,
     deleteMessage,
     deleteMessagesAfter,
@@ -298,6 +299,16 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
         deleteMessage(this.ensureDB(), id);
     }
 
+    /**
+     * 删除指定时间戳之后的所有消息及 traces (rerun 场景)。
+    */
+    deleteMessagesAfter(sessionId: string, fromTs: number): void {
+        deleteMessagesAfter(this.ensureDB(), sessionId, fromTs);
+    }
+    clearMessages(sessionId: string): void {
+        clearMessages(this.ensureDB(), sessionId);
+    }
+
     /** 流式追加消息内容增量 */
     appendMessageDelta(messageId: string, delta: string): void {
         appendMessageDelta(this.ensureDB(), messageId, delta);
@@ -332,12 +343,5 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
 
     listTracesByMessage(messageId: string): TraceNode[] {
         return listTracesByMessage(this.ensureDB(), messageId);
-    }
-
-    /**
- * 删除指定时间戳之后的所有消息及 traces (rerun 场景)。
- */
-    deleteMessagesAfter(sessionId: string, fromTs: number): void {
-        deleteMessagesAfter(this.ensureDB(), sessionId, fromTs);
     }
 }

@@ -766,3 +766,42 @@ export function deleteMessagesAfter(
             .run();
     });
 }
+
+/**
+ * 清空指定会话下的全部消息及关联 traces。
+ * 
+ * 与 deleteSession 的区别：本函数保留 session 行本身，仅清除其下所有内容。
+ * 执行后会话的 messageCount 重置为 0，lastMessageAt 置为 null。
+ * 
+ * @param db Drizzle 数据库实例
+ * @param sessionId 要清空的会话 ID
+ */
+export function clearMessages(db: DrizzleDBType, sessionId: string): void {
+    if (!sessionId) return;
+
+    db.transaction((tx) => {
+        // 1. 查出该会话下所有消息 ID（用于级联删除 traces）
+        const msgIds = tx
+            .select({ id: messages.id })
+            .from(messages)
+            .where(eq(messages.sessionId, sessionId))
+            .all()
+            .map((r) => r.id);
+
+        // 2. 先删 traces（手工级联），再删 messages
+        if (msgIds.length > 0) {
+            tx.delete(traces).where(inArray(traces.messageId, msgIds)).run();
+            tx.delete(messages).where(eq(messages.sessionId, sessionId)).run();
+        }
+
+        // 3. 重置会话统计字段
+        tx.update(sessions)
+            .set({
+                messageCount: 0,
+                lastMessageAt: null,
+                updatedAt: Date.now(),
+            })
+            .where(eq(sessions.id, sessionId))
+            .run();
+    });
+}

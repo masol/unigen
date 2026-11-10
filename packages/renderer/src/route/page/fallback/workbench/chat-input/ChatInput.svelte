@@ -49,11 +49,12 @@
   let sending = $derived(messageStore.isLoading);
   let reloading = $derived(messageStore.isReloading);
   let aborting = $derived(messageStore.isAborting);
-  let disabled = $derived(sending || reloading);
+  let deleting = $derived(messageStore.isDeleting);
+  let disabled = $derived(sending || reloading || deleting);
   let canSend = $derived(value.trim().length > 0 && !disabled);
 
   let effectivePlaceholder = $derived(
-    reloading ? "正在同步会话…" : placeholder,
+    reloading ? "正在同步会话…" : deleting ? "正在删除消息…" : placeholder,
   );
 
   async function openFilePicker() {
@@ -273,9 +274,13 @@
           {disabled}
           title="语音输入"
           aria-label="语音输入"
-          class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          class="group flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground active:scale-90 active:bg-accent/80 disabled:cursor-not-allowed disabled:hover:bg-transparent"
         >
-          <IconMicrophone size={18} stroke={1.5} />
+          <IconMicrophone
+            size={18}
+            stroke={1.5}
+            class="transition-transform duration-200 group-active:scale-110"
+          />
         </button>
         <button
           type="button"
@@ -283,26 +288,42 @@
           {disabled}
           title="命令"
           aria-label="打开命令菜单"
-          class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          class="group flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground active:scale-90 active:bg-accent/80 disabled:cursor-not-allowed disabled:hover:bg-transparent"
         >
-          <IconSlash size={18} stroke={1.5} />
+          <IconSlash
+            size={18}
+            stroke={1.5}
+            class="transition-transform duration-200 group-active:scale-110"
+          />
         </button>
       </div>
 
       <Button
         size="sm"
-        class="size-9 shrink-0 rounded-xl p-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl disabled:hover:translate-y-0"
+        class="group size-9 shrink-0 rounded-xl p-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl active:translate-y-0 active:scale-95 disabled:hover:translate-y-0 disabled:active:scale-100"
         onclick={sending ? stop : send}
         disabled={sending ? aborting : !canSend}
         aria-label={aborting ? "终止中" : sending ? "停止生成" : "发送消息"}
         title={aborting ? "终止中…" : sending ? "停止生成" : "发送"}
       >
         {#if aborting}
-          <IconLoader2 size={18} stroke={1.5} class="animate-spin" />
+          <IconLoader2
+            size={18}
+            stroke={1.5}
+            class="animate-spin transition-transform duration-200 group-active:scale-110"
+          />
         {:else if sending}
-          <IconPlayerStopFilled size={16} stroke={1.5} />
+          <IconPlayerStopFilled
+            size={16}
+            stroke={1.5}
+            class="transition-transform duration-200 group-active:scale-110"
+          />
         {:else}
-          <IconSend size={18} stroke={1.5} />
+          <IconSend
+            size={18}
+            stroke={1.5}
+            class="transition-transform duration-200 group-active:scale-110"
+          />
         {/if}
       </Button>
     </div>

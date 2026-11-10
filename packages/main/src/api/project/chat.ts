@@ -97,6 +97,35 @@ const listMessage = os
     });
 
 
+const deleteMessage = os
+    .input(z.string())
+    .output(z.void())
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        const prjdb = PrjDB.ensure(ctx.project);
+        prjdb.deleteMessage(input);
+    });
+
+
+
+const deleteMessagesAfter = os
+    .input(z.object({
+        sid: z.string(),
+        fromTs: z.number()
+    }))
+    .output(z.void())
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        const prjdb = PrjDB.ensure(ctx.project);
+        if (input.fromTs == 0) {
+            prjdb.clearMessages(input.sid)
+        } else {
+            prjdb.deleteMessagesAfter(input.sid, input.fromTs);
+        }
+    });
+
+
+
 const newMessage = os
     .input(newChatMessageSchema)
     .output(z.string())
@@ -127,5 +156,7 @@ export default {
     pinSession,
     updateSessTitle,
     listMessage,
+    deleteMessage,
+    deleteMessagesAfter,
     newMessage
 }

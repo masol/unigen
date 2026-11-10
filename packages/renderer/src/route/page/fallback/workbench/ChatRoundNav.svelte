@@ -19,24 +19,13 @@
     onSelect?: (round: RoundEntry) => void;
   } = $props();
 
-  // 受控展开状态：开合由三个显式路径驱动——鼠标进入 / 鼠标移出容器 / ESC
+  // 受控展开状态：开合由四个显式路径驱动——鼠标进入 / 鼠标离开边界 / 焦点进入 / 焦点离开 / ESC
   let expanded = $state(false);
 
   /**
-   * 鼠标移出检测：用 mouseout + relatedTarget，而不是 mouseleave。
-   * 原因：本容器宽度随 expanded 状态变化（w-8 ↔ w-72），
-   * 在收缩动画过程中 mouseleave 可能在边界变化时丢失，
-   * 导致“鼠标已移出但面板不收起”。mouseout 冒泡 + relatedTarget
-   * 是显式判断：只有鼠标真正离开整个容器（relatedTarget 为 null
-   * 或不在容器内）时才收起，在行与行之间移动不会误触发。
+   * 焦点离开：focusout 会冒泡（blur 不冒泡），必须用 relatedTarget 判断
+   * 新焦点是否仍在容器内；在外部才收起。
    */
-  function handleMouseOut(event: MouseEvent) {
-    const container = event.currentTarget as HTMLElement;
-    const related = event.relatedTarget as Node | null;
-    if (related && container.contains(related)) return;
-    expanded = false;
-  }
-
   function handleFocusOut(event: FocusEvent) {
     const container = event.currentTarget as HTMLElement;
     if (container.contains(event.relatedTarget as Node)) return;
@@ -58,22 +47,27 @@
   <!--
     外层：贴右侧、垂直居中。
     - onmouseenter：进入组件区域 → 展开
-    - onmouseout：用 relatedTarget 判断是否真正移出容器 → 收起
-    - focusin / focusout：键盘 Tab 进入 → 展开，Tab 移出 → 收起
-    点击某行只触发 onSelect 跳转，不改变 expanded，避免“点击即收起”的突兀。
+    - onmouseleave：真正离开容器（含全部后代）边界 → 收起。
+      之所以用 mouseleave 而不是 mouseout + relatedTarget：
+        * mouseleave 不冒泡，且仅在指针几何上离开元素边界时触发一次，
+          天然避免「子元素之间移动 / gap 空隙 / relatedTarget 为 null
+          或指向被替换节点」等导致的判断失准；
+        * mouseout 需要逐次比对 relatedTarget，边界不可控，
+          这正是原实现「已离开但不收起」的根因。
+    - focusin / focusout：键盘 Tab 进入 → 展开，Tab 移出 → 收起。
+      点击某行只触发 onSelect 跳转，不改变 expanded，避免"点击即收起"的突兀。
 
-    关于下方 svelte-ignore：a11y_mouse_events_have_key_events 按事件名
-    强制要求 mouseout 配对 blur。但 blur 不冒泡，无法表达“焦点离开整个
-    子树”的语义；我们用的 focusout 才是 blur 的冒泡等价物，功能上已完整
-    覆盖键盘路径。该警告在此为误报，故显式忽略。
+    svelte-ignore a11y_mouse_events_have_key_events：
+      改用 mouseenter / mouseleave 后通常不再触发该 a11y 警告；
+      为兼容不同 Svelte 补丁版本对"冗余 ignore"的处理差异保留此行，
+      若 CI 对 unused ignore 零容忍可整行删除，不影响功能。
   -->
-  <!-- svelte-ignore a11y_mouse_events_have_key_events -->
   <div
     class="group absolute inset-y-0 right-2 z-20 flex items-center"
     role="navigation"
     aria-label="对话轮次快速导航"
     onmouseenter={() => (expanded = true)}
-    onmouseout={handleMouseOut}
+    onmouseleave={() => (expanded = false)}
     onfocusin={() => (expanded = true)}
     onfocusout={handleFocusOut}
   >

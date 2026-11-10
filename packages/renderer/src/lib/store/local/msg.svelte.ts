@@ -71,6 +71,15 @@ class MessageStore {
     /** 消息列表同步加载中：与 AI 运行中的 isLoading 分开，避免 BlockUI 误伤流式回答 */
     isReloading = $state(true);
 
+    /**
+     * 全局删除/清理操作进行中。
+     * 用于在删除、清空、编辑后重跑等异步操作期间禁用输入发送，避免状态竞争。
+     */
+    isDeleting = $state(false);
+
+    /** 每条消息的「删除中」状态：用于单条消息按钮显示转圈 */
+    deletingMessages = $state<Record<string, boolean>>({});
+
     collapsedMessages = $state<Record<string, boolean>>({});
 
     /**
@@ -130,15 +139,174 @@ class MessageStore {
         return msg;
     }
 
-    clear() {
-        this.messages = [];
-        this.collapsedMessages = {};
-        this.#activeAssistantId = null;
+    /**
+     * 清空当前会话的全部消息。
+     * - 先调用 deleteMessagesAfter(fromTs = 0) 让后端清空；
+     * - 成功后本地消息、折叠状态、活动助手 id 一并重置；
+     * - 失败时保留本地状态，并提示用户。
+     */
+    async clear(): Promise<void> {
+        if (this.isDeleting || this.isLoading || this.isReloading) return;
+
+        const sid = sessionStore.activeSessionId;
+        if (!sid) {
+            // 没有活跃 session 时直接清空本地状态
+            this.messages = [];
+            this.collapsedMessages = {};
+            this.#activeAssistantId = null;
+            return;
+        }
+
+        this.isDeleting = true;
+        try {
+            await safeApi().project.deleteMessagesAfter({ sid, fromTs: 0 });
+            this.messages = [];
+            this.collapsedMessages = {};
+            this.#activeAssistantId = null;
+        } catch (err) {
+            const errText = err instanceof Error ? err.message : String(err);
+            toast.error(`清空会话失败：${errText}`);
+            Logger.error("[MessageStore] clear() failed", err);
+        } finally {
+            this.isDeleting = false;
+        }
     }
 
-    deleteMessage(id: string) {
-        this.messages = this.messages.filter((m) => m.id !== id);
-        delete this.collapsedMessages[id];
+    /**
+     * 删除单条消息，并按配对规则同时删除其配对消息：
+     * - 删除用户消息：连带删除紧随其后的助手消息（直到下一个用户消息之前）；
+     * - 删除助手消息：连带删除其提示用户消息，以及该用户消息之后的所有助手消息。
+     *
+     * 删除按条逐个进行，每条成功后立即更新本地状态，使部分失败时的 UI 与后端一致。
+     */
+    async deleteMessage(id: string): Promise<void> {
+        if (this.isDeleting || this.isLoading || this.isReloading) {
+            toast.error("当前有其他操作正在进行，请稍后");
+            return;
+        }
+
+        const idx = this.messages.findIndex((m) => m.id === id);
+        if (idx < 0) return;
+
+        const { start, end } = this.#findPairBoundary(idx);
+        const targets = this.messages.slice(start, end + 1);
+        const ids = targets.map((m) => m.id);
+
+        ids.forEach((mid) => { this.deletingMessages[mid] = true; });
+        this.isDeleting = true;
+
+        try {
+            for (const mid of ids) {
+                await safeApi().project.deleteMessage(mid);
+                // 单条成功后立即从本地状态移除，保证部分失败时前后端一致
+                this.messages = this.messages.filter((m) => m.id !== mid);
+                delete this.collapsedMessages[mid];
+                delete this.deletingMessages[mid];
+            }
+
+            if (this.#activeAssistantId && ids.includes(this.#activeAssistantId)) {
+                this.#activeAssistantId = null;
+            }
+        } catch (err) {
+            const errText = err instanceof Error ? err.message : String(err);
+            toast.error(`删除失败：${errText}`);
+            Logger.error("[MessageStore] deleteMessage() failed", { id, err });
+        } finally {
+            // 兜底清空转圈状态
+            ids.forEach((mid) => { delete this.deletingMessages[mid]; });
+            this.isDeleting = false;
+        }
+    }
+
+    /**
+     * 从指定用户消息处重新执行：
+     * - 先 deleteMessagesAfter 删除该消息及其后所有消息（fromTs = target.timestamp - 1，
+     *   假设 deleteMessagesAfter 语义为严格大于）；
+     * - 再以原内容或编辑后的新内容重新创建一条用户消息；
+     * - 最后走正常 AIResponse 流程。
+     *
+     * 用于「重新运行」与「编辑并重新运行」两个入口。
+     */
+    async resendFrom(messageId: string, newContent?: string): Promise<void> {
+        if (this.isDeleting || this.isLoading || this.isReloading) {
+            toast.error("当前有其他操作正在进行，请稍后");
+            return;
+        }
+        if (!projectStore.opened) {
+            toast.error("请先打开一个项目");
+            return;
+        }
+
+        const idx = this.messages.findIndex((m) => m.id === messageId);
+        if (idx < 0) return;
+        const target = this.messages[idx];
+        if (target.role !== "user") {
+            toast.warning("只能从用户消息重新运行");
+            return;
+        }
+
+        const sid = sessionStore.activeSessionId;
+        if (!sid) return;
+
+        // 假设 deleteMessagesAfter 语义为严格大于 → 用 timestamp - 1 一并删除目标消息本身
+        const fromTs = target.timestamp - 1;
+
+        this.isDeleting = true;
+        try {
+            await safeApi().project.deleteMessagesAfter({ sid, fromTs });
+            // 本地同步裁剪（丢弃目标消息及其后所有消息）
+            this.messages = this.messages.slice(0, idx);
+            if (this.#activeAssistantId && !this.#findMessage(this.#activeAssistantId)) {
+                this.#activeAssistantId = null;
+            }
+        } catch (err) {
+            const errText = err instanceof Error ? err.message : String(err);
+            toast.error(`重新运行前的删除失败：${errText}`);
+            Logger.error("[MessageStore] resendFrom() delete failed", err);
+            return; // finally 会清理状态
+        } finally {
+            this.isDeleting = false;
+        }
+
+        // 重建用户消息并走正常流程（files 从历史消息恢复）
+        const userMsg = this.addMessage({
+            role: "user",
+            content: newContent ?? target.content,
+            files: target.files ?? [],
+        });
+
+        await this.AIResponse(userMsg);
+    }
+
+    /**
+     * 在消息序列中定位「配对边界」：
+     * - 用户消息：配对从自身开始，到下一个用户消息前的最后一条助手消息结束；
+     * - 助手消息：向前回溯到最近的用户消息作为配对起点，向后延伸到下一个用户消息前的最后一条助手消息。
+     */
+    #findPairBoundary(idx: number): { start: number; end: number } {
+        const target = this.messages[idx];
+        let start = idx;
+        let end = idx;
+
+        if (target.role === "user") {
+            for (let i = idx + 1; i < this.messages.length; i++) {
+                if (this.messages[i].role === "user") break;
+                end = i;
+            }
+        } else {
+            for (let i = idx - 1; i >= 0; i--) {
+                if (this.messages[i].role === "user") {
+                    start = i;
+                    break;
+                }
+            }
+            for (let i = idx + 1; i < this.messages.length; i++) {
+                if (this.messages[i].role === "user") break;
+                end = i;
+            }
+        }
+
+        return { start, end };
     }
 
     /**
@@ -149,24 +317,6 @@ class MessageStore {
     async regenerate(messageId: string): Promise<void> {
         void messageId;
         toast.warning("重新生成功能尚未实现");
-    }
-
-    /**
-     * 正式声明「从此分叉」能力。
-     * 当前尚未实现，先以 toast 提示占位。
-     */
-    async forkFrom(messageId: string): Promise<void> {
-        void messageId;
-        toast.warning("从此分叉功能尚未实现");
-    }
-
-    /**
-     * 正式声明「从此重新发送」能力。
-     * 当前尚未实现，先以 toast 提示占位。
-     */
-    async resendFrom(messageId: string): Promise<void> {
-        void messageId;
-        toast.warning("重新发送功能尚未实现");
     }
 
     setLoading(loading: boolean) {
@@ -360,6 +510,10 @@ class MessageStore {
 
     // ── Run lifecycle ───────────────────────────────────────────
     async AIResponse(userMessage: ChatMessage, mode: string | null = null): Promise<void> {
+        if (this.isDeleting) {
+            toast.error("正在删除消息，请稍后");
+            return;
+        }
         if (this.#runPromise) {
             toast.error("已有任务正在进行，请等待完成或先终止");
             return;
