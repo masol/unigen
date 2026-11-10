@@ -60,7 +60,7 @@ function getDelegates(c: CompiledPacAgent) {
 /** FM 中已被框架消费的字段,渲染时不再暴露到模板上下文根。 */
 const RESERVED = new Set([
     "name", "description", "inputs", "outputs",
-    "tools", "maxSteps",
+    "tools", "skills", "knowledgeBases", "maxSteps",
     "userTemplate", "userTemplatePath",
     "setDefault", "streaming", "reasoning", "persist", "history",
     "timeout", "temperature", "maxOutputTokens", "toolCallConcurrency", "strict",

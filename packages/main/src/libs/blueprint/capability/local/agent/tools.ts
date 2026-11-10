@@ -5,6 +5,7 @@ import { tool, type Tool } from "ai";
 import Logger from "electron-log/main.js";
 import { connectLocalMcp, type LocalMcpClient } from "../mcp.js";
 import type { CompiledPacAgent, JsonValue } from "../type.js";
+import { attachLocalContextTools } from "./context-tools.js";
 import type { IAgentExecutor, McpClientCache, PacRunState } from "./types.js";
 
 export async function materializeTools(
@@ -88,6 +89,9 @@ export async function materializeTools(
             }
         }
     }
+
+    await attachLocalContextTools(out, compiled, ctx);
+
     return out;
 }
 

@@ -167,6 +167,20 @@ export interface PacFrontMatter {
     /** 根 agent 不应声明 outputs(直接响应用户),编译期告警并忽略 */
     outputs?: Record<string, unknown>;
     tools?: PacToolConfig[];
+    /**
+     * 本 agent 可用的本地技能名称列表。
+     *
+     * 运行期会转换为完整 id：`skill:${name}`，并从项目 LanceDB 的 skill 表读取。
+     * 命中的技能会以 `load_locskill` 工具注入当前 agent。
+     */
+    skills?: string[];
+    /**
+     * 本 agent 可用的本地知识库 id 列表。
+     *
+     * 运行期会从项目 LanceDB 的 kb_catalog 表读取名称/描述，
+     * 并以 `query_lockc` 工具注入当前 agent。
+     */
+    knowledgeBases?: string[];
     maxSteps?: number;
     /** 内联用户模板,与 userTemplatePath 二选一 */
     userTemplate?: string;

@@ -4,7 +4,7 @@ import evtbus from '$lib/utils/evtbus';
 import { PinyinFuseSearch } from '$lib/utils/fuse';
 import { hooks } from "$lib/utils/hook";
 import { DbKeys } from '$lib/utils/service/dbkeys';
-import { default as log, default as Logger } from 'electron-log/renderer';
+import { default as log } from 'electron-log/renderer';
 import { i18nStore } from '../i18n.svelte';
 import type { ChatSession, SessionPatch } from './chat.types';
 
@@ -209,7 +209,7 @@ class SessionStore {
             return;
         }
         const session = this.#sessions.find((s) => s.id === this.#activeSessionId)
-        Logger.debug(newTitle, " session autoTitle session=", session)
+        // Logger.debug(newTitle, " session autoTitle session=", session)
         if (session && !session.titleManual) {
             session.title = newTitle
         }

@@ -68,7 +68,8 @@ export class LanceDB extends BaseProjectController {
             );
             this.#search = search;
 
-            if (!(await isDirectory(dbDir))) {
+            const isFirst = !(await isDirectory(dbDir))
+            if (isFirst) {
                 search.markFirstCreate();
             }
 
@@ -77,6 +78,10 @@ export class LanceDB extends BaseProjectController {
             if (!search.opened) {
                 Logger.warn("[LanceDB] 检索库未打开，LanceDB 不可用。");
                 return;
+            }
+
+            if (isFirst) {
+                await search.syncFromDirectories();
             }
 
             this.#opened = true;

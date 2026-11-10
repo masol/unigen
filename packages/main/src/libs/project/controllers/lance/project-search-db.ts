@@ -103,7 +103,7 @@ export class ProjectSearchDB extends SearchDbBase {
             await this.skill.syncSkillsFromDirectory(this.skillsDir);
         } else {
             Logger.debug(
-                `[LanceDB] skills 目录不存在，跳过技能入库: ${this.skillsDir}`,
+                `[LanceDB] 项目级skills 目录不存在，跳过技能入库: ${this.skillsDir}`,
             );
         }
 
@@ -111,7 +111,7 @@ export class ProjectSearchDB extends SearchDbBase {
             await this.kb.syncKnowledgeBasesFromDirectory(this.kcDir);
         } else {
             Logger.debug(
-                `[LanceDB] kc 目录不存在，跳过知识库入库: ${this.kcDir}`,
+                `[LanceDB] 项目级kc 目录不存在，跳过知识库入库: ${this.kcDir}`,
             );
         }
     }
