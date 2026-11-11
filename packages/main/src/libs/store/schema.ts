@@ -1,6 +1,7 @@
 import { AppConfig } from '$types/appconfig.js';
 import { Schema } from 'electron-store';
 import { keybindingsSchema } from './common.schema.js';
+import { mcpServerSchema } from './mcp.schema.js';
 import { providerSchema } from './provider.schema.js';
 
 export const configSchema: Schema<AppConfig> = {
@@ -85,6 +86,11 @@ export const configSchema: Schema<AppConfig> = {
         type: 'array',
         default: [],
         items: providerSchema // 引入服务商 schema
+    },
+    mcpServers: {
+        type: 'array',
+        default: [],
+        items: mcpServerSchema,
     },
     keybindings: keybindingsSchema,
 };

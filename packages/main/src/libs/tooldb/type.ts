@@ -2,6 +2,8 @@
 import type { Tool } from "ai";
 import type { z } from "zod";
 
+export type { McpServerConfig } from "$types/shared/mcp.js";
+
 /**
  * 工具来源：
  * - builtin: 启动期由 `init({ builtins })` 注入，或运行期 `register()` 的代码工具；
@@ -54,18 +56,4 @@ export interface ToolDefinition<TInput = unknown, TOutput = unknown> {
 }
 
 /** MCP 服务器配置 */
-export interface McpServerConfig {
-    id: string;
-    name?: string;
-    enabled?: boolean;
-    transport:
-    | {
-        type: "stdio";
-        command: string;
-        args?: string[];
-        env?: Record<string, string>;
-        cwd?: string;
-    }
-    | { type: "sse"; url: string; headers?: Record<string, string> }
-    | { type: "http"; url: string; headers?: Record<string, string> };
-}
+export type { McpServerConfig as McpServerConfigType } from "$types/shared/mcp.js";

@@ -78,7 +78,7 @@ export async function materializeTools(
                 );
             }
         } else if (ref.meta) {
-            const live = globalToolDB.getToolMeta(ref.meta.id);
+            const live = await globalToolDB.getToolMeta(ref.meta.id);
             if (live) {
                 out[ref.key] = live.tool;
             } else {

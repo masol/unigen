@@ -51,7 +51,7 @@ export async function loadToolRefs(
                 continue;
             }
 
-            const origin = cfg.type === "mcp" ? "mcp_global" : cfg.type;
+            const origin = cfg.type;
             for (const [rawKey, meta] of Object.entries(loaded.tools)) {
                 const key = uniqueKey(rawKey, taken);
                 taken.add(key);

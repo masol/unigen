@@ -1,4 +1,5 @@
 // packages/main/src/libs/tooldb/index.ts
+export { initGlobalToolDB } from "./bootstrap.js";
 export {
     GlobalToolDB,
     globalToolDB,
@@ -40,4 +41,3 @@ export type {
     ToolMeta,
     ToolSource
 } from "./type.js";
-

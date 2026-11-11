@@ -46,7 +46,11 @@ export type {
     KbDocumentInput
 } from "./tables/kb-table.js";
 export type { SkillInput, SkillRow } from "./tables/skill-table.js";
-export type { ToolInput, ToolRow } from "./tables/tool-table.js";
+export type {
+    ToolInput,
+    ToolRow,
+    ToolScope
+} from "./tables/tool-table.js";
 
 export function getGlobalSearchDB(): GlobalSearchDB {
     return getSearchDB();

@@ -44,7 +44,7 @@ export const invokeToolDef: ToolDefinition<InvokeInput, unknown> = {
         "请据此重新组织 args 后再次调用 invoke_tool。",
     inputSchema: invokeInputSchema,
     execute: async ({ id, args }) => {
-        const meta = globalToolDB.getToolMeta(id);
+        const meta = await globalToolDB.getToolMeta(id);
         if (!meta) {
             return {
                 ok: false,

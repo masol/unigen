@@ -1,13 +1,18 @@
 // electron/store/configStore.ts
+import { mcpRoute } from '$libs/mcp/route.js';
+import { bootMcpTools } from '$libs/mcp/sync.js';
+import { globalToolDB } from '$libs/tooldb/globaltooldb.js';
 import { getCurrentProject } from '$libs/utils/api/index.js';
 import evtbus from '$libs/utils/evtbus.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
 import type { ITelemetryService } from '$libs/utils/telemetry/telemetry.interface.js';
 import { AppConfig } from '$types/appconfig.js';
 import { Provider } from '$types/index.js';
+import type { McpServerConfig } from '$types/shared/mcp.js';
 import { app } from 'electron';
 import Store from 'electron-store';
 import { join } from 'path';
+import { isEqual } from 'radashi';
 import { configSchema } from './schema.js';
 
 /**
@@ -71,8 +76,8 @@ class ConfigService {
      * 获取整个配置对象
      * 内部会自动融合 schema 中定义的所有最新默认值
      */
-    getAll(): AppConfig {
-        return this.store.store;
+    getAll(): Readonly<AppConfig> {
+        return this.store.store; // structuredClone(this.store.store);
     }
 
     /**
@@ -84,6 +89,8 @@ class ConfigService {
         const embedChanged = (config.embed_model !== this.store.store.embed_model)
         const rerankOld = this.store.store.rerank_model;
         const rerankChanged = (config.rerank_model !== this.store.store.rerank_model)
+
+        const mcpChanged = !isEqual(config.mcpServers, this.store.store.mcpServers)
 
         this.store.store = config;
         const prj = getCurrentProject();
@@ -98,17 +105,22 @@ class ConfigService {
         if (rerankChanged) {
             evtbus.emit("rerank-changed", { old: rerankOld, new: config.rerank_model })
         }
+
+        if (mcpChanged) {
+            bootMcpTools(mcpRoute, globalToolDB, config.mcpServers)
+        }
+
     }
 
     /**
      * 通用获取配置项方法
      * 传入的 key 必须是 AppConfig 的键，返回值会自动推导为该键对应的类型
      */
-    get<K extends keyof AppConfig>(key: K): AppConfig[K] {
+    get<K extends keyof AppConfig>(key: K): Readonly<AppConfig[K]> {
         return this.store.get(key);
     }
 
-    getProvider(providerId: string): Provider | undefined {
+    getProvider(providerId: string): Readonly<Provider> | undefined {
         const models = this.get("models");
         if (!models) {
             return;
@@ -116,22 +128,61 @@ class ConfigService {
         return models.find(m => m.id == providerId);
     }
 
+    getMcpServer(serverId: string): Readonly<McpServerConfig> | undefined {
+        const servers = this.get('mcpServers');
+        if (!servers) {
+            return;
+        }
+        return servers.find(s => s.id === serverId);
+    }
+
+    /**
+     * 按 id 新增或整体替换单个 MCP server。
+     * 变更通过通用的 `set('mcpServers', ...)` 走统一广播路径（cfg:set）。
+     */
+    setMcpServer(config: McpServerConfig): void {
+        const current = this.get('mcpServers') ?? [];
+        const list = [...current];
+        const index = list.findIndex(s => s.id === config.id);
+        if (index >= 0) {
+            list[index] = config;
+        } else {
+            list.push(config);
+        }
+        this.set('mcpServers', list);
+    }
+
     /**
      * 通用设置配置项方法
      * 传入的 key 必须是 AppConfig 的键，value 的类型会被严格约束为该键对应的类型
      * 不进行内部异常捕获，若 schema 校验失败，异常将直接向上抛出由外部处理
      */
-    set<K extends keyof AppConfig>(key: K, value: AppConfig[K]): void {
-        const embed_changed = (key === "embed_model" && this.store.store.embed_model !== value)
-        const rerank_changed = (key === "rerank_model" && this.store.store.rerank_model !== value)
+    set<K extends keyof AppConfig>(
+        key: K,
+        value: Exclude<AppConfig[K], undefined>
+    ): void {
         const embed_old = this.store.store.embed_model;
         const rerank_old = this.store.store.rerank_model;
+
         this.store.set(key, value);
-        if (embed_changed) {
-            evtbus.emit("embed-changed", { old: embed_old, new: value as string })
-        } else if (rerank_changed) {
-            evtbus.emit("rerank-changed", { old: rerank_old, new: value as string })
+
+        if (key === "embed_model") {
+            // 此处 key: "embed_model"，value: Exclude<AppConfig["embed_model"], undefined>
+            if (this.store.store.embed_model !== value) {
+                evtbus.emit("embed-changed", { old: embed_old, new: value as string });
+            }
+        } else if (key === "rerank_model") {
+            if (this.store.store.rerank_model !== value) {
+                evtbus.emit("rerank-changed", { old: rerank_old, new: value as string });
+            }
+        } else if (key === "mcpServers") {
+            // 此处 value 被收窄为 AppConfig["mcpServers"]
+            const servers = value as AppConfig["mcpServers"];
+            if (!isEqual(servers, this.store.store.mcpServers)) {
+                bootMcpTools(mcpRoute, globalToolDB, servers);
+            }
         }
+
         if (this.oTel && key === 'telemetry') {
             this.oTel.reconfigure(value as string);
         }
@@ -161,7 +212,12 @@ export const configService = (): ConfigService => {
             new Store<AppConfig>({
                 schema: configSchema,
                 name: 'config',
-                defaults: dynamicDefaults as AppConfig,
+                defaults: dynamicDefaults,
+                // 频繁读、少数写：开启内存缓存；写操作后 electron-store 会自动丢弃缓存。
+                // 注意：开启后 .store / .get() 返回的对象和数组是冻结的，只读使用。
+                cache: true,
+                // 与构造函数中的“损坏则重置”意图一致：构造期遇到非法 JSON / schema 校验失败时清空并重写。
+                clearInvalidConfig: true,
             }),
         );
     }

@@ -40,7 +40,8 @@ compilePacAgent(prjType, entry, cache?, prj?)
    - 非根：`jsonSchemaToZod(fm.inputs)` / `jsonSchemaToZod(fm.outputs)`。
 5. **工具引用**：`loadToolRefs` 遍历 `fm.tools`，按类型分派：
    - `agent`：`resolveProjectPath` 得到子文件分段路径，递归 `compileFile`，用别名或子 agent 名作为 `key`；
-   - `builtin` / `search` / `mcp`：`loadExternalTools` 返回 `meta`，工具来自全局工具库；
+   - `builtin` / `search`：`loadExternalTools` 返回 `meta`，工具来自全局工具库；`globalToolDB.getToolMeta` 已改为**异步查表**，因此这一阶段是异步的；
+   - **全局 MCP 不再作为独立配置类型**：agent 侧统一通过 `builtin` + 全局工具 id 引用，`builtin` / `mcp` 的来源差异由 tooldb 隔离，agent 不感知；
    - `mcp_local`：编译期 `probeMcpMetadata` 拿元数据，运行期才真正连接；
    - 所有 `key` 经 `uniqueKey` 去重（非法字符替换、冲突加 `_2`）。
 6. **工具目录**：`buildToolDoc(toolRefs)` 生成 markdown（描述、输入字段、返回语义），供父 agent 模板的 `{{_BI_tool}}` 使用。

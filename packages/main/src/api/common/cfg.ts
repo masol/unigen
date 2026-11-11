@@ -6,6 +6,7 @@ import { dataCenter } from '$libs/utils/sys/data.js'
 import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
 import { recentProjectSchema } from '$types/shared/api/recents.js'
 import { GetThemeSchema } from '$types/shared/api/theme.js'
+import { mcpServerConfigSchema } from '$types/shared/mcp.js'
 import { os } from '@orpc/server'
 import { nativeTheme } from 'electron'
 import FastGlob from 'fast-glob'
@@ -74,6 +75,27 @@ const recents = os
             secondConfig().removeProject(input);
         }
         return secondConfig().recents;
+    })
+
+/**
+ * 按 id 获取单个 MCP 服务器配置；不存在返回 null。
+ */
+const getMcpServer = os
+    .input(z.string())
+    .output(mcpServerConfigSchema.nullable())
+    .handler(async ({ input }) => {
+        return configService().getMcpServer(input) ?? null;
+    })
+
+/**
+ * 按 id 新增或整体替换单个 MCP 服务器配置。
+ */
+const setMcpServer = os
+    .input(mcpServerConfigSchema)
+    .output(z.boolean())
+    .handler(async ({ input }) => {
+        configService().setMcpServer(input);
+        return true;
     })
 
 /**
@@ -151,6 +173,8 @@ export default {
     getEmbedings,
     getReranks,
     recents,
+    getMcpServer,
+    setMcpServer,
     setTheme: setheme,
     resetTheme: resetheme,
     getTheme: getheme,

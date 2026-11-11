@@ -1,8 +1,11 @@
 import { intereg } from '$libs/blueprint/index.js';
+import { mcpRoute } from '$libs/mcp/index.js';
+import { bootMcpTools } from '$libs/mcp/sync.js';
 import { getGlobalSearchDB, openGlobalSearch } from '$libs/searchsrv/index.js';
 import { configService } from '$libs/store/index.js';
 import { secondConfig } from '$libs/store/second.js';
 import { initGlobalToolDB } from '$libs/tooldb/bootstrap.js';
+import { globalToolDB } from '$libs/tooldb/index.js';
 import { syncToolsToSearchDB } from '$libs/tooldb/search-sync.js';
 import { puppeteerInst } from '$libs/utils/puppeteer/index.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
@@ -57,6 +60,17 @@ class UnigenModule implements AppModule {
         await Promise.all([
             initSearch()
         ])
+
+        // 与initSearch不并行的原因，是都要写tool表，不确认lancedb对同一张表的并行写入是否安全。
+        // MCP 配置初始化：每次启动都执行，保证 mcpRoute 持有当前配置；
+        // 但 bootMcpTools 只对“持久化缺失 / 新增”的 server 做 discover，
+        // 已持久化且未缺失的 server 不会建立连接，保持懒加载。
+        // 退出清理由 McpRoute 构造时注册的 appLife.beforeQuit 负责。
+        await bootMcpTools(
+            mcpRoute,
+            globalToolDB,
+            configService().get("mcpServers") ?? [],
+        );
     }
 }
 

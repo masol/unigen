@@ -3,7 +3,7 @@ import { api } from '$lib/utils/api';
 import { KeybindConfig } from '$lib/utils/commands/config.svelte';
 import evtbus from '$lib/utils/evtbus';
 import { ModelTags } from '$lib/utils/model/base_models';
-import type { AppConfig, Model, Provider } from '@app/main/types';
+import type { AppConfig, McpServerConfig, Model, Provider } from '@app/main/types';
 import log from 'electron-log/renderer';
 import { setMode } from "mode-watcher";
 import { toast } from 'svelte-sonner';
@@ -24,6 +24,7 @@ class ConfigStore {
     #embedModel = $state<string>('')                   // 原始值 → $state
     #rerankModel = $state<string>('')                   // 原始值 → $state
     #providers = $state<Provider[]>([])           // 复合对象整体替换 → $state.raw
+    #mcpServers = $state<McpServerConfig[]>([])   // 复合对象整体替换 → $state.raw
     #task_dir = $state<string>("")           // 复合对象整体替换 → $state.raw
     #autoupdate = $state<boolean>(true)
     #disableHA = $state<boolean>(false)
@@ -54,6 +55,7 @@ class ConfigStore {
     get embedModel() { return this.#embedModel }
     get localModel() { return this.#rerankModel }
     get providers() { return this.#providers }
+    get mcpServers() { return this.#mcpServers }
     get autoupdate() { return this.#autoupdate }
     get disableHA() { return this.#disableHA }
     get itemsPerPage() { return this.#itemsPerPage }
@@ -109,6 +111,12 @@ class ConfigStore {
     /** embed_model 是否指向外部服务 */
     readonly isExternalEmbed = $derived(this.#embedModel.startsWith('external:'))
 
+    /** 是否已配置至少一个 MCP Server */
+    readonly hasMcpServers = $derived(this.#mcpServers.length > 0)
+
+    /** MCP Server 总数 */
+    readonly mcpServerCount = $derived(this.#mcpServers.length)
+
     private updStoreValue(name: string, value: unknown) {
         switch (name) {
             case 'theme':
@@ -118,6 +126,7 @@ class ConfigStore {
                 {
                     const nlang = value as AppConfig['lang'];
                     if (this.#lang !== nlang) {
+                        this.#lang = nlang
                         evtbus.emit("lang:changed", nlang)
                     }
                 }
@@ -130,6 +139,9 @@ class ConfigStore {
                 break;
             case 'models':
                 this.#providers = value as AppConfig['models'];
+                break;
+            case 'mcpServers':
+                this.#mcpServers = value as AppConfig['mcpServers'];
                 break;
             case 'autoupdate':
                 this.#autoupdate = value as AppConfig['autoupdate'];
@@ -176,7 +188,6 @@ class ConfigStore {
     }
 
     constructor() {
-        log.info('[ConfigStore] initialized')
         this.keybinding = new KeybindConfig();
         // 被动监听：外部通知需要重新加载配置
         evtbus.on("sys:usedark", (bDark) => {
@@ -214,6 +225,7 @@ class ConfigStore {
         this.#embedModel = config.embed_model
         this.#rerankModel = config.rerank_model
         this.#providers = config.models
+        this.#mcpServers = config.mcpServers
         this.#autoupdate = config.autoupdate
         this.#disableHA = config.disableHA
         this.#itemsPerPage = config.itemsPerPage
@@ -245,9 +257,9 @@ class ConfigStore {
 
             this.applyConfig(config);
 
-            log.info(
+            log.debug(
                 `[ConfigStore] config loaded, theme=${config.theme}, lang=${config.lang}, ` +
-                `${config.models.length} providers`,
+                `${config.models.length} providers, ${config.mcpServers.length} mcp servers`,
             )
         } catch (err) {
             this.#error = err instanceof Error ? err.message : String(err)
@@ -585,6 +597,37 @@ class ConfigStore {
     }
 
     // ═══════════════════════════════════════
+    //  Actions — MCP Server 管理（单条 upsert，走专用 RPC）
+    // ═══════════════════════════════════════
+
+    /**
+     * 按 id 新增或整体替换单个 MCP Server。
+     *
+     * 主进程 `setMcpServer` 内部走通用 `set('mcpServers')`，会通过 `cfg:set` 广播最新全量列表；
+     * 本方法同时做乐观本地更新，二者幂等（收到广播会以主进程结果为准再覆盖一次）。
+     */
+    async setMcpServer(config: McpServerConfig): Promise<void> {
+        log.debug(`[ConfigStore] setMcpServer() called, id=${config.id}`)
+        this.#savingCount++
+        this.#saveError = null
+        try {
+            await api().config.setMcpServer(config)
+            const idx = this.#mcpServers.findIndex((s) => s.id === config.id)
+            this.#mcpServers = idx >= 0
+                ? this.#mcpServers.map((s) => (s.id === config.id ? config : s))
+                : [...this.#mcpServers, config]
+            this.#lastSaved = Date.now()
+            log.info(`[ConfigStore] mcp server "${config.id}" upserted`)
+        } catch (err) {
+            this.#saveError = err instanceof Error ? err.message : String(err)
+            log.error('[ConfigStore] setMcpServer() failed', err)
+            toast.error(this.#saveError);
+        } finally {
+            this.#savingCount--
+        }
+    }
+
+    // ═══════════════════════════════════════
     //  纯查询（同步，无副作用）
     // ═══════════════════════════════════════
 
@@ -601,6 +644,11 @@ class ConfigStore {
             if (model) return { provider, model }
         }
         return undefined
+    }
+
+    /** 按 id 查找 MCP Server（返回 raw 引用，只读使用） */
+    findMcpServerById(id: string): McpServerConfig | undefined {
+        return this.#mcpServers.find((s) => s.id === id)
     }
 }
 

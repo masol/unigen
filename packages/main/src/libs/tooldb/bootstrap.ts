@@ -2,28 +2,25 @@ import { appLife } from "$libs/utils/tapable/applife.js";
 import Logger from "electron-log/main.js";
 import { getBuiltinTools } from "./builtins.js";
 import { globalToolDB } from "./globaltooldb.js";
-import type { McpServerConfig } from "./type.js";
 
 let initialized = false;
 
 /**
  * 应用启动期的一次性入口。
- * - 注入 builtins；
- * - 对齐 MCP 到当前持久化配置；
- * - 注册 beforeQuit 清理钩子。
  *
- * 目录工具加载已移除。工具检索入 searchsrv 由外部在初始化流程中
- * 调用 syncToolsToSearchDB() 完成。
+ * 只负责 builtin / meta 工具注入与生命周期钩子。
+ * MCP 配置、连接、发现由外部（mcp-sync 的 bootMcpTools）负责；
+ * tooldb 只被动接收 replaceMcpServerTools / removeMcpServerTools。
+ *
+ * 工具检索入 searchsrv 由外部在初始化流程中调用
+ * syncToolsToSearchDB() 完成。
  */
-export async function initGlobalToolDB(
-    mcpServers?: McpServerConfig[],
-): Promise<{ failed: string[] }> {
-    if (initialized) return { failed: [] };
+export async function initGlobalToolDB(): Promise<void> {
+    if (initialized) return;
     initialized = true;
 
-    const { mcpFailed } = await globalToolDB.init({
+    await globalToolDB.init({
         builtins: getBuiltinTools(),
-        mcpServers,
     });
 
     appLife.beforeQuit.tapPromise("GlobalToolDB", async () => {
@@ -31,6 +28,4 @@ export async function initGlobalToolDB(
         await globalToolDB.close();
         Logger.debug("[ToolDB] 清理资源完成。");
     });
-
-    return { failed: mcpFailed };
 }

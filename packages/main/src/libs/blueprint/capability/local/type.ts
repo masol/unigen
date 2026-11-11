@@ -13,9 +13,12 @@ export type JsonValue =
 
 /**
  * 工具引用来源。
- * - builtin / search / mcp_global: 全局工具库(tooldb)
+ * - builtin / search: 全局工具库(tooldb)；若工具实际来自 MCP，由 tooldb 隔离，agent 侧不区分
  * - mcp_local: PAC 文件中声明的局部 MCP 连接
  * - agent: 子 agent
+ *
+ * mcp_global 仅为兼容旧 trace 编码保留；新配置不再产生该来源，
+ * 全局 MCP 工具统一通过 builtin 的全局 id 引用。
  *
  * 注:技能能力不再作为编译期一等公民,统一走 tool 接口(builtin / mcp 等)。
  */
@@ -40,12 +43,16 @@ export interface LocalToolSpec {
     inputSchema: z.ZodType;
 }
 
-/** front matter 中的工具声明 */
+/**
+ * front matter 中的工具声明。
+ *
+ * 全局 MCP 工具不再使用独立的 type: "mcp" 声明，
+ * 统一通过 builtin + 全局工具 id 引用。
+ */
 export type PacToolConfig =
     | { type: "builtin"; id: string; alias?: string }
     | { type: "search"; query: string; limit?: number }
     | { type: "agent"; path: string; alias?: string }
-    | { type: "mcp"; server: string; tool: string; alias?: string }
     | { type: "mcp_local"; transport: McpServerConfig["transport"]; include?: string[]; alias?: string };
 
 /** 局部 MCP 工具的编译期元数据 */

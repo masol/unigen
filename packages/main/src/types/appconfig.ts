@@ -1,5 +1,6 @@
 import type { RecentProject } from "./shared/api/recents.js";
-import { Provider } from "./shared/model.js";
+import type { McpServerConfig } from "./shared/mcp.js";
+import type { Provider } from "./shared/model.js";
 
 
 
@@ -14,6 +15,7 @@ export interface AppConfig {
     autoupdate: boolean;
     parallelRun: boolean;
     models: Provider[];
+    mcpServers: McpServerConfig[];
     concurrency: number;
     telemetry: string; // COLLECTOR_URL配置。
     disableHA: boolean; // 禁用硬件加速。 disableHardwareAcceleration 

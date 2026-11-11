@@ -30,7 +30,7 @@ class ConfigService {
             maxSize: 6,
         })
         const recents = this.get('recents');
-        // 按 time 降序排序，时间小的在前
+        // 按 time 降序排序，时间小的在前，方便LRU正确移除。
         const sortedRecents = [...recents].sort((a, b) => a.time - b.time);
         for (const recent of sortedRecents) {
             this.lru.set(recent.path, recent);
@@ -86,7 +86,7 @@ class ConfigService {
      * 获取整个配置对象
      * 内部会自动融合 schema 中定义的所有最新默认值
      */
-    getAll(): SecondConfig {
+    getAll(): Readonly<SecondConfig> {
         return this.store.store;
     }
 
@@ -95,7 +95,7 @@ class ConfigService {
      * 通用获取配置项方法
      * 传入的 key 必须是 AppConfig 的键，返回值会自动推导为该键对应的类型
      */
-    get<K extends keyof SecondConfig>(key: K): SecondConfig[K] {
+    get<K extends keyof SecondConfig>(key: K): Readonly<SecondConfig[K]> {
         return this.store.get(key);
     }
 
@@ -104,7 +104,7 @@ class ConfigService {
      * 传入的 key 必须是 AppConfig 的键，value 的类型会被严格约束为该键对应的类型
      * 不进行内部异常捕获，若 schema 校验失败，异常将直接向上抛出由外部处理
      */
-    set<K extends keyof SecondConfig>(key: K, value: SecondConfig[K]): void {
+    set<K extends keyof SecondConfig>(key: K, value: Exclude<SecondConfig[K], undefined>): void {
         this.store.set(key, value);
     }
 }
@@ -119,6 +119,9 @@ export const secondConfig = (): ConfigService => {
     if (!g[KEY]) {
         g[KEY] = new ConfigService(new Store<SecondConfig>({
             schema: secondSchema,
+            // 频繁读、少数写：开启内存缓存；写操作后 electron-store 会自动丢弃缓存。
+            // 注意：开启后 .store / .get() 返回的对象和数组是冻结的，只读使用。
+            cache: true,
             name: 'second',
         }));
     }
