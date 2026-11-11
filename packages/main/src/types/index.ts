@@ -2,6 +2,10 @@
 export type { AppConfig } from './appconfig.js'
 export type { CacheItem, IdentifiedItem } from './blueprint/blackboard/array.js'
 export type { RunState } from './blueprint/state.js'
+export type {
+    ToolSearchItem,
+    ToolSearchOutput
+} from './shared/api/agent.js'
 export type { AppClient, NotifyContract } from './shared/api/index.js'
 export type { BlueprintKind } from './shared/api/list.js'
 export type { RecentProject } from './shared/api/recents.js'

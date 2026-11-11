@@ -1,5 +1,4 @@
 // packages/main/src/libs/tooldb/globaltooldb.ts
-// packages/main/src/libs/tooldb/globaltooldb.ts
 import {
     mcpRoute,
     wrapMcpTool,
@@ -97,9 +96,10 @@ async function normalizeToolSchema(
  *
  * 查询入口统一为 `searchTools`：
  *   - query 非空：searchsrv hybrid 检索（相关度排序）；
- *   - query 为空：列出全部可检索工具（分页）；
+ *   - query 为空：ToolTable.listTools 全量枚举（分页）；
  *   - 结果按 id 回表：内存命中 builtin；未命中查 LanceDB 并
- *     使用持久化 schema 构造 MCP 惰性包装器。
+ *     使用持久化 schema 构造 MCP 惰性包装器；
+ *   - 启用 Rerank 时，检索阶段产生的 rerankScore 会附加到返回 ToolMeta 上。
  */
 export class GlobalToolDB {
     #registry = new ToolRegistry();
@@ -394,7 +394,10 @@ export class GlobalToolDB {
             tool: t,
             inputSchema: def.inputSchema,
             outputSchema: def.outputSchema,
-            execute: def.execute as (input: unknown) => unknown,
+            // 通过 lambda 调用 def.execute，保留 def 作为 this：
+            // class 形式的 ToolDefinition（如 UserClarifyTool）依赖 this 访问内部方法；
+            // 直接存 def.execute 并在 invoke_tool 路径下裸调用会丢失 this。
+            execute: (input: unknown) => def.execute(input as TInput),
         }) as ToolMeta<TInput, TOutput>;
     }
 
@@ -414,14 +417,17 @@ export class GlobalToolDB {
      * 统一的工具查询入口。
      *
      * - query 非空：searchsrv hybrid 检索（相关度排序）；
-     * - query 为空字符串：返回**全部可检索工具**（分页）；
+     * - query 为空字符串：走 `ToolTable.listTools` 全量枚举（分页）；
      * - 结果按 id 回表：内存命中 builtin；未命中查 LanceDB 并
      *   用持久化 schema 构造 MCP 惰性包装器；
-     * - 跳过 meta 工具（isMetaToolId）；按 opts.source 二次过滤。
+     * - 跳过 meta 工具（isMetaToolId）；按 opts.source 二次过滤；
+     * - 启用 Rerank 时，检索阶段产生的 rerankScore 会附加到返回的 ToolMeta 上；
+     *   空 query 路径无 rerank，返回行不带 rerankScore。
      *
      * 分页：
      *   - offset / limit 控制；
-     *   - 返回结果 `< limit` 表示已到末尾（无下一页）。
+     *   - 返回结果 `< limit` 表示已到末尾（无下一页）；
+     *   - source 过滤时 fetchLimit 已放大，减少分页边界丢失。
      */
     async searchTools(
         query: string,
@@ -456,9 +462,9 @@ export class GlobalToolDB {
             : target;
 
         try {
-            const rows = await db.tool.searchTools(q, {
-                limit: fetchLimit,
-            });
+            const rows = q
+                ? await db.tool.searchTools(q, { limit: fetchLimit })
+                : await db.tool.listTools({ limit: fetchLimit });
 
             const metas: ToolMeta[] = [];
             for (const row of rows) {
@@ -466,7 +472,15 @@ export class GlobalToolDB {
                 const meta = await this.getToolMeta(String(row.id));
                 if (!meta || isMetaToolId(meta.id)) continue;
                 if (opts.source && meta.source !== opts.source) continue;
-                metas.push(meta);
+
+                // 把检索阶段的 rerankScore 附加到返回对象上。
+                // 必须是新对象，不能改 registry 里的引用。
+                const score = row.rerankScore;
+                metas.push(
+                    typeof score === "number" && Number.isFinite(score)
+                        ? { ...meta, rerankScore: score }
+                        : meta,
+                );
             }
             return metas.slice(offset);
         } catch (error) {
@@ -494,25 +508,23 @@ export class GlobalToolDB {
         const db = getGlobalSearchDB();
         if (!db.opened) return null;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const table = db.tool as any;
+        const table = db.tool;
 
-        if (typeof table.getById !== "function") {
-            Logger.warn(
-                "[ToolDB] searchsrv tool 表缺少 getById，无法解析 MCP 工具。",
-            );
-            return null;
-        }
+        let row: ToolSearchRow | null = null;
 
-        let row: ToolSearchRow | null;
-        try {
-            row = (await table.getById(idOrName)) ?? null;
-        } catch (e) {
+        if (typeof table.getById === "function") {
+            try {
+                row = (await table.getById(idOrName)) ?? null;
+            } catch (e) {
+                Logger.warn(
+                    `[ToolDB] 按 id 查询工具元数据失败，尝试回退检索: ${idOrName}`,
+                    e,
+                );
+            }
+        } else {
             Logger.warn(
-                `[ToolDB] 查询工具元数据失败: ${idOrName}`,
-                e,
+                "[ToolDB] searchsrv tool 表缺少 getById，将回退到检索解析 MCP 工具。",
             );
-            return null;
         }
 
         if (!row && typeof table.searchTools === "function") {
@@ -622,7 +634,7 @@ export class GlobalToolDB {
      *
      * - 同步、不查 LanceDB、不触发 MCP 连接；
      * - 仅用于内部枚举（如 syncToolsToSearchDB 首次全量写入 searchsrv）；
-     * - **不**包含 MCP 工具；MCP 请使用 `searchTools("")` 分页获取。
+     * - **不**包含 MCP 工具；全量枚举（含 MCP）请用 `searchTools("")`。
      */
     listBuiltinTools(): ToolMeta[] {
         return this.#registry.list();

@@ -24,6 +24,20 @@ const RERANK_CANDIDATE_MULTIPLIER = 3;
 /** RRF 平滑常数默认值，与 LanceDB RRFReranker 默认值保持一致 */
 const DEFAULT_RRF_K = 60;
 
+/**
+ * 断崖检测的固定参数。
+ *
+ * - MIN_TOP_K：即使断崖很早，也至少保留这么多条，避免空结果；
+ * - GAP_ABS_MULTIPLIER：相邻 gap 超过平均 gap 的倍数，视为断崖；
+ * - GAP_REL_RATIO：相邻 gap / 当前分 的相对比例下限，避免整体分数接近时误判。
+ *
+ * 这里没有绝对 minScore：rerank 分数是排序信号，不具备跨查询可比性。
+ * 断崖由当前候选集分布决定，不使用全局固定阈值。
+ */
+const GAP_MIN_TOP_K = 2;
+const GAP_ABS_MULTIPLIER = 2;
+const GAP_REL_RATIO = 0.2;
+
 const RENAME_UNSUPPORTED_KEY = Symbol.for(
     "unigen.singleton.renameTableUnsupported",
 );
@@ -427,6 +441,8 @@ export abstract class SearchTableBase<
         });
         const rows = (await query.toArray()) as T[];
 
+        // 未启用 Rerank：没有可靠的跨查询相关度信号。
+        // 按候选数截断，不做"明显不相关"判断（_distance 不可比，不上浮）。
         if (!rerankEnabled || rows.length === 0) {
             return rows.slice(0, limit);
         }
@@ -440,8 +456,10 @@ export abstract class SearchTableBase<
                 return rows.slice(0, limit);
             }
 
+            // topN 取 candidateLimit 而非 limit：
+            // 断崖检测需要看到足够多的候选分布，才能正确找到边界。
             const result = await rerank.rerank(queryText, documents, {
-                topN: limit,
+                topN: candidateLimit,
             });
 
             const ranked = result.ranking
@@ -460,7 +478,9 @@ export abstract class SearchTableBase<
                 return rows.slice(0, limit);
             }
 
-            return ranked.slice(0, limit);
+            // Rerank 参与时：用断崖检测决定自然边界，
+            // 截掉"明显不同"的低分尾部，而不是机械 slice(0, limit)。
+            return truncateByScoreGap(ranked, limit);
         } catch (error) {
             Logger.warn(
                 `[Search] 表 [${this.name}] Rerank 失败，本次使用未重排结果。`,
@@ -580,7 +600,7 @@ export abstract class SearchTableBase<
 }
 
 // ------------------------------------------------------------
-// Rerank 分数与零向量标记
+// Rerank 分数与断崖截断
 // ------------------------------------------------------------
 
 function readRerankScore(value: unknown): number | undefined {
@@ -600,6 +620,65 @@ function readRerankScore(value: unknown): number | undefined {
     }
 
     return undefined;
+}
+
+/**
+ * 断崖检测：按 rerankScore 降序，找到第一个"相邻落差显著大于整体落差"的位置，
+ * 在该处截断。不依赖跨查询不可比的绝对阈值。
+ *
+ * - 仅在 Rerank 参与时调用（所有行都有 rerankScore）；
+ * - n <= 3 不做统计，直接按 limit 切片；
+ * - 若任一缺失 rerankScore，说明上游非预期，回退到按 limit 切片；
+ * - 至少保留 GAP_MIN_TOP_K 条，避免断崖过早导致空结果；
+ * - 最多 maxTopK = min(limit, n) 条，不突破调用方上限。
+ */
+function truncateByScoreGap<T extends Record<string, unknown>>(
+    rows: T[],
+    limit: number,
+): T[] {
+    const fallback = rows.slice(0, limit);
+    if (rows.length <= 3) return fallback;
+
+    const indexed: Array<{ row: T; score: number }> = [];
+    for (const row of rows) {
+        const s = row["rerankScore"];
+        if (typeof s !== "number" || !Number.isFinite(s)) {
+            return fallback;
+        }
+        indexed.push({ row, score: s });
+    }
+    if (indexed.length <= 3) return fallback;
+
+    indexed.sort((a, b) => b.score - a.score);
+
+    const minTopK = Math.min(GAP_MIN_TOP_K, indexed.length);
+    const maxTopK = Math.min(limit, indexed.length);
+
+    if (maxTopK <= minTopK) {
+        return indexed.slice(0, maxTopK).map((x) => x.row);
+    }
+
+    const gaps: number[] = [];
+    for (let i = 0; i < indexed.length - 1; i++) {
+        gaps.push(indexed[i].score - indexed[i + 1].score);
+    }
+    const meanGap =
+        gaps.reduce((s, g) => s + g, 0) / gaps.length;
+
+    let cut = maxTopK;
+    // 从 minTopK-1 开始，到 maxTopK-1 前停止：
+    // 边界至少要有 minTopK 条在前，最多切到 maxTopK。
+    for (let i = minTopK - 1; i < maxTopK - 1; i++) {
+        const gap = gaps[i];
+        const cur = Math.abs(indexed[i].score) || 1;
+        const relative = gap / cur;
+        if (gap > GAP_ABS_MULTIPLIER * meanGap && relative > GAP_REL_RATIO) {
+            cut = i + 1;
+            break;
+        }
+    }
+
+    return indexed.slice(0, cut).map((x) => x.row);
 }
 
 function markZeroVector(metadata: unknown): string {

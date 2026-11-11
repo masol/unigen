@@ -4,12 +4,6 @@
   import { Separator } from "$lib/components/ui/separator";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { layoutStore } from "$lib/store/ui/layout.svelte";
-  import {
-    IconLayoutBottombarCollapseFilled,
-    IconLayoutBottombarExpand,
-    IconLayoutSidebarRightCollapseFilled,
-    IconLayoutSidebarRightExpand,
-  } from "@tabler/icons-svelte";
 </script>
 
 <div
@@ -47,7 +41,7 @@
   <!-- 下部按钮组 -->
   <div class="flex flex-col items-center gap-0.5 pb-2">
     <!-- 快捷面板切换 -->
-    <Tooltip.Root>
+    <!-- <Tooltip.Root>
       <Tooltip.Trigger>
         {#snippet child({ props })}
           <button
@@ -95,7 +89,7 @@
       <Tooltip.Content side="right" sideOffset={6}>
         <p class="text-xs">切换辅助侧栏</p>
       </Tooltip.Content>
-    </Tooltip.Root>
+    </Tooltip.Root> -->
     <Separator class="my-1 w-6" />
 
     {#each layoutStore.bottomActivities as activity (activity.id)}

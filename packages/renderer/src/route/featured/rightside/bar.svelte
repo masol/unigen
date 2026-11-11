@@ -7,15 +7,12 @@
   import autoAnimate from "@formkit/auto-animate";
   import BarHeader from "./bar.header.svelte";
   import Glossary from "./glossary/table.svelte";
+  import ToolSearch from "./toolsearch/toolsearch.svelte";
 
   let isMaximized = $derived(layoutStore.maximizedPanel === "right");
 </script>
 
-<div class="flex h-full flex-col border-l border-border/50 bg-muted/20">
-  <!-- ╭─────────────────────────────────────────────────────╮ -->
-  <!-- │ PanelHeader：BarHeader 作为 headerComponent 传入    │ -->
-  <!-- │ BarHeader 通过 store 切换 tab → bar 感知并切换内容  │ -->
-  <!-- ╰─────────────────────────────────────────────────────╯ -->
+<div class="flex h-full min-w-0 flex-col border-l border-border/50 bg-muted/20">
   <PanelHeader
     {isMaximized}
     onToggleMaximize={() => layoutStore.toggleMaximizePanel("right")}
@@ -25,18 +22,23 @@
     headerComponent={BarHeader}
   />
 
-  <!-- ╭─────────────────────────────────────────────────────╮ -->
-  <!-- │ 内容区：assistant 铺满自管滚动；blueprint 走 ScrollArea │ -->
-  <!-- │    assistant 不可包 ScrollArea / padding，否则输入框 │ -->
-  <!-- │    会被一起滚动，无法固定在底部                       │ -->
-  <!-- ╰─────────────────────────────────────────────────────╯ -->
-  <div class="min-h-0 flex-1 overflow-hidden">
+  <!--
+    内容区按分支决定谁负责滚动：
+    - blueprint：普通流式内容 → 用 ScrollArea
+    - toolsearch：VirtualList 自管滚动 → 直接放在带确定高度的 flex 容器里
+      （不要再套 ScrollArea，否则 viewport 的 h-full 会失效）
+  -->
+  <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
     {#if rightPanelStore.activeTab === "blueprint"}
       <ScrollArea class="h-full">
         <div class="space-y-1 p-2 pt-1" use:autoAnimate>
           <Glossary />
         </div>
       </ScrollArea>
+    {:else if rightPanelStore.activeTab === "toolsearch"}
+      <!-- ToolSearch 根为 flex flex-1 min-h-0 flex-col，
+           依赖本父级是 flex 容器并给出确定高度 -->
+      <ToolSearch />
     {/if}
   </div>
 </div>

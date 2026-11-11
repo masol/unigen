@@ -47,6 +47,13 @@ export interface SearchOutput {
         name: string;
         description: string;
         source: string;
+        /**
+         * 启用 Rerank 时的精排分数，越大越相关；未启用时不出现。
+         *
+         * 仅供框架/调用方参考相关度；是排序信号，不具备跨查询可比性，
+         * 不要基于此字段做“是否相关”的绝对判断。
+         */
+        score?: number;
         invocation: InvocationSpec;
     }>;
     guidance?: string;
@@ -91,7 +98,8 @@ export const searchToolDef: ToolDefinition<SearchInput, SearchOutput> = {
         "用自然语言检索当前可用的工具。描述你想完成的动作（而非工具名）。" +
         "建议一次并行发起多个 search_tools 调用，每个调用聚焦一个能力/意图，" +
         "再合并返回的工具集并据此调整策略；不要只搜一个宽泛词就停止。" +
-        "返回按相关度排序的工具列表，每项含 id/name/description/invocation。" +
+        "返回按相关度排序的工具列表，每项含 id/name/description/invocation；" +
+        "启用 Rerank 时还会带 score（仅作参考，不具备跨查询可比性）。" +
         "调用具体工具时必须使用返回的 id，并严格按 invocation.inputSchema 组织参数，" +
         "然后通过 invoke_tool 执行。",
     inputSchema: searchInputSchema,
@@ -113,6 +121,9 @@ export const searchToolDef: ToolDefinition<SearchInput, SearchOutput> = {
                 name: meta.name,
                 description: meta.description,
                 source: meta.source,
+                ...(typeof meta.rerankScore === "number"
+                    ? { score: meta.rerankScore }
+                    : {}),
                 invocation: await buildInvocationSpec(meta),
             })),
         );
@@ -122,7 +133,8 @@ export const searchToolDef: ToolDefinition<SearchInput, SearchOutput> = {
             guidance:
                 "可一次并行发起多个 search_tools 调用，每个调用聚焦一个能力/意图，" +
                 "再合并工具集调整策略。实际调用工具时必须使用 invoke_tool，" +
-                "并以 invocation.inputSchema 为准组织 args；不要凭 name/description 猜测参数。",
+                "并以 invocation.inputSchema 为准组织 args；不要凭 name/description 猜测参数。" +
+                "score 仅作相关度参考，不具备跨查询可比性，不要作为判断是否相关的绝对依据。",
         };
     },
 };

@@ -21,6 +21,8 @@ export interface ToolRow extends Record<string, unknown> {
     text: string;
     vector?: number[];
     metadata?: string;
+    /** 启用 Rerank 时的精排分数；未启用时不出现。 */
+    rerankScore?: number;
     created_at?: string;
     updated_at?: string;
 }
@@ -178,8 +180,49 @@ export class ToolTable extends SearchTableBase<ToolRow> {
     }
 
     /**
+     * 按全局 id 获取工具行。
+     *
+     * GlobalToolDB.getToolMeta 在检索命中后需要按 id 回表解析工具元数据；
+     * MCP 工具不在内存 registry 中，必须通过这里从 LanceDB 取回持久化行。
+     */
+    async getById(id: string): Promise<ToolRow | null> {
+        return this.findById(id);
+    }
+
+    /**
+     * 列出全部工具行，支持分页；不依赖 query（无 FTS / 向量）。
+     *
+     * - 只 select 必要字段，不读 vector，避免大字段无谓 IO；
+     * - offset 在表内应用；limit 必 > 0，否则返回空数组；
+     * - 返回行不会带 rerankScore（未经过 rerank 阶段）；
+     * - 不做 source 过滤：如需 source 过滤，调用方在结果上二次筛。
+     *
+     * 这是 `GlobalToolDB.searchTools("")` 的底层原语，也供其它需要
+     * 枚举全部工具的场景直接使用。
+     */
+    async listTools(
+        opts: { limit?: number; offset?: number } = {},
+    ): Promise<ToolRow[]> {
+        const limit = opts.limit ?? 100;
+        const offset = opts.offset ?? 0;
+        if (limit <= 0) return [];
+        if (offset < 0) return [];
+
+        const rows = (await this.ensureTable()
+            .query()
+            .select(["id", "name", "description", "text", "metadata"])
+            .limit(offset + limit)
+            .toArray()) as ToolRow[];
+
+        return rows.slice(offset);
+    }
+
+    /**
      * tool 检索只依赖 name + description。
      * tool 没有正文，无需聚合；直接返回完整工具条目。
+     *
+     * 若上层启用 Rerank，返回行会额外携带 `rerankScore`；
+     * 断崖截断已在 `SearchTableBase.search` 内完成，本方法不重复截断。
      */
     async searchTools(
         queryText: string,

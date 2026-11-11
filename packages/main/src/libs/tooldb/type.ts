@@ -42,6 +42,14 @@ export interface ToolMeta<TInput = unknown, TOutput = unknown> {
     outputSchema?: z.ZodType<TOutput>;
     /** 直接 execute（绕过 AI SDK）。MCP 工具通常缺省 */
     execute?: (input: TInput) => Promise<TOutput> | TOutput;
+    /**
+     * 检索时若启用 Rerank，会附带精排分数；未启用时不存在。
+     *
+     * 仅由 `GlobalToolDB.searchTools` 从检索结果回填，用于消费方判断相关度；
+     * 不持久化、不写入 registry，也不应作为绝对阈值使用。
+     * 该分数是排序信号，不具备跨查询可比性。
+     */
+    rerankScore?: number;
 }
 
 /**

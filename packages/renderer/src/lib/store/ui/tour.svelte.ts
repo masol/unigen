@@ -15,11 +15,6 @@ class TourStore {
     // ── 只读门面 ──
     get steps() { return this.#steps }
 
-
-    constructor() {
-        log.info('[TourStore] initialized')
-    }
-
     async onStep(curStepIdx: number) {
         if (isNumber(curStepIdx)) {
             return await this.#callback?.(curStepIdx);

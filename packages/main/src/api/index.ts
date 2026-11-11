@@ -4,6 +4,7 @@ import plugin from './common/plugin.js';
 import window from './common/window.js';
 // import Logger from "electron-log/main.js";
 import { alsMiddleware } from "./als.js";
+import agent from './common/agent.js';
 import config from './common/cfg.js';
 import rapi from './common/rapi.js';
 import system from './common/sys.js';
@@ -21,6 +22,7 @@ const appRouter = os
         config,
         system,
         project,
+        agent,
         rapi
     });
 

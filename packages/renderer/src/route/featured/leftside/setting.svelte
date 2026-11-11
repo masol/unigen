@@ -5,15 +5,18 @@
   import { PinyinFuseSearch } from "$lib/utils/fuse";
   import autoAnimate from "@formkit/auto-animate";
   import {
+    IconBolt,
+    IconBooks,
     IconBrain,
     IconChevronDown,
     IconCode,
     IconCodePlus,
+    IconCube,
     IconFolders,
     IconKeyboard,
-    IconPlug,
+    IconPlugConnected,
     IconSettings,
-    IconSettingsOff
+    IconSettingsOff,
   } from "@tabler/icons-svelte";
   import { debounce } from "radashi";
   import { push, router } from "svelte-spa-router";
@@ -180,9 +183,40 @@
           id: "api-mcp",
           label: "MCP",
           description: "增加AI可使用工具，以扩展AI能力",
-          icon: IconPlug,
+          icon: IconPlugConnected,
           path: "api/mcp",
           keywords: ["MCP", "tool", "插件", "function calling"],
+        },
+        {
+          id: "api-skill",
+          label: "技能",
+          description: "设置和管理全局技能",
+          icon: IconBolt,
+          path: "api/skill",
+          keywords: ["rag", "skill", "tool", "技能", "function calling"],
+        },
+        {
+          id: "api-knowlege",
+          label: "知识库",
+          description: "设置和管理全局知识库",
+          icon: IconBooks,
+          path: "api/knowlege",
+          keywords: [
+            "rag",
+            "knowlegeBase",
+            "knowlege",
+            "tool",
+            "知识库",
+            "function calling",
+          ],
+        },
+        {
+          id: "api-sandbox",
+          label: "沙盒",
+          description: "技能中脚本的运行环境",
+          icon: IconCube,
+          path: "api/sandbox",
+          keywords: ["runtime", "sandbox", "tool", "沙盒", "function calling"],
         },
       ],
     },
