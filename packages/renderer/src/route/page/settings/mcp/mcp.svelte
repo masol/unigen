@@ -1,52 +1,89 @@
 <script lang="ts">
   import { Separator } from "$lib/components/ui/separator";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
+  import type { McpServerConfig } from "@app/main/types";
   import autoAnimate from "@formkit/auto-animate";
+  import { toast } from "svelte-sonner";
   import ConfigHeader from "./ConfigHeader.svelte";
   import EmptyState from "./EmptyState.svelte";
+  import {
+    importMcpConfigFromZip,
+    parseMcpConfigJson,
+  } from "./mcpConfigImport";
   import MCPServerCard from "./MCPServerCard.svelte";
   import MCPServerConfigDialog from "./MCPServerConfigDialog.svelte";
   import { mcpStore } from "./mcpstore.svelte";
   import SearchFilterBar from "./SearchFilterBar.svelte";
-  import type { MCPServerConfig } from "./types";
 
-  /* ═══ 派生统计 ═══ */
   let serverCount = $derived(mcpStore.servers.length);
-  let enabledCount = $derived(mcpStore.servers.filter((s) => s.enabled).length);
-  let toolCount = $derived(
-    mcpStore.servers.reduce((s, x) => s + x.tools.length, 0),
-  );
-  let autoApproveCount = $derived(
-    mcpStore.servers.reduce((s, x) => s + (x.autoApprove?.length ?? 0), 0),
+  let enabledCount = $derived(
+    mcpStore.servers.filter((server) => server.enabled !== false).length,
   );
 
   let openStates = $state<Record<string, boolean>>({});
   let hasServers = $derived(mcpStore.servers.length > 0);
-
-  /* ═══ Actions ═══
-     以下回调均通过 store 完成；dialogStore 仅作为触发器，
-     真正的数据落地走 mcpStore。
-     TODO: store bridge —— 把 mcpStore.upsertServer / removeServer 替换为真实 configStore 同步。 */
+  let fileInput = $state<HTMLInputElement | null>(null);
 
   async function openAdd() {
     await dialogStore.safeShow(MCPServerConfigDialog, {
-      onSave: async (server: MCPServerConfig) => {
-        mcpStore.upsertServer(server);
-        return false;
+      onSave: async (server: McpServerConfig) => {
+        await mcpStore.upsertServer(server);
       },
     });
   }
 
   async function openEdit(serverId: string) {
-    const server = mcpStore.servers.find((s) => s.id === serverId);
+    const server = mcpStore.servers.find((item) => item.id === serverId);
     if (!server) return;
+
     await dialogStore.safeShow(MCPServerConfigDialog, {
       server,
-      onSave: async (next: MCPServerConfig) => {
-        mcpStore.upsertServer(next);
-        return false;
+      onSave: async (next: McpServerConfig) => {
+        await mcpStore.upsertServer(next);
       },
     });
+  }
+
+  function triggerImport() {
+    fileInput?.click();
+  }
+
+  async function handleImportFile(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+
+    try {
+      const raw = file.name.toLowerCase().endsWith(".zip")
+        ? await importMcpConfigFromZip(file)
+        : JSON.parse(await file.text());
+
+      if (raw === null) {
+        toast.info("ZIP 配置解析尚未实现");
+        return;
+      }
+
+      const servers = parseMcpConfigJson(raw);
+      if (servers.length === 0) {
+        toast.error("未识别到有效的 MCP 服务配置");
+        return;
+      }
+
+      if (servers.some((server) => server.transport.type === "stdio")) {
+        toast.warning(
+          "配置包含 stdio 传输：将在本机启动进程，请确认命令与参数来源可信",
+        );
+      }
+
+      for (const server of servers) {
+        await mcpStore.upsertServer(server);
+      }
+
+      toast.success(`已导入 ${servers.length} 个 MCP 服务`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "配置文件解析失败");
+    }
   }
 </script>
 
@@ -55,9 +92,16 @@
     <ConfigHeader
       {serverCount}
       {enabledCount}
-      {toolCount}
-      {autoApproveCount}
       onAddServer={openAdd}
+      onImportConfig={triggerImport}
+    />
+
+    <input
+      bind:this={fileInput}
+      type="file"
+      accept=".json,.zip,application/json,application/zip"
+      class="hidden"
+      onchange={handleImportFile}
     />
 
     {#if hasServers}
@@ -72,14 +116,9 @@
           open={openStates[server.id] ?? false}
           onOpenChange={(v) => (openStates[server.id] = v)}
           onEdit={() => openEdit(server.id)}
-          onRemove={() => mcpStore.removeServer(server.id)}
-          onToggleEnabled={(enabled) => {
-            // TODO: store bridge —— 持久化
-            void enabled;
-          }}
-          onToggleAutoApprove={(toolName) => {
-            mcpStore.toggleAutoApprove(server.id, toolName);
-          }}
+          onRemove={() => void mcpStore.removeServer(server.id)}
+          onToggleEnabled={(enabled) =>
+            void mcpStore.toggleEnabled(server.id, enabled)}
         />
       {/each}
 

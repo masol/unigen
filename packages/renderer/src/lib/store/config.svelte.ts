@@ -597,7 +597,7 @@ class ConfigStore {
     }
 
     // ═══════════════════════════════════════
-    //  Actions — MCP Server 管理（单条 upsert，走专用 RPC）
+    //  Actions — MCP Server 管理（单条 upsert / remove，走专用 RPC）
     // ═══════════════════════════════════════
 
     /**
@@ -621,6 +621,33 @@ class ConfigStore {
         } catch (err) {
             this.#saveError = err instanceof Error ? err.message : String(err)
             log.error('[ConfigStore] setMcpServer() failed', err)
+            toast.error(this.#saveError);
+        } finally {
+            this.#savingCount--
+        }
+    }
+
+    /**
+     * 按 id 移除单个 MCP Server。
+     *
+     * 主进程 `removeMcpServer` 内部走通用 `set('mcpServers')`，会通过 `cfg:set` 广播最新全量列表；
+     * 本方法同时做乐观本地更新，二者幂等。
+     */
+    async removeMcpServer(id: string): Promise<void> {
+        log.debug(`[ConfigStore] removeMcpServer() called, id=${id}`)
+        this.#savingCount++
+        this.#saveError = null
+        try {
+            await api().config.removeMcpServer(id)
+            const next = this.#mcpServers.filter((s) => s.id !== id)
+            if (next.length !== this.#mcpServers.length) {
+                this.#mcpServers = next
+            }
+            this.#lastSaved = Date.now()
+            log.info(`[ConfigStore] mcp server "${id}" removed`)
+        } catch (err) {
+            this.#saveError = err instanceof Error ? err.message : String(err)
+            log.error('[ConfigStore] removeMcpServer() failed', err)
             toast.error(this.#saveError);
         } finally {
             this.#savingCount--

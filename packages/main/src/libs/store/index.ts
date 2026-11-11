@@ -153,6 +153,20 @@ class ConfigService {
     }
 
     /**
+     * 按 id 移除单个 MCP server。
+     * 变更通过通用的 `set('mcpServers', ...)` 走统一广播路径（cfg:set）。
+     * 若指定 id 不存在则为 no-op。
+     */
+    removeMcpServer(serverId: string): void {
+        const current = this.get('mcpServers') ?? [];
+        if (!current.some(s => s.id === serverId)) {
+            return;
+        }
+        const list = current.filter(s => s.id !== serverId);
+        this.set('mcpServers', list);
+    }
+
+    /**
      * 通用设置配置项方法
      * 传入的 key 必须是 AppConfig 的键，value 的类型会被严格约束为该键对应的类型
      * 不进行内部异常捕获，若 schema 校验失败，异常将直接向上抛出由外部处理

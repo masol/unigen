@@ -99,6 +99,18 @@ const setMcpServer = os
     })
 
 /**
+ * 按 id 移除单个 MCP 服务器配置。
+ * 指定 id 不存在时同样返回 true（幂等）。
+ */
+const removeMcpServer = os
+    .input(z.string())
+    .output(z.boolean())
+    .handler(async ({ input }) => {
+        configService().removeMcpServer(input);
+        return true;
+    })
+
+/**
  * 读取当前系统是否启用了dark/light.
  */
 const useDark = os
@@ -175,6 +187,7 @@ export default {
     recents,
     getMcpServer,
     setMcpServer,
+    removeMcpServer,
     setTheme: setheme,
     resetTheme: resetheme,
     getTheme: getheme,

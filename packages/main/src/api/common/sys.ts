@@ -1,7 +1,12 @@
+import { testMcpServerConnection } from '$libs/mcp/client.js'
 import { listModels } from '$libs/model/list.js'
 import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
 import { WindowService } from '$libs/utils/window.js'
 import { FileFilterPreset } from '$types/shared/api/sys.js'
+import {
+    mcpConnectionTestResultSchema,
+    mcpTestServerConfigSchema,
+} from '$types/shared/mcp.js'
 import { os } from '@orpc/server'
 import type { OpenDialogOptions } from 'electron'
 import { app, dialog, shell } from 'electron'
@@ -330,6 +335,17 @@ const showItemInFolder = os
         return true
     })
 
+/**
+ * 测试 MCP server 连接。
+ * 只创建临时连接并立即关闭，不修改任何 server 配置或连接池状态。
+ */
+const testMcpConnection = os
+    .input(mcpTestServerConfigSchema)
+    .output(mcpConnectionTestResultSchema)
+    .handler(async ({ input }) => {
+        return await testMcpServerConnection(input)
+    })
+
 const listmodel = os
     .input(z.object({ baseURL: z.string(), apiKey: z.string() }))
     .output(z.array(z.record(z.string(), z.any())))
@@ -459,6 +475,7 @@ export default {
     openExternal,
     openPath,
     showItemInFolder,
+    testMcpConnection,
     listmodel,
     getPath,
     streamLogs,

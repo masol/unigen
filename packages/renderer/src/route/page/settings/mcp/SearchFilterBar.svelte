@@ -10,16 +10,15 @@
   } = $props();
 
   const TRANSPORTS = [
-    { value: "stdio", label: "本地 (stdio)" },
-    { value: "sse", label: "SSE" },
     { value: "http", label: "HTTP" },
+    { value: "sse", label: "SSE" },
+    { value: "stdio", label: "stdio（高级）" },
   ] as const;
 </script>
 
 <div
   class="space-y-4 rounded-2xl border border-border/50 bg-card p-6 shadow-sm"
 >
-  <!-- 搜索输入 -->
   <div class="relative">
     <IconSearch
       size={16}
@@ -28,7 +27,7 @@
     />
     <Input
       bind:value={mcpStore.searchQuery}
-      placeholder="搜索服务名、ID 或描述…"
+      placeholder="搜索服务名或 ID…"
       class="rounded-xl pl-9 pr-9"
     />
     {#if mcpStore.searchQuery}
@@ -43,7 +42,6 @@
     {/if}
   </div>
 
-  <!-- 传输协议 + 仅显示启用 -->
   <div class="flex flex-wrap items-center gap-2">
     <span class="mr-1 text-xs text-muted-foreground">传输协议</span>
     {#each TRANSPORTS as t (t.value)}

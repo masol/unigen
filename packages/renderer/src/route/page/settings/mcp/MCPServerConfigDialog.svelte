@@ -6,6 +6,18 @@
       server,
       onSave: (cfg) => mcpStore.upsertServer(cfg),
     });
+
+  分步流程（Stepper）：
+    [0] 连接 —— 传输协议、URL/命令、鉴权、请求头
+    [1] 测试 —— 从 Step 0 前进进入时自动测试；成功后方可继续
+                从 Step 2 回退进入时保留历史测试结果，不自动重测
+    [2] 确认 —— 名称（可修改）、服务 ID、启用开关（均为持久化字段）
+
+  持久化字段（与 McpServerConfig 对齐）：
+    id        —— 本地唯一标识
+    name      —— 名称；优先取测试返回的 serverInfo.name，缺省回退为 "未命名"
+    enabled   —— 是否启用
+    transport —— 连接参数
 -->
 <script lang="ts">
   import * as Alert from "$lib/components/ui/alert";
@@ -18,179 +30,342 @@
   } from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
-  import * as Tabs from "$lib/components/ui/tabs";
+  import * as Stepper from "$lib/components/ui/stepper";
+  import { Switch } from "$lib/components/ui/switch";
   import type { DialogComponentProps } from "$lib/types/dialog";
+  import type {
+    McpConnectionTestResult,
+    McpServerConfig,
+    McpTransport,
+  } from "@app/main/types";
   import {
     IconAlertCircle,
-    IconCirclePlus,
+    IconAlertTriangle,
+    IconCheck,
+    IconChevronLeft,
+    IconChevronRight,
     IconLoader2,
-    IconPlugConnected,
-    IconSettings,
+    IconRefresh,
     IconTool,
-    IconTrash,
   } from "@tabler/icons-svelte";
-  import ToolPermissionEditor from "./ToolPermissionEditor.svelte";
-
-  type Server = {
-    id: string;
-    name: string;
-    transport: "stdio" | "sse" | "http";
-    command?: string;
-    args?: string[];
-    url?: string;
-    enabled: boolean;
-    tools: Array<{ name: string; description: string; dangerous: boolean }>;
-    autoApprove?: string[];
-    timeoutMs?: number;
-    description?: string;
-  };
+  import type { AuthMode } from "./McpAuthField.svelte";
+  import McpAuthField, {
+    buildAuthHeaders,
+    parseAuthFromHeaders,
+  } from "./McpAuthField.svelte";
+  import type { HeaderPair } from "./McpHeaderEditor.svelte";
+  import McpHeaderEditor, {
+    pairsToRecord,
+    recordToPairs,
+  } from "./McpHeaderEditor.svelte";
+  import { testMcpConnection } from "./mcpConnection";
 
   type Props = {
-    server?: Partial<Server>;
-    onSave?: (server: Server) => Promise<boolean>;
-  } & DialogComponentProps<Server>;
+    server?: Partial<McpServerConfig>;
+    onSave?: (server: McpServerConfig) => Promise<void> | void;
+  } & DialogComponentProps<McpServerConfig>;
 
   let { server, onSave, onClose, onCancel }: Props = $props();
 
   const isEditMode = !!server?.id;
+  const initialTransport = server?.transport;
+
+  // ── 步骤定义 ──
+  const steps = [
+    { step: 0, label: "连接" },
+    { step: 1, label: "测试" },
+    { step: 2, label: "确认" },
+  ];
+
+  let currentStep = $state(0);
+
+  // ── 初始解析 ──
+  const initialHeaders =
+    initialTransport &&
+    (initialTransport.type === "sse" || initialTransport.type === "http")
+      ? initialTransport.headers
+      : undefined;
+
+  const parsed = parseAuthFromHeaders(initialHeaders);
 
   // ── 表单状态 ──
   let id = $state(server?.id ?? "");
   let name = $state(server?.name ?? "");
-  let transport = $state<Server["transport"]>(server?.transport ?? "stdio");
-  let command = $state(server?.command ?? "");
-  let argsText = $state((server?.args ?? []).join(" "));
-  let url = $state(server?.url ?? "");
-  let timeoutMs = $state<number | undefined>(server?.timeoutMs ?? 30000);
-  let description = $state(server?.description ?? "");
-  let tools = $state(server?.tools ?? []);
-  let autoApprove = $state<string[]>(server?.autoApprove ?? []);
+  let enabled = $state(server?.enabled ?? true);
+  let transportType = $state<McpTransport["type"]>(
+    initialTransport?.type ?? "http",
+  );
 
-  function handleTransportChange(t: string) {
-    if (t === "stdio" || t === "sse" || t === "http") {
-      transport = t;
-    }
-  }
+  let command = $state(
+    initialTransport?.type === "stdio" ? initialTransport.command : "",
+  );
+  let argsText = $state(
+    initialTransport?.type === "stdio"
+      ? (initialTransport.args ?? []).join(" ")
+      : "",
+  );
+  let url = $state(
+    initialTransport &&
+      (initialTransport.type === "sse" || initialTransport.type === "http")
+      ? initialTransport.url
+      : "",
+  );
 
-  // ── UI 状态 ──
+  let authMode = $state<AuthMode>(parsed.authMode);
+  let authToken = $state(parsed.authToken);
+  let headerPairs = $state<HeaderPair[]>(
+    recordToPairs(parsed.remaining, () => crypto.randomUUID()),
+  );
+
+  // ── 测试状态 ──
+  let testing = $state(false);
+  let testResult = $state<McpConnectionTestResult | null>(null);
+  let testError = $state("");
+  let testedSnapshot = $state("");
+  let testToken = 0; // 普通变量：用于取消被 resetTest 作废的在途测试
+
+  // ── 提交状态 ──
   let isSubmitting = $state(false);
   let errorMessage = $state("");
 
-  // ── 校验 ──
-  const isValid = $derived(
-    id.trim().length > 0 &&
-      name.trim().length > 0 &&
-      (transport === "stdio"
-        ? command.trim().length > 0
-        : url.trim().length > 0),
-  );
-
+  // ── 工具函数 ──
   function parseArgs(): string[] {
     return argsText
       .split(/\s+/)
-      .map((s) => s.trim())
+      .map((item) => item.trim())
       .filter(Boolean);
   }
 
-  function handleAddTool() {
-    tools = [...tools, { name: "new_tool", description: "", dangerous: false }];
-  }
-  function handleRemoveTool(idx: number) {
-    tools = tools.filter((_, i) => i !== idx);
+  /** 浏览器内置 crc32（基于 TextEncoder，同步可用）。 */
+  function crc32(text: string): number {
+    const table: number[] = [];
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) {
+        c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      }
+      table[i] = c >>> 0;
+    }
+
+    let crc = 0xffffffff;
+    const bytes = new TextEncoder().encode(text);
+    for (const b of bytes) {
+      crc = table[(crc ^ b) & 0xff] ^ (crc >>> 8);
+    }
+
+    return (crc ^ 0xffffffff) >>> 0;
   }
 
-  async function handleSubmit() {
-    if (!isValid || isSubmitting) return;
-    isSubmitting = true;
-    errorMessage = "";
-    try {
-      const result: Server = {
-        id: id.trim(),
-        name: name.trim(),
-        transport,
-        command: transport === "stdio" ? command.trim() : undefined,
-        args: transport === "stdio" ? parseArgs() : undefined,
-        url: transport !== "stdio" ? url.trim() : undefined,
-        enabled: server?.enabled ?? true,
-        tools,
-        autoApprove,
-        timeoutMs,
-        description: description.trim() || undefined,
+  /**
+   * 从连接参数派生稳定、合法的函数/工具 ID。
+   * seed 取服务器地址（http/sse 用 url；stdio 用命令与参数），
+   * 结果固定为 "mcp" + 8 位十六进制（11 字符），严格匹配 ^[a-z][a-z0-9_-]{0,15}$。
+   */
+  function deriveId(): string {
+    const seed =
+      transportType === "stdio" ? `${command} ${argsText}`.trim() : url.trim();
+
+    if (!seed) return "mcp-server";
+
+    const hash = crc32(seed).toString(16).padStart(8, "0");
+    return `mcp${hash}`;
+  }
+
+  function connectionSnapshot(): string {
+    return JSON.stringify({
+      transportType,
+      url: url.trim(),
+      command: command.trim(),
+      argsText: argsText.trim(),
+      authMode,
+      authToken: authMode === "none" ? "" : authToken,
+      headerPairs: headerPairs
+        .filter((p) => p.key.trim())
+        .map((p) => ({ k: p.key.trim(), v: p.value })),
+    });
+  }
+
+  const connectionReady = $derived(
+    transportType === "stdio"
+      ? command.trim().length > 0
+      : url.trim().length > 0,
+  );
+
+  const testPassed = $derived(
+    testResult?.ok === true && testedSnapshot === connectionSnapshot(),
+  );
+
+  const isFinalValid = $derived(
+    id.trim().length > 0 &&
+      name.trim().length > 0 &&
+      /^[a-z][a-z0-9_-]{0,15}$/.test(id.trim()),
+  );
+
+  function buildTransport(): McpTransport {
+    if (transportType === "stdio") {
+      return {
+        type: "stdio",
+        command: command.trim(),
+        args: parseArgs(),
       };
-      if (onSave) {
-        if (await onSave(result)) return;
+    }
+
+    const authHeaders = buildAuthHeaders(authMode, authToken);
+    const custom = pairsToRecord(headerPairs);
+
+    const headers: Record<string, string> = { ...custom };
+    for (const [key, value] of Object.entries(authHeaders)) {
+      headers[key] = value;
+    }
+
+    return {
+      type: transportType,
+      url: url.trim(),
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+    };
+  }
+
+  function buildDraft(): McpServerConfig {
+    return {
+      id: id.trim() || "__pending__",
+      name: name.trim() || undefined,
+      enabled,
+      transport: buildTransport(),
+    };
+  }
+
+  // ── 测试 ──
+  function resetTest() {
+    testToken += 1;
+    testing = false;
+    testResult = null;
+    testError = "";
+    testedSnapshot = "";
+  }
+
+  async function runTest() {
+    if (!connectionReady || testing) return;
+
+    resetTest();
+    const myToken = testToken;
+    testing = true;
+
+    try {
+      const result = await testMcpConnection(buildDraft());
+      if (myToken !== testToken) return; // 已被取消
+
+      testResult = result;
+
+      if (!result.ok) {
+        testError = result.error ?? "连接失败";
+        return;
       }
-      onClose(result);
-    } catch (e) {
-      errorMessage = e instanceof Error ? e.message : "保存失败";
+
+      // 记录本次测试的配置快照，配合 derived 的 testPassed 判定有效期
+      testedSnapshot = connectionSnapshot();
+
+      // 名称初值：优先取服务端返回；若用户已在别处填写则不覆盖
+      if (!name.trim() && result.serverInfo?.name) {
+        name = result.serverInfo.name;
+      }
+    } catch (err) {
+      if (myToken !== testToken) return;
+      testResult = null;
+      testError = err instanceof Error ? err.message : "连接失败";
     } finally {
-      isSubmitting = false;
+      if (myToken === testToken) testing = false;
     }
   }
 
-  function handleToggleAutoApprove(toolName: string) {
-    const idx = autoApprove.indexOf(toolName);
-    if (idx >= 0) autoApprove.splice(idx, 1);
-    else autoApprove.push(toolName);
+  // ── 导航 ──
+  function goForward() {
+    if (currentStep === 0) {
+      if (!connectionReady) return;
+      resetTest();
+      currentStep = 1;
+      void runTest();
+      return;
+    }
+
+    if (currentStep === 1) {
+      if (!testPassed || testing) return;
+      if (!id.trim()) id = deriveId();
+      if (!name.trim()) {
+        name = testResult?.serverInfo?.name?.trim() || "未命名";
+      }
+      currentStep = 2;
+    }
+  }
+
+  function goBack() {
+    if (currentStep === 0) return;
+    // 只回退 step，不清测试状态：Step2 → Step1 显示历史结果，不重测
+    currentStep -= 1;
+  }
+
+  // 兜底：若通过 Trigger 直接跳到 Step2 且测试未通过，退回 Step1
+  $effect(() => {
+    if (currentStep === 2 && !testPassed) {
+      currentStep = 1;
+    }
+  });
+
+  // ── 提交 ──
+  async function handleSubmit() {
+    if (!isFinalValid || isSubmitting) return;
+
+    isSubmitting = true;
+    errorMessage = "";
+
+    try {
+      const result: McpServerConfig = {
+        id: id.trim(),
+        name: name.trim(),
+        enabled,
+        transport: buildTransport(),
+      };
+      await onSave?.(result);
+      onClose(result);
+    } catch (err) {
+      errorMessage = err instanceof Error ? err.message : "保存失败";
+    } finally {
+      isSubmitting = false;
+    }
   }
 </script>
 
 <DialogHeader>
   <DialogTitle>{isEditMode ? "编辑 MCP 服务" : "新建 MCP 服务"}</DialogTitle>
   <DialogDescription>
-    {isEditMode ? "修改 MCP 服务连接与工具权限" : "接入一个新的 MCP 服务"}
+    {isEditMode ? "修改 MCP 服务连接参数" : "分步接入一个新的 MCP 服务"}
   </DialogDescription>
 </DialogHeader>
 
-<div class="space-y-6 py-4">
-  <Tabs.Root value="basic" class="w-full">
-    <Tabs.List class="rounded-xl">
-      <Tabs.Trigger value="basic" class="gap-1.5 rounded-xl">
-        <IconSettings size={14} stroke={1.5} />
-        基本信息
-      </Tabs.Trigger>
-      <Tabs.Trigger value="tools" class="gap-1.5 rounded-xl">
-        <IconTool size={14} stroke={1.5} />
-        工具权限
-        <span
-          class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
-        >
-          {tools.length}
-        </span>
-      </Tabs.Trigger>
-    </Tabs.List>
+<div class="space-y-5 py-4">
+  <Stepper.Root bind:value={currentStep}>
+    {#each steps as s (s.step)}
+      <Stepper.Item step={s.step}>
+        <Stepper.Trigger step={s.step}>
+          <Stepper.Indicator step={s.step} />
+          <Stepper.Title>{s.label}</Stepper.Title>
+        </Stepper.Trigger>
+        {#if s.step !== steps.length - 1}
+          <Stepper.Separator />
+        {/if}
+      </Stepper.Item>
+    {/each}
+  </Stepper.Root>
 
-    <Tabs.Content value="basic" class="space-y-4 pt-4">
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div class="space-y-2">
-          <Label for="mcp-id">服务 ID</Label>
-          <Input
-            id="mcp-id"
-            bind:value={id}
-            placeholder="github-mcp"
-            class="rounded-xl font-mono"
-          />
-        </div>
-        <div class="space-y-2">
-          <Label for="mcp-name">显示名称</Label>
-          <Input
-            id="mcp-name"
-            bind:value={name}
-            placeholder="GitHub"
-            class="rounded-xl"
-          />
-        </div>
-      </div>
-
+  {#if currentStep === 0}
+    <div class="animate-fade-in space-y-4">
       <div class="space-y-2">
         <Label>传输协议</Label>
         <div class="flex flex-wrap gap-2">
-          {#each ["stdio", "sse", "http"] as t (t)}
-            {@const active = transport === t}
+          {#each ["http", "sse", "stdio"] as t (t)}
+            {@const active = transportType === t}
             <button
               type="button"
-              onclick={() => handleTransportChange(t)}
+              onclick={() => (transportType = t as McpTransport["type"])}
               class={[
                 "rounded-xl border px-3 py-1.5 text-sm transition-all duration-200",
                 active
@@ -198,13 +373,27 @@
                   : "border-border/50 bg-background text-muted-foreground hover:bg-muted",
               ]}
             >
-              {t}
+              {t === "stdio" ? "stdio（高级）" : t.toUpperCase()}
             </button>
           {/each}
         </div>
       </div>
 
-      {#if transport === "stdio"}
+      {#if transportType === "stdio"}
+        <div
+          class="flex items-start gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-muted-foreground"
+        >
+          <IconAlertTriangle
+            size={16}
+            stroke={1.5}
+            class="mt-0.5 shrink-0 text-destructive"
+          />
+          <p>
+            stdio 会在本机启动进程。请确认命令来源可信；非必要建议使用 HTTP /
+            SSE。
+          </p>
+        </div>
+
         <div class="space-y-2">
           <Label for="mcp-cmd">启动命令</Label>
           <Input
@@ -214,6 +403,7 @@
             class="rounded-xl font-mono"
           />
         </div>
+
         <div class="space-y-2">
           <Label for="mcp-args">参数（空格分隔）</Label>
           <Input
@@ -233,108 +423,194 @@
             class="rounded-xl"
           />
         </div>
+
+        <McpAuthField bind:authMode bind:authToken />
+        <McpHeaderEditor bind:headerPairs />
       {/if}
-
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div class="space-y-2">
-          <Label for="mcp-timeout">超时（毫秒）</Label>
-          <Input
-            id="mcp-timeout"
-            type="number"
-            value={timeoutMs ?? ""}
-            oninput={(e) => {
-              const raw = (e.currentTarget as HTMLInputElement).value;
-              timeoutMs = raw ? Number(raw) : undefined;
-            }}
-            class="rounded-xl tabular-nums"
-          />
-        </div>
-        <div class="space-y-2">
-          <Label for="mcp-desc">描述</Label>
-          <Input
-            id="mcp-desc"
-            bind:value={description}
-            placeholder="简要说明该服务的用途"
-            class="rounded-xl"
-          />
-        </div>
-      </div>
-    </Tabs.Content>
-
-    <Tabs.Content value="tools" class="space-y-4 pt-4">
-      <div class="flex items-center justify-between">
-        <h3 class="text-sm font-medium">声明的工具</h3>
-        <Button
-          variant="outline"
-          size="sm"
-          class="gap-1.5 rounded-xl"
-          onclick={handleAddTool}
-        >
-          <IconCirclePlus size={14} stroke={1.5} />
-          添加工具
-        </Button>
-      </div>
-
-      {#if tools.length === 0}
+    </div>
+  {:else if currentStep === 1}
+    <div class="animate-fade-in space-y-4">
+      {#if testing}
         <div
-          class="flex flex-col items-center justify-center space-y-2 rounded-xl border border-dashed border-border/50 py-10"
+          class="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/20 p-4 text-sm text-muted-foreground"
         >
-          <IconPlugConnected
-            size={20}
-            stroke={1.5}
-            class="text-muted-foreground"
-          />
-          <p class="text-sm text-muted-foreground">尚未声明工具</p>
+          <IconLoader2 size={16} stroke={1.5} class="animate-spin" />
+          正在测试连接…
         </div>
-      {:else}
-        <div class="space-y-3">
-          {#each tools as tool, idx (tool.name + idx)}
-            <div
-              class="space-y-2 rounded-xl border border-border/50 bg-background p-3"
+      {:else if testResult?.ok && testResult}
+        <div
+          class="animate-fade-in space-y-3 rounded-xl border border-border/50 bg-background p-4"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <span
+              class="flex items-center gap-1.5 rounded-lg bg-primary/10 px-2 py-0.5 text-xs text-primary"
             >
-              <div class="flex items-center gap-2">
-                <Input
-                  bind:value={tool.name}
-                  class="min-w-0 flex-1 rounded-lg font-mono text-xs"
-                  placeholder="tool_name"
-                />
-                <button
-                  type="button"
-                  class="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-destructive/10 hover:text-destructive"
-                  onclick={() => handleRemoveTool(idx)}
-                >
-                  <IconTrash size={14} stroke={1.5} />
-                </button>
+              <IconCheck size={12} stroke={1.5} />
+              连接成功
+            </span>
+            <span class="text-xs text-muted-foreground">
+              {testResult.latencyMs} ms
+            </span>
+            {#if testResult.protocolVersion}
+              <span class="text-xs text-muted-foreground">
+                协议 {testResult.protocolVersion}
+              </span>
+            {/if}
+            {#if !testPassed}
+              <span class="text-xs text-destructive">
+                配置已变更，需重新测试
+              </span>
+            {/if}
+          </div>
+
+          {#if testResult.serverInfo}
+            <div class="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+              <div>
+                <p class="text-muted-foreground">服务名称</p>
+                <p class="font-medium">{testResult.serverInfo.name}</p>
               </div>
-              <Input
-                bind:value={tool.description}
-                class="rounded-lg text-xs"
-                placeholder="工具说明"
-              />
-              <label
-                class="flex items-center gap-2 text-xs text-muted-foreground"
-              >
-                <input
-                  type="checkbox"
-                  bind:checked={tool.dangerous}
-                  class="size-3.5 rounded border-border"
-                />
-                标记为危险操作（默认需要运行时确认）
-              </label>
+              <div>
+                <p class="text-muted-foreground">版本</p>
+                <p class="font-medium">{testResult.serverInfo.version}</p>
+              </div>
             </div>
-          {/each}
+          {/if}
+
+          {#if testResult.tools.length > 0}
+            <div class="space-y-2 border-t border-border/50 pt-3">
+              <p
+                class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+              >
+                <IconTool size={12} stroke={1.5} />
+                可用工具 · {testResult.tools.length}
+              </p>
+              <div class="space-y-1.5">
+                {#each testResult.tools as tool (tool.name)}
+                  <div
+                    class="rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
+                  >
+                    <p class="truncate font-mono text-xs font-medium">
+                      {tool.name}
+                    </p>
+                    {#if tool.description}
+                      <p class="mt-0.5 text-xs text-muted-foreground">
+                        {tool.description}
+                      </p>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if testResult.resources && testResult.resources.length > 0}
+            <div class="space-y-2 border-t border-border/50 pt-3">
+              <p class="text-xs font-medium text-muted-foreground">
+                资源 · {testResult.resources.length}
+              </p>
+              <div class="flex flex-wrap gap-1.5">
+                {#each testResult.resources as resource (resource.uri)}
+                  <span
+                    class="rounded-lg bg-muted/30 px-2 py-0.5 font-mono text-xs text-muted-foreground"
+                  >
+                    {resource.uri}
+                  </span>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if testResult.prompts && testResult.prompts.length > 0}
+            <div class="space-y-2 border-t border-border/50 pt-3">
+              <p class="text-xs font-medium text-muted-foreground">
+                提示模板 · {testResult.prompts.length}
+              </p>
+              <div class="flex flex-wrap gap-1.5">
+                {#each testResult.prompts as prompt (prompt.name)}
+                  <span
+                    class="rounded-lg bg-muted/30 px-2 py-0.5 font-mono text-xs text-muted-foreground"
+                  >
+                    {prompt.name}
+                  </span>
+                {/each}
+              </div>
+            </div>
+          {/if}
+        </div>
+      {:else if testError}
+        <div
+          class="animate-fade-in rounded-xl border border-destructive/20 bg-destructive/5 p-4"
+        >
+          <div class="flex items-start gap-2 text-sm text-destructive">
+            <IconAlertCircle size={16} stroke={1.5} class="mt-0.5 shrink-0" />
+            <p>{testError}</p>
+          </div>
         </div>
       {/if}
 
-      <Separator />
+      {#if !testing}
+        <Button
+          type="button"
+          variant="outline"
+          class="gap-2 rounded-xl"
+          onclick={() => void runTest()}
+          disabled={!connectionReady}
+        >
+          <IconRefresh size={16} stroke={1.5} />
+          重新测试
+        </Button>
+      {/if}
+    </div>
+  {:else}
+    <div class="animate-fade-in space-y-4">
+      <div class="space-y-2">
+        <Label for="mcp-name">名称</Label>
+        <Input
+          id="mcp-name"
+          bind:value={name}
+          placeholder="MCP 服务"
+          class="rounded-xl"
+        />
+        {#if testResult?.serverInfo?.name}
+          <p class="text-xs text-muted-foreground">
+            已从服务器信息自动填充，可直接修改
+          </p>
+        {/if}
+      </div>
 
-      <ToolPermissionEditor
-        {tools}
-        {autoApprove}
-        onToggle={handleToggleAutoApprove}
-      />
-    </Tabs.Content>
-  </Tabs.Root>
+      <div class="space-y-2">
+        <Label for="mcp-id">服务 ID</Label>
+        <Input
+          id="mcp-id"
+          bind:value={id}
+          placeholder="mcp0a1b2c3d"
+          class="rounded-xl font-mono"
+        />
+        <p class="text-xs text-muted-foreground">
+          本地唯一标识，须匹配
+          <code class="rounded bg-muted px-1 py-0.5 font-mono"
+            >^[a-z][a-z0-9_-]&#123;0,15&#125;$</code
+          >
+        </p>
+      </div>
+
+      <div
+        class="flex items-center justify-between rounded-xl border border-border/50 bg-background p-3"
+      >
+        <div class="min-w-0">
+          <p class="text-sm font-medium">启用服务</p>
+          <p class="text-xs text-muted-foreground">
+            禁用后保留配置，但不参与运行
+          </p>
+        </div>
+
+        <Switch
+          checked={enabled}
+          onCheckedChange={(checked) => (enabled = checked)}
+        />
+      </div>
+    </div>
+  {/if}
 
   {#if errorMessage}
     <Alert.Root variant="destructive" class="rounded-xl">
@@ -346,15 +622,43 @@
 </div>
 
 <DialogFooter class="mt-4">
-  <Button variant="outline" onclick={() => onCancel()} disabled={isSubmitting}>
-    取消
-  </Button>
-  <Button onclick={handleSubmit} disabled={!isValid || isSubmitting}>
-    {#if isSubmitting}
-      <IconLoader2 class="size-4 animate-spin" />
-      保存中
-    {:else}
-      {isEditMode ? "保存更改" : "创建"}
-    {/if}
-  </Button>
+  {#if currentStep > 0}
+    <Button
+      variant="outline"
+      onclick={goBack}
+      disabled={isSubmitting || testing}
+    >
+      <IconChevronLeft size={16} stroke={1.5} />
+      上一步
+    </Button>
+  {:else}
+    <Button
+      variant="outline"
+      onclick={() => onCancel()}
+      disabled={isSubmitting}
+    >
+      取消
+    </Button>
+  {/if}
+
+  {#if currentStep === 0}
+    <Button onclick={goForward} disabled={!connectionReady}>
+      下一步
+      <IconChevronRight size={16} stroke={1.5} />
+    </Button>
+  {:else if currentStep === 1}
+    <Button onclick={goForward} disabled={!testPassed || testing}>
+      下一步
+      <IconChevronRight size={16} stroke={1.5} />
+    </Button>
+  {:else}
+    <Button onclick={handleSubmit} disabled={!isFinalValid || isSubmitting}>
+      {#if isSubmitting}
+        <IconLoader2 class="size-4 animate-spin" />
+        保存中
+      {:else}
+        {isEditMode ? "保存更改" : "创建"}
+      {/if}
+    </Button>
+  {/if}
 </DialogFooter>

@@ -2,7 +2,8 @@
 export {
     closeMcpClient,
     connectMcpServer,
-    resolveMcpToolDescription
+    resolveMcpToolDescription,
+    testMcpServerConnection
 } from "./client.js";
 export type { McpClient, McpConnection } from "./client.js";
 export { McpConnectionPool } from "./connection.js";
