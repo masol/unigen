@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import { configStore } from "$lib/store/config.svelte";
   import {
+    IconAlertTriangle,
     IconBrain,
     IconDeviceDesktop,
     IconPlus,
@@ -25,8 +27,22 @@
     <h1 class="text-2xl font-semibold tracking-tight lg:text-3xl">
       AIGC模型配置
     </h1>
-    <p class="text-sm text-muted-foreground">
-      管理 AIGC 服务提供商及其支持的模型
+    <p
+      class="text-xs text-muted-foreground mt-1.5 flex flex-wrap items-center gap-2"
+    >
+      <span>管理 AIGC 服务提供商及其支持的模型</span>
+      {#if configStore.llmModelCount === 0}
+        <span
+          class="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5
+                   text-[11px] font-semibold tracking-wide
+                   text-amber-600 dark:text-amber-400
+                   ring-1 ring-inset ring-amber-500/30
+                   shadow-[0_0_0_3px_rgba(245,158,11,0.08)]"
+        >
+          <IconAlertTriangle size={12} stroke={2.25} />
+          需配置并启用至少一个文本模型
+        </span>
+      {/if}
     </p>
     <div class="flex items-center gap-3 pt-1 text-xs text-muted-foreground">
       <span class="flex items-center gap-1.5">

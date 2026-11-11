@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { push } from "svelte-spa-router";
   import * as Tooltip from "$lib/components/ui/tooltip";
+  import { push } from "svelte-spa-router";
 
   const handleClick = () => {
     push("/");
@@ -24,5 +24,5 @@
       </button>
     {/snippet}
   </Tooltip.Trigger>
-  <Tooltip.Content class="z-200">回到控制台</Tooltip.Content>
+  <Tooltip.Content class="z-200">回到工作台</Tooltip.Content>
 </Tooltip.Root>

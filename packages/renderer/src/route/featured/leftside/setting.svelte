@@ -113,7 +113,7 @@
     },
     {
       id: "api",
-      label: "API 管理",
+      label: "AI 能力",
       icon: IconCode,
       items: [
         {

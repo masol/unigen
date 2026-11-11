@@ -1,5 +1,7 @@
 <script lang="ts">
   import { ScrollArea } from "$lib/components/ui/scroll-area";
+  import { configStore } from "$lib/store/config.svelte";
+  import autoAnimate from "@formkit/auto-animate";
   import { IconAdjustments, IconAlertTriangle } from "@tabler/icons-svelte";
   import BlueprintSection from "./BlueprintSection.svelte";
   import EditorSection from "./EditorSection.svelte";
@@ -49,10 +51,12 @@
   <!-- ══════════════════════════════════════════════════════ -->
   <div class="flex-1 min-h-0">
     <ScrollArea class="h-full">
-      <div class="px-8 lg:px-12 py-8 space-y-8">
+      <div class="px-8 lg:px-12 py-8 space-y-8" use:autoAnimate>
         <GeneralSection></GeneralSection>
-        <BlueprintSection />
-        <EditorSection />
+        {#if configStore.showDevUI}
+          <BlueprintSection />
+          <EditorSection />
+        {/if}
         <div class="h-8"></div>
       </div>
     </ScrollArea>

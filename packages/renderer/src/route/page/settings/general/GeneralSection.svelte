@@ -230,7 +230,7 @@
           <IconDeviceSim size={20} stroke={1.5} class="text-muted-foreground" />
         </div>
         <div class="min-w-0">
-          <p class="text-sm font-medium text-foreground">UI禁用硬件加速</p>
+          <p class="text-sm font-medium text-foreground">禁用硬件加速</p>
           <p class="text-xs text-muted-foreground mt-0.5">
             禁用UI界面的硬件加速(重启生效)
           </p>

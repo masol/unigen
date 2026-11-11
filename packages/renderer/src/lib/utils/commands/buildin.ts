@@ -13,7 +13,7 @@ export const builtins: CommandDescriptor[] = [
     // ── 导航 ──
     {
         id: 'navigation.home',
-        label: '回到控制台',
+        label: '回到工作台',
         category: 'Navigation',
         handler: () => push("/"),
     },
@@ -103,7 +103,7 @@ export const builtins: CommandDescriptor[] = [
     },
     {
         id: 'dev.clearConsole',
-        label: '清空控制台',
+        label: '清空工作台',
         category: 'Developer',
         handler: () => console.clear(),
     },

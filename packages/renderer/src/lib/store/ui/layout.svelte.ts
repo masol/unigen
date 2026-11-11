@@ -299,7 +299,7 @@ class LayoutStore {
 
     /** 切换面板开关，关闭时同步退出该面板的最大化 */
     togglePanel(panel: PanelPosition): void {
-        log.debug(`[LayoutStore] togglePanel() panel=${panel}`)
+        // log.debug(`[LayoutStore] togglePanel() panel=${panel}`)
 
         switch (panel) {
             case 'left':
@@ -321,7 +321,7 @@ class LayoutStore {
 
     /** 打开指定面板（幂等） */
     openPanel(panel: PanelPosition): void {
-        log.debug(`[LayoutStore] openPanel() panel=${panel}`)
+        // log.debug(`[LayoutStore] openPanel() panel=${panel}`)
 
         switch (panel) {
             case 'left':
@@ -338,7 +338,7 @@ class LayoutStore {
 
     /** 关闭指定面板，同步退出其最大化 */
     closePanel(panel: PanelPosition): void {
-        log.debug(`[LayoutStore] closePanel() panel=${panel}`)
+        // log.debug(`[LayoutStore] closePanel() panel=${panel}`)
 
         switch (panel) {
             case 'left':
