@@ -1,5 +1,8 @@
+import { KcDirName, SkillsDirName } from "$libs/const.js";
 import { app } from "electron";
+import Logger from "electron-log";
 import { join } from "node:path";
+import { knowledgeCenter } from "../kc.js";
 
 export function rerankPath(): string {
     const dataPath = app.getPath("userData");
@@ -57,4 +60,49 @@ export function lanceGlobalDir(...parts: string[]): string {
  */
 export function lanceModelDir(...parts: string[]): string {
     return join(app.getPath("userData"), "lance-models", ...parts);
+}
+
+export function globalSkillDir(...sub: string[]): string {
+    return join(app.getPath("userData"), SkillsDirName, ...sub);
+}
+
+
+export function globalKbDir(...sub: string[]): string {
+    return join(app.getPath("userData"), KcDirName, ...sub);
+}
+
+
+export function getBuildinPath(name: string, ...sub: string[]): string {
+    let basePath: string | undefined
+    switch (name) {
+        case 'llm':
+        case 'rerank':
+            basePath = join(rerankPath())
+            break
+        case 'embeding':
+            basePath = join(embedingPath())
+            break
+        case 'kc':
+            basePath = knowledgeCenter.kcPath
+            break
+        case 'logs':
+            basePath = Logger.transports.file.getFile().path
+            break
+        case 'global-skill':
+            basePath = globalSkillDir(...sub)
+            break
+        default:
+            try {
+                // @ts-expect-error 无类型。
+                const tempPath = app.getPath(name)
+                basePath = join(tempPath)
+            } catch (e) {
+                void e
+                return ""
+            }
+    }
+    if (basePath) {
+        return join(basePath, ...(sub ?? []))
+    }
+    return ""
 }

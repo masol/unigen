@@ -1,5 +1,17 @@
-import { parseMcpConfigOrThrow } from '$libs/loader/mcp/parse.js';
-import { openGlobalSearch } from "$libs/searchsrv/index.js";
+// packages/main/src/api/common/agent.ts
+import { installKnowledgeBase as installKnowledgeBaseFromSource } from "$libs/loader/kb/install.js";
+import {
+    exportMcpServerConfigToPath,
+    getMcpExportDefaultBaseName,
+    importMcpConfigFromPath,
+} from '$libs/loader/mcp/config-io.js';
+import { installSkill as installSkillFromSource } from "$libs/loader/skill/install.js";
+import { uninstallSkill as uninstallSkillFromSource } from "$libs/loader/skill/uninstall.js";
+import {
+    openGlobalSearch,
+    type KbCatalogRow,
+    type SkillRow,
+} from "$libs/searchsrv/index.js";
 import { globalToolDB, type ToolMeta } from "$libs/tooldb/index.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import { WindowService } from '$libs/utils/window.js';
@@ -8,16 +20,51 @@ import {
     toolSearchOutputSchema,
     type ToolSearchItem,
 } from "$types/shared/api/agent.js";
+import {
+    knowledgeBaseInstallInputSchema,
+    knowledgeBaseInstallOutputSchema,
+    knowledgeBaseSearchInputSchema,
+    knowledgeBaseSearchOutputSchema,
+    type KnowledgeBaseSearchItem,
+} from "$types/shared/api/kb.js";
+import {
+    skillDeleteInputSchema,
+    skillDeleteOutputSchema,
+    skillInstallInputSchema,
+    skillInstallOutputSchema,
+    skillSearchInputSchema,
+    skillSearchOutputSchema,
+    type SkillSearchItem,
+} from "$types/shared/api/skill.js";
 import { mcpServerConfigSchema } from '$types/shared/mcp.js';
 import { os } from "@orpc/server";
-import AdmZip from 'adm-zip';
-import { app, dialog } from 'electron';
+import { dialog } from 'electron';
 import Logger from "electron-log/main.js";
-import { ensureDir } from 'fs-extra';
-import { readFile, writeFile } from 'fs/promises';
-import { dirname, join, posix } from 'path';
-import { z } from 'zod';
+import { z } from "zod";
 import type { RpcContext } from '../type.js';
+
+function parseMetadata(raw: unknown): Record<string, unknown> {
+    if (typeof raw === "string" && raw) {
+        try {
+            const parsed = JSON.parse(raw) as unknown;
+            return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+                ? (parsed as Record<string, unknown>)
+                : {};
+        } catch {
+            return {};
+        }
+    }
+
+    return raw && typeof raw === "object" && !Array.isArray(raw)
+        ? (raw as Record<string, unknown>)
+        : {};
+}
+
+function readRerankScore(value: unknown): number | undefined {
+    return typeof value === "number" && Number.isFinite(value)
+        ? value
+        : undefined;
+}
 
 /**
  * ToolMeta -> API DTO。
@@ -33,17 +80,44 @@ function toToolSearchItem(meta: ToolMeta): ToolSearchItem {
         metadata.serverId = meta.serverId;
     }
 
-    const rerankScore =
-        typeof meta.rerankScore === "number" &&
-            Number.isFinite(meta.rerankScore)
-            ? meta.rerankScore
-            : undefined;
+    const rerankScore = readRerankScore(meta.rerankScore);
 
     return {
         id: meta.id,
         name: meta.name,
         description: meta.description,
         metadata,
+        ...(rerankScore !== undefined ? { rerankScore } : {}),
+    };
+}
+
+/**
+ * SkillRow -> API DTO。
+ *
+ * skill 正文不跨进程传输；只返回检索/展示所需字段。
+ */
+function toSkillSearchItem(row: SkillRow): SkillSearchItem {
+    const rerankScore = readRerankScore(row.rerankScore);
+
+    return {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        path: row.path,
+        metadata: parseMetadata(row.metadata),
+        ...(rerankScore !== undefined ? { rerankScore } : {}),
+    };
+}
+
+function toKnowledgeBaseSearchItem(
+    row: KbCatalogRow,
+): KnowledgeBaseSearchItem {
+    const rerankScore = readRerankScore(row.rerankScore);
+
+    return {
+        id: row.id,
+        name: row.name,
+        description: row.description,
         ...(rerankScore !== undefined ? { rerankScore } : {}),
     };
 }
@@ -82,6 +156,147 @@ const searchTools = os
         };
     });
 
+const searchSkills = os
+    .input(skillSearchInputSchema)
+    .output(skillSearchOutputSchema)
+    .handler(async ({ input }) => {
+        const db = await openGlobalSearch();
+        if (!db.opened) {
+            throwPrecondition("[Agent] 全局检索库未就绪，无法检索 Skill。");
+        }
+
+        // 多取 1 条判断是否还有下一页，避免额外 count 查询。
+        const fetchLimit = input.limit + 1;
+
+        const rows = await db.skill.searchSkills(input.query, {
+            limit: fetchLimit,
+            offset: input.offset,
+        });
+
+        const hasMore = rows.length > input.limit;
+        const items = rows
+            .slice(0, input.limit)
+            .map((row) => toSkillSearchItem(row));
+
+        Logger.debug(
+            `[Agent] Skill 检索完成: query=${JSON.stringify(
+                input.query,
+            )}, offset=${input.offset}, items=${items.length}, hasMore=${hasMore}`,
+        );
+
+        return {
+            items,
+            hasMore,
+        };
+    });
+
+const searchKnowledgeBases = os
+    .input(knowledgeBaseSearchInputSchema)
+    .output(knowledgeBaseSearchOutputSchema)
+    .handler(async ({ input }) => {
+        const db = await openGlobalSearch();
+        if (!db.opened) {
+            throwPrecondition(
+                "[Agent] 全局检索库未就绪，无法检索知识库。",
+            );
+        }
+
+        const fetchLimit = input.limit + 1;
+        let rows: KbCatalogRow[];
+
+        if (input.query) {
+            rows = await db.kb.searchKnowledgeBases(input.query, {
+                limit: input.offset + fetchLimit,
+            });
+            rows = rows.slice(input.offset);
+        } else {
+            const all = await db.kb.listCatalogEntries();
+            rows = all.slice(input.offset, input.offset + fetchLimit);
+        }
+
+        const hasMore = rows.length > input.limit;
+        const items = rows
+            .slice(0, input.limit)
+            .map((row) => toKnowledgeBaseSearchItem(row));
+
+        Logger.debug(
+            `[Agent] 知识库检索完成: query=${JSON.stringify(
+                input.query,
+            )}, offset=${input.offset}, items=${items.length}, hasMore=${hasMore}`,
+        );
+
+        return {
+            items,
+            hasMore,
+        };
+    });
+
+/**
+ * 安装技能。
+ *
+ * 主进程负责弹出 zip 选择框并完成解压安装，安装完成后直接返回；
+ * 不查询检索库，列表刷新由渲染进程在安装成功后自行发起。
+ */
+const installSkill = os
+    .input(skillInstallInputSchema)
+    .output(skillInstallOutputSchema)
+    .handler(async ({ context }) => {
+        const { canceled, filePaths } =
+            await WindowService.instance.withModalWindow(
+                context as RpcContext,
+                (parent) =>
+                    dialog.showOpenDialog(parent, {
+                        title: "安装技能",
+                        properties: ["openFile", "dontAddToRecent"],
+                        filters: [
+                            {
+                                name: "技能压缩包",
+                                extensions: ["zip"],
+                            },
+                        ],
+                    }),
+            );
+
+        if (canceled || filePaths.length === 0) {
+            return { canceled: true as const };
+        }
+
+        const result = await installSkillFromSource(filePaths[0]);
+
+        // loader 在目标技能已存在等场景下会返回 null；这里必须显式拦截，
+        // 避免后续读取 result.source 抛 TypeError，并把可读错误返回给客户端。
+        if (!result) {
+            throwPrecondition("技能已存在，无需重复安装。");
+        }
+
+        Logger.debug(
+            `[Agent] Skill 安装完成: source=${JSON.stringify(
+                result.source,
+            )}, targetDir=${JSON.stringify(result.targetDir)}`,
+        );
+
+        return {
+            canceled: false as const,
+            source: result.source,
+            targetDir: result.targetDir,
+        };
+    });
+
+const deleteSkill = os
+    .input(skillDeleteInputSchema)
+    .output(skillDeleteOutputSchema)
+    .handler(async ({ input }) => {
+        await uninstallSkillFromSource(input.id);
+        return { success: true as const };
+    });
+
+const installKnowledgeBase = os
+    .input(knowledgeBaseInstallInputSchema)
+    .output(knowledgeBaseInstallOutputSchema)
+    .handler(async ({ input }) => {
+        return installKnowledgeBaseFromSource(input);
+    });
+
 const mcpImportResultSchema = z.union([
     z.object({
         canceled: z.literal(true),
@@ -100,159 +315,57 @@ const mcpExportResultSchema = z.object({
 });
 
 /**
- * 将 zip 内路径归一化为安全相对路径。
- *
- * zip 条目统一按 POSIX 风格处理；同时拒绝 Windows 反斜杠逃逸与 ../ 逃逸。
- */
-function safeZipRelativeName(name: string): string | null {
-    const normalized = posix
-        .normalize(name.replace(/\\/g, '/'))
-        .replace(/^\/+/, '');
-
-    if (!normalized || normalized === '.' || normalized === '..') {
-        return null;
-    }
-
-    if (normalized.startsWith('../') || normalized.includes('/../')) {
-        return null;
-    }
-
-    return normalized;
-}
-
-/**
- * MCP 服务 id 会作为 userData/mcp 下的目录名使用，必须限制为安全目录名。
- */
-function safeMcpDirectoryName(id: string): string {
-    const name = id.trim();
-
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(name)) {
-        throw new Error(`MCP 服务 ID 不能用作目录名: ${id}`);
-    }
-
-    return name;
-}
-
-/**
- * 将 zip 中 mcp.json 所在目录及其资源复制到 targetRoot。
- */
-async function copyZipResources(
-    zip: AdmZip,
-    configEntryName: string,
-    targetRoot: string,
-): Promise<void> {
-    const idx = configEntryName.lastIndexOf('/');
-    const configDir = idx >= 0 ? configEntryName.slice(0, idx + 1) : '';
-
-    for (const entry of zip.getEntries()) {
-        if (entry.isDirectory) continue;
-        if (!entry.entryName.startsWith(configDir)) continue;
-
-        const relative = entry.entryName.slice(configDir.length);
-        const safeRelative = safeZipRelativeName(relative);
-        if (!safeRelative) continue;
-
-        const dest = join(targetRoot, safeRelative);
-        await ensureDir(dirname(dest));
-        await writeFile(dest, entry.getData());
-    }
-}
-
-/**
  * 导入 MCP 配置。
  *
- * - 由主进程打开文件选择对话框，拿到完整路径；
- * - 支持 JSON 与 ZIP；
- * - ZIP 中必须存在 mcp.json，mcp.json 所在目录视为资源根目录；
- * - ZIP 导入时，将资源复制到 app.getPath('userData')/mcp/<server.id>。
+ * API 层只负责弹出文件选择框并调用 loader；
+ * JSON / ZIP 解析、ZIP 资源落盘、目录安全校验均在
+ * $libs/loader/mcp/config-io.ts 中完成。
  */
 const importMcpConfig = os
     .input(z.void())
     .output(mcpImportResultSchema)
     .handler(async ({ context }) => {
-        const { canceled, filePaths } = await WindowService.instance.withModalWindow(
-            context as RpcContext,
-            (parent) =>
-                dialog.showOpenDialog(parent, {
-                    title: '导入 MCP 配置',
-                    properties: ['openFile', 'dontAddToRecent'],
-                    filters: [
-                        {
-                            name: 'MCP 配置',
-                            extensions: ['json', 'zip'],
-                        },
-                        {
-                            name: 'JSON',
-                            extensions: ['json'],
-                        },
-                        {
-                            name: 'ZIP',
-                            extensions: ['zip'],
-                        },
-                    ],
-                }),
-        );
+        const { canceled, filePaths } =
+            await WindowService.instance.withModalWindow(
+                context as RpcContext,
+                (parent) =>
+                    dialog.showOpenDialog(parent, {
+                        title: '导入 MCP 配置',
+                        properties: ['openFile', 'dontAddToRecent'],
+                        filters: [
+                            {
+                                name: 'MCP 配置',
+                                extensions: ['json', 'zip'],
+                            },
+                            {
+                                name: 'JSON',
+                                extensions: ['json'],
+                            },
+                            {
+                                name: 'ZIP',
+                                extensions: ['zip'],
+                            },
+                        ],
+                    }),
+            );
 
         if (canceled || filePaths.length === 0) {
             return { canceled: true as const };
         }
 
-        const sourcePath = filePaths[0];
-
-        if (!sourcePath.toLowerCase().endsWith('.zip')) {
-            const text = await readFile(sourcePath, 'utf8');
-            const servers = parseMcpConfigOrThrow(text);
-
-            return {
-                canceled: false as const,
-                servers,
-                sourcePath,
-            };
-        }
-
-        const zip = new AdmZip(sourcePath);
-        const configEntries = zip
-            .getEntries()
-            .filter(
-                (entry) =>
-                    !entry.isDirectory &&
-                    posix.basename(entry.entryName).toLowerCase() === 'mcp.json',
-            )
-            .sort(
-                (a, b) =>
-                    a.entryName.split('/').length -
-                    b.entryName.split('/').length,
-            );
-
-        if (configEntries.length === 0) {
-            throw new Error('ZIP 中未找到 mcp.json 配置文件');
-        }
-
-        if (configEntries.length > 1) {
-            Logger.warn(
-                `[Agent] ZIP 中存在多个 mcp.json，将使用层级最浅的一个: ${configEntries[0].entryName}`,
-            );
-        }
-
-        const configEntry = configEntries[0];
-        const servers = parseMcpConfigOrThrow(zip.readAsText(configEntry));
-        const mcpRoot = join(app.getPath('userData'), 'mcp');
-
-        for (const server of servers) {
-            const targetRoot = join(mcpRoot, safeMcpDirectoryName(server.id));
-            await ensureDir(targetRoot);
-            await copyZipResources(zip, configEntry.entryName, targetRoot);
-        }
+        const result = await importMcpConfigFromPath(filePaths[0]);
 
         return {
             canceled: false as const,
-            servers,
-            sourcePath,
+            ...result,
         };
     });
 
 /**
  * 导出单个 MCP 配置为 JSON。
+ *
+ * API 层只负责弹出保存框并调用 loader；
+ * 文件名兜底、.json 后缀补齐、JSON 序列化均在 loader 中完成。
  */
 const exportMcpServerConfig = os
     .input(
@@ -263,48 +376,31 @@ const exportMcpServerConfig = os
     .output(mcpExportResultSchema)
     .handler(async ({ input, context }) => {
         const { server } = input;
-        const fallbackName = /^[a-zA-Z0-9._-]+$/.test(server.id)
-            ? server.id
-            : 'mcp-config';
 
-        const { canceled, filePath } = await WindowService.instance.withModalWindow(
-            context as RpcContext,
-            (parent) =>
-                dialog.showSaveDialog(parent, {
-                    title: '导出 MCP 配置',
-                    defaultPath: `${fallbackName}.json`,
-                    filters: [
-                        {
-                            name: 'JSON',
-                            extensions: ['json'],
-                        },
-                    ],
-                    properties: ['showOverwriteConfirmation'],
-                }),
-        );
+        const { canceled, filePath } =
+            await WindowService.instance.withModalWindow(
+                context as RpcContext,
+                (parent) =>
+                    dialog.showSaveDialog(parent, {
+                        title: '导出 MCP 配置',
+                        defaultPath: `${getMcpExportDefaultBaseName(server)}.json`,
+                        filters: [
+                            {
+                                name: 'JSON',
+                                extensions: ['json'],
+                            },
+                        ],
+                        properties: ['showOverwriteConfirmation'],
+                    }),
+            );
 
         if (canceled || !filePath) {
             return { success: false, canceled: true };
         }
 
-        const targetPath = filePath.toLowerCase().endsWith('.json')
-            ? filePath
-            : `${filePath}.json`;
-
-        const payload = {
-            mcpServers: {
-                [server.id]: {
-                    name: server.name,
-                    enabled: server.enabled,
-                    transport: server.transport,
-                },
-            },
-        };
-
-        await writeFile(
-            targetPath,
-            JSON.stringify(payload, null, 2),
-            'utf8',
+        const targetPath = await exportMcpServerConfigToPath(
+            server,
+            filePath,
         );
 
         return {
@@ -316,6 +412,11 @@ const exportMcpServerConfig = os
 
 export default {
     searchTools,
+    searchSkills,
+    searchKnowledgeBases,
+    installSkill,
+    deleteSkill,
+    installKnowledgeBase,
     importMcpConfig,
     exportMcpServerConfig,
 };

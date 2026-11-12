@@ -19,6 +19,7 @@ import LLMSetting from "../../../route/page/settings/llm/llm.svelte";
 import MCPSetting from '../../../route/page/settings/mcp/mcp.svelte';
 import ProjectTypeManager from '../../../route/page/settings/project-type/ProjectTypeManager.svelte';
 import MCPSearchSetting from '../../../route/page/settings/search/search.svelte';
+import SkillSetting from '../../../route/page/settings/skill/skill.svelte';
 
 // ── 类型 ──
 
@@ -47,6 +48,7 @@ class RouterStore {
         "/settings/models/llm": LLMSetting,
         "/settings/api/mcp": MCPSetting,
         "/settings/api/search": MCPSearchSetting,
+        "/settings/api/skill": SkillSetting,
         "/settings/general": GeneralSetting,
         "/settings/develops": DevSetting,
         "/settings/keybindings": Keybindings,

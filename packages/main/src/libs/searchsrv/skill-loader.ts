@@ -1,4 +1,4 @@
-// skill-loader.ts
+// packages/main/src/libs/searchsrv/skill-loader.ts
 import matter from "@11ty/gray-matter";
 import Logger from "electron-log/main.js";
 import fg from "fast-glob";
@@ -49,6 +49,78 @@ function parseSkillSource(raw: string): ParsedSkillSource {
 }
 
 /**
+ * 解析单个 SKILL.md 文件。
+ *
+ * rootDir 为技能根目录，用于计算 id / dir / metadata.skillFile。
+ * 解析失败、缺少 name/description、正文为空时返回 null（只告警），
+ * 与批量扫描行为一致。安装流程可直接复用它把单个 skill 写入检索库。
+ */
+export async function parseSkillFile(
+    absFile: string,
+    rootDir: string,
+): Promise<ScannedSkill | null> {
+    const root = resolve(rootDir);
+    const raw = await loadTextFile(absFile);
+
+    if (!raw.trim()) {
+        Logger.warn(
+            `[Search] 跳过空或读取失败的 Skill: ${absFile}`,
+        );
+        return null;
+    }
+
+    let parsed: ParsedSkillSource;
+    try {
+        parsed = parseSkillSource(raw);
+    } catch (error) {
+        Logger.warn(
+            `[Search] 解析 Skill front-matter 失败，已忽略: ${absFile}`,
+            error,
+        );
+        return null;
+    }
+
+    const name =
+        typeof parsed.data.name === "string"
+            ? parsed.data.name.trim()
+            : "";
+    const description =
+        typeof parsed.data.description === "string"
+            ? parsed.data.description.trim()
+            : "";
+
+    if (!name || !description) {
+        Logger.warn(
+            `[Search] 跳过无效 Skill（缺少 front-matter name/description）: ${absFile}`,
+        );
+        return null;
+    }
+
+    if (!parsed.body) {
+        Logger.warn(
+            `[Search] 跳过无效 Skill（正文为空）: ${absFile}`,
+        );
+        return null;
+    }
+
+    const skillDirAbs = dirname(absFile);
+    const relDir = relative(root, skillDirAbs).split(sep).join("/");
+    const dir = relDir === "." ? "" : relDir;
+
+    return {
+        id: `skill:${dir || "."}`,
+        name,
+        description,
+        path: skillDirAbs,
+        dir,
+        text: parsed.body,
+        metadata: {
+            skillFile: relative(root, absFile).split(sep).join("/"),
+        },
+    };
+}
+
+/**
  * 扫描目录下的 SKILL.md。（不递归，递归将扫描模板改为 **\/SKILL.md
  *
  * 默认忽略依赖/版本控制目录。注意：递归扫描可能误识别 skill 内部
@@ -83,69 +155,11 @@ export async function scanSkillsFromDirectory(
 
     const scanned = await pMap(
         files.sort(),
-        async (relFile): Promise<ScannedSkill | null> => {
-            const absFile = join(root, relFile);
-            const raw = await loadTextFile(absFile);
-
-            if (!raw.trim()) {
-                Logger.warn(
-                    `[Search] 跳过空或读取失败的 Skill: ${absFile}`,
-                );
-                return null;
-            }
-
-            let parsed: ParsedSkillSource;
-            try {
-                parsed = parseSkillSource(raw);
-            } catch (error) {
-                Logger.warn(
-                    `[Search] 解析 Skill front-matter 失败，已忽略: ${absFile}`,
-                    error,
-                );
-                return null;
-            }
-
-            const name =
-                typeof parsed.data.name === "string"
-                    ? parsed.data.name.trim()
-                    : "";
-            const description =
-                typeof parsed.data.description === "string"
-                    ? parsed.data.description.trim()
-                    : "";
-
-            if (!name || !description) {
-                Logger.warn(
-                    `[Search] 跳过无效 Skill（缺少 front-matter name/description）: ${absFile}`,
-                );
-                return null;
-            }
-
-            if (!parsed.body) {
-                Logger.warn(
-                    `[Search] 跳过无效 Skill（正文为空）: ${absFile}`,
-                );
-                return null;
-            }
-
-            const skillDirAbs = dirname(absFile);
-            const relDir = relative(root, skillDirAbs).split(sep).join("/");
-            const dir = relDir === "." ? "" : relDir;
-
-            return {
-                id: `skill:${dir || "."}`,
-                name,
-                description,
-                path: skillDirAbs,
-                dir,
-                text: parsed.body,
-                metadata: {
-                    skillFile: relFile.split(sep).join("/"),
-                },
-            };
-        },
+        (relFile) => parseSkillFile(join(root, relFile), root),
         { concurrency: FILE_CONCURRENCY },
     );
 
-    return scanned.filter((skill): skill is ScannedSkill => skill !== null);
+    return scanned.filter(
+        (skill): skill is ScannedSkill => skill !== null,
+    );
 }

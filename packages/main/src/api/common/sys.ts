@@ -1,6 +1,6 @@
 import { testMcpServerConnection } from '$libs/mcp/client.js'
 import { listModels } from '$libs/model/list.js'
-import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
+import { getBuildinPath } from '$libs/utils/sys/dir.js'
 import { WindowService } from '$libs/utils/window.js'
 import { FileFilterPreset } from '$types/shared/api/sys.js'
 import {
@@ -9,7 +9,7 @@ import {
 } from '$types/shared/mcp.js'
 import { os } from '@orpc/server'
 import type { OpenDialogOptions } from 'electron'
-import { app, dialog, shell } from 'electron'
+import { dialog, shell } from 'electron'
 import { Hook, LogMessage, Transport } from 'electron-log'
 import Logger from 'electron-log/main'
 import { ensureDir } from 'fs-extra'
@@ -19,7 +19,6 @@ import { z } from 'zod'
 // import { genText } from '$libs/utils/model/factory/node-llama-cpp/local.js'
 import { configService } from '$libs/store/index.js'
 import { throwCancel } from '$libs/utils/err.js'
-import { knowledgeCenter } from '$libs/utils/kc.js'
 import { dataCenter } from '$libs/utils/sys/data.js'
 import { nextIncrementalName } from '$libs/utils/sys/fs.js'
 import { appLife } from '$libs/utils/tapable/applife.js'
@@ -320,6 +319,7 @@ const openPath = os
         }
     })
 
+
 /**
  * 在文件管理器中显示 / 高亮文件
  */
@@ -328,8 +328,30 @@ const showItemInFolder = os
     .output(z.boolean())
     .handler(async ({ input, context }) => {
         const ctx = context as RpcContext
-        const path = Array.isArray(input.path) ? join(...input.path) : input.path
-        const fullPath = isAbsolute(path) ? path : ctx.project.getPath(path)
+
+        // 先归一为数组
+        const parts = Array.isArray(input.path) ? [...input.path] : [input.path]
+
+        // 判空
+        if (parts.length === 0 || !parts[0]) {
+            Logger.warn(`showItemInFolder路径为空: ${JSON.stringify(input.path)}`)
+            return false
+        }
+
+        // 第一项以 "::" 开头则替换为内置路径（传入去掉 "::" 后的内容）
+        if (parts[0].startsWith('::')) {
+            const builtinPath = getBuildinPath(parts[0].slice(2))
+            if (!builtinPath) {
+                Logger.warn(`内置路径为空，无法解析: ${parts[0]}`)
+                return false
+            }
+            parts[0] = builtinPath
+        }
+
+        // 替换后继续拼接
+        const itemPath = parts.length === 1 ? parts[0] : join(...parts)
+        const fullPath = isAbsolute(itemPath) ? itemPath : ctx.project.getPath(itemPath)
+
         shell.showItemInFolder(fullPath)
         Logger.info(`使用系统资源管理器显示文件(目录):${fullPath}`)
         return true
@@ -364,30 +386,7 @@ const getPath = os
     .input(z.object({ name: z.string(), sub: z.array(z.string()).optional(), create: z.boolean().optional() }))
     .output(z.string())
     .handler(async ({ input }) => {
-        let basePath
-        switch (input.name) {
-            case 'llm':
-            case 'rerank':
-                basePath = join(rerankPath(), ...(input.sub ?? []))
-                break
-            case 'embeding':
-                basePath = join(embedingPath(), ...(input.sub ?? []))
-                break
-            case 'kc':
-                basePath = knowledgeCenter.kcPath
-                break
-            case 'logs':
-                return Logger.transports.file.getFile().path
-            default:
-                try {
-                    // @ts-expect-error 无类型。
-                    const tempPath = app.getPath(input.name)
-                    basePath = join(tempPath, ...(input.sub ?? []))
-                } catch (e) {
-                    void e
-                    return ""
-                }
-        }
+        const basePath = getBuildinPath(input.name, ...(input.sub ?? []));
         if (basePath && input.create) {
             await ensureDir(basePath)
         }

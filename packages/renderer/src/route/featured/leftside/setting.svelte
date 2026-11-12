@@ -182,7 +182,7 @@
         {
           id: "api-mcp",
           label: "MCP",
-          description: "增加AI可使用工具，以扩展AI能力",
+          description: "增加AI可使用的工具，以扩展AI能力",
           icon: IconPlugConnected,
           path: "api/mcp",
           keywords: ["MCP", "tool", "插件", "function calling"],
