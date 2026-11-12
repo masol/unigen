@@ -1,4 +1,4 @@
-import { parseMcpConfigOrThrow } from '$libs/blueprint/loader/mcp/parse.js';
+import { parseMcpConfigOrThrow } from '$libs/loader/mcp/parse.js';
 import { openGlobalSearch } from "$libs/searchsrv/index.js";
 import { globalToolDB, type ToolMeta } from "$libs/tooldb/index.js";
 import { throwPrecondition } from "$libs/utils/err.js";

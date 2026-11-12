@@ -16,6 +16,7 @@ export type Events = {
     "task_finished": { success: boolean, reason?: string, seq: number } // 任务结束，启动时间。    
     "clarify": { uuid: string, question: string, mode?: string, options?: string[] }, // 请求用户澄清,在projectStore处理。
     "runcommand-end": { suc: boolean, seq: number }
+    "toast": { type: string, msg: string },
     "recent:projects": RecentProject[]
     "kv-changed": { key: string, value: unknown }
     "before-input-evt": {

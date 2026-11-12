@@ -1,6 +1,9 @@
 // packages/main/src/libs/tooldb/tools/meta-tools/validate.ts
 import { getRunnerContext } from "$libs/project/controllers/runner.js";
+import Logger from "electron-log/main.js";
+import { loads } from "json-repair-js";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import type { ToolMeta } from "../../type.js";
 import { getInputSchema } from "./schema.js";
 
@@ -84,6 +87,25 @@ async function validateWithSchema(
                 value: args,
             };
         }
+
+        // AI SDK jsonSchema() 包装器：{ jsonSchema: ... }
+        // MCP 工具的 inputSchema 通常以这种形式挂载，需要用 zod 的
+        // fromJSONSchema 转成可校验 schema。转换失败时降级为不验证，
+        // 不能假设所有 JSON Schema 特性都能被 zod 无损转换。
+        const rawJsonSchema = await resolveJsonSchema(anySchema);
+        if (rawJsonSchema) {
+            const zodFromJson = tryFromJSONSchema(rawJsonSchema);
+            if (zodFromJson) {
+                const result = zodFromJson.safeParse(args);
+                return result.success
+                    ? { ok: true, value: result.data, validated: true }
+                    : {
+                        ok: false,
+                        issues: result.error?.issues ?? result.error,
+                        value: args,
+                    };
+            }
+        }
     } catch (error) {
         return {
             ok: false,
@@ -95,14 +117,95 @@ async function validateWithSchema(
     return null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveJsonSchema(anySchema: any): Promise<unknown | null> {
+    if (!anySchema || typeof anySchema !== "object") return null;
+
+    // { jsonSchema: ... } 包装器（可能是 PromiseLike）
+    if ("jsonSchema" in anySchema) {
+        try {
+            const js = await Promise.resolve(anySchema.jsonSchema);
+            return js && typeof js === "object" ? js : null;
+        } catch {
+            return null;
+        }
+    }
+
+    // 直接就是 JSON Schema 对象
+    if (
+        "type" in anySchema ||
+        "properties" in anySchema ||
+        "anyOf" in anySchema ||
+        "oneOf" in anySchema
+    ) {
+        return anySchema;
+    }
+
+    return null;
+}
+
+function tryFromJSONSchema(jsonSchema: unknown): z.ZodType | null {
+    const fn = (
+        z as unknown as { fromJSONSchema?: (s: unknown) => z.ZodType }
+    ).fromJSONSchema;
+    if (typeof fn !== "function") return null;
+    try {
+        return fn(jsonSchema);
+    } catch (error) {
+        Logger.debug(
+            "[ToolDB] z.fromJSONSchema 转换失败，跳过参数校验。",
+            error,
+        );
+        return null;
+    }
+}
+
+/**
+ * 尝试修复模型传参的常见畸形。
+ *
+ * 覆盖：
+ *   - 字符串化 JSON：'{"numbers":[1,3]}' → { numbers: [1,3] }
+ *   - LLM 常见的语法畸形（缺引号、尾逗号、Python None/True、tuple 等），
+ *     交给 json-repair-js 处理
+ *   - null / undefined / 空字符串 → {}
+ *
+ * 不做：
+ *   - 语义猜测（如字段名拼写错误、类型强制转换），
+ *     这些留给 schema 校验失败后由模型自纠正。
+ */
 export function tryRepairArgs(args: unknown): {
     value: unknown;
     changed: boolean;
 } {
+    // 已经是对象：不碰，避免对合法参数做无意义的二次变换。
+    if (args !== null && typeof args === "object") {
+        return { value: args, changed: false };
+    }
+
     if (typeof args === "string") {
+        const trimmed = args.trim();
+        if (!trimmed) {
+            return { value: {}, changed: true };
+        }
+
         try {
-            return { value: JSON.parse(args), changed: true };
-        } catch {
+            const repaired = loads(trimmed);
+            const sanitized = sanitizeParsed(repaired);
+            // 原输入是字符串，只要修复后不是字符串，就是发生了修复。
+            // 修复失败时 loads 通常返回原字符串，changed 为 false。
+            const changed = typeof sanitized !== "string";
+            if (changed) {
+                Logger.debug(
+                    "[ToolDB] args 经 json-repair-js 修复",
+                    { original: args, repaired: sanitized },
+                );
+            }
+            return { value: sanitized, changed };
+        } catch (error) {
+            Logger.debug(
+                "[ToolDB] json-repair-js 修复失败，保留原始字符串。",
+                error,
+            );
             return { value: args, changed: false };
         }
     }
@@ -112,6 +215,25 @@ export function tryRepairArgs(args: unknown): {
     }
 
     return { value: args, changed: false };
+}
+
+/**
+ * 净化解析结果，剔除 __proto__ 键，防止后续 spread/assign 造成原型污染。
+ *
+ * 只过滤 __proto__：这是唯一能通过普通对象写入改变原型链的键。
+ * constructor / prototype 单独存在不构成原型污染，且作为工具参数名极罕见，
+ * 不过度过滤以免误伤合法 schema。
+ */
+function sanitizeParsed(value: unknown): unknown {
+    if (value === null || typeof value !== "object") return value;
+    if (Array.isArray(value)) return value.map(sanitizeParsed);
+
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        if (k === "__proto__") continue;
+        out[k] = sanitizeParsed(v);
+    }
+    return out;
 }
 
 /**

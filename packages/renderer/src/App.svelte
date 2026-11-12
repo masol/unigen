@@ -7,6 +7,7 @@
   import Tour from "$lib/components/Tour.svelte";
   import * as ImageZoom from "$lib/components/ui/image-zoom/index";
   import { Toaster } from "$lib/components/ui/sonner";
+  import { setup as setupEvtHanle } from "$lib/evthandle";
   import { configStore } from "$lib/store/config.svelte";
   import { i18nStore } from "$lib/store/i18n.svelte";
   import { pluginStore } from "$lib/store/plugin.svelte";
@@ -64,6 +65,7 @@
       await Promise.all([
         pluginStore.init(),
         i18nStore.init(),
+        setupEvtHanle(),
         recentProjectsStore.load(),
       ]);
 
@@ -77,7 +79,7 @@
 
       // 等待系统自举完成。
       await pTimeout(safeApi().system.bootstrapped(), {
-        milliseconds: 3000, // 3秒超时
+        milliseconds: 15000, // 15秒超时
         fallback: () => {
           // 超时后不抛异常，直接返回 void (undefined)
           return undefined as void;

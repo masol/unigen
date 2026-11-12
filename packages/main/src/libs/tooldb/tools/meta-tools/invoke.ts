@@ -71,16 +71,18 @@ export const invokeToolDef: ToolDefinition<InvokeInput, unknown> = {
 
         let currentArgs = args;
         let repaired = false;
-        let validation = await validateToolArgs(meta, currentArgs);
 
-        if (!validation.ok) {
-            const repair = tryRepairArgs(currentArgs);
-            if (repair.changed) {
-                currentArgs = repair.value;
-                repaired = true;
-                validation = await validateToolArgs(meta, currentArgs);
-            }
+        // 先做参数修复，再验证。
+        // 模型常见的错误是把 args 传成字符串化 JSON（如 "{}"），
+        // 若不先修复，后续验证对 MCP 工具可能不生效（validated: false），
+        // 字符串会被原样传给 MCP server，导致参数反序列化失败。
+        const repair = tryRepairArgs(currentArgs);
+        if (repair.changed) {
+            currentArgs = repair.value;
+            repaired = true;
         }
+
+        const validation = await validateToolArgs(meta, currentArgs);
 
         if (!validation.ok) {
             return {
@@ -99,6 +101,28 @@ export const invokeToolDef: ToolDefinition<InvokeInput, unknown> = {
 
         try {
             const result = await callRealTool(meta, validation.value);
+
+            // MCP 工具在执行失败时返回 { content: [...], isError: true }，
+            // 而不是抛异常。必须显式识别并映射为 ok: false，
+            // 否则模型会把错误当作成功，永远看不到 content 中的恢复提示。
+            if (
+                meta.source === "mcp" &&
+                result !== null &&
+                typeof result === "object" &&
+                (result as { isError?: unknown }).isError === true
+            ) {
+                return {
+                    ok: false,
+                    tool: { id: meta.id, name: meta.name },
+                    error:
+                        extractMcpErrorText(result) ||
+                        "MCP 工具返回 isError: true",
+                    hint:
+                        "MCP 工具报告执行失败。请阅读 error 中的提示，" +
+                        "修正参数或调整策略后重试；不要用相同参数重复提交。",
+                };
+            }
+
             return {
                 ok: true,
                 tool: { id: meta.id, name: meta.name },
@@ -118,5 +142,24 @@ export const invokeToolDef: ToolDefinition<InvokeInput, unknown> = {
         }
     },
 };
+
+function extractMcpErrorText(result: unknown): string {
+    if (result === null || typeof result !== "object") return "";
+
+    const content = (result as { content?: unknown }).content;
+    if (Array.isArray(content)) {
+        return content
+            .map((c) => {
+                if (c && typeof c === "object" && "text" in c) {
+                    return String((c as { text: unknown }).text ?? "");
+                }
+                return "";
+            })
+            .filter(Boolean)
+            .join("\n");
+    }
+    if (typeof content === "string") return content;
+    return "";
+}
 
 export const invokeTool = buildAiTool(invokeToolDef);

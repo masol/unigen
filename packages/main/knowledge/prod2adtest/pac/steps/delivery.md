@@ -71,14 +71,6 @@ completion_report 严格按四段写,顺序不可增删:
 3. **关键决策**:为走通流程做的取舍,2-5 条
 4. **遗留问题**:没做完的、被阻塞的、需要人确认的
 
-## 可用工具
-
-你有以下 1 个工具:
-
-1. **`render_image`**:拿到完整 render_spec 和 negative_prompt 后调,直接产出包含文字、Logo、版式、色彩的 300dpi 成品图。一次一张,别批量塞。
-
-{{_BI_tool}}
-
 ## 输出格式
 
 > **强制约束:只返回符合 outputs schema 的 JSON。禁止把图片内容、文件正文粘贴进 completion_report——只给路径,用户会自己点开。**

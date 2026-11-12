@@ -62,6 +62,8 @@
     "handlebars": "^4.7.9",
     "hookable": "^6.1.1",
     "humanize-duration": "^3.35.1",
+    "ipull": "^4.0.3",
+    "json-repair-js": "^1.1.0",
     "lru-cache": "^11.5.1",
     "memoize": "^11.0.0",
     "mitt": "^3.0.1",

@@ -76,14 +76,3 @@ delivery 消费 shot-design 的 `render_spec` 与 `negative_prompt`,只调用一
 ## 返工规则
 
 delivery 返回的 artifacts 若有 status=failed(例如文字没渲染清楚、主体变形、色彩偏离方案),把失败原因带回 shot-design 调整 render_spec,风格层面的偏差才回 style-direction 调整风格令牌。最多两轮,仍失败就按现状交付并在 open_issues 里说明。
-
-## 可用工具
-
-你有以下 4 个工具:
-
-1. **`briefing-and-positioning`**:拿到客户原始设计资料时第一个调,提炼核心卖点、确定 slogan、找目标市场和参考案例。
-2. **`style-direction`**:信息提炼完成后调,归纳目标人群风格、提取产品内涵、总结情绪价值,给出视觉风格令牌。
-3. **`shot-design`**:风格确定后调,把风格落到完整画面规格——主体、构图、光影、镜头、字体、色彩方案、负面词,一次性拼成可直接出成品的 render_spec。
-4. **`delivery`**:render_spec 就位后调,它负责一次文生图直接出含文字的 300dpi 成品并登记交付清单。
-
-{{_BI_tool}}

@@ -49,7 +49,7 @@ function parseSkillSource(raw: string): ParsedSkillSource {
 }
 
 /**
- * 递归扫描目录下的 SKILL.md。
+ * 扫描目录下的 SKILL.md。（不递归，递归将扫描模板改为 **\/SKILL.md
  *
  * 默认忽略依赖/版本控制目录。注意：递归扫描可能误识别 skill 内部
  * references/examples 中的 SKILL.md；如需严格模式，可改为限制 deep 或
@@ -65,7 +65,7 @@ export async function scanSkillsFromDirectory(
 
     let files: string[];
     try {
-        files = await fg("**/SKILL.md", {
+        files = await fg("*/SKILL.md", {
             cwd: root,
             onlyFiles: true,
             dot: false,

@@ -22,23 +22,35 @@
   let importing = $state(false);
 
   async function openAdd() {
-    await dialogStore.safeShow(MCPServerConfigDialog, {
-      onSave: async (server: McpServerConfig) => {
-        await mcpStore.upsertServer(server);
+    await dialogStore.safeShow(
+      MCPServerConfigDialog,
+      {
+        onSave: async (server: McpServerConfig) => {
+          await mcpStore.upsertServer(server);
+        },
       },
-    });
+      {
+        size: "xl6",
+      },
+    );
   }
 
   async function openEdit(serverId: string) {
     const server = mcpStore.servers.find((item) => item.id === serverId);
     if (!server) return;
 
-    await dialogStore.safeShow(MCPServerConfigDialog, {
-      server,
-      onSave: async (next: McpServerConfig) => {
-        await mcpStore.upsertServer(next);
+    await dialogStore.safeShow(
+      MCPServerConfigDialog,
+      {
+        server,
+        onSave: async (next: McpServerConfig) => {
+          await mcpStore.upsertServer(next);
+        },
       },
-    });
+      {
+        size: "xl6",
+      },
+    );
   }
 
   async function triggerImport() {
