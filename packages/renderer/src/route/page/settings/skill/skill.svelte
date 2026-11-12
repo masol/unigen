@@ -4,14 +4,15 @@
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
-  import { safeApi } from "$lib/utils/api";
+  import { getErrorMsg, safeApi } from "$lib/utils/api";
   import type { SkillSearchItem } from "@app/main/types";
-  import autoAnimate from "@formkit/auto-animate";
+  import Logger from "electron-log/renderer.js";
   import { getErrorMessage } from "radashi";
   import { onMount } from "svelte";
   import { toast } from "svelte-sonner";
   import SkillCard from "./SkillCard.svelte";
   import SkillEmptyState from "./SkillEmptyState.svelte";
+  import SkillGrid from "./SkillGrid.svelte";
   import SkillHeader from "./SkillHeader.svelte";
   import SkillMarketGuideDialog from "./SkillMarketGuideDialog.svelte";
   import { skillStore } from "./skillStore.svelte";
@@ -19,8 +20,26 @@
   const totalCount = $derived(skillStore.items.length);
   const visibleCount = $derived(skillStore.filteredItems.length);
 
+  /** 滚动容器（IntersectionObserver 的 root）。 */
+  let scrollRoot = $state<HTMLDivElement | null>(null);
+  /** 搜索遮罩是否可见（延迟出现，避免快速往返闪烁）。 */
+  let overlayVisible = $state(false);
+
   onMount(() => {
     void skillStore.load();
+  });
+
+  $effect(() => {
+    if (!skillStore.searching) {
+      overlayVisible = false;
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      overlayVisible = true;
+    }, 180);
+
+    return () => clearTimeout(timer);
   });
 
   async function openExternal(url: string) {
@@ -36,7 +55,9 @@
       const installed = await skillStore.install();
       if (installed) toast.success("技能安装成功");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "技能安装失败");
+      const errMsg = getErrorMsg(err);
+      Logger.error("技能安装失败:", errMsg);
+      // toast.error(err instanceof Error ? err.message : "技能安装失败");
     }
   }
 
@@ -76,13 +97,15 @@
   }
 </script>
 
-<div class="flex h-full w-full flex-col overflow-y-auto bg-background">
+<div bind:this={scrollRoot} class="h-full w-full overflow-y-auto bg-background">
   <div class="space-y-8 p-8 lg:p-12">
     <SkillHeader
       {totalCount}
       {visibleCount}
       bind:query={skillStore.query}
       installing={skillStore.installing}
+      searching={skillStore.searching}
+      onSearch={() => skillStore.searchNow()}
       onInstall={openInstall}
       onOpenDirectory={openDirectory}
       onShowMarkets={showMarketGuide}
@@ -92,9 +115,9 @@
 
     {#if skillStore.error}
       <div
-        class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive"
+        class="flex animate-fade-in flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive"
       >
-        <span>{skillStore.error}</span>
+        <span class="min-w-0 wrap-break-word">{skillStore.error}</span>
         <Button
           variant="outline"
           size="sm"
@@ -112,35 +135,38 @@
           <Skeleton class="h-56 rounded-2xl" />
         {/each}
       </div>
+    {:else if visibleCount === 0 && skillStore.query.trim() && !skillStore.searching}
+      <SkillEmptyState
+        variant="filtered"
+        onAction={() => (skillStore.query = "")}
+      />
+    {:else if totalCount === 0 && !skillStore.query.trim() && !skillStore.loading}
+      <SkillEmptyState
+        variant="empty"
+        installing={skillStore.installing}
+        onAction={openInstall}
+        onOpenMarket={(url) => void openExternal(url)}
+      />
     {:else}
-      <div
-        class="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
-        use:autoAnimate
+      <SkillGrid
+        items={skillStore.filteredItems}
+        itemKey={(skill) => skill.id}
+        blocking={overlayVisible}
+        message="正在搜索…"
+        canLoadMore={skillStore.canLoadMore}
+        loadingMore={skillStore.loadingMore}
+        totalLoaded={visibleCount}
+        {scrollRoot}
+        onLoadMore={() => skillStore.loadMore()}
       >
-        {#each skillStore.filteredItems as skill (skill.id)}
+        {#snippet card(skill)}
           <SkillCard
             {skill}
             removing={skillStore.isRemoving(skill.id)}
             onRemove={() => void handleRemove(skill)}
           />
-        {/each}
-      </div>
-
-      {#if skillStore.query.trim() && visibleCount === 0}
-        <SkillEmptyState
-          variant="filtered"
-          onAction={() => (skillStore.query = "")}
-        />
-      {/if}
-
-      {#if !skillStore.query.trim() && totalCount === 0}
-        <SkillEmptyState
-          variant="empty"
-          installing={skillStore.installing}
-          onAction={openInstall}
-          onOpenMarket={(url) => void openExternal(url)}
-        />
-      {/if}
+        {/snippet}
+      </SkillGrid>
     {/if}
   </div>
 </div>

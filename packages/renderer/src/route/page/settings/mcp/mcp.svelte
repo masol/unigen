@@ -1,5 +1,7 @@
+<!-- packages/renderer/src/route/page/settings/mcp/mcp.svelte -->
 <script lang="ts">
   import { Separator } from "$lib/components/ui/separator";
+  import { confirmStore } from "$lib/store/ui/confirm.svelte";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
   import { safeApi } from "$lib/utils/api";
   import type { McpServerConfig } from "@app/main/types";
@@ -51,6 +53,17 @@
         size: "xl6",
       },
     );
+  }
+
+  async function confirmRemove(server: McpServerConfig) {
+    const confirmed = await confirmStore.request({
+      title: "移除 MCP 服务",
+      message: `确定要移除 ${server.name ?? server.id} 吗？该服务的配置将被永久删除。`,
+      variant: "question",
+    });
+    if (!confirmed) return;
+
+    await mcpStore.removeServer(server.id);
   }
 
   async function triggerImport() {
@@ -110,7 +123,7 @@
           open={openStates[server.id] ?? false}
           onOpenChange={(v) => (openStates[server.id] = v)}
           onEdit={() => openEdit(server.id)}
-          onRemove={() => void mcpStore.removeServer(server.id)}
+          onRemove={() => void confirmRemove(server)}
           onToggleEnabled={(enabled) =>
             void mcpStore.toggleEnabled(server.id, enabled)}
         />

@@ -8,9 +8,10 @@ import type { EmbeddingState } from "./embedding/embedding-manager.js";
 import { KB_PREFIX, SKILL_TABLE, TOOL_TABLE } from "./schema.js";
 import { SearchDbBase } from "./search-db-base.js";
 import type { SearchTableBase } from "./search-table-base.js";
+import { scanSkillsFromDirectory } from "./skill-loader.js";
 import { KbRegistry } from "./tables/kb-registry.js";
 import { KbTable } from "./tables/kb-table.js";
-import { SkillTable } from "./tables/skill-table.js";
+import { SkillTable, type SkillInput } from "./tables/skill-table.js";
 import { ToolTable } from "./tables/tool-table.js";
 
 const GLOBAL_SEARCH_DB_KEY = Symbol.for("unigen.singleton.globalSearchDB");
@@ -55,13 +56,39 @@ export class GlobalSearchDB extends SearchDbBase {
 
     public async syncSystemSkills(): Promise<void> {
         const skTable = this.skill;
-        await this.syncPathsInOrder(
-            [
-                dataCenter.pathInRes(SkillsDirName),
-                dataCenter.pathInData(SkillsDirName),
-            ],
-            (path) => skTable.syncSkillsFromDirectory(path),
+
+        // 合并多个技能根后再一次性 syncSkills（replaceAll），避免多次
+        // syncSkillsFromDirectory 之间互相覆盖（后者会清空前者）。
+        // 同一 id 时按顺序后者覆盖前者：data 目录（用户安装）优先于 res。
+        const dirs = [
+            dataCenter.pathInRes(SkillsDirName),
+            dataCenter.pathInData(SkillsDirName),
+        ];
+
+        const merged = new Map<string, SkillInput>();
+
+        for (const dir of dirs) {
+            if (!(await pathExists(dir))) continue;
+
+            const skills = await scanSkillsFromDirectory(dir);
+            for (const skill of skills) {
+                merged.set(skill.id, {
+                    id: skill.id,
+                    name: skill.name,
+                    description: skill.description,
+                    path: skill.path,
+                    dir: skill.dir,
+                    text: skill.text,
+                    metadata: skill.metadata,
+                });
+            }
+        }
+
+        Logger.debug(
+            `[Search] 系统 Skill 同步: 目录数=${dirs.length}, 合并后条目数=${merged.size}`,
         );
+
+        await skTable.syncSkills(Array.from(merged.values()));
     }
 
     public async syncSystemKC(): Promise<void> {
@@ -95,15 +122,22 @@ export class GlobalSearchDB extends SearchDbBase {
      * - 已存在表：直接打开，FTS 可用
      * - 不存在表：无 embedding 时用 1 维占位向量建空表，FTS 可用；
      *   之后配置 embedding 会由 onEmbeddingChanged -> reindexAll 重建
+     *
+     * 每次就绪都会对每张表执行 alignVectorSize 做自愈：
+     * 历史遗留的 1 维表（首次无 embed 时创建、后续未触发全量重建）
+     * 会在这一步被按当前 embedSize 修复，无需用户清 search_inited。
+     * 维度一致时只做一次 schema 读，无 embedding 成本。
      */
     protected async onEmbeddingReady(): Promise<void> {
         if (!this.opened) return;
 
         this.#tool ??= new ToolTable(this, TOOL_TABLE);
         await this.#tool.init();
+        await this.#tool.alignVectorSize();
 
         this.#skill ??= new SkillTable(this, SKILL_TABLE);
         await this.#skill.init();
+        await this.#skill.alignVectorSize();
 
         this.#kb ??= new KbRegistry(this);
     }

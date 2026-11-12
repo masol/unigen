@@ -13,6 +13,17 @@
 /* 关键：让 dark: 变体跟随 .dark class，而不是系统偏好 */
 @custom-variant dark (&:where(.dark, .dark *));
 
+@property --uipkge-border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes uipkge-border-beam {
+  to {
+    --uipkge-border-angle: 360deg;
+  }
+}
+
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);

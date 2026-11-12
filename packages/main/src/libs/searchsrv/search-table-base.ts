@@ -67,6 +67,20 @@ export abstract class SearchTableBase<
     /** 当前表的向量维度；init / 交换后从 schema 读取 */
     #vecSize: number | null = null;
 
+    /**
+     * 正在进行的后台重建。
+     * 用于防重入：多个检索同时发现维度不一致时，只触发一次重建。
+     */
+    #aligning: Promise<void> | null = null;
+
+    /**
+     * 已排队但尚未开始执行的后台重建。
+     * requestAlign 用 setTimeout(..., 0) 让出当前 tick，避免打断正在
+     * toArray 的 query；在 setTimeout 回调执行前，新的检索命中本字段
+     * 会被直接吞掉，不会重复排队。
+     */
+    #alignPending = false;
+
     constructor(
         protected readonly host: SearchDbBase,
         name: string,
@@ -186,6 +200,115 @@ export abstract class SearchTableBase<
     }
 
     /**
+     * 请求后台重建（fire-and-forget）。
+     *
+     * 使用场景：检索路径发现「表维度 ≠ embedSize」。这是语义检索
+     * 静默退化最典型的原因（首次无 embed 时建的表、appliedState 与
+     * 实际 schema 漂移等），如果不主动修复，会永远降级为全文检索，
+     * 且只在 debug 日志里可见。
+     *
+     * 特性：
+     * - 用 setTimeout(..., 0) 让出当前 tick：buildQuery 调用 requestAlign
+     *   后本次检索仍会 toArray 完成，不会被 close/drop 打断；
+     * - #alignPending / #aligning 双重防重入：并发检索只触发一次；
+     * - 只做一次 warn（不是每次检索都 warn），避免日志刷屏；
+     * - 重建失败打 error 但不再自动重试，避免无限循环；下次 embed 变化
+     *   或重启会再次走到 onEmbeddingReady → alignVectorSize。
+     *
+     * 不 await：调用方（buildQuery）本次检索继续走 FTS 返回。
+     */
+    requestAlign(reason: string): void {
+        if (this.#aligning || this.#alignPending) return;
+        if (!this.host.embedReady) return;
+        if (this.host.rebuilding) return;
+
+        this.#alignPending = true;
+
+        Logger.warn(
+            `[Search] 表 [${this.name}] 检测到向量维度不一致（${reason}），` +
+            `本次检索降级为全文检索，已排队后台重建。`,
+        );
+
+        setTimeout(() => {
+            void this.#runAlign(reason);
+        }, 0);
+    }
+
+    async #runAlign(reason: string): Promise<void> {
+        if (this.#aligning) return;
+
+        this.#aligning = (async () => {
+            try {
+                await this.alignVectorSize();
+                Logger.info(
+                    `[Search] 表 [${this.name}] 后台重建完成（原因：${reason}）。`,
+                );
+            } catch (error) {
+                Logger.error(
+                    `[Search] 表 [${this.name}] 后台重建失败，检索将继续降级为全文检索。`,
+                    error,
+                );
+            } finally {
+                this.#aligning = null;
+                this.#alignPending = false;
+            }
+        })();
+
+        await this.#aligning;
+    }
+
+    /**
+     * 自愈：检查已存在表的向量维度是否与当前 embedSize 一致。
+     *
+     * 背景：首次启动时若未配置 embed_model，表会以 1 维占位创建；
+     * 之后配置 embed_model，onEmbeddingChanged 只在「applied state 变化」
+     * 时触发，且 apply 后会被记录，下次启动不再检查。如果那次重建时表
+     * 为空（replaceAll([]) 的旧实现只 delete("true") 不重建 schema），
+     * 表会一直停留在 1 维，后续 add 全部落零向量、buildQuery 全部降级
+     * 为 FTS —— 这就是「配了 embedding 但检索像全文」的根因。
+     *
+     * 本方法在每次 embed 就绪时（onEmbeddingReady）调用：
+     * - embed 未就绪：直接 return，不动表；
+     * - 维度一致：一次 schema 读，零成本；
+     * - 维度不一致：按当前 embedSize 重建（无数据则新建空表，
+     *   有数据则 rebuild 全量重算向量）。
+     *
+     * 也由 requestAlign 在检索路径触发，作为 onEmbeddingReady 漏跑
+     * 时的兜底。
+     */
+    async alignVectorSize(): Promise<void> {
+        if (!this.host.embedReady) return;
+
+        const current = await this.resolveVectorSize();
+        if (current === this.host.embedSize) return;
+
+        const rows = await this.queryAll();
+
+        Logger.warn(
+            `[Search] 表 [${this.name}] 维度(${current})与 embedSize(${this.host.embedSize}) 不一致，` +
+            `行数=${rows.length}，开始按新维度重建。`,
+        );
+
+        if (rows.length === 0) {
+            await this.drop();
+            this.#vecSize = this.host.embedSize;
+            this.table = await this.createTableNamed(
+                this.name,
+                this.host.embedSize,
+            );
+            Logger.debug(
+                `[Search] 表 [${this.name}] 已按 ${this.host.embedSize} 重建为空表。`,
+            );
+            return;
+        }
+
+        await this.rebuild(rows);
+        Logger.debug(
+            `[Search] 表 [${this.name}] 已按 ${this.host.embedSize} 重建，行数=${rows.length}。`,
+        );
+    }
+
+    /**
      * 构造写入记录。
      *
      * 嵌入异常（服务不可用、网络失败、维度不一致等）不得打断入库：
@@ -230,6 +353,12 @@ export abstract class SearchTableBase<
             usedFallback = true;
         }
 
+        if (usedFallback) {
+            Logger.debug(
+                `[Search] 表 [${this.name}] 本次写入 ${texts.length} 行使用零向量占位。`,
+            );
+        }
+
         return items.map((item, index) => ({
             ...item,
             text: texts[index],
@@ -269,6 +398,24 @@ export abstract class SearchTableBase<
 
     async replaceAll(items: SearchRow[]): Promise<void> {
         if (items.length === 0) {
+            // 空数组同步是修复"表维度停留在占位维度"的兜底窗口。
+            // 主修复在 alignVectorSize（onEmbeddingReady / requestAlign），
+            // 这里保留兜底，避免 embed 就绪后 sync 空目录时表维度仍然错位。
+            const needRebuild =
+                this.host.embedReady &&
+                (await this.resolveVectorSize()) !== this.host.embedSize;
+
+            if (needRebuild) {
+                const vecSize = this.host.embedSize;
+                Logger.debug(
+                    `[Search] 表 [${this.name}] 空数组 replaceAll：表维度与 embedSize 不一致，按 ${vecSize} 重建空表。`,
+                );
+                await this.drop();
+                this.#vecSize = vecSize;
+                this.table = await this.createTableNamed(this.name, vecSize);
+                return;
+            }
+
             Logger.debug(
                 `[Search] 表 [${this.name}] 全量替换为空，清空数据。`,
             );
@@ -308,7 +455,8 @@ export abstract class SearchTableBase<
             if (swapped) {
                 this.#vecSize = await this.readVectorSize(this.ensureTable());
                 Logger.debug(
-                    `[Search] 表 [${this.name}] 全量替换完成，行数=${records.length}。`,
+                    `[Search] 表 [${this.name}] 全量替换完成，行数=${records.length}，` +
+                    `vecSize=${this.#vecSize}。`,
                 );
                 return;
             }
@@ -435,11 +583,22 @@ export abstract class SearchTableBase<
             ? Math.max(limit, limit * RERANK_CANDIDATE_MULTIPLIER)
             : limit;
 
+        Logger.debug(
+            `[Search] 表 [${this.name}] 检索开始: query=${JSON.stringify(
+                queryText,
+            )}, limit=${limit}, rerankEnabled=${rerankEnabled}, ` +
+            `rerankStatus=${rerank.status}, candidateLimit=${candidateLimit}`,
+        );
+
         const query = await this.buildQuery(queryText, {
             ...opts,
             limit: candidateLimit,
         });
         const rows = (await query.toArray()) as T[];
+
+        Logger.debug(
+            `[Search] 表 [${this.name}] 检索候选完成: rows=${rows.length}`,
+        );
 
         // 未启用 Rerank：没有可靠的跨查询相关度信号。
         // 按候选数截断，不做"明显不相关"判断（_distance 不可比，不上浮）。
@@ -510,13 +669,33 @@ export abstract class SearchTableBase<
         const table = this.ensureTable();
 
         let canUseVector = this.host.embedReady && !this.host.rebuilding;
+        let vecSize: number | null = null;
         if (canUseVector) {
-            const vecSize = await this.resolveVectorSize();
+            vecSize = await this.resolveVectorSize();
             canUseVector = vecSize === this.host.embedSize;
         }
 
         const effectiveMode =
             mode !== "fts" && !canUseVector ? "fts" : mode;
+
+        // 容错：调用方请求了向量/混合检索，但表维度与 embedSize 不一致。
+        // 这是语义检索静默退化为全文检索最典型的成因（首次无 embed 时建的
+        // 1 维表、appliedState 与实际 schema 漂移等）。只降级不修复会导致
+        // 「一错永错」，因此这里主动排队后台重建；本次检索仍走 FTS 返回。
+        //
+        // 显式 mode="fts" 时不动：那是调用方主动选择全文检索，与健康度无关。
+        if (mode !== "fts" && !canUseVector && this.host.embedReady) {
+            this.requestAlign(
+                `vecSize=${vecSize ?? "n/a"} vs embedSize=${this.host.embedSize}`,
+            );
+        }
+
+        Logger.debug(
+            `[Search] 表 [${this.name}] 模式解析: requested=${mode}, effective=${effectiveMode}, ` +
+            `embedReady=${this.host.embedReady}, rebuilding=${this.host.rebuilding}, ` +
+            `vecSize=${vecSize ?? "n/a"}, ` +
+            `embedSize=${this.host.embedReady ? this.host.embedSize : "n/a"}`,
+        );
 
         const ftsColumns = ftsColumn ? [ftsColumn] : this.ftsColumns();
 

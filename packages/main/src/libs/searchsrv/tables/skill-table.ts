@@ -1,6 +1,7 @@
 // packages/main/src/libs/searchsrv/tables/skill-table.ts
 // tables/skill-table.ts
 import type { Schema } from "apache-arrow";
+import Logger from "electron-log/main.js";
 import {
     SKILL_BODY_META_KEY,
     SKILL_DIR_META_KEY,
@@ -197,11 +198,21 @@ export class SkillTable extends SearchTableBase<SkillRow> {
             return this.listSkills({ limit, offset });
         }
 
+        Logger.debug(
+            `[Search] Skill 检索: query=${JSON.stringify(queryText)}, ` +
+            `offset=${offset}, limit=${limit}`,
+        );
+
         const rows = await super.search(queryText, {
             mode: "hybrid",
             ...rest,
             limit: offset + limit,
         });
+
+        Logger.debug(
+            `[Search] Skill 检索完成: query=${JSON.stringify(queryText)}, ` +
+            `returned=${rows.length}`,
+        );
 
         return rows
             .slice(offset, offset + limit)

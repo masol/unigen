@@ -73,6 +73,7 @@
     <Input
       bind:value={proxyUrl}
       id="dlg-proxy-url"
+      disabled={true}
       placeholder="代理地址（可选）"
       class="min-w-0 flex-1 rounded-xl border-dashed"
     />

@@ -11,12 +11,11 @@
     IconChevronDown,
     IconCode,
     IconCodePlus,
-    IconCube,
     IconFolders,
     IconKeyboard,
     IconPlugConnected,
     IconSettings,
-    IconSettingsOff,
+    IconSettingsOff
   } from "@tabler/icons-svelte";
   import { debounce } from "radashi";
   import { push, router } from "svelte-spa-router";
@@ -73,7 +72,7 @@
         {
           id: "general-main",
           label: "通用",
-          description: "语言、本地模型、数据备份",
+          description: "语言、搜索设置、数据备份",
           icon: IconSettings,
           path: "general",
           keywords: [
@@ -107,7 +106,7 @@
         {
           id: "develops",
           label: "开发(需技术知识)",
-          description: "设置AI内存与动态代码管理工具",
+          description: "管理AI的内存与动态代码",
           icon: IconCodePlus,
           path: "develops",
           keywords: ["开发", "监督", "审查", "AI协同"],
@@ -122,7 +121,7 @@
         {
           id: "models-all",
           label: "AIGC 模型",
-          description: "文本、图像、音频、视频等模型配置",
+          description: "配置生成内容的AI模型",
           icon: IconBrain,
           path: "models/llm",
           keywords: [
@@ -182,7 +181,7 @@
         {
           id: "api-mcp",
           label: "MCP",
-          description: "增加AI可使用的工具，以扩展AI能力",
+          description: "为AI连接外部工具和数据",
           icon: IconPlugConnected,
           path: "api/mcp",
           keywords: ["MCP", "tool", "插件", "function calling"],
@@ -190,7 +189,7 @@
         {
           id: "api-skill",
           label: "技能",
-          description: "设置和管理全局技能",
+          description: "AI做事的方法和能力",
           icon: IconBolt,
           path: "api/skill",
           keywords: ["rag", "skill", "tool", "技能", "function calling"],
@@ -198,7 +197,7 @@
         {
           id: "api-knowlege",
           label: "知识库",
-          description: "设置和管理全局知识库",
+          description: "维护个人偏好及私有知识",
           icon: IconBooks,
           path: "api/knowlege",
           keywords: [
@@ -210,14 +209,14 @@
             "function calling",
           ],
         },
-        {
-          id: "api-sandbox",
-          label: "沙盒",
-          description: "技能中脚本的运行环境",
-          icon: IconCube,
-          path: "api/sandbox",
-          keywords: ["runtime", "sandbox", "tool", "沙盒", "function calling"],
-        },
+        // {
+        //   id: "api-sandbox",
+        //   label: "沙盒",
+        //   description: "技能中脚本的运行环境",
+        //   icon: IconCube,
+        //   path: "api/sandbox",
+        //   keywords: ["runtime", "sandbox", "tool", "沙盒", "function calling"],
+        // },
       ],
     },
   ];

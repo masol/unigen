@@ -1,6 +1,7 @@
 <!-- ProviderCard.svelte -->
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
+  import { BorderBeam } from "$lib/components/ui/border-beam";
   import { Button } from "$lib/components/ui/button";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Separator } from "$lib/components/ui/separator";
@@ -58,14 +59,34 @@
 <Collapsible.Root {open} onOpenChange={(v) => onOpenChange?.(v)}>
   <div
     class={[
-      "rounded-2xl border transition-all duration-200",
+      "group relative isolate rounded-2xl ring-1 transition-all duration-200 contain-[layout_style]",
+      // 默认态：中性淡边框，仅用于分辨卡片；彩色强调只在 hover 由 beam/pulse 提供
       isDisabled
-        ? "border-border/30 bg-card/60 shadow-none"
+        ? "ring-border/30 bg-muted/50 shadow-none"
         : open
-          ? "border-border/50 bg-card shadow-md"
-          : "border-border/50 bg-card shadow-sm hover:shadow-lg",
+          ? "ring-border/50 bg-card shadow-md"
+          : "ring-border/50 bg-card shadow-sm hover:shadow-lg",
     ]}
   >
+    {#if isDisabled}
+      <!-- 禁用态：hover 才显示，destructive 色调、更慢节奏 -->
+      <BorderBeam
+        size={2}
+        duration={12}
+        color="var(--destructive)"
+        class="z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+      />
+      <span class="beam-pulse beam-pulse--disabled z-10" aria-hidden="true"
+      ></span>
+    {:else}
+      <BorderBeam
+        size={2}
+        duration={6}
+        class="z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+      />
+      <span class="beam-pulse z-10" aria-hidden="true"></span>
+    {/if}
+
     <!-- ─── Trigger ─── -->
     <Collapsible.Trigger>
       {#snippet child({ props })}
@@ -190,62 +211,32 @@
       <div class="space-y-6 px-6 pb-6">
         <Separator />
 
-        <!-- 使用 autoAnimate 包裹互斥的两个块，确保切换时高度不变且有动画 -->
-        <div use:autoAnimate>
-          {#if isDisabled}
-            <!-- 禁用横幅（垂直 padding 与编辑行保持一致：py-2） -->
-            <div
-              class="flex items-center gap-4 rounded-xl border border-dashed border-destructive/20 bg-destructive/5 px-4"
-            >
-              <div
-                class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-destructive/10"
-              >
-                <IconCloudOff size={16} stroke={1.5} class="text-destructive" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium text-foreground">
-                  提供商【<span class="font-bold">{provider.id}</span>】已被禁用
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                class="shrink-0 gap-1.5 rounded-xl text-xs"
-                onclick={() => handleToggleEnabled(true)}
-              >
-                重新启用
-              </Button>
-            </div>
-          {:else}
-            <!-- 提供商配置行（增加 py-2，与横幅等高） -->
-            <div class="flex flex-wrap items-center justify-between gap-4">
-              <Button
-                variant="outline"
-                size="sm"
-                class="gap-2 rounded-xl text-xs"
-                onclick={() => onEditConfig?.()}
-              >
-                <IconSettings size={14} stroke={1.5} />
-                编辑提供商
-              </Button>
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <Button
+            variant="outline"
+            size="sm"
+            class="gap-2 rounded-xl text-xs"
+            onclick={() => onEditConfig?.()}
+            disabled={isDisabled}
+          >
+            <IconSettings size={14} stroke={1.5} />
+            编辑提供商
+          </Button>
 
-              {#if provider.maxConn}
-                <div
-                  class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
-                >
-                  <span class="flex items-center gap-1">
-                    <IconServer size={12} stroke={1.5} />
-                    最大并发 {provider.maxConn}
-                  </span>
-                </div>
-              {/if}
+          {#if provider.maxConn}
+            <div
+              class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
+            >
+              <span class="flex items-center gap-1">
+                <IconServer size={12} stroke={1.5} />
+                最大并发 {provider.maxConn}
+              </span>
             </div>
           {/if}
         </div>
 
         <Separator />
 
-        <!-- 模型列表区 -->
         <div class="space-y-4">
           <div class="flex items-center justify-between">
             <h3
@@ -318,7 +309,6 @@
           {/if}
         </div>
 
-        <!-- 危险操作区 -->
         <Separator />
         <div class="flex items-center justify-between">
           <p class="text-xs text-muted-foreground">
@@ -327,7 +317,7 @@
           <Button
             variant="ghost"
             size="sm"
-            class="gap-2 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
+            class="shrink-0 gap-1.5 rounded-xl text-xs text-muted-foreground/60 transition-all duration-200 hover:bg-destructive/10 hover:text-destructive"
             onclick={() => onRemoveProvider?.()}
           >
             <IconTrash size={14} stroke={1.5} />
@@ -338,3 +328,63 @@
     </Collapsible.Content>
   </div>
 </Collapsible.Root>
+
+<style>
+  /* 启用态：hover 触发，primary 色调，节奏 2.4s */
+  .beam-pulse {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 200ms ease;
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 55%, transparent);
+  }
+
+  :global(.group:hover) .beam-pulse:not(.beam-pulse--disabled) {
+    opacity: 1;
+    animation: beam-border-pulse 2.4s ease-in-out infinite;
+  }
+
+  @keyframes beam-border-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 25%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 85%, transparent);
+    }
+  }
+
+  /* 禁用态：同样 hover 才显示；destructive 色调 + 更慢的 3.6s 节奏 */
+  :global(.group:hover) .beam-pulse--disabled {
+    opacity: 1;
+    animation: beam-border-pulse--disabled 3.6s ease-in-out infinite;
+  }
+
+  @keyframes beam-border-pulse--disabled {
+    0%,
+    100% {
+      box-shadow: 0 0 0 1px
+        color-mix(in oklch, var(--destructive) 25%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 1px
+        color-mix(in oklch, var(--destructive) 70%, transparent);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.group:hover) .beam-pulse:not(.beam-pulse--disabled) {
+      animation: none;
+      opacity: 1;
+      box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 55%, transparent);
+    }
+    :global(.group:hover) .beam-pulse--disabled {
+      animation: none;
+      opacity: 1;
+      box-shadow: 0 0 0 1px
+        color-mix(in oklch, var(--destructive) 55%, transparent);
+    }
+  }
+</style>

@@ -1,5 +1,7 @@
+<!-- packages/renderer/src/route/page/settings/mcp/MCPServerCard.svelte -->
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
+  import { BorderBeam } from "$lib/components/ui/border-beam";
   import { Button } from "$lib/components/ui/button";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Separator } from "$lib/components/ui/separator";
@@ -103,14 +105,32 @@
 <Collapsible.Root {open} onOpenChange={(v) => onOpenChange?.(v)}>
   <div
     class={[
-      "rounded-2xl border transition-all duration-200",
+      "group relative isolate rounded-2xl ring-1 transition-all duration-200 contain-[layout_style]",
       isDisabled
-        ? "border-border/30 bg-card/60 shadow-none"
+        ? "ring-border/30 bg-card/60 shadow-none"
         : open
-          ? "border-border/50 bg-card shadow-md"
-          : "border-border/50 bg-card shadow-sm hover:shadow-lg",
+          ? "ring-border/50 bg-card shadow-md"
+          : "ring-border/50 bg-card shadow-sm hover:shadow-lg",
     ]}
   >
+    {#if isDisabled}
+      <BorderBeam
+        size={2}
+        duration={12}
+        color="var(--destructive)"
+        class="z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+      />
+      <span class="beam-pulse beam-pulse--disabled z-10" aria-hidden="true"
+      ></span>
+    {:else}
+      <BorderBeam
+        size={2}
+        duration={6}
+        class="z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+      />
+      <span class="beam-pulse z-10" aria-hidden="true"></span>
+    {/if}
+
     <div class="flex items-center gap-3 p-6">
       <Collapsible.Trigger>
         {#snippet child({ props })}
@@ -199,21 +219,6 @@
       <div class="space-y-6 px-6 pb-6">
         <Separator />
 
-        {#if isDisabled}
-          <div
-            class="flex items-center gap-4 rounded-xl border border-dashed border-destructive/20 bg-destructive/5 p-4"
-          >
-            <div
-              class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-destructive/10"
-            >
-              <IconCloudOff size={16} stroke={1.5} class="text-destructive" />
-            </div>
-            <p class="min-w-0 flex-1 text-sm text-muted-foreground">
-              该 MCP 服务已被禁用，运行期不可用，配置仍然保留。
-            </p>
-          </div>
-        {/if}
-
         <div class="grid gap-4 sm:grid-cols-2">
           <div class="rounded-xl border border-border/50 bg-background p-4">
             <p class="text-xs text-muted-foreground">传输协议</p>
@@ -294,7 +299,7 @@
           <Button
             variant="ghost"
             size="sm"
-            class="gap-2 rounded-xl text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+            class="shrink-0 gap-1.5 rounded-xl text-xs text-muted-foreground/60 transition-all duration-200 hover:bg-destructive/10 hover:text-destructive"
             onclick={() => onRemove?.()}
           >
             <IconTrash size={14} stroke={1.5} />
@@ -371,10 +376,6 @@
                     </p>
                   {/if}
                 </div>
-
-                <p class="text-xs text-muted-foreground">
-                  测试结果仅用于确认连接，不会写入配置。
-                </p>
               </div>
             {:else}
               <div class="flex items-start gap-3 text-sm text-destructive">
@@ -392,3 +393,63 @@
     </Collapsible.Content>
   </div>
 </Collapsible.Root>
+
+<style>
+  /* 启用态：hover 触发，primary 色调，节奏 2.4s */
+  .beam-pulse {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 200ms ease;
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 55%, transparent);
+  }
+
+  :global(.group:hover) .beam-pulse:not(.beam-pulse--disabled) {
+    opacity: 1;
+    animation: beam-border-pulse 2.4s ease-in-out infinite;
+  }
+
+  @keyframes beam-border-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 25%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 85%, transparent);
+    }
+  }
+
+  /* 禁用态：同样 hover 才显示；destructive 色调 + 更慢的 3.6s 节奏 */
+  :global(.group:hover) .beam-pulse--disabled {
+    opacity: 1;
+    animation: beam-border-pulse--disabled 3.6s ease-in-out infinite;
+  }
+
+  @keyframes beam-border-pulse--disabled {
+    0%,
+    100% {
+      box-shadow: 0 0 0 1px
+        color-mix(in oklch, var(--destructive) 25%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 1px
+        color-mix(in oklch, var(--destructive) 70%, transparent);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.group:hover) .beam-pulse:not(.beam-pulse--disabled) {
+      animation: none;
+      opacity: 1;
+      box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 55%, transparent);
+    }
+    :global(.group:hover) .beam-pulse--disabled {
+      animation: none;
+      opacity: 1;
+      box-shadow: 0 0 0 1px
+        color-mix(in oklch, var(--destructive) 55%, transparent);
+    }
+  }
+</style>
