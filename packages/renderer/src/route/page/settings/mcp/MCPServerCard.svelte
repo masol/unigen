@@ -5,6 +5,7 @@
   import { Separator } from "$lib/components/ui/separator";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { Switch } from "$lib/components/ui/switch";
+  import { safeApi } from "$lib/utils/api";
   import type {
     McpConnectionTestResult,
     McpServerConfig,
@@ -15,11 +16,13 @@
     IconCheck,
     IconChevronDown,
     IconCloudOff,
+    IconDownload,
     IconLoader2,
     IconPencil,
     IconPlugConnected,
     IconTrash,
   } from "@tabler/icons-svelte";
+  import { toast } from "svelte-sonner";
   import { testMcpConnection } from "./mcpConnection";
 
   let {
@@ -49,6 +52,7 @@
   let testState = $state<"idle" | "loading" | "success" | "error">("idle");
   let testResult = $state<McpConnectionTestResult | null>(null);
   let testError = $state("");
+  let exporting = $state(false);
 
   async function handleTest() {
     if (testState === "loading") return;
@@ -70,6 +74,28 @@
     } catch (err) {
       testState = "error";
       testError = err instanceof Error ? err.message : "连接失败";
+    }
+  }
+
+  async function handleExport() {
+    if (exporting) return;
+
+    exporting = true;
+
+    try {
+      const result = await safeApi().agent.exportMcpServerConfig({ server });
+
+      if (result.canceled) return;
+
+      if (result.success) {
+        toast.success("已导出 MCP 配置");
+      } else {
+        toast.error("导出失败");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "导出失败");
+    } finally {
+      exporting = false;
     }
   }
 </script>
@@ -245,6 +271,22 @@
               {:else}
                 <IconPlugConnected size={14} stroke={1.5} />
                 测试连接
+              {/if}
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              class="gap-2 rounded-xl text-xs text-muted-foreground hover:text-foreground"
+              onclick={() => void handleExport()}
+              disabled={exporting}
+            >
+              {#if exporting}
+                <IconLoader2 size={14} stroke={1.5} class="animate-spin" />
+                导出中
+              {:else}
+                <IconDownload size={14} stroke={1.5} />
+                导出
               {/if}
             </Button>
           </div>

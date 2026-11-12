@@ -1,4 +1,5 @@
 // packages/main/src/libs/tooldb/tools/meta-tools/invoke.ts
+// packages/main/src/libs/tooldb/tools/meta-tools/invoke.ts
 import { z } from "zod";
 import { buildAiTool } from "../../builder.js";
 import { globalToolDB } from "../../globaltooldb.js";
@@ -19,7 +20,8 @@ const invokeInputSchema = z.object({
         .min(1)
         .describe(
             "search_tools 返回的工具 id（不是 name，不是 llmName）。" +
-            "id 形如 builtin::xxx / mcp::serverId::xxx。",
+            "id 形如 builtin::xxx / mcp::serverId::xxx，必须原样传入；" +
+            "不要自行拼接、简写或猜测 serverId。",
         ),
     args: z
         .unknown()
@@ -40,6 +42,8 @@ export const invokeToolDef: ToolDefinition<InvokeInput, unknown> = {
         "调用由 search_tools 发现的具体工具。args 为 unknown，" +
         "必须严格按照 search_tools 返回的 invocation.inputSchema 组织；" +
         "不要凭工具名猜测参数，不要把 args 传成字符串化 JSON。" +
+        "id 必须使用 search_tools 返回的完整 id（形如 builtin::xxx / mcp::serverId::name），" +
+        "不要用 name 或 llmName 代替。" +
         "参数会先验证，失败时会尝试修复；仍失败会返回 issues，" +
         "请据此重新组织 args 后再次调用 invoke_tool。",
     inputSchema: invokeInputSchema,
@@ -48,8 +52,10 @@ export const invokeToolDef: ToolDefinition<InvokeInput, unknown> = {
         if (!meta) {
             return {
                 ok: false,
-                error: `未找到工具: ${id}`,
-                hint: "请重新调用 search_tools 获取有效 id。",
+                error: `未找到工具或引用有歧义: ${id}`,
+                hint:
+                    "请重新调用 search_tools 获取有效 id；" +
+                    "重名工具必须使用 search_tools 返回的完整 id（mcp::serverId::name）。",
             };
         }
 

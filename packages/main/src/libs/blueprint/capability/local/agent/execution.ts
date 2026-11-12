@@ -442,10 +442,14 @@ export async function executeAgent(
         return { text: "", usage: undefined };
     }
 
-    deltaBuffer.flush(
-        persist ? prjdb : undefined,
-        persist ? state.messageId : undefined,
-    );
+    // 只有根 agent 的 deltaBuffer 才代表当前 assistant message 的正文增量。
+    // 子 agent 的正文已经只写自己的 output trace，不能 flush 到根 message。
+    if (isRoot) {
+        deltaBuffer.flush(
+            persist ? prjdb : undefined,
+            persist ? state.messageId : undefined,
+        );
+    }
 
     if (failure) {
         handleFailure(ctx, prjdb, state, agentCtx, failure);

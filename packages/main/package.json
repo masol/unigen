@@ -73,6 +73,7 @@
     "radashi": "^12.9.1",
     "remark-parse": "^11.0.0",
     "shell-quote": "^1.10.0",
+    "strip-json-comments": "^5.0.3",
     "terser": "^5.50.0",
     "three": "^0.185.1",
     "tldjs": "^2.3.2",

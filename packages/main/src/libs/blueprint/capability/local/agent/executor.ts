@@ -196,7 +196,11 @@ export async function streamAgent(
     const appendText = (delta: string) => {
         if (!delta) return;
         textBuf.push(delta);
-        deltaBuffer.push(delta);
+        // 只有根 agent 的正文才进入 message delta buffer。
+        // 子 agent 的正文只应写自己的 output trace，绝不能写回根 assistant message。
+        if (streamToMessage) {
+            deltaBuffer.push(delta);
+        }
         ensureOutputNode();
 
         if (streamToMessage) {

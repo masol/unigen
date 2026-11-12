@@ -1,3 +1,4 @@
+// packages/main/src/libs/blueprint/capability/local/loader.ts
 import { globalToolDB, type ToolMeta } from "$libs/tooldb/index.js";
 import { throwNotfound, throwPrecondition } from "$libs/utils/err.js";
 import Logger from "electron-log/main.js";
@@ -19,6 +20,14 @@ export type LoadResult =
  *
  * 全局 MCP 不再作为独立配置类型：agent 侧统一通过 builtin 的全局 id 引用，
  * builtin / mcp 的来源差异由 tooldb 隔离。
+ *
+ * builtin.id 支持多种可引用标识（按优先级）：
+ * - 全局 id（推荐，最稳定）：builtin::xxx / mcp::<serverId>::<name>
+ * - 唯一 llmName
+ * - 唯一原始 name
+ * - 唯一 MCP 简写：mcp:<name>（<name> 即 tool_table.name，MCP 原始函数名）
+ *
+ * 匹配到多个工具时全部挂载；重名场景建议使用全局 id 或唯一 llmName。
  */
 export async function loadExternalTools(
     cfg: Exclude<PacToolConfig, { type: "agent" }>,
@@ -26,9 +35,29 @@ export async function loadExternalTools(
     switch (cfg.type) {
         case "builtin": {
             await waitToolDB();
-            const meta = await globalToolDB.getToolMeta(cfg.id);
-            if (!meta) throwNotfound(`[PAC] 全局工具不存在: ${cfg.id}`);
-            return { kind: "meta", tools: { [cfg.alias ?? meta.llmName]: meta } };
+            const metas = await globalToolDB.getToolMetas(cfg.id);
+            if (metas.length === 0) {
+                throwNotfound(
+                    `[PAC] 全局工具不存在或引用有歧义: ${cfg.id}。` +
+                    `MCP 工具可写唯一函数名或 mcp:<函数名>；` +
+                    `重名时请使用全局 id（mcp::<serverId>::<name>）或唯一 llmName。`,
+                );
+            }
+            const out: Record<string, ToolMeta> = {};
+            const prefix = cfg.alias ? `${cfg.alias}_` : "";
+            for (const meta of metas) {
+                let key =
+                    metas.length === 1
+                        ? (cfg.alias ?? meta.llmName)
+                        : `${prefix}${meta.llmName}`;
+                if (key in out) {
+                    let n = 2;
+                    while (`${key}_${n}` in out) n++;
+                    key = `${key}_${n}`;
+                }
+                out[key] = meta;
+            }
+            return { kind: "meta", tools: out };
         }
         case "search": {
             await waitToolDB();

@@ -177,6 +177,7 @@ class ConfigService {
     ): void {
         const embed_old = this.store.store.embed_model;
         const rerank_old = this.store.store.rerank_model;
+        const mcp_old = this.store.store.mcpServers;
 
         this.store.set(key, value);
 
@@ -192,7 +193,7 @@ class ConfigService {
         } else if (key === "mcpServers") {
             // 此处 value 被收窄为 AppConfig["mcpServers"]
             const servers = value as AppConfig["mcpServers"];
-            if (!isEqual(servers, this.store.store.mcpServers)) {
+            if (!isEqual(servers, mcp_old)) {
                 bootMcpTools(mcpRoute, globalToolDB, servers);
             }
         }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import {
+    IconLoader2,
     IconPlugConnected,
     IconPlus,
     IconShieldCheck,
@@ -10,11 +11,13 @@
   let {
     serverCount = 0,
     enabledCount = 0,
+    importing = false,
     onAddServer,
     onImportConfig,
   }: {
     serverCount?: number;
     enabledCount?: number;
+    importing?: boolean;
     onAddServer?: () => void;
     onImportConfig?: () => void;
   } = $props();
@@ -24,7 +27,7 @@
   <div class="space-y-2">
     <h1 class="text-2xl font-semibold tracking-tight lg:text-3xl">MCP 服务</h1>
     <p class="text-sm text-muted-foreground">
-      管理 Model Context Protocol 服务连接参数
+      管理 Model Context Protocol 服务连接
     </p>
     <div
       class="flex flex-wrap items-center gap-3 pt-1 text-xs text-muted-foreground"
@@ -41,14 +44,21 @@
     </div>
   </div>
 
-  <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+  <div class="flex flex-wrap items-center gap-3 self-start sm:self-auto">
     <Button
-      variant="outline"
-      class="gap-2 rounded-xl"
+      variant="ghost"
+      size="sm"
+      class="h-8 gap-1.5 rounded-lg px-2 text-xs font-normal text-muted-foreground hover:text-foreground"
       onclick={() => onImportConfig?.()}
+      disabled={importing}
     >
-      <IconUpload size={16} stroke={1.5} />
-      导入配置
+      {#if importing}
+        <IconLoader2 size={14} stroke={1.5} class="animate-spin" />
+        导入中
+      {:else}
+        <IconUpload size={14} stroke={1.5} />
+        导入配置
+      {/if}
     </Button>
 
     <Button class="gap-2 rounded-xl" onclick={() => onAddServer?.()}>

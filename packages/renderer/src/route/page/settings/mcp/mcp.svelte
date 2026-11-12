@@ -1,15 +1,12 @@
 <script lang="ts">
   import { Separator } from "$lib/components/ui/separator";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
+  import { safeApi } from "$lib/utils/api";
   import type { McpServerConfig } from "@app/main/types";
   import autoAnimate from "@formkit/auto-animate";
   import { toast } from "svelte-sonner";
   import ConfigHeader from "./ConfigHeader.svelte";
   import EmptyState from "./EmptyState.svelte";
-  import {
-    importMcpConfigFromZip,
-    parseMcpConfigJson,
-  } from "./mcpConfigImport";
   import MCPServerCard from "./MCPServerCard.svelte";
   import MCPServerConfigDialog from "./MCPServerConfigDialog.svelte";
   import { mcpStore } from "./mcpstore.svelte";
@@ -22,7 +19,7 @@
 
   let openStates = $state<Record<string, boolean>>({});
   let hasServers = $derived(mcpStore.servers.length > 0);
-  let fileInput = $state<HTMLInputElement | null>(null);
+  let importing = $state(false);
 
   async function openAdd() {
     await dialogStore.safeShow(MCPServerConfigDialog, {
@@ -44,27 +41,17 @@
     });
   }
 
-  function triggerImport() {
-    fileInput?.click();
-  }
+  async function triggerImport() {
+    if (importing) return;
 
-  async function handleImportFile(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = "";
-    if (!file) return;
+    importing = true;
 
     try {
-      const raw = file.name.toLowerCase().endsWith(".zip")
-        ? await importMcpConfigFromZip(file)
-        : JSON.parse(await file.text());
+      const result = await safeApi().agent.importMcpConfig();
 
-      if (raw === null) {
-        toast.info("ZIP 配置解析尚未实现");
-        return;
-      }
+      if (result.canceled) return;
 
-      const servers = parseMcpConfigJson(raw);
+      const servers = result.servers;
       if (servers.length === 0) {
         toast.error("未识别到有效的 MCP 服务配置");
         return;
@@ -83,6 +70,8 @@
       toast.success(`已导入 ${servers.length} 个 MCP 服务`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "配置文件解析失败");
+    } finally {
+      importing = false;
     }
   }
 </script>
@@ -92,16 +81,9 @@
     <ConfigHeader
       {serverCount}
       {enabledCount}
+      {importing}
       onAddServer={openAdd}
       onImportConfig={triggerImport}
-    />
-
-    <input
-      bind:this={fileInput}
-      type="file"
-      accept=".json,.zip,application/json,application/zip"
-      class="hidden"
-      onchange={handleImportFile}
     />
 
     {#if hasServers}

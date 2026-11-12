@@ -1,3 +1,4 @@
+// packages/main/src/libs/searchsrv/tables/tool-table.ts
 // tables/tool-table.ts
 import type { Schema } from "apache-arrow";
 import Logger from "electron-log/main.js";
@@ -187,6 +188,51 @@ export class ToolTable extends SearchTableBase<ToolRow> {
      */
     async getById(id: string): Promise<ToolRow | null> {
         return this.findById(id);
+    }
+
+    /**
+     * 按“可引用标识”查找工具行：全局 id、原始 name、metadata.llmName。
+     *
+     * 额外支持 `mcp:<name>` 这种仅按 MCP 工具函数名引用的简写。
+     * 本方法只返回所有候选，不替调用方猜测重名结果；是否唯一、是否可用
+     * 由 GlobalToolDB.getToolMeta 判定。重名时必须使用全局 id 或唯一 llmName。
+     */
+    async findByIdentity(idOrName: string): Promise<ToolRow[]> {
+        const raw = idOrName.trim();
+        if (!raw) return [];
+
+        const alias =
+            raw.startsWith("mcp:") && !raw.startsWith("mcp::")
+                ? raw.slice(4).trim()
+                : "";
+
+        const rows = (await this.ensureTable()
+            .query()
+            .select([
+                "id",
+                "name",
+                "description",
+                "text",
+                "metadata",
+                "created_at",
+                "updated_at",
+            ])
+            .toArray()) as ToolRow[];
+
+        const out: ToolRow[] = [];
+        for (const row of rows) {
+            const metadata = parseMetadata(row.metadata);
+            const matches =
+                String(row.id) === raw ||
+                String(row.name) === raw ||
+                String(metadata.llmName ?? "") === raw ||
+                (!!alias &&
+                    metadata.source === "mcp" &&
+                    String(row.name) === alias);
+
+            if (matches) out.push(row);
+        }
+        return out;
     }
 
     /**

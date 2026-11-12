@@ -41,7 +41,10 @@ export interface InvocationSpec {
 
 export interface SearchOutput {
     tools: Array<{
-        /** 全局唯一调用标识；invoke_tool 的入参 id 就填这个 */
+        /**
+         * 全局唯一调用标识；invoke_tool 的入参 id 必须原样填这个完整 id，
+         * 形如 builtin::xxx / mcp::serverId::name。
+         */
         id: string;
         /** 原始工具名（自然语言），仅用于人类/LLM 阅读 */
         name: string;
@@ -68,7 +71,8 @@ async function buildInvocationSpec(meta: ToolMeta): Promise<InvocationSpec> {
         callWith: invokeToolName,
         args:
             "args 必须是符合 inputSchema 的单个 JSON 对象；" +
-            "调用 invoke_tool 时 id 使用本工具 id。",
+            "调用 invoke_tool 时 id 必须原样使用 search_tools 返回的完整 id" +
+            "（形如 builtin::xxx / mcp::serverId::name），不要用 name 或 llmName。",
         inputSchema:
             inputSchema ??
             "未声明：请严格依据 description 组织参数，并先最小化调用验证。",
@@ -99,9 +103,9 @@ export const searchToolDef: ToolDefinition<SearchInput, SearchOutput> = {
         "建议一次并行发起多个 search_tools 调用，每个调用聚焦一个能力/意图，" +
         "再合并返回的工具集并据此调整策略；不要只搜一个宽泛词就停止。" +
         "返回按相关度排序的工具列表，每项含 id/name/description/invocation；" +
-        "启用 Rerank 时还会带 score（仅作参考，不具备跨查询可比性）。" +
-        "调用具体工具时必须使用返回的 id，并严格按 invocation.inputSchema 组织参数，" +
-        "然后通过 invoke_tool 执行。",
+        "id 是全局唯一调用标识（形如 builtin::xxx 或 mcp::serverId::name），" +
+        "调用具体工具时必须把返回的 id 原样传给 invoke_tool，不要用 name 或 llmName 代替。" +
+        "启用 Rerank 时还会带 score（仅作参考，不具备跨查询可比性）。",
     inputSchema: searchInputSchema,
     execute: async ({ query, limit }) => {
         const hits = await globalToolDB.searchTools(query, {
@@ -133,7 +137,8 @@ export const searchToolDef: ToolDefinition<SearchInput, SearchOutput> = {
             guidance:
                 "可一次并行发起多个 search_tools 调用，每个调用聚焦一个能力/意图，" +
                 "再合并工具集调整策略。实际调用工具时必须使用 invoke_tool，" +
-                "并以 invocation.inputSchema 为准组织 args；不要凭 name/description 猜测参数。" +
+                "并把本工具返回的 id 原样传入（形如 builtin::xxx / mcp::serverId::name）；" +
+                "以 invocation.inputSchema 为准组织 args；不要凭 name/description 猜测参数。" +
                 "score 仅作相关度参考，不具备跨查询可比性，不要作为判断是否相关的绝对依据。",
         };
     },

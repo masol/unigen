@@ -1,4 +1,5 @@
 // packages/main/src/libs/tooldb/globaltooldb.ts
+// packages/main/src/libs/tooldb/globaltooldb.ts
 import {
     mcpRoute,
     wrapMcpTool,
@@ -493,63 +494,154 @@ export class GlobalToolDB {
     }
 
     /**
-     * 解析工具元数据。
+     * 解析单个工具元数据（歧义即 null）。
      *
-     * - 先查内存 registry（builtin/meta）；
-     * - 未命中查 searchsrv.tool.getById；
-     * - 若 source === "mcp"，用持久化 metadata 中的 schema 构造惰性包装器；
-     *   不调用 mcpRoute.discoverTools，因此检索命中不会发起 MCP 连接；
-     * - 返回临时 ToolMeta，不写回 registry。
+     * 用于 `invoke_tool` 这类必须拿到唯一 ToolMeta 的场景。
+     * 引用规则见 `getToolMetas`：优先精确 id，其次唯一 llmName / name /
+     * `mcp:<name>` 简写；多个候选无法唯一确定时返回 null 并告警。
      */
     async getToolMeta(idOrName: string): Promise<ToolMeta | null> {
-        const local = this.#registry.get(idOrName);
-        if (local) return local;
+        const raw = idOrName.trim();
+        if (!raw) return null;
 
+        const metas = await this.getToolMetas(raw);
+        if (metas.length === 0) return null;
+        if (metas.length === 1) return metas[0];
+
+        const exact = metas.find((m) => m.id === raw);
+        if (exact) return exact;
+
+        Logger.warn(
+            `[ToolDB] 工具引用存在歧义: ${raw}。` +
+            `请使用全局 id（例如 mcp::<serverId>::<name>）或唯一 llmName。`,
+        );
+        return null;
+    }
+
+    /**
+     * 按可引用标识查找工具，返回全部匹配项。
+     *
+     * 支持（按优先级）：
+     *   - 全局 id：builtin::xxx / mcp::<serverId>::<name>（精确）
+     *   - metadata.llmName
+     *   - 原始 name（ToolTable.name，即 MCP 函数名）
+     *   - mcp:<name>：仅匹配 source === "mcp" 且 name 相同的工具
+     *
+     * `opts.source` 可限定来源（"builtin" / "mcp"）；不传时返回两边匹配项。
+     * 结果为数组，允许重名场景（例如两个 MCP server 都暴露了 search），
+     * 由调用方决定如何使用（agent 配置可全部挂载；invoke_tool 必须用
+     * getToolMeta 保证唯一）。
+     */
+    async getToolMetas(
+        idOrName: string,
+        opts: { source?: ToolSource } = {},
+    ): Promise<ToolMeta[]> {
+        const raw = idOrName.trim();
+        if (!raw) return [];
+
+        const result: ToolMeta[] = [];
+
+        // 1. 内存 registry（builtin / meta）
+        if (!opts.source || opts.source === "builtin") {
+            const local = this.#registry.get(raw);
+            if (local) result.push(local);
+        }
+
+        // 2. LanceDB 中的 MCP 元数据
+        if (!opts.source || opts.source === "mcp") {
+            const rows = await this.#resolveMcpToolRows(raw);
+            for (const row of rows) {
+                const meta = this.#buildMcpToolMeta(
+                    row,
+                    parseRowMetadata(row.metadata),
+                );
+                if (meta) result.push(meta);
+            }
+        }
+
+        // 3. 按 id 去重
+        const seen = new Set<string>();
+        return result.filter((m) => {
+            if (seen.has(m.id)) return false;
+            seen.add(m.id);
+            return true;
+        });
+    }
+
+    async #resolveMcpToolRows(raw: string): Promise<ToolSearchRow[]> {
         const db = getGlobalSearchDB();
-        if (!db.opened) return null;
-
+        if (!db.opened) return [];
         const table = db.tool;
-
-        let row: ToolSearchRow | null = null;
+        const rows: ToolSearchRow[] = [];
 
         if (typeof table.getById === "function") {
             try {
-                row = (await table.getById(idOrName)) ?? null;
+                const direct = await table.getById(raw);
+                if (direct) rows.push(direct);
             } catch (e) {
                 Logger.warn(
-                    `[ToolDB] 按 id 查询工具元数据失败，尝试回退检索: ${idOrName}`,
+                    `[ToolDB] 按 id 查询工具元数据失败: ${raw}`,
                     e,
                 );
             }
-        } else {
-            Logger.warn(
-                "[ToolDB] searchsrv tool 表缺少 getById，将回退到检索解析 MCP 工具。",
-            );
         }
 
-        if (!row && typeof table.searchTools === "function") {
+        if (
+            rows.length === 0 &&
+            typeof table.findByIdentity === "function"
+        ) {
             try {
-                const candidates = (await table.searchTools(idOrName, {
-                    limit: 5,
-                })) as ToolSearchRow[];
-                row =
-                    candidates.find((r) => {
-                        if (String(r.id) === idOrName) return true;
-                        if (String(r.name) === idOrName) return true;
-                        const m = parseRowMetadata(r.metadata);
-                        return String(m.llmName ?? "") === idOrName;
-                    }) ?? null;
+                rows.push(...(await table.findByIdentity(raw)));
             } catch (e) {
                 Logger.warn(
-                    `[ToolDB] 回退检索工具元数据失败: ${idOrName}`,
+                    `[ToolDB] 按 id/name/llmName 查询工具元数据失败: ${raw}`,
                     e,
                 );
             }
         }
 
-        if (!row) return null;
+        // 兼容旧实现 / 旧表结构：仅在「无法精确按 id/name/llmName 查询」
+        // 时才回退到全文/向量检索匹配。
+        //
+        // 回退风险（已确认）：FTS / 向量索引同步通常滞后于 `delete`，
+        // 已删除的工具行仍可能命中，导致：
+        //   - 已删除的 MCP 工具重新出现在 searchTools 结果中；
+        //   - getToolMeta 返回非空，被 searchTools / invoke_tool 误用。
+        //
+        // 当前 ToolTable 已实现 `findByIdentity`，精确查询覆盖 id/name/llmName/别名，
+        // 因此该回退仅在 `findByIdentity` 完全缺失时才应启用。
+        if (
+            rows.length === 0 &&
+            typeof table.findByIdentity !== "function" &&
+            typeof table.searchTools === "function"
+        ) {
+            try {
+                const candidates = (await table.searchTools(raw, {
+                    limit: 10,
+                })) as ToolSearchRow[];
+                rows.push(
+                    ...candidates.filter((r) => {
+                        if (String(r.id) === raw) return true;
+                        if (String(r.name) === raw) return true;
+                        const m = parseRowMetadata(r.metadata);
+                        return String(m.llmName ?? "") === raw;
+                    }),
+                );
+            } catch (e) {
+                Logger.warn(
+                    `[ToolDB] 回退检索工具元数据失败: ${raw}`,
+                    e,
+                );
+            }
+        }
 
-        const metadata = parseRowMetadata(row.metadata);
+        return rows;
+    }
+
+    #buildMcpToolMeta(
+        row: ToolSearchRow,
+        metadata: Record<string, unknown>,
+    ): ToolMeta | null {
         if (metadata.source !== "mcp") return null;
 
         const serverId =
@@ -573,7 +665,7 @@ export class GlobalToolDB {
         const inputSchema = metadata.inputSchema;
         const outputSchema = metadata.outputSchema;
 
-        const raw = {
+        const rawTool = {
             description,
             ...(inputSchema
                 ? { inputSchema: { jsonSchema: inputSchema } }
@@ -586,7 +678,7 @@ export class GlobalToolDB {
         const tool = wrapMcpTool({
             serverId,
             name,
-            raw,
+            raw: rawTool,
             call: (sid, n, args, opts) =>
                 mcpRoute.callTool(sid, n, args, opts),
         });
