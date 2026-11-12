@@ -12,7 +12,9 @@
   let external = $derived.by(() => {
     if (!href) return false;
     // 锚点、相对路径、特殊协议 → 内链
-    if (/^(#|\/|mailto:|tel:|data:|javascript:)/i.test(href)) return false;
+    // 注意：//host/path 是协议相对 URL，不能按站内路径处理
+    if (/^(#|\/(?!\/)|mailto:|tel:|data:|javascript:)/i.test(href))
+      return false;
     // SSR 安全：无 window 时按内链处理
     if (typeof window === "undefined") return false;
     try {
@@ -34,6 +36,6 @@
   {#if children}{@render children()}{/if}
   {#if external}
     <IconExternalLink size={13} stroke={1.5} class="mb-0.5" />
-    <span class="sr-only">(在新标签页打开)</span>
+    <span class="sr-only">(在浏览器中打开)</span>
   {/if}
 </a>

@@ -1,5 +1,6 @@
 <!-- src/App.svelte -->
 <script lang="ts">
+  /* eslint-disable svelte/no-at-html-tags */
   import Confirm from "$lib/components/Confirm.svelte";
   import DialogHost from "$lib/components/dialog/DialogHost.svelte";
   import ErrorScreen from "$lib/components/error-screen.svelte";
@@ -14,12 +15,15 @@
   import { projectStore } from "$lib/store/project.svelte";
   import { recentProjectsStore } from "$lib/store/recent-projects.svelte";
   import { windowStore } from "$lib/store/window.svelte";
+  import { highlightThemeCss } from "$lib/utils/highlight";
   import { ModeWatcher } from "mode-watcher";
   import pTimeout from "p-timeout";
   import { onDestroy, onMount } from "svelte";
   import { AnimatePresence, Motion } from "svelte-motion";
   import { api, safeApi, setupEvt } from "./lib/utils/api";
   import Layout from "./route/layout.svelte";
+
+  void highlightThemeCss;
 
   // 初始化完成标记：未完成时显示加载页
   let ready = $state(false);
@@ -155,6 +159,10 @@
 
   <DialogHost />
 </ImageZoom.Root>
+
+<svelte:head>
+  {@html `<style>${highlightThemeCss}</style>`}
+</svelte:head>
 
 <style>
   /* 整窗接管：占满视口，外层不滚动 */
