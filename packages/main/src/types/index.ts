@@ -7,6 +7,7 @@ export type {
     ToolSearchOutput
 } from './shared/api/agent.js'
 export type { AppClient, NotifyContract } from './shared/api/index.js'
+export type { KbCollection, KbCollectionInput, KbDoc, KbDocStatus, KnowledgeBaseSearchItem } from './shared/api/kb.js'
 export type { BlueprintKind } from './shared/api/list.js'
 export type { RecentProject } from './shared/api/recents.js'
 export type { RunnerParam } from './shared/api/runner.js'
@@ -18,6 +19,5 @@ export type { Model, ModelOption, ModelTags, Provider, ProviderProtocol } from '
 export type { Facets, GDagJSON, GuardKind, NodeKindT, NodeStatus, PNode, RegArtifact, RiskLevel, SizeEstimateT, TriState } from './shared/plan/nodes.js'
 export type { ModuleSource, PluginInfo, PluginScope, PluginStatus } from './shared/plugin.js'
 export type { WindowEventPayload, WindowEventType } from './shared/rpcevt.js'
-
 export type * from './shared/template/index.js'
 

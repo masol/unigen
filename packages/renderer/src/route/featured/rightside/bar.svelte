@@ -7,6 +7,7 @@
   import autoAnimate from "@formkit/auto-animate";
   import BarHeader from "./bar.header.svelte";
   import Glossary from "./glossary/table.svelte";
+  import KbSearch from "./kbsearch/kbsearch.svelte";
   import ToolSearch from "./toolsearch/toolsearch.svelte";
 
   let isMaximized = $derived(layoutStore.maximizedPanel === "right");
@@ -39,6 +40,10 @@
       <!-- ToolSearch 根为 flex flex-1 min-h-0 flex-col，
            依赖本父级是 flex 容器并给出确定高度 -->
       <ToolSearch />
+    {:else if rightPanelStore.activeTab === "kbsearch"}
+      <!-- ToolSearch 根为 flex flex-1 min-h-0 flex-col，
+           依赖本父级是 flex 容器并给出确定高度 -->
+      <KbSearch />
     {/if}
   </div>
 </div>

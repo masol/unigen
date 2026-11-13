@@ -28,11 +28,11 @@
     return IconFile;
   }
 
-  function formatSize(bytes: number): string {
-    if (!Number.isFinite(bytes) || bytes <= 0) return "";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  /** 只在异常状态给出文字提示；ready 保持单行，降低列表噪音。 */
+  function statusText(status: KbDoc["status"]): string {
+    if (status === "converting") return "转换中";
+    if (status === "failed") return "转换失败";
+    return "";
   }
 </script>
 
@@ -49,18 +49,25 @@
   <ul class="max-h-64 space-y-2 overflow-y-auto pr-1" use:autoAnimate>
     {#each docs as doc (doc.id)}
       {@const Icon = docIcon(doc.kind)}
+      {@const status = statusText(doc.status)}
       <li
         class="flex items-center gap-3 rounded-xl border border-border/50 bg-card px-3 py-2.5"
       >
         <Icon size={18} stroke={1.5} class="shrink-0 text-muted-foreground" />
 
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm" title={doc.name}>{doc.name}</p>
-          <p class="text-xs text-muted-foreground">
-            {formatSize(doc.size)}
-            {#if doc.status === "converting"}· 转换中
-            {:else if doc.status === "failed"}· 转换失败{/if}
+          <p class="truncate text-sm" title={doc.path ?? doc.name}>
+            {doc.name}
           </p>
+          {#if status}
+            <p
+              class="text-xs {doc.status === 'failed'
+                ? 'text-destructive'
+                : 'text-muted-foreground'}"
+            >
+              {status}
+            </p>
+          {/if}
         </div>
 
         {#if doc.status === "converting"}

@@ -17,9 +17,13 @@ class ToolSearchPanelStore {
     hasMore = $state(false);
 
     #requestId = 0;
+    // 记录「上一次真正发出」的 query，避免用户在输入框改了字但没按回车时，
+    // loadMore 误用新 query 把不同语义的下一页拼进当前列表。
+    #searchedQuery = "";
 
     clearSearch() {
         this.#requestId++;
+        this.#searchedQuery = "";
         this.query = "";
         this.loading = false;
         this.loadingMore = false;
@@ -51,13 +55,18 @@ class ToolSearchPanelStore {
             this.results = result.items;
             this.hasMore = result.hasMore;
             this.searched = true;
+            this.#searchedQuery = query;
         } catch (error) {
             if (requestId !== this.#requestId) return;
 
             this.error = toErrorMessage(error);
-            this.searched = true;
+            // - 模板中 `loading && !searched` 只在「首次/重试加载中」出现；
+            // - 错误显示走 `error && results.length === 0` 分支；
+            // - 用户点「重试」时，loading 一开即回到「正在检索」而不是闪「未找到」。
+            this.searched = false;
             this.results = [];
             this.hasMore = false;
+            this.#searchedQuery = query;
         } finally {
             if (requestId === this.#requestId) {
                 this.loading = false;
@@ -77,7 +86,8 @@ class ToolSearchPanelStore {
 
         try {
             const result = await safeApi().agent.searchTools({
-                query: this.query.trim(),
+                // 关键修复：用本次列表真正对应的 query，而非输入框当前值。
+                query: this.#searchedQuery,
                 limit: PAGE_SIZE,
                 offset: this.results.length,
             });

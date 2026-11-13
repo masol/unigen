@@ -1,4 +1,4 @@
-import { KcDirName, SkillsDirName } from "$libs/const.js";
+import { KcDirName, McpDirName, SkillsDirName } from "$libs/const.js";
 import { app } from "electron";
 import Logger from "electron-log";
 import { join } from "node:path";
@@ -69,6 +69,11 @@ export function globalSkillDir(...sub: string[]): string {
 
 export function globalKbDir(...sub: string[]): string {
     return join(app.getPath("userData"), KcDirName, ...sub);
+}
+
+
+export function globalMCPDir(...sub: string[]): string {
+    return join(app.getPath("userData"), McpDirName, ...sub);
 }
 
 

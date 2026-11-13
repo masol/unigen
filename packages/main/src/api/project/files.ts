@@ -101,7 +101,7 @@ const getURL = os
         }
 
         // 3. 相对路径 → 走 project.getPath 解析
-        return path2URL(ctx.project.getPath([...input]));
+        return path2URL(ctx.project.getPath([input]));
     });
 
 export default {

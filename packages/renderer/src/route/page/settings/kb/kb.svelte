@@ -4,6 +4,7 @@
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
+  import { safeApi } from "$lib/utils/api";
   import autoAnimate from "@formkit/auto-animate";
   import { onMount } from "svelte";
   import { toast } from "svelte-sonner";
@@ -12,7 +13,7 @@
   import KbEmptyState from "./KbEmptyState.svelte";
   import KbGuideDialog from "./KbGuideDialog.svelte";
   import KbHeader from "./KbHeader.svelte";
-  import { kbApi, kbStore } from "./kbStore.svelte";
+  import { kbStore } from "./kbStore.svelte";
   import { KB_TEMPLATES } from "./kbTemplates";
   import type { KbCollection, KbDoc } from "./kbTypes";
 
@@ -24,36 +25,39 @@
     void kbStore.load();
   });
 
-  async function pickDocuments(): Promise<KbDoc[]> {
-    try {
-      const picked = await kbApi().knowledge.pickDocuments();
-      if (Array.isArray(picked)) return picked;
-    } catch {
-      // 静默降级到 file input
-    }
-    return pickViaInput();
+  /** 从绝对路径拆出文件名与扩展名，不额外读文件。 */
+  function docFromPath(fullPath: string): KbDoc {
+    const name = fullPath.split(/[\\/]/).pop() || fullPath;
+    const dot = name.lastIndexOf(".");
+    const kind = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+
+    return {
+      id: crypto.randomUUID(),
+      name,
+      path: fullPath,
+      // schema 里 size 有 default(0)；这里不 stat 文件，避免「选择即返回」的体验被 IO 拖慢。
+      size: 0,
+      kind,
+      status: "ready",
+    };
   }
 
-  function pickViaInput(): Promise<KbDoc[]> {
-    return new Promise((resolve) => {
-      const input = document.createElement("input");
-      input.type = "file";
-      input.multiple = true;
-      input.onchange = () => {
-        const files = Array.from(input.files ?? []);
-        resolve(
-          files.map((f) => ({
-            id: crypto.randomUUID(),
-            name: f.name,
-            size: f.size,
-            kind: (f.name.split(".").pop() ?? "").toLowerCase(),
-            status: "ready" as const,
-          })),
-        );
-      };
-      input.oncancel = () => resolve([]);
-      input.click();
+  async function pickDocuments(): Promise<KbDoc[]> {
+    // safeApi 已统一捕获并提示错误（含用户取消）；此处只需兜底空数组。
+    const paths = await safeApi().system.openFile({
+      title: "选择知识库文档",
+      multi: true,
+      filters: [
+        {
+          name: "Documents",
+          extensions: ["pdf", "txt", "doc", "docx", "md", "rtf", "odt"],
+        },
+      ],
     });
+
+    // 同一文件被多次选中时只保留一份，按全路径去重（同名不同目录是常见情况）。
+    const uniquePaths = Array.from(new Set(paths ?? []));
+    return uniquePaths.map(docFromPath);
   }
 
   async function openCreate(seed?: { name?: string; description?: string }) {

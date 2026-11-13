@@ -57,7 +57,15 @@
     picking = true;
     try {
       const picked = await onPickDocuments();
-      if (picked.length > 0) docs = [...docs, ...picked];
+      if (picked.length === 0) return;
+
+      // 按全路径去重：同一文件重复选择只保留一份，避免 AI 重复引用。
+      // 没有 path 的条目（理论上不应出现）保持原样，不做误伤。
+      const existingPaths = new Set(
+        docs.map((d) => d.path).filter((p): p is string => !!p),
+      );
+      const fresh = picked.filter((d) => !d.path || !existingPaths.has(d.path));
+      if (fresh.length > 0) docs = [...docs, ...fresh];
     } finally {
       picking = false;
     }
@@ -73,12 +81,15 @@
       return;
     }
     if (!canSave) return;
-    onClose?.({
-      action: "save",
-      name: name.trim(),
-      description: description.trim(),
-      docs,
-    });
+    onClose?.(
+      {
+        action: "save",
+        name: name.trim(),
+        description: description.trim(),
+        docs,
+      },
+      // 注意：onClose 的参数签名以 DialogComponentProps 为准，这里保持与既有实现一致。
+    );
   }
 </script>
 

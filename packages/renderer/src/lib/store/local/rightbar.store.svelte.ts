@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // featured/rightside/store.svelte.ts
 import {
-    IconDeviceImacSearch,
+    IconBooks,
     // IconAiAgent,
-    IconSketching
+    IconSketching,
+    IconTool
 } from "@tabler/icons-svelte";
 import type { Component } from "svelte";
 import { configStore } from "../config.svelte";
@@ -31,7 +32,8 @@ function createRightPanelStore() {
         ...(configStore.showDevUI
             ? [{ id: "blueprint", label: "蓝图", Icon: IconSketching as unknown as Component<any> }]
             : []),
-        { id: "toolsearch", label: "工具", Icon: IconDeviceImacSearch as unknown as Component<any> }
+        { id: "toolsearch", label: "工具", Icon: IconTool as unknown as Component<any> },
+        { id: "kbsearch", label: "知识库", Icon: IconBooks as unknown as Component<any> }
     ]);
 
     return {

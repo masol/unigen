@@ -1,10 +1,15 @@
+// packages/main/src/libs/searchsrv/tables/kb-registry.ts
 // tables/kb-registry.ts
 import Logger from "electron-log/main.js";
 import { createHash, randomUUID } from "node:crypto";
 import pMap from "p-map";
 import { throwPrecondition } from "../../utils/err.js";
 import { loadTextFile } from "../file-text-loader.js";
-import { scanKnowledgeBaseDirectories } from "../kb-loader.js";
+import {
+    scanKnowledgeBaseDirectories,
+    scanKnowledgeBaseDirectory,
+    type ScannedKnowledgeBase,
+} from "../kb-loader.js";
 import { KB_PREFIX } from "../schema.js";
 import type { SearchDbBase } from "../search-db-base.js";
 import type { SearchOptions } from "../types.js";
@@ -24,6 +29,17 @@ const FILE_CONCURRENCY = 8;
  *   2. get(kbId).searchChunks(query) 再进库检索 chunk
  *
  * 已确定目标库时可直接调用 get(kbId)，跳过目录检索。
+ *
+ * 生命周期与同步路径：
+ *   - 加载：restore，由 GlobalSearchDB.onEmbeddingReady 在每次启动时调用；
+ *     从 catalog 恢复所有已登记知识库的表到内存 Map。tool/skill 表靠
+ *     固定表名 init 即完成加载，KbTable 是动态表，必须有这一步等价入口。
+ *   - 单库增量：syncKnowledgeBaseFromDir / removeKnowledgeBase，只处理单个库，
+ *     不 readdir 根目录、不触碰其它库。upsert / install / delete 走这里。
+ *   - 启动差量：syncKnowledgeBases，由 syncSystemKC 调用；只重建「新增」或
+ *     「meta 变化」的库，已存在且未变化的库只加载不重建。
+ *   - Embedding 全量：reindexCatalog，仅由 onEmbeddingChanged 调用；
+ *     catalog 使用独立 schema，不能走 KbTable 通用重建路径。
  */
 export class KbRegistry {
     private readonly tables = new Map<string, KbTable>();
@@ -146,69 +162,240 @@ export class KbRegistry {
     }
 
     /**
-     * 统一初始化入口：扫描根目录一级子目录，存在 meta.json 的目录视为知识库。
+     * 从 catalog 恢复所有已登记知识库的表到内存。
      *
-     * 每个知识库会：
-     *   1. 全量同步目录表 name/desc
-     *   2. 读取 meta.files 中所有文本文件
-     *   3. 全量重建该知识库的 chunk 表
+     * 每个知识库是一张独立表，表名由 kbId 派生，无法在启动时靠固定
+     * 表名 init 打开，必须先从 catalog 拿到 id 列表再逐个 ensure。
      *
-     * 文件读取通过 pMap 并发；知识库之间的建表/换表仍串行，避免在同一个
-     * LanceDB Connection 上并发执行 renameTable / dropTable 引发竞争。
+     * 这是二次启动的关键路径：search_inited 已为 true 时 syncSystemKC
+     * 不会重跑，若不在 embedding 就绪时恢复，KbRegistry.tables 会为空，
+     * 检索侧 has(kbId) 为 false 而静默跳过。
      *
-     * 注意：不会自动删除“目录已不存在”的旧 KbTable，仅从目录表移除。
+     * 只加载 catalog 中已登记的库，不扫描磁盘；磁盘上目录的新增 /
+     * 删除由 syncKnowledgeBases（首次启动）和 upsert / install API 处理。
+     *
+     * 幂等：ensure 命中内存缓存时零成本；表实际不存在时 init 会自动
+     * 创建空表（embedReady 时用 embedSize，否则占位维度），后续
+     * syncKnowledgeBase 或 upsert 可正常写入。
      */
-    async syncKnowledgeBasesFromDirectory(rootDir: string): Promise<void> {
+    async restore(): Promise<void> {
         const catalog = await this.ensureCatalog();
-        const scanned = await scanKnowledgeBaseDirectories(rootDir);
+        const entries = await catalog.listEntries();
+        if (entries.length === 0) return;
 
-        await catalog.syncCatalog(
-            scanned.map((kb) => ({
-                id: kb.id,
-                name: kb.name,
-                description: kb.description,
-            })),
+        let loaded = 0;
+        for (const entry of entries) {
+            try {
+                await this.ensure(entry.id);
+                loaded++;
+            } catch (error) {
+                Logger.warn(
+                    `[Search] 恢复知识库 [${entry.id}] 失败，已跳过。`,
+                    error,
+                );
+            }
+        }
+
+        Logger.debug(
+            `[Search] 知识库表恢复完成: 总计=${entries.length}, 加载=${loaded}。`,
         );
+    }
 
-        for (const kb of scanned) {
-            const table = await this.ensure(kb.id);
-
-            const docsOrNull = await pMap(
-                kb.files,
-                async (file): Promise<KbDocumentInput | null> => {
-                    const text = await loadTextFile(file.path);
-
-                    if (!text.trim()) {
-                        Logger.warn(
-                            `[Search] 知识库 [${kb.id}] 文件为空或读取失败，已忽略: ${file.source}`,
-                        );
-                        return null;
-                    }
-
-                    return {
-                        id: `${kb.id}:${file.source}`,
-                        text,
-                        title: kb.name,
-                        source: file.source,
-                        metadata: {
-                            kbId: kb.id,
-                            file: file.source,
-                        },
-                    };
-                },
-                { concurrency: FILE_CONCURRENCY },
-            );
-
-            const docs = docsOrNull.filter(
-                (doc): doc is KbDocumentInput => doc !== null,
-            );
-
-            await table.replaceDocuments(docs);
-
-            Logger.debug(
-                `[Search] 知识库 [${kb.id}] 已同步，文件数=${docs.length}`,
+    /**
+     * 单库增量同步：读取指定知识库目录，重建该库 chunk 表，
+     * 并 upsert 该库在目录表中的单条记录。
+     *
+     * 不 readdir 根目录、不触碰其它知识库、不做 syncCatalog 全量替换。
+     * upsert / install 等单库变更必须走这里。
+     */
+    async syncKnowledgeBaseFromDir(kbDir: string): Promise<void> {
+        const kb = await scanKnowledgeBaseDirectory(kbDir);
+        if (!kb) {
+            throwPrecondition(
+                `[Search] 无法加载知识库目录（meta.json 缺失或非法）: ${kbDir}`,
             );
         }
+
+        const catalog = await this.ensureCatalog();
+        await catalog.upsertCatalogEntry({
+            id: kb.id,
+            name: kb.name,
+            description: kb.description,
+        });
+
+        await this.syncKnowledgeBase(kb);
+    }
+
+    /**
+     * 单库增量删除：drop 该库 chunk 表，并删除目录表中的单条记录。
+     * 不触发任何全量同步，不影响其它知识库。
+     */
+    async removeKnowledgeBase(kbId: string): Promise<void> {
+        await this.drop(kbId);
+
+        const catalog = await this.ensureCatalog();
+        await catalog.deleteCatalogEntry(kbId);
+    }
+
+    /**
+     * 启动期差量同步：只重建「新增」或「meta 变化」的库。
+     *
+     * 已存在且 name/description 完全一致的库直接跳过内容重建——它们的内容
+     * 在磁盘上没变（用户通过 upsert / install 修改后 catalog 已同步，
+     * 内容更新在对应接口中已写入 LanceDB），无需再次重建。
+     *
+     * 但“跳过重建”不等于“跳过加载”。此处对所有扫描到的知识库都 ensure，
+     * 保证本方法被任何调用路径触发后，KbRegistry.tables 覆盖全部扫描结果，
+     * 检索侧不会因 has(kbId) 为 false 而漏库。启动路径上通常已由
+     * restore 加载，这里的 ensure 会命中缓存，零成本。
+     *
+     * 这是修复"每次启动都全量重建所有 kb 表"的关键路径：
+     *   - 仅新增 / 删除 / meta 变化时触发 catalog.syncCatalog
+     *   - 仅对新增 / meta 变化的 kb 调用 syncKnowledgeBase（单库重建）
+     *   - 其它情况只加载表，不重建内容
+     */
+    async syncKnowledgeBases(
+        scanned: ScannedKnowledgeBase[],
+    ): Promise<void> {
+        const catalog = await this.ensureCatalog();
+        const existing = await catalog.listEntries();
+        const existingById = new Map(existing.map((e) => [e.id, e]));
+        const scannedIds = new Set(scanned.map((kb) => kb.id));
+
+        // 判断哪些需要重建：新增的、或 meta（name/description）变化的。
+        const toRebuild: ScannedKnowledgeBase[] = [];
+        for (const kb of scanned) {
+            const current = existingById.get(kb.id);
+            if (
+                !current ||
+                current.name !== kb.name ||
+                current.description !== kb.description
+            ) {
+                toRebuild.push(kb);
+            }
+        }
+
+        // catalog 是否需要整体同步：新增 / 删除 / 元信息变化。
+        // 三者都没有时跳过 syncCatalog，避免无谓的 catalog 全量重建。
+        const catalogChanged =
+            toRebuild.length > 0 ||
+            existing.length !== scanned.length ||
+            existing.some((e) => !scannedIds.has(e.id));
+
+        if (catalogChanged) {
+            await catalog.syncCatalog(
+                scanned.map((kb) => ({
+                    id: kb.id,
+                    name: kb.name,
+                    description: kb.description,
+                })),
+            );
+        }
+
+        if (toRebuild.length > 0) {
+            Logger.debug(
+                `[Search] 知识库启动同步: 总计=${scanned.length}, 需重建=${toRebuild.length}, ` +
+                `跳过内容重建=${scanned.length - toRebuild.length}`,
+            );
+        } else if (catalogChanged) {
+            Logger.debug(
+                `[Search] 知识库目录已同步（无内容重建需要）: 总计=${scanned.length}`,
+            );
+        } else {
+            Logger.debug(
+                `[Search] 知识库启动同步: 内容无变化，仅加载表（总计=${scanned.length}）。`,
+            );
+        }
+
+        // 差量同步只决定是否重建内容，不决定是否加载表。
+        // 对所有扫描到的库 ensure，保证本方法调用后全部可用。
+        for (const kb of scanned) {
+            await this.ensure(kb.id);
+        }
+
+        for (const kb of toRebuild) {
+            await this.syncKnowledgeBase(kb);
+        }
+    }
+
+    /**
+     * 单根全量同步。保留供单根初始化使用；
+     * 多根场景请先合并扫描结果再调用 syncKnowledgeBases。
+     */
+    async syncKnowledgeBasesFromDirectory(rootDir: string): Promise<void> {
+        const scanned = await scanKnowledgeBaseDirectories(rootDir);
+        await this.syncKnowledgeBases(scanned);
+    }
+
+    /**
+     * 按当前 Embedding 重建目录表。
+     *
+     * catalog 使用独立 schema（name/description），不能走 KbTable 通用
+     * 重建路径，否则 schema 会被 KB chunk schema 覆盖。
+     *
+     * Embedding 变化时由 GlobalSearchDB.onEmbeddingChanged 单独调用。
+     * 这是必要的全量重建：所有向量必须用新模型重算，无法避免。
+     */
+    async reindexCatalog(): Promise<void> {
+        if (!this.host.embedReady) return;
+
+        const catalog = await this.ensureCatalog();
+        const rows = await catalog.queryAll();
+        if (rows.length === 0) return;
+
+        await catalog.rebuild(rows);
+
+        Logger.debug(
+            `[Search] 知识库目录表已按新 Embedding 重建，条目数=${rows.length}。`,
+        );
+    }
+
+    /**
+     * 重建单个已扫描知识库的 chunk 表。
+     *
+     * 文件读取通过 pMap 并发；建表/换表仍串行，避免在同一个
+     * LanceDB Connection 上并发执行 renameTable / dropTable 引发竞争。
+     */
+    private async syncKnowledgeBase(
+        kb: ScannedKnowledgeBase,
+    ): Promise<void> {
+        const table = await this.ensure(kb.id);
+
+        const docsOrNull = await pMap(
+            kb.files,
+            async (file): Promise<KbDocumentInput | null> => {
+                const text = await loadTextFile(file.path);
+
+                if (!text.trim()) {
+                    Logger.warn(
+                        `[Search] 知识库 [${kb.id}] 文件为空或读取失败，已忽略: ${file.source}`,
+                    );
+                    return null;
+                }
+
+                return {
+                    id: `${kb.id}:${file.source}`,
+                    text,
+                    title: kb.name,
+                    source: file.source,
+                    metadata: {
+                        kbId: kb.id,
+                        file: file.source,
+                    },
+                };
+            },
+            { concurrency: FILE_CONCURRENCY },
+        );
+
+        const docs = docsOrNull.filter(
+            (doc): doc is KbDocumentInput => doc !== null,
+        );
+
+        await table.replaceDocuments(docs);
+
+        Logger.debug(
+            `[Search] 知识库 [${kb.id}] 已同步，文件数=${docs.length}`,
+        );
     }
 
     /**

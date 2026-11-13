@@ -1,3 +1,4 @@
+// packages/main/src/libs/searchsrv/tables/kb-catalog-table.ts
 // tables/kb-catalog-table.ts
 import type { Schema } from "apache-arrow";
 import { getKbCatalogSchema, KB_CATALOG_TABLE } from "../schema.js";
@@ -57,8 +58,36 @@ export class KbCatalogTable extends SearchTableBase<KbCatalogRow> {
     }
 
     /**
+     * 单条 upsert：存在则替换，不存在则新增。
+     *
+     * 用于单库增量同步（upsert / install）。不走 syncCatalog 全量替换，
+     * 不会触碰其它知识库目录项。
+     *
+     * 实现为 delete(id) + add：LanceDB 的 add 不会按 id 去重，
+     * 必须显式删除旧行，否则同一 id 会出现多行。
+     */
+    async upsertCatalogEntry(entry: {
+        id: string;
+        name: string;
+        description: string;
+    }): Promise<void> {
+        const escaped = entry.id.replace(/'/g, "''");
+        await this.ensureTable().delete(`id = '${escaped}'`);
+        await this.addCatalogEntry(entry);
+    }
+
+    /** 单条删除；不存在的 id 静默忽略。 */
+    async deleteCatalogEntry(id: string): Promise<void> {
+        const trimmed = id.trim();
+        if (!trimmed) return;
+
+        const escaped = trimmed.replace(/'/g, "''");
+        await this.ensureTable().delete(`id = '${escaped}'`);
+    }
+
+    /**
      * 全量同步知识库目录。
-     * 用于目录扫描初始化，删除不再存在的目录项。
+     * 仅用于启动 / embedding 重建等低频全量场景。
      */
     async syncCatalog(
         entries: Array<{

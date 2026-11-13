@@ -1,7 +1,7 @@
-import { McpDirName } from '$libs/const.js';
+// packages/main/src/libs/loader/mcp/config-io.ts
+import { globalMCPDir } from '$libs/utils/sys/dir.js';
 import type { McpServerConfig } from '$types/shared/mcp.js';
 import AdmZip from 'adm-zip';
-import { app } from 'electron';
 import Logger from 'electron-log/main.js';
 import { ensureDir } from 'fs-extra';
 import { readFile, writeFile } from 'fs/promises';
@@ -77,7 +77,7 @@ async function copyZipResources(
  *
  * - JSON：直接解析并返回 servers；
  * - ZIP：必须存在 mcp.json，mcp.json 所在目录视为资源根目录；
- *   将资源复制到 app.getPath('userData')/mcp/<server.id>。
+ *   将资源复制到 globalMCPDir()/<server.id>。
  */
 export async function importMcpConfigFromPath(
     sourcePath: string,
@@ -118,7 +118,7 @@ export async function importMcpConfigFromPath(
 
     const configEntry = configEntries[0];
     const servers = parseMcpConfigOrThrow(zip.readAsText(configEntry));
-    const mcpRoot = join(app.getPath('userData'), McpDirName);
+    const mcpRoot = globalMCPDir();
 
     for (const server of servers) {
         const targetRoot = join(mcpRoot, safeMcpDirectoryName(server.id));

@@ -1,27 +1,9 @@
-export type KbDocStatus = 'ready' | 'converting' | 'failed';
+// packages/renderer/src/route/page/settings/kb/kbTypes.ts
+export type { KbCollection, KbDoc, KbDocStatus } from "@app/main/types";
 
-export type KbDoc = {
-    id: string;
-    name: string;
-    size: number;
-    kind: string;
-    status: KbDocStatus;
-};
+import type { KbCollectionInput } from "@app/main/types";
 
-export type KbCollection = {
-    id: string;
-    name: string;
-    description: string;
-    docs: KbDoc[];
-    /** ISO 时间戳，用于卡片底部展示"更新于 X 前"。 */
-    updatedAt: string;
-};
-
-export type KbCollectionInput = {
-    name: string;
-    description: string;
-    docs: KbDoc[];
-};
+export type { KbCollectionInput };
 
 /**
  * 编辑对话框返回值。
@@ -31,6 +13,6 @@ export type KbCollectionInput = {
  * - cancel ：显式取消（遮罩/Esc 关闭由 dialogStore 返回 null）
  */
 export type KbEditorResult =
-    | ({ action: 'save' } & KbCollectionInput)
-    | { action: 'delete' }
-    | { action: 'cancel' };
+    | ({ action: "save" } & KbCollectionInput)
+    | { action: "delete" }
+    | { action: "cancel" };

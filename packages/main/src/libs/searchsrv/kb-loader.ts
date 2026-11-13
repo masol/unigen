@@ -1,8 +1,9 @@
+// packages/main/src/libs/searchsrv/kb-loader.ts
 // kb-loader.ts
 import Logger from "electron-log/main.js";
 import fs from "fs-extra";
 import { readdir } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 
 export interface ScannedKnowledgeBaseFile {
@@ -41,9 +42,110 @@ const KbMetaSchema = z.object({
 type KbMeta = z.infer<typeof KbMetaSchema>;
 
 /**
+ * 读取单个知识库目录。返回 null 表示该目录不是合法知识库
+ * （meta.json 缺失 / 校验失败 / disabled），调用方决定是否跳过。
+ *
+ * 抽取为独立函数，供全量扫描和单库增量同步复用，
+ * 保证两条路径的 meta 校验与路径越界检查完全一致。
+ */
+async function readKnowledgeBase(
+    kbDir: string,
+    id: string,
+): Promise<ScannedKnowledgeBase | null> {
+    const dir = resolve(kbDir);
+    const metaPath = join(dir, "meta.json");
+
+    let meta: KbMeta;
+    try {
+        const raw = await fs.readJSON(metaPath);
+        const parsed = KbMetaSchema.safeParse(raw);
+        if (!parsed.success) {
+            Logger.warn(
+                `[Search] 知识库 meta.json 校验失败，已忽略: ${metaPath}`,
+                parsed.error,
+            );
+            return null;
+        }
+        meta = parsed.data;
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "ENOENT") {
+            Logger.warn(
+                `[Search] 读取知识库 meta.json 失败，已忽略: ${metaPath}`,
+                error,
+            );
+        }
+        return null;
+    }
+
+    if (meta.disabled) {
+        Logger.info(`[Search] 知识库已禁用，跳过: ${metaPath}`);
+        return null;
+    }
+
+    const files: ScannedKnowledgeBaseFile[] = [];
+
+    for (const fileRaw of meta.files) {
+        if (!fileRaw.trim()) continue;
+
+        if (isAbsolute(fileRaw)) {
+            Logger.warn(
+                `[Search] 知识库 files 必须为相对路径，已忽略: ${metaPath} -> ${fileRaw}`,
+            );
+            continue;
+        }
+
+        const abs = resolve(dir, fileRaw);
+        const rel = relative(dir, abs);
+
+        if (
+            !rel ||
+            rel === ".." ||
+            rel.startsWith(`..${sep}`) ||
+            isAbsolute(rel)
+        ) {
+            Logger.warn(
+                `[Search] 知识库文件越界，已忽略: ${metaPath} -> ${fileRaw}`,
+            );
+            continue;
+        }
+
+        files.push({
+            path: abs,
+            source: rel.split(sep).join("/"),
+        });
+    }
+
+    return {
+        id,
+        dir,
+        name: meta.name,
+        description: meta.desc,
+        files,
+    };
+}
+
+/**
+ * 读取单个知识库目录（增量同步用）。
+ *
+ * 与 scanKnowledgeBaseDirectories 的区别：只 stat/读取这一个目录，
+ * 不 readdir 根目录、不触碰任何其它知识库。upsert / install 等
+ * 单库变更场景必须走这里，避免无意义的全量扫描。
+ */
+export async function scanKnowledgeBaseDirectory(
+    kbDir: string,
+): Promise<ScannedKnowledgeBase | null> {
+    const dir = resolve(kbDir);
+    return readKnowledgeBase(dir, basename(dir));
+}
+
+/**
  * 扫描根目录的一级子目录；存在合法 meta.json 的子目录视为知识库。
  * meta.json 缺失、解析失败或校验失败的知识库均被忽略。
  * `disabled: true` 的知识库同样跳过，不进入结果。
+ *
+ * 仅用于启动 / embedding 重建等低频全量场景。单库变更请使用
+ * scanKnowledgeBaseDirectory。
  */
 export async function scanKnowledgeBaseDirectories(
     rootDir: string,
@@ -63,77 +165,8 @@ export async function scanKnowledgeBaseDirectories(
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
         if (!entry.isDirectory()) continue;
 
-        const kbDir = join(root, entry.name);
-        const metaPath = join(kbDir, "meta.json");
-
-        let meta: KbMeta;
-        try {
-            const raw = await fs.readJSON(metaPath);
-            const parsed = KbMetaSchema.safeParse(raw);
-            if (!parsed.success) {
-                Logger.warn(
-                    `[Search] 知识库 meta.json 校验失败，已忽略: ${metaPath}`,
-                    parsed.error,
-                );
-                continue;
-            }
-            meta = parsed.data;
-        } catch (error) {
-            const code = (error as NodeJS.ErrnoException).code;
-            if (code !== "ENOENT") {
-                Logger.warn(
-                    `[Search] 读取知识库 meta.json 失败，已忽略: ${metaPath}`,
-                    error,
-                );
-            }
-            continue;
-        }
-
-        if (meta.disabled) {
-            Logger.info(`[Search] 知识库已禁用，跳过: ${metaPath}`);
-            continue;
-        }
-
-        const files: ScannedKnowledgeBaseFile[] = [];
-
-        for (const fileRaw of meta.files) {
-            if (!fileRaw.trim()) continue;
-
-            if (isAbsolute(fileRaw)) {
-                Logger.warn(
-                    `[Search] 知识库 files 必须为相对路径，已忽略: ${metaPath} -> ${fileRaw}`,
-                );
-                continue;
-            }
-
-            const abs = resolve(kbDir, fileRaw);
-            const rel = relative(kbDir, abs);
-
-            if (
-                !rel ||
-                rel === ".." ||
-                rel.startsWith(`..${sep}`) ||
-                isAbsolute(rel)
-            ) {
-                Logger.warn(
-                    `[Search] 知识库文件越界，已忽略: ${metaPath} -> ${fileRaw}`,
-                );
-                continue;
-            }
-
-            files.push({
-                path: abs,
-                source: rel.split(sep).join("/"),
-            });
-        }
-
-        result.push({
-            id: entry.name,
-            dir: kbDir,
-            name: meta.name,
-            description: meta.desc,
-            files,
-        });
+        const kb = await readKnowledgeBase(join(root, entry.name), entry.name);
+        if (kb) result.push(kb);
     }
 
     return result;

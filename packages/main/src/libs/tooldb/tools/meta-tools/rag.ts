@@ -5,6 +5,7 @@ import { loadTextFileStrict } from "$libs/searchsrv/file-text-loader.js";
 import type {
     KbCatalogRow,
     KbChunkRow,
+    KbRegistry,
     KbTable,
     SkillRow,
 } from "$libs/searchsrv/index.js";
@@ -31,16 +32,27 @@ const DEFAULT_LIMIT = 8;
 const CANDIDATE_MULTIPLIER = 3;
 const SEARCH_CONCURRENCY = 4;
 
+// const NO_SKILL_HINT =
+//     "没有找到匹配的 Skill。请换一种能力描述，或确认该能力是否已作为 Skill 提供；" +
+//     "不要用同义关键词反复重试。";
+
+// const NO_KB_HINT =
+//     "没有找到匹配的知识库。请换一种知识主题描述；" +
+//     "如果明确知道知识库 id，也可以直接调用 query_knowledge。";
+
+// const NO_KB_CHUNK_HINT =
+//     "没有检索到知识库片段。可能是知识库为空，或查询与内容不匹配。";
+
 const NO_SKILL_HINT =
-    "没有找到匹配的 Skill。请换一种能力描述，或确认该能力是否已作为 Skill 提供；" +
-    "不要用同义关键词反复重试。";
+    "No matching skill found. Rephrase the capability description, or confirm " +
+    "the capability is provided as a skill. Do not retry with synonyms.";
 
 const NO_KB_HINT =
-    "没有找到匹配的知识库。请换一种知识主题描述；" +
-    "如果明确知道知识库 id，也可以直接调用 query_knowledge。";
+    `No matching knowledge base found for this topic. The knowledge base stores personal preferences, project constraints, historical decisions, and private facts — not general reference — so a general concept may not be covered here. Rephrase the topic, or if you already know the base id, call query_knowledge directly. To search across all bases without choosing one, use query_all_knowledge.`;
 
 const NO_KB_CHUNK_HINT =
-    "没有检索到知识库片段。可能是知识库为空，或查询与内容不匹配。";
+    "No knowledge chunks retrieved. The knowledge base may be empty, or the " +
+    "query does not match its content.";
 
 type Scope = "project" | "global";
 
@@ -61,7 +73,7 @@ interface ScopedChunk {
     row: KbChunkRow;
 }
 
-interface ChunkOutput {
+export interface ChunkOutput {
     kbId: string;
     kbName?: string;
     chunkId: string;
@@ -122,6 +134,34 @@ async function getProjectLance(): Promise<LanceDB | null> {
 function getOpenedGlobalSearch() {
     const db = getGlobalSearchDB();
     return db.opened ? db : null;
+}
+
+/**
+ * 从 KbRegistry 取回可用表：命中缓存直接返回，未加载则懒加载。
+ *
+ * - 懒加载是启动期 restore() 之外的防御层：restore 内部对单库 ensure
+ *   失败只 warn 跳过，这里再给检索入口一次自愈机会。
+ * - ensure 命中内存缓存时零成本；仅在“未加载”时承担 init 开销，
+ *   而这部分开销在 restore() 时本来也会发生。
+ * - ensure 失败（磁盘损坏、表名冲突等）时 warn 并返回 null，
+ *   由调用方决定跳过还是抛出，避免单库异常阻断整个枚举。
+ */
+async function resolveKbTable(
+    registry: KbRegistry,
+    id: string,
+): Promise<KbTable | null> {
+    const cached = registry.tryGet(id);
+    if (cached) return cached;
+
+    try {
+        return await registry.ensure(id);
+    } catch (error) {
+        Logger.warn(
+            `[ToolDB] 知识库 [${id}] 加载失败，已跳过。`,
+            error,
+        );
+        return null;
+    }
 }
 
 async function rerankCandidates<T>(
@@ -454,9 +494,9 @@ async function findKbById(id: string): Promise<FoundKb | null> {
     if (project) {
         const entry = await project.search.kb.getCatalogEntry(id);
         if (entry) {
-            const table = project.search.kb.tryGet(id);
+            const table = await resolveKbTable(project.search.kb, id);
             if (!table) {
-                throw new Error(`知识库未加载或不存在: ${id}`);
+                throw new Error(`知识库加载失败: ${id}`);
             }
             return { scope: "project", entry, table };
         }
@@ -466,9 +506,9 @@ async function findKbById(id: string): Promise<FoundKb | null> {
     if (global) {
         const entry = await global.kb.getCatalogEntry(id);
         if (entry) {
-            const table = global.kb.tryGet(id);
+            const table = await resolveKbTable(global.kb, id);
             if (!table) {
-                throw new Error(`知识库未加载或不存在: ${id}`);
+                throw new Error(`知识库加载失败: ${id}`);
             }
             return { scope: "global", entry, table };
         }
@@ -574,10 +614,12 @@ export async function queryKnowledgeByIds(
 }
 
 /**
- * 汇总项目级与全局"已加载"的知识库表。
+ * 汇总项目级与全局"可用"的知识库表。
  *
- * 名称来自 KbRegistry.listCatalogEntries()（稳定排序），
- * 而不是已加载表里猜测；未加载表在两侧都可能存在，跳过并 debug 记录。
+ * 名称来自 KbRegistry.listCatalogEntries()（稳定排序），而不是从已加载表
+ * 里猜测。表未加载时先懒加载——启动期 restore() 已覆盖主要路径，这里
+ * 是检索入口的防御层：某个库 restore 时失败被跳过，或项目级/全局注册表
+ * 未走 restore，仍然可以自愈。懒加载失败的库 warn 并跳过，不阻断其它库。
  */
 async function collectKbEntries(): Promise<
     Array<{ scope: Scope; kbId: string; kbName: string; table: KbTable }>
@@ -595,13 +637,8 @@ async function collectKbEntries(): Promise<
     if (project) {
         const catalog = await project.search.kb.listCatalogEntries();
         for (const entry of catalog) {
-            const table = project.search.kb.tryGet(entry.id);
-            if (!table) {
-                Logger.debug(
-                    `[ToolDB] 项目级知识库目录 [${entry.id}] 存在但未加载，已跳过。`,
-                );
-                continue;
-            }
+            const table = await resolveKbTable(project.search.kb, entry.id);
+            if (!table) continue;
             result.push({
                 scope: "project",
                 kbId: entry.id,
@@ -614,13 +651,8 @@ async function collectKbEntries(): Promise<
     if (global) {
         const catalog = await global.kb.listCatalogEntries();
         for (const entry of catalog) {
-            const table = global.kb.tryGet(entry.id);
-            if (!table) {
-                Logger.debug(
-                    `[ToolDB] 全局知识库目录 [${entry.id}] 存在但未加载，已跳过。`,
-                );
-                continue;
-            }
+            const table = await resolveKbTable(global.kb, entry.id);
+            if (!table) continue;
             result.push({
                 scope: "global",
                 kbId: entry.id,
@@ -633,14 +665,23 @@ async function collectKbEntries(): Promise<
     return result;
 }
 
-async function queryAllKnowledge(
+export async function queryAllKnowledge(
     query: string,
     limit: number,
+    offset = 0,
 ): Promise<ChunkOutput[]> {
+    if (limit <= 0 || offset < 0) return [];
+
     const entries = await collectKbEntries();
     if (entries.length === 0) return [];
 
-    const candidateLimit = Math.max(limit * CANDIDATE_MULTIPLIER, limit);
+    // 全局分页：每个库至少要召回到 offset + limit，
+    // 否则深页 chunk 可能不在任何库的候选集里，导致漏数据。
+    const window = offset + limit;
+    const candidateLimit = Math.max(
+        window * CANDIDATE_MULTIPLIER,
+        window,
+    );
 
     const jobs = entries.map(
         ({ scope, kbId, kbName, table }) =>
@@ -669,10 +710,12 @@ async function queryAllKnowledge(
         query,
         candidates,
         (item) => String(item.row.text ?? ""),
-        limit,
+        window,
     );
 
-    return reranked.map(toChunkOutput);
+    return reranked
+        .slice(offset, offset + limit)
+        .map(toChunkOutput);
 }
 
 const skillRefSchema = z.object({
@@ -737,30 +780,31 @@ const searchSkillsInputSchema = z.object({
     query: z
         .string()
         .min(1)
-        .describe("用自然语言描述你希望加载的能力或任务场景。"),
+        .describe(`Natural-language description of the capability or task scenario, e.g. "extract tables from PDF steps", "code review workflow". Do not pass a skill name.`),
     limit: z
         .number()
         .int()
         .min(1)
         .max(20)
         .optional()
-        .describe("最多返回的 Skill 数，默认 8。"),
+        .describe(`Maximum number of skills to return. Default 8.`),
 });
 
 const loadSkillInputSchema = z.object({
     id: z
         .string()
         .min(1)
-        .describe("search_skills 返回的 Skill id。"),
+        .describe("Skill id returned by search_skills. Do not construct it yourself."),
     path: z
         .string()
         .trim()
         .min(1)
         .optional()
         .describe(
-            "第二次调用时使用。首次只传 id，返回 Skill 正文；" +
-            "当 Skill 正文/描述要求加载扩展文件时，以相同 id + 该扩展文件再次调用，" +
-            "此时返回的是该扩展文件的 Markdown 内容（而非 Skill 正文）。",
+            `Only when the skill body or description instructs loading an extension file. Path relative to the skill directory; must not be absolute or escape the directory. When set, returns that file's content instead of the skill body. Omit on the first call.`
+            // "第二次调用时使用。首次只传 id，返回 Skill 正文；" +
+            // "当 Skill 正文/描述要求加载扩展文件时，以相同 id + 该扩展文件再次调用，" +
+            // "此时返回的是该扩展文件的 Markdown 内容（而非 Skill 正文）。",
         ),
 });
 
@@ -769,7 +813,8 @@ const searchKnowledgeBasesInputSchema = z.object({
         .string()
         .trim()
         .describe(
-            "知识主题的自然语言描述。留空则返回全部可用知识库；非空时按相关度排序返回。",
+            `Topic covered by the target knowledge base, e.g. "project architecture conventions", "user writing preferences", "deployment constraints". This is a topic, not a specific question — use query_knowledge or query_all_knowledge for questions. Leave empty to list all available knowledge bases and assess whether any covers a topic of interest.`
+            // "知识主题的自然语言描述。留空则返回全部可用知识库；非空时按相关度排序返回。",
         ),
     limit: z
         .number()
@@ -777,39 +822,39 @@ const searchKnowledgeBasesInputSchema = z.object({
         .min(1)
         .max(20)
         .optional()
-        .describe("最多返回的知识库数，默认 8。"),
+        .describe("Maximum number of knowledge bases to return. Default 8."),
 });
 
 const queryKnowledgeInputSchema = z.object({
     id: z
         .string()
         .min(1)
-        .describe("search_knowledge_bases 返回的知识库 id。"),
+        .describe("Knowledge-base id returned by search_knowledge_bases. Do not construct it yourself."),
     query: z
         .string()
         .min(1)
-        .describe("要在该知识库中检索的自然语言问题。"),
+        .describe(`Natural-language question to search within this knowledge base, e.g. "what is the API versioning policy".`),
     limit: z
         .number()
         .int()
         .min(1)
         .max(20)
         .optional()
-        .describe("最多返回的 chunk 数，默认 8。"),
+        .describe("Maximum number of chunks to return. Default 8."),
 });
 
 const queryAllKnowledgeInputSchema = z.object({
     query: z
         .string()
         .min(1)
-        .describe("要在全部知识库中检索的自然语言问题。"),
+        .describe(`Natural-language expression of the information gap or preference question, e.g. "project convention for error log format", "preferred commit message style", "deployment constraints for this service". Do not put tool usage, schema definitions, or generic concept questions here.`),
     limit: z
         .number()
         .int()
         .min(1)
         .max(20)
         .optional()
-        .describe("最终返回的 chunk 数，默认 8。"),
+        .describe("Maximum number of chunks to return. Default 8."),
 });
 
 type SearchSkillsInput = z.infer<typeof searchSkillsInputSchema>;
@@ -830,10 +875,10 @@ export const searchSkillsToolDef: ToolDefinition<
     SearchSkillsOutput
 > = {
     name: searchSkillsToolName,
-    description:
-        "检索可用 Skill（技能）。用自然语言描述能力或任务场景，而不是猜 Skill 名。" +
-        "返回按相关度排序的 id、name、description。" +
-        "命中后调用 load_skill 并传 id 加载正文；不要凭 name 猜测 Skill 内容。",
+    description: 'Search the skill index for a reusable capability. Use when you need a procedure, method, workflow, or best practice for a node, or when unsure whether an existing skill covers it. Do not use to find tools (use search_tools) or facts/preferences (use query_all_knowledge). Describe the capability or task scenario in natural language; do not guess skill names. Returns: id, name, description, ranked by relevance. On a hit, call load_skill with the id. Do not infer skill content from name.',
+    // "检索可用 Skill（技能）。用自然语言描述能力或任务场景，而不是猜 Skill 名。" +
+    // "返回按相关度排序的 id、name、description。" +
+    // "命中后调用 load_skill 并传 id 加载正文；不要凭 name 猜测 Skill 内容。",
     inputSchema: searchSkillsInputSchema,
     outputSchema: skillSearchOutputSchema,
     execute: async ({ query, limit }) => {
@@ -871,9 +916,9 @@ export const searchSkillsToolDef: ToolDefinition<
             );
             return {
                 skills: [],
-                hint:
-                    `检索 Skill 失败：${message}。` +
-                    "可稍后重试；如持续失败，请换一种能力描述或确认 Skill 是否可用。",
+                hint: `Skill search failed: ${message}. Retry later; if it persists, rephrase the capability or confirm the skill is available.`,
+                // `检索 Skill 失败：${message}。` +
+                // "可稍后重试；如持续失败，请换一种能力描述或确认 Skill 是否可用。",
             };
         }
     },
@@ -884,12 +929,12 @@ export const loadSkillToolDef: ToolDefinition<
     LoadSkillOutput
 > = {
     name: loadSkillToolName,
-    description:
-        "加载 search_skills 返回的 Skill。id 必须使用 search_skills 返回的 id。" +
-        "首次调用只传 id，返回 Skill 正文；" +
-        "若 Skill 正文/描述要求加载扩展文件，以相同 id 加 path 再次调用（path 是该扩展文件相对 Skill 目录的路径），" +
-        "此时返回的是该扩展文件的 Markdown 内容（而非 Skill 正文）。" +
-        "不要凭 Skill 名猜测或编造正文。",
+    description: `Load a skill body, or read an extension file inside a loaded skill's directory. Use when search_skills returned a matching id and you need the body to follow the method. Do not guess content from name, and do not construct an id without search_skills. Returns: with no path, the skill body in text; with path, the Markdown content of that file relative to the skill directory, not the skill body.`,
+    // "加载 search_skills 返回的 Skill。id 必须使用 search_skills 返回的 id。" +
+    // "首次调用只传 id，返回 Skill 正文；" +
+    // "若 Skill 正文/描述要求加载扩展文件，以相同 id 加 path 再次调用（path 是该扩展文件相对 Skill 目录的路径），" +
+    // "此时返回的是该扩展文件的 Markdown 内容（而非 Skill 正文）。" +
+    // "不要凭 Skill 名猜测或编造正文。",
     inputSchema: loadSkillInputSchema,
     outputSchema: loadSkillOutputSchema,
     execute: async ({ id, path: relativePath }) => {
@@ -902,8 +947,8 @@ export const loadSkillToolDef: ToolDefinition<
                     error instanceof Error
                         ? error.message
                         : String(error),
-                hint:
-                    "请确认 id 来自 search_skills，且 path 是 Skill 目录内的相对路径。",
+                hint: `Confirm the id comes from search_skills and that path is a relative path inside the skill directory.`,
+                // "请确认 id 来自 search_skills，且 path 是 Skill 目录内的相对路径。",
             };
         }
     },
@@ -914,9 +959,9 @@ export const searchKnowledgeBasesToolDef: ToolDefinition<
     SearchKnowledgeBasesOutput
 > = {
     name: searchKnowledgeBasesToolName,
-    description:
-        "检索知识库目录。query 为空时返回全部可用知识库；非空时按相关度排序返回。" +
-        "每项含 id、name、description。命中后调用 query_knowledge 并传 id 检索该库的具体片段。",
+    description: `The knowledge base stores personal preferences and private knowledge — user preferences, project constraints, historical decisions, and private facts — not tool manuals or general reference. This tool searches its catalog, not chunks: it returns available knowledge bases with their id, name, and description. Use when (1) a fact, constraint, historical decision, or preference is needed but you don't know which base covers it, so the base must be located before calling query_knowledge; (2) you want to confirm whether a topic is already covered by an existing base; or (3) query is empty, to list all available bases and assess coverage. Do not use to retrieve chunks — call query_knowledge (one known base) or query_all_knowledge (all bases, when the target is unknown) — for tool usage (use search_skills or the tool schema), or for general concept questions, since this knowledge base is private, not an encyclopedia. Returns: id, name, description per base; all entries when query is empty, otherwise ranked by relevance.`,
+    // "检索知识库目录。query 为空时返回全部可用知识库；非空时按相关度排序返回。" +
+    // "每项含 id、name、description。命中后调用 query_knowledge 并传 id 检索该库的具体片段。",
     inputSchema: searchKnowledgeBasesInputSchema,
     outputSchema: kbSearchOutputSchema,
     execute: async ({ query, limit }) => {
@@ -974,9 +1019,9 @@ export const searchKnowledgeBasesToolDef: ToolDefinition<
             );
             return {
                 knowledgeBases: [],
-                hint:
-                    `检索知识库目录失败：${message}。` +
-                    "可稍后重试；如持续失败，请换一种知识主题描述。",
+                hint: `Knowledge-base catalog search failed: ${message}. Retry later; if it persists, rephrase the topic. If the target base is already known, call query_knowledge directly; otherwise use query_all_knowledge to search across all available bases without selecting one first.`,
+                // `检索知识库目录失败：${message}。` +
+                // "可稍后重试；如持续失败，请换一种知识主题描述。",
             };
         }
     },
@@ -987,8 +1032,8 @@ export const queryKnowledgeToolDef: ToolDefinition<
     QueryKnowledgeOutput
 > = {
     name: queryKnowledgeToolName,
-    description:
-        "在指定知识库中检索具体片段。id 必须使用 search_knowledge_bases 返回的 id。",
+    description: `Retrieve chunks from one specified knowledge base. Use when you already have a knowledge-base id from search_knowledge_bases and the fact or preference is known to live in that base. Do not call without an id, and do not probe multiple bases one by one when the target is uncertain; use query_all_knowledge instead. Returns: chunks ranked by relevance, each with kbId, kbName, chunkId, text, title, source, metadata.`,
+    // "在指定知识库中检索具体片段。id 必须使用 search_knowledge_bases 返回的 id。",
     inputSchema: queryKnowledgeInputSchema,
     outputSchema: queryKnowledgeOutputSchema,
     execute: async ({ id, query, limit }) => {
@@ -1010,8 +1055,8 @@ export const queryKnowledgeToolDef: ToolDefinition<
                     error instanceof Error
                         ? error.message
                         : String(error),
-                hint:
-                    "请先调用 search_knowledge_bases 获取有效 id。",
+                hint: `Call search_knowledge_bases first to obtain a valid id.`,
+                // "请先调用 search_knowledge_bases 获取有效 id。",
             };
         }
     },
@@ -1022,10 +1067,10 @@ export const queryAllKnowledgeToolDef: ToolDefinition<
     QueryAllKnowledgeOutput
 > = {
     name: queryAllKnowledgeToolName,
-    description:
-        "在全部可用知识库中检索与 query 相关的片段。" +
-        "知识库存放用户专有/私有知识、事实、偏好、项目约束等；" +
-        "当回答需要用户信息或项目背景，或需要确认某个事实/偏好/约定的来源时使用。",
+    description: `Retrieve chunks from all available knowledge bases. The knowledge base stores personal preferences, project constraints, historical decisions, and private facts — not tool manuals or general reference. Use when any of the following holds: (1) a fact, constraint, or historical decision required to complete the current node is missing from context; (2) more than one valid approach exists and user preference or project convention decides which; (3) you need to confirm whether a claim is consistent with an established preference or constraint. Do not use for tool usage (use search_skills or the tool schema), and do not defer to post-failure correction — this tool provides preferences and private constraints before action. Returns: chunks ranked by relevance across all bases, each with kbId, kbName, chunkId, text, title, source, metadata.`,
+    // "在全部可用知识库中检索与 query 相关的片段。" +
+    // "知识库存放用户专有/私有知识、事实、偏好、项目约束等；" +
+    // "当回答需要用户信息或项目背景，或需要确认某个事实/偏好/约定的来源时使用。",
     inputSchema: queryAllKnowledgeInputSchema,
     outputSchema: queryAllKnowledgeOutputSchema,
     execute: async ({ query, limit }) => {
@@ -1049,8 +1094,8 @@ export const queryAllKnowledgeToolDef: ToolDefinition<
                     error instanceof Error
                         ? error.message
                         : String(error),
-                hint:
-                    "请确认知识库可用；如已知目标库，优先使用 search_knowledge_bases + query_knowledge。",
+                hint: `Confirm the knowledge bases are available; if the target base is known, prefer search_knowledge_bases + query_knowledge.`,
+                // "请确认知识库可用；如已知目标库，优先使用 search_knowledge_bases + query_knowledge。",
             };
         }
     },

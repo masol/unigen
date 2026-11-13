@@ -1,5 +1,11 @@
 // packages/main/src/api/common/agent.ts
+// packages/main/src/api/common/agent.ts
 import { installKnowledgeBase as installKnowledgeBaseFromSource } from "$libs/loader/kb/install.js";
+import {
+    deleteKnowledgeBase as deleteKnowledgeBaseFromLoader,
+    listKnowledgeBases as listKnowledgeBasesFromLoader,
+    upsertKnowledgeBase as upsertKnowledgeBaseFromLoader,
+} from "$libs/loader/kb/service.js";
 import {
     exportMcpServerConfigToPath,
     getMcpExportDefaultBaseName,
@@ -9,10 +15,13 @@ import { installSkill as installSkillFromSource } from "$libs/loader/skill/insta
 import { uninstallSkill as uninstallSkillFromSource } from "$libs/loader/skill/uninstall.js";
 import {
     openGlobalSearch,
-    type KbCatalogRow,
     type SkillRow,
 } from "$libs/searchsrv/index.js";
 import { globalToolDB, type ToolMeta } from "$libs/tooldb/index.js";
+import {
+    queryAllKnowledge,
+    type ChunkOutput,
+} from "$libs/tooldb/tools/meta-tools/rag.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import { WindowService } from '$libs/utils/window.js';
 import {
@@ -21,10 +30,15 @@ import {
     type ToolSearchItem,
 } from "$types/shared/api/agent.js";
 import {
+    knowledgeBaseDeleteInputSchema,
+    knowledgeBaseDeleteOutputSchema,
     knowledgeBaseInstallInputSchema,
     knowledgeBaseInstallOutputSchema,
+    knowledgeBaseListOutputSchema,
     knowledgeBaseSearchInputSchema,
     knowledgeBaseSearchOutputSchema,
+    knowledgeBaseUpsertInputSchema,
+    knowledgeBaseUpsertOutputSchema,
     type KnowledgeBaseSearchItem,
 } from "$types/shared/api/kb.js";
 import {
@@ -109,16 +123,29 @@ function toSkillSearchItem(row: SkillRow): SkillSearchItem {
     };
 }
 
+/**
+ * ChunkOutput -> API DTO。
+ *
+ * ChunkOutput 的 kbName 是可选的，用 catalog 兜底；
+ * kbDescription 不在 ChunkOutput 中，从 catalog 映射补全。
+ *
+ * 注：当前 ChunkOutput 不携带 rerankScore，故该字段不会出现。
+ * 如需在卡片上展示相关度分数，需先让 toChunkOutput 透传 score。
+ */
 function toKnowledgeBaseSearchItem(
-    row: KbCatalogRow,
+    row: ChunkOutput,
+    catalogById: Map<string, { name: string; description: string }>,
 ): KnowledgeBaseSearchItem {
-    const rerankScore = readRerankScore(row.rerankScore);
-
+    const entry = catalogById.get(row.kbId);
+    Logger.debug("search metadata=", row.metadata)
     return {
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        ...(rerankScore !== undefined ? { rerankScore } : {}),
+        id: row.chunkId,
+        kbId: row.kbId,
+        kbName: row.kbName || entry?.name || row.kbId,
+        kbDescription: entry?.description ?? "",
+        text: row.text,
+        title: row.title,
+        source: row.source,
     };
 }
 
@@ -197,31 +224,47 @@ const searchKnowledgeBases = os
         const db = await openGlobalSearch();
         if (!db.opened) {
             throwPrecondition(
-                "[Agent] 全局检索库未就绪，无法检索知识库。",
+                "[Agent] 全局检索库未就绪，无法检索知识库片段。",
             );
         }
 
-        const fetchLimit = input.limit + 1;
-        let rows: KbCatalogRow[];
-
-        if (input.query) {
-            rows = await db.kb.searchKnowledgeBases(input.query, {
-                limit: input.offset + fetchLimit,
-            });
-            rows = rows.slice(input.offset);
-        } else {
-            const all = await db.kb.listCatalogEntries();
-            rows = all.slice(input.offset, input.offset + fetchLimit);
+        const query = input.query.trim();
+        if (!query) {
+            return {
+                items: [],
+                hasMore: false,
+            };
         }
+
+        // 用 catalog 给 ChunkOutput 补齐 kbName / kbDescription：
+        // ChunkOutput 的 kbName 可选，kbDescription 完全缺失。
+        const catalog = await db.kb.listCatalogEntries();
+        const catalogById = new Map(
+            catalog.map(
+                (entry) =>
+                    [
+                        entry.id,
+                        { name: entry.name, description: entry.description },
+                    ] as const,
+            ),
+        );
+
+        // 多取 1 条判断 hasMore；offset 透传给 queryAllKnowledge，
+        // 由其内部按 (offset + limit) 扩大每库候选并跨库统一 rerank。
+        const rows = await queryAllKnowledge(
+            query,
+            input.limit + 1,
+            input.offset,
+        );
 
         const hasMore = rows.length > input.limit;
         const items = rows
             .slice(0, input.limit)
-            .map((row) => toKnowledgeBaseSearchItem(row));
+            .map((row) => toKnowledgeBaseSearchItem(row, catalogById));
 
         Logger.debug(
-            `[Agent] 知识库检索完成: query=${JSON.stringify(
-                input.query,
+            `[Agent] 知识库片段检索完成: query=${JSON.stringify(
+                query,
             )}, offset=${input.offset}, items=${items.length}, hasMore=${hasMore}`,
         );
 
@@ -229,6 +272,28 @@ const searchKnowledgeBases = os
             items,
             hasMore,
         };
+    });
+
+const listKnowledgeBases = os
+    .input(z.void())
+    .output(knowledgeBaseListOutputSchema)
+    .handler(async () => {
+        return listKnowledgeBasesFromLoader();
+    });
+
+const upsertKnowledgeBase = os
+    .input(knowledgeBaseUpsertInputSchema)
+    .output(knowledgeBaseUpsertOutputSchema)
+    .handler(async ({ input }) => {
+        return upsertKnowledgeBaseFromLoader(input);
+    });
+
+const deleteKnowledgeBase = os
+    .input(knowledgeBaseDeleteInputSchema)
+    .output(knowledgeBaseDeleteOutputSchema)
+    .handler(async ({ input }) => {
+        await deleteKnowledgeBaseFromLoader(input.id);
+        return { success: true as const };
     });
 
 /**
@@ -414,6 +479,9 @@ export default {
     searchTools,
     searchSkills,
     searchKnowledgeBases,
+    listKnowledgeBases,
+    upsertKnowledgeBase,
+    deleteKnowledgeBase,
     installSkill,
     deleteSkill,
     installKnowledgeBase,

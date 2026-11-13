@@ -16,7 +16,7 @@
     return match?.[1]?.toLowerCase() ?? "";
   }
 
-  // @humanspeak/svelte-markdown 的 image renderer 不传 href/src，
+  // @humanspeak/svelte-markdown 的 image renderer 可能不传 href/src，
   // 只给 raw（markdown 原文），如：![alt](file:///path/a.png "title")
   // 支持 <> 包裹与可选 title；仅在 href/src/url 均为空时兜底使用。
   function parseUrlFromRaw(raw: string) {
@@ -40,7 +40,11 @@
 
 <script lang="ts">
   import * as ImageZoom from "$lib/components/ui/image-zoom/index";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import { safeApi } from "$lib/utils/api";
+  import autoAnimate from "@formkit/auto-animate";
+  import Logger from "electron-log/renderer.js";
+  import { onMount } from "svelte";
   import VideoPlayer from "svelte-video-player";
 
   let {
@@ -71,13 +75,14 @@
   let resolved = $state("");
   let loading = $state(true);
   let failed = $state(false);
+
+  // 非响应式的竞态序号，仅在组件生命周期内自增
   let requestId = 0;
 
   const ext = $derived(getExt(resolved || orig));
   const kind = $derived(VIDEO_EXTS.has(ext) ? "video" : "image");
 
-  $effect(() => {
-    const target = orig;
+  async function load(target: string) {
     const id = ++requestId;
 
     resolved = "";
@@ -90,45 +95,46 @@
       return;
     }
 
-    void (async () => {
-      try {
-        const url = await safeApi().project.getURL(target);
-        if (id !== requestId) return;
-        if (!url) {
-          failed = true;
-          return;
-        }
-        resolved = url;
-      } catch {
-        if (id !== requestId) return;
+    try {
+      const next = await safeApi().project.getURL(target);
+      if (id !== requestId) return;
+      if (!next) {
         failed = true;
-      } finally {
-        if (id === requestId) loading = false;
+        return;
       }
-    })();
+      resolved = next;
+    } catch (err) {
+      if (id !== requestId) return;
+      Logger.error("[MarkdownMedia] project.getURL failed:", target, err);
+      failed = true;
+    } finally {
+      if (id === requestId) loading = false;
+    }
+  }
 
+  onMount(() => {
+    void load(orig);
     return () => {
+      // 卸载时使所有进行中的请求失效
       requestId++;
     };
   });
 </script>
 
-<div class="not-prose my-3 w-full" title={title ?? undefined}>
+<div class="not-prose my-3 w-full" title={title ?? undefined} use:autoAnimate>
   {#if loading}
-    <div
-      class="flex min-h-24 w-full flex-col items-center justify-center gap-1 rounded-xl border border-border/50 bg-muted/20 text-xs text-muted-foreground"
-    >
-      <div class="flex items-center gap-2">
-        <span
-          class="size-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary"
-          aria-hidden="true"
-        ></span>
-        <span>正在加载媒体...</span>
-      </div>
-      <span class="max-w-full truncate px-4 font-mono text-[10px] opacity-60">
-        {orig || "(empty src)"}
-      </span>
+    <!--╭─────────────────────────────────────────────────────╮ -->
+    <!-- │ [可抽取子组件 → MediaSkeleton.svelte]                │ -->
+    <!-- │职责：按媒体类型（video/image）渲染等尺寸骨架占位     │ -->
+    <!-- ╰─────────────────────────────────────────────────────╯ -->
+    <div class="flex w-full justify-center">
+      <Skeleton
+        class={kind === "video"
+          ? "aspect-video w-full max-w-xl rounded-2xl"
+          : "h-64 w-full rounded-2xl"}
+      />
     </div>
+    <!-- ╭─── / MediaSkeleton ───╮ -->
   {:else if failed || !resolved}
     <div
       class="flex min-h-24 w-full flex-col items-center justify-center gap-1 rounded-xl border border-border/50 bg-muted/20 text-xs text-muted-foreground"

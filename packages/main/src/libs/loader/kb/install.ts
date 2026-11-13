@@ -1,4 +1,5 @@
 // packages/main/src/libs/loader/kb/install.ts
+// packages/main/src/libs/loader/kb/install.ts
 import { openGlobalSearch } from "$libs/searchsrv/index.js";
 import { throwUnprcessable } from "$libs/utils/err.js";
 import { globalKbDir } from "$libs/utils/sys/dir.js";
@@ -28,6 +29,8 @@ export interface InstalledKnowledgeBase {
  *
  * ZIP 内必须存在 meta.json。若 meta.json 位于某个子目录中，则安装该子目录内容；
  * 若位于根目录，则使用 zip 文件名作为安装目录名。
+ *
+ * 安装完成后只对该目标目录做单库增量同步，不触发全量扫描。
  */
 export async function installKnowledgeBase(
     source: string,
@@ -44,7 +47,12 @@ export async function installKnowledgeBase(
     const result = await installKnowledgeBaseFromZip(trimmed);
 
     const db = await openGlobalSearch();
-    await db.syncSystemKC();
+    if (!db.opened) {
+        throwUnprcessable("[Kb] 全局检索库未就绪。");
+    }
+
+    // 单库增量：只读刚安装的目录，不扫描 res/data 全量。
+    await db.kb.syncKnowledgeBaseFromDir(result.targetDir);
 
     return result;
 }
