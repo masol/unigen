@@ -70,12 +70,12 @@
     {
       icon: IconClipboardText,
       title: "像给同事交代任务那样，告诉 AI 怎么做",
-      desc: "无需编程背景。把一件事该怎么做写下来并保存，就得到一个专注于此的 Agent。有向人交代工作的经验，通常就能上手。",
+      desc: "无需编程背景。把一件事该怎么做写下，就得到一个专注于此的 Agent。有向人交代工作的经验，通常就能上手。",
     },
     {
       icon: IconAdjustments,
       title: "像带新人那样，指出哪一步不对",
-      desc: "哪里做得不对，直接改指南里对应的那一步，下次它会按新的做。某一步过于笼统时，可单独写成子指南，由独立的 sub-agent 完成。",
+      desc: "哪里做得不对，改指南里的对应描述，下次AI会按新的做。模型强弱，决定了你指南的细粒度，都可以正确工作。",
     },
     {
       icon: IconPlugConnected,
@@ -117,13 +117,13 @@
           class="flex gap-4 rounded-2xl border border-border/50 bg-card p-6 shadow-sm"
         >
           <Icon
-            size={20}
+            size={32}
             stroke={1.5}
             class="mt-0.5 shrink-0 text-muted-foreground"
           />
           <div class="space-y-1.5">
-            <p class="text-sm font-medium text-foreground">{item.title}</p>
-            <p class="text-xs leading-relaxed text-muted-foreground">
+            <h3 class="font-medium text-foreground">{item.title}</h3>
+            <p class="text-sm leading-relaxed text-muted-foreground">
               {item.desc}
             </p>
           </div>

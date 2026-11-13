@@ -5,10 +5,13 @@
   import { sessionStore } from "$lib/store/local/session.store.svelte";
   import autoAnimate from "@formkit/auto-animate";
   import VirtualList from "@humanspeak/svelte-virtual-list";
+  import { onMount } from "svelte";
   import SessionEmpty from "./session.empty.svelte";
   import SessionGroup from "./session.group.svelte";
   import SessionItem from "./session.item.svelte";
   import SessionSkeleton from "./session.skeleton.svelte";
+
+  import { push, router } from "svelte-spa-router";
 
   type VirtualListItem =
     | { type: "group"; data: TimeGroup }
@@ -44,6 +47,12 @@
       ? `group-${item.data.id}`
       : `session-${item.data.id}`;
   }
+
+  onMount(() => {
+    if (router.location !== "/") {
+      push("/");
+    }
+  });
 </script>
 
 <div class="flex h-full min-w-0 flex-col">

@@ -10,7 +10,7 @@ import type { ModelUsage } from "$types/shared/chat.js";
 import { isStepCount, ToolLoopAgent, type ModelMessage } from "ai";
 import Logger from "electron-log/main.js";
 import { isPlainObject } from "radashi";
-import { resolveModelOptions } from "../settings.js";
+import { resolveEffectiveSettings, resolveModelOptions } from "../settings.js";
 import { buildUserPrompt, renderSystemPrompt } from "../template.js";
 import { nextSeq } from "../traceid.js";
 import type { CompiledPacAgent, JsonValue } from "../type.js";
@@ -93,15 +93,19 @@ export async function executeAgent(
         ...inheritedDefaults,
         ...compiled.ownDefaults,
     };
-    const settings = compiled.settings;
+    const settings = resolveEffectiveSettings(compiled.settings, ctx.settings);
     const persist = state.persist;
     const shouldStream = isRoot ? settings.streaming : true;
     const subHistoryLimit = isRoot ? null : resolveSubAgentHistoryLimit(settings.history);
     const histEnabled = isRoot ? settings.history !== 0 : subHistoryLimit !== 0;
 
     // 2. 模型选择
-    const modelOptions = resolveModelOptions(ctx);
-    const model = getSmartModel(modelOptions as never, ctx);
+    const modelOptions = resolveModelOptions(
+        ctx,
+        compiled.config.requireModel,
+        compiled.config.model,
+    );
+    const model = getSmartModel(modelOptions, ctx);
     const providerId = model?.provider ?? "unknown";
     const modelId = model?.modelId ?? "unknown";
     state.modelInfo = { providerId, modelId };
@@ -206,6 +210,8 @@ export async function executeAgent(
         state,
         agentTraceNodeId,
         agentExecutor,
+        isRoot ? ctx.tools : undefined,
+        isRoot ? ctx.skills : undefined,
     );
 
     // 仅主 agent 注入动态附件读取工具。子 agent 不注入。

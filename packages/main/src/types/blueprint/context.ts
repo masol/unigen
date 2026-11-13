@@ -1,6 +1,7 @@
 import { ICapaFunctor } from "$libs/blueprint/capability/type.js";
 import type { IProjectContext } from "$libs/project/type.js";
 import type { ChatStreamEvent } from "$types/shared/chat.js";
+import { ResolvedSettings } from "./settings.js";
 
 
 export interface CommandInfo {
@@ -31,23 +32,20 @@ export interface IRunnerContext {
     readonly files: string[]; // 此变量是否移入store?
     readonly mode: CmdMode; // 此变量是否移入store?
     readonly timestamp: number; // 客户端消息的创建时间，此变量是否移入store?
+    readonly settings: Partial<ResolvedSettings>;
+    readonly skills: string[];
+    readonly tools: string[];
 
     /** 快照检查点：判断当前工作流是否已经被终止 */
     readonly isAborted: boolean;
 
-    /** 快照检查点：判断是否属于“强制杀死”状态 */
-    readonly isForceKilled: boolean;
     readonly prj: IProjectContext;
     cmd: CommandInfo;
-    // readonly stack: Capability[]; // 指示当前调用栈--主要服务于目标跟踪及拆解。
 
-    // push(cap: Capability): void;
-    // pop(): Capability | null;
     /**
      * 内部或外部触发取消的方法（配合宿主环境使用）
-     * @param force 是否属于强制杀死
      */
-    triggerAbort(force?: boolean): void;
+    triggerAbort(): void;
 
     // 为mode打的补丁，为了支持rerun。如果加载到cmd,需要重置mode.
     setMode(mode: CmdMode): void;

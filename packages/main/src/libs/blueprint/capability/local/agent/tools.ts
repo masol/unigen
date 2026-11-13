@@ -17,6 +17,8 @@ export async function materializeTools(
     state: PacRunState,
     parentTraceId: string,
     agentExecutor: IAgentExecutor,
+    extraToolIds?: string[],
+    extraSkillIds?: string[],
 ): Promise<Record<string, Tool>> {
     const out: Record<string, Tool> = {};
     for (let i = 0; i < compiled.toolRefs.length; i++) {
@@ -90,7 +92,45 @@ export async function materializeTools(
         }
     }
 
-    await attachLocalContextTools(out, compiled, ctx);
+    // 运行期追加工具：仅根 agent 会传入。字符串直接作为全局工具 id 查询，
+    // 不解析 builtin:: / mcp:: 等前缀。
+    if (extraToolIds && extraToolIds.length > 0) {
+        const seen = new Set<string>();
+        for (const rawId of extraToolIds) {
+            if (typeof rawId !== "string") continue;
+
+            const id = rawId.trim();
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+
+            try {
+                const live = await globalToolDB.getToolMeta(id);
+                if (!live) {
+                    Logger.warn(
+                        `[PAC] ${compiled.name}: 运行期追加工具 ${id} 不存在，本次运行跳过`,
+                    );
+                    continue;
+                }
+
+                const key = live.llmName || id;
+                if (out[key]) {
+                    Logger.warn(
+                        `[PAC] ${compiled.name}: 运行期追加工具 ${id} 的调用名 ${key} 已被占用，本次运行跳过`,
+                    );
+                    continue;
+                }
+
+                out[key] = live.tool;
+            } catch (e) {
+                Logger.warn(
+                    `[PAC] ${compiled.name}: 运行期追加工具 ${id} 失败，本次运行跳过`,
+                    e,
+                );
+            }
+        }
+    }
+
+    await attachLocalContextTools(out, compiled, ctx, extraSkillIds);
 
     return out;
 }

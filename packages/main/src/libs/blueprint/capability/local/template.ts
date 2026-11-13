@@ -64,6 +64,7 @@ const RESERVED = new Set([
     "userTemplate", "userTemplatePath",
     "setDefault", "streaming", "reasoning", "persist", "history",
     "timeout", "temperature", "maxOutputTokens", "toolCallConcurrency", "strict",
+    "requireModel", "model",
 ]);
 
 function stripReserved(fm: Record<string, unknown>): Record<string, unknown> {

@@ -27,29 +27,22 @@ export class CapaRunner extends BaseRunner {
         this.#ctx = null;
     }
 
-    stop(bForce: boolean = false) {
+    stop() {
         if (this.#state === "idle") {
             return;
         }
 
         if (this.#ctx) {
-            this.#ctx.triggerAbort(bForce);
+            this.#ctx.triggerAbort();
         }
-        if (bForce) {
-            // 强制模式：直接清理，让 waitFinish 立即完成
-            this.#ctx = null;
-            this.#running = null;
-            this.#state = "idle";
-        } else {
-            this.#state = "terminating"
-        }
+        this.#state = "terminating"
     }
 
     start(capaId: string, ctx: IRunnerContext) {
         if (this.#state === "idle") {
             if (this.#running) {
                 Logger.warn("[WorkflowRunner] 历史执行尚未执行完毕...");
-                this.stop(true);
+                this.stop();
             }
             const p = this.run(capaId, ctx);
             // 错误处理：避免 unhandled rejection

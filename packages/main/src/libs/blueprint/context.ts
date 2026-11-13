@@ -1,6 +1,7 @@
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { IProjectContext } from '$libs/project/type.js';
 import type { CmdMode, CommandInfo, IRunnerContext } from '$types/blueprint/context.js';
+import { ResolvedSettings } from '$types/blueprint/settings.js';
 import type { ChatStreamEvent, RunnerParam } from '$types/index.js';
 import log from 'electron-log/main.js';
 import { loadFunctor } from './capability/index.js';
@@ -18,6 +19,10 @@ export class RunnerContext implements IRunnerContext {
     readonly msgId: string;
     readonly sessId: string;
     readonly timestamp: number;
+    readonly settings: Partial<ResolvedSettings>;
+    readonly skills: string[];
+    readonly tools: string[];
+
     #varMap: Map<string, unknown> = new Map();
     #mode: CmdMode;
 
@@ -42,7 +47,6 @@ export class RunnerContext implements IRunnerContext {
     // #stack: Capability[] = [];
 
     private readonly abortController: AbortController | null = null;
-    #isForceKilled: boolean = false;
 
     constructor(command: RunnerParam, prj: IProjectContext, signal?: AbortSignal | null, seq?: number) {
         this.files = command.files ?? [];
@@ -50,6 +54,9 @@ export class RunnerContext implements IRunnerContext {
         this.sessId = command.sessId;
         this.#mode = (command.mode ?? null);
         this.timestamp = command.timestamp;
+        this.settings = command.settings ?? {};
+        this.tools = command.tools ?? [];
+        this.skills = command.skills ?? [];
 
         this.seq = seq ? seq : runSeq--;
         this.prj = prj;
@@ -72,18 +79,6 @@ export class RunnerContext implements IRunnerContext {
         this.#mode = mode;
     }
 
-
-    // push(cap: Capability): void {
-    //     this.#stack.push(cap);
-    // }
-
-    // pop(): Capability | null {
-    //     if (this.#stack.length === 0) {
-    //         return null;
-    //     }
-    //     return this.#stack.pop() ?? null;
-    // }
-
     // ==========================================
     // 🚦 状态检查点
     // ==========================================
@@ -93,26 +88,13 @@ export class RunnerContext implements IRunnerContext {
         return this.signal.aborted;
     }
 
-    // get stack(): Capability[] {
-    //     return this.#stack;
-    // }
-
-    /** 快照检查点：判断是否属于“强制杀死”状态 */
-    get isForceKilled(): boolean {
-        return this.#isForceKilled;
-    }
-
     /**
      * 内部或外部触发取消的方法（配合宿主环境使用）
-     * @param force 是否属于强制杀死
      */
-    triggerAbort(force: boolean = false): void {
-        if (force) {
-            this.#isForceKilled = true;
-        }
+    triggerAbort(): void {
         if (this.abortController) {
             this.abortController.abort();
-            this.warn(`Workflow execution was aborted. ForceKilled: ${force}`);
+            this.warn(`Workflow execution was aborted.`);
         } else {
             this.warn(`Workflow execution want abort. but this runner controlled by outer.`);
         }

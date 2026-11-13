@@ -1,6 +1,6 @@
-import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import Logger from "electron-log/main.js";
+import { isPlainObject } from "radashi";
 import type {
     JsonValue, ModelSelectOptions, PacFrontMatter,
     PacTimeoutConfig, ReasoningLevel, ResolvedSettings,
@@ -17,7 +17,7 @@ import type {
  *     front matter.setDefault → _T_ 变量默认值表。
  *
  *  3) 运行期可变(resolveModelOptions)
- *     prjDB.get("model") → getSmartModel 的 options。
+ *     ctx.settings.userSelModel / front matter.model → getSmartModel 的 options。
  *     对所有层级(含子 agent)生效。
  */
 
@@ -52,6 +52,54 @@ export const REASONING_LEVELS: readonly ReasoningLevel[] = [
 
 function isReasoningLevel(v: unknown): v is ReasoningLevel {
     return typeof v === "string" && (REASONING_LEVELS as readonly string[]).includes(v);
+}
+
+/**
+ * 使用本次请求的临时 settings 覆盖 agent 编译期默认值。
+ *
+ * 仅覆盖显式提供且非 undefined 的字段，避免 JSON 中缺省字段把默认值打穿。
+ */
+export function resolveEffectiveSettings(
+    base: ResolvedSettings,
+    overrides?: Partial<ResolvedSettings>,
+): ResolvedSettings {
+    if (!overrides) return base;
+
+    const out: ResolvedSettings = { ...base };
+    for (const key of Object.keys(overrides) as (keyof ResolvedSettings)[]) {
+        const value = overrides[key];
+        if (value !== undefined) {
+            (out as unknown as Record<string, unknown>)[key] = value;
+        }
+    }
+    return out;
+}
+
+/**
+ * 解析 `ProviderID::ModelID`，返回 getSmartModel 的 exact 选项。
+ * 非法格式只告警并返回 undefined，由调用方继续走后续策略。
+ */
+function parseExactModel(
+    raw: string,
+    source: string,
+): ModelSelectOptions | undefined {
+    const value = raw.trim();
+    const sep = value.indexOf("::");
+
+    if (sep <= 0 || sep >= value.length - 2) {
+        Logger.warn(`[PAC] ${source} 不是合法的 provider::model 格式,已忽略:`, raw);
+        return undefined;
+    }
+
+    const providerId = value.slice(0, sep).trim();
+    const modelId = value.slice(sep + 2).trim();
+
+    if (!providerId || !modelId) {
+        Logger.warn(`[PAC] ${source} 的 providerId/modelId 为空,已忽略:`, raw);
+        return undefined;
+    }
+
+    return { exact: { providerId, modelId } };
 }
 
 /** FM 常量开关 → ResolvedSettings。未知/非法字段用默认值。 */
@@ -177,38 +225,68 @@ export function resolveOwnDefaults(fm: PacFrontMatter): Record<string, JsonValue
 }
 
 /**
- * 从 PrjDB 读取 "model" 并归一化为 getSmartModel 的 options。
- *   - 字符串          → modelPattern (new RegExp)
- *   - 对象            → 透传;若 modelPattern 为字符串则转 RegExp
- *   - 缺失/异常/非法  → undefined (走默认策略)
+ * 解析模型选择选项。
+ *
+ * 优先级：
+ *   1. ctx.settings.userSelModel 为 string → 直接按 `ProviderID::ModelID` exact 选择；
+ *   2. ctx.settings.userSelModel 为 object 且当前 agent 有 requireModel → 以 requireModel
+ *      为 key 取 `ProviderID::ModelID`，exact 选择；
+ *   3. 以上未取到值时，使用当前 agent front matter.model 解析：
+ *      - string：按 `modelPattern` 正则处理；
+ *      - object：作为模型选择选项透传；其中 modelPattern 字段若为字符串则转正则。
+ *
+ * @param requireModel 当前 agent front matter.requireModel
+ * @param fmModel 当前 agent front matter.model
  */
-export function resolveModelOptions(ctx: IRunnerContext): ModelSelectOptions | undefined {
-    let raw: unknown;
-    try {
-        raw = PrjDB.ensure(ctx.prj).get("model");
-    } catch (e) {
-        Logger.warn("[PAC] 读取 prjdb.model 失败,改用默认模型:", e);
-        return undefined;
+export function resolveModelOptions(
+    ctx: IRunnerContext,
+    requireModel?: string,
+    fmModel?: PacFrontMatter["model"],
+): ModelSelectOptions | undefined {
+    const override = ctx.settings?.userSelModel;
+
+    if (typeof override === "string") {
+        const exact = parseExactModel(override, "ctx.settings.userSelModel");
+        if (exact) return exact;
+    } else if (isPlainObject(override)) {
+        const key = requireModel?.trim();
+        if (key) {
+            const raw = (override as Record<string, unknown>)[key];
+            if (typeof raw === "string") {
+                const exact = parseExactModel(raw, `ctx.settings.userSelModel["${key}"]`);
+                if (exact) return exact;
+            } else if (raw !== undefined) {
+                Logger.warn(
+                    `[PAC] ctx.settings.userSelModel["${key}"] 必须是 provider::model 字符串,已忽略:`,
+                    raw,
+                );
+            }
+        }
+    } else if (override !== undefined) {
+        Logger.warn(`[PAC] ctx.settings.userSelModel 类型非法,已忽略:`, override);
     }
+
+    const raw = fmModel;
     if (raw === null || raw === undefined || raw === "") return undefined;
 
     if (typeof raw === "string") {
         try {
             return { modelPattern: new RegExp(raw) };
         } catch (e) {
-            Logger.warn(`[PAC] prjdb.model 不是合法正则,忽略: ${raw}`, e);
+            Logger.warn(`[PAC] front matter.model 不是合法正则,忽略: ${raw}`, e);
             return undefined;
         }
     }
 
-    if (typeof raw === "object" && !Array.isArray(raw)) {
+    if (isPlainObject(raw)) {
         const obj = raw as Record<string, unknown>;
+
         if (typeof obj.modelPattern === "string") {
             try {
                 return { ...obj, modelPattern: new RegExp(obj.modelPattern) } as ModelSelectOptions;
             } catch (e) {
                 Logger.warn(
-                    `[PAC] prjdb.model.modelPattern 不是合法正则,已剔除: ${obj.modelPattern}`,
+                    `[PAC] front matter.model.modelPattern 不是合法正则,已剔除: ${obj.modelPattern}`,
                     e,
                 );
                 const { modelPattern: _drop, ...rest } = obj;
@@ -218,6 +296,6 @@ export function resolveModelOptions(ctx: IRunnerContext): ModelSelectOptions | u
         return obj as ModelSelectOptions;
     }
 
-    Logger.warn("[PAC] prjdb.model 值类型异常,忽略:", raw);
+    Logger.warn("[PAC] front matter.model 值类型异常,忽略:", raw);
     return undefined;
 }

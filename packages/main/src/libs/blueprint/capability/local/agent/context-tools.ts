@@ -80,19 +80,30 @@ export async function attachLocalContextTools(
     tools: Record<string, Tool>,
     compiled: CompiledPacAgent,
     ctx: IRunnerContext,
+    extraSkillIds: string[] = [],
 ): Promise<void> {
-    const skillNames = readStringList(
+    const compiledSkillIds = readStringList(
         compiled.config.skills,
         "skills",
         compiled.sourcePath,
-    );
+    ).map(normalizeSkillId);
+
+    // ctx.skills 中的字符串已经是完整 skill id，不再补 skill: 前缀。
+    const runtimeSkillIds: string[] = [];
+    for (const value of extraSkillIds) {
+        if (typeof value !== "string") continue;
+        const trimmed = value.trim();
+        if (trimmed) runtimeSkillIds.push(trimmed);
+    }
+
+    const skillIds = [...new Set([...compiledSkillIds, ...runtimeSkillIds])];
     const kbIds = readStringList(
         compiled.config.knowledgeBases,
         "knowledgeBases",
         compiled.sourcePath,
     );
 
-    if (skillNames.length === 0 && kbIds.length === 0) return;
+    if (skillIds.length === 0 && kbIds.length === 0) return;
 
     const search = await getProjectSearchDB(ctx);
     if (!search) {
@@ -102,8 +113,8 @@ export async function attachLocalContextTools(
         return;
     }
 
-    if (skillNames.length > 0) {
-        await attachSkillTool(tools, compiled, search, skillNames);
+    if (skillIds.length > 0) {
+        await attachSkillTool(tools, compiled, search, skillIds);
     }
 
     if (kbIds.length > 0) {
@@ -115,7 +126,7 @@ async function attachSkillTool(
     tools: Record<string, Tool>,
     compiled: CompiledPacAgent,
     search: ProjectSearchDB,
-    skillNames: string[],
+    skillIds: string[],
 ): Promise<void> {
     if (tools[LOAD_LOCAL_SKILL_TOOL_NAME]) {
         Logger.error(
@@ -124,7 +135,7 @@ async function attachSkillTool(
         return;
     }
 
-    const ids = [...new Set(skillNames.map(normalizeSkillId))];
+    const ids = [...new Set(skillIds)];
     const byId = new Map<string, SkillRow>();
 
     for (const id of ids) {
@@ -143,8 +154,8 @@ async function attachSkillTool(
     const skills = [...byId.values()];
     if (skills.length === 0) return;
 
-    const skillIds = skills.map((skill) => skill.id);
-    const idSchema = z.enum(skillIds as [string, ...string[]]);
+    const skillIdsInDb = skills.map((skill) => skill.id);
+    const idSchema = z.enum(skillIdsInDb as [string, ...string[]]);
 
     tools[LOAD_LOCAL_SKILL_TOOL_NAME] = tool({
         description: buildSkillToolDescription(skills),

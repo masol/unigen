@@ -42,7 +42,7 @@ export class PrjRunner extends BaseProjectController {
             Logger.debug('[PrjRunner] 正在停止运行中的命令...');
             const active = Array.from(this.#cmdRunners.values());
             for (const { ctx } of active) {
-                ctx.triggerAbort(true);
+                ctx.triggerAbort();
             }
             await Promise.all(active.map(({ runner }) => runner.waitFinish()));
             Logger.debug('[PrjRunner] 命令已停止。');

@@ -8,7 +8,7 @@ export const BLANK_PROJECT_TYPE_ID = 'blank';
 export const BLANK_PROJECT_TYPE: ProjectType = {
     id: BLANK_PROJECT_TYPE_ID,
     name: '直通对话',
-    description: '不支持工具、技能及知识库，对话透传给模型。',
+    description: '无默认工具、技能及知识库，对话透传给模型。',
     icon: 'IconSquarePlus',
 };
 

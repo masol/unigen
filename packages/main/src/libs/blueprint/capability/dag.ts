@@ -53,7 +53,7 @@ export class DagFunctor extends BaseFunctor {
         this.validateGraph();
 
         // 状态检查：如果校验完就已经被取消了，直接退出
-        if (ctx.isAborted || ctx.isForceKilled) return;
+        if (ctx.isAborted) return;
 
         forEachTopologicalGeneration(this.dag, (generation) => {
             // generation 是一个包含当前代所有节点 ID 的数组
@@ -65,8 +65,8 @@ export class DagFunctor extends BaseFunctor {
         // 顺序遍历每一代
         for (let i = 0; i < generations.length; i++) {
             // 1. 快速检查点：进入新一代前，如果已经被终止，则直接退出
-            if (ctx.isAborted || ctx.isForceKilled) {
-                Logger.warn(`[第 ${i + 1} 代] 检测到工作流已被终止，放弃执行后续代。中断类型: ${ctx.isForceKilled ? '强制杀死' : '普通终止'}`);
+            if (ctx.isAborted) {
+                Logger.warn(`[第 ${i + 1} 代] 检测到工作流已被终止，放弃执行后续代。中断类型:`);
                 break;
             }
 
@@ -82,21 +82,21 @@ export class DagFunctor extends BaseFunctor {
 
                 await Promise.race([
                     Promise.all(promises),
-                    new Promise<never>((_, reject) => {
+                    new Promise<never>((_, _reject) => {
                         // 初始化时已触发abort，仅强制杀死才拒绝
                         if (ctx.signal.aborted) {
-                            if (ctx.isForceKilled) {
-                                return reject(ctx.signal.reason);
-                            }
+                            // if (ctx.isForceKilled) {
+                            //     return reject(ctx.signal.reason);
+                            // }
                             // 非强制终止，不reject，让Promise.all自行走完
                             return;
                         }
 
                         abortHandler = () => {
                             // 仅强制杀死时才抛出中断错误
-                            if (ctx.isForceKilled) {
-                                reject(ctx.signal.reason);
-                            }
+                            // if (ctx.isForceKilled) {
+                            //     reject(ctx.signal.reason);
+                            // }
                         };
 
                         ctx.signal.addEventListener('abort', abortHandler);
@@ -121,7 +121,7 @@ export class DagFunctor extends BaseFunctor {
         }
 
         // 最终状态检查
-        if (ctx.isAborted || ctx.isForceKilled) {
+        if (ctx.isAborted) {
             Logger.debug('\n--- DAG 任务因终止信号退出 ---');
         } else {
             Logger.debug('\n--- DAG 所有任务执行完成 ---');

@@ -3,6 +3,7 @@
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { randomUUID } from "node:crypto";
+import { resolveEffectiveSettings } from "../settings.js";
 import type { CompiledPacAgent, IPacAgent, JsonValue } from "../type.js";
 import { executeAgent } from "./execution.js";
 import { closeLocalMcpClients } from "./tools.js";
@@ -21,11 +22,39 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
         return this.compiled;
     }
 
+    /**
+     * 收集当前 agent 树中所有 front matter.requireModel 的去重数组。
+     * 顺序为：根 agent 优先，然后按 toolRefs 深度优先顺序。
+     */
+    getRequireModels(): string[] {
+        const out: string[] = [];
+        const seen = new Set<string>();
+        const visited = new Set<CompiledPacAgent>();
+
+        const walk = (agent: CompiledPacAgent): void => {
+            if (visited.has(agent)) return;
+            visited.add(agent);
+
+            const req = agent.config.requireModel?.trim();
+            if (req && !seen.has(req)) {
+                seen.add(req);
+                out.push(req);
+            }
+
+            for (const ref of agent.toolRefs) {
+                if (ref.agent) walk(ref.agent);
+            }
+        };
+
+        walk(this.compiled);
+        return out;
+    }
+
     async run(ctx: IRunnerContext): Promise<string> {
         const mcpClients: McpClientCache = new Map();
         try {
             const prjdb = PrjDB.ensure(ctx.prj);
-            const persist = this.compiled.settings.persist;
+            const persist = resolveEffectiveSettings(this.compiled.settings, ctx.settings).persist;
             const messageId = this.createAssistantMessageId(prjdb, ctx, persist);
 
             const state: PacRunState = {
@@ -66,7 +95,7 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
         const prjdb = PrjDB.ensure(ctx.prj);
 
         if (!state) {
-            const persist = this.compiled.settings.persist;
+            const persist = resolveEffectiveSettings(this.compiled.settings, ctx.settings).persist;
             const messageId = this.createAssistantMessageId(prjdb, ctx, persist);
             state = {
                 messageId,

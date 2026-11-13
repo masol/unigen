@@ -72,6 +72,8 @@
 
   <Separator orientation="vertical" class="mx-1 h-5" />
 
-  <LayoutGroup />
+  {#if configStore.showDevUI}
+    <LayoutGroup />
+  {/if}
   <Winctrl />
 </header>

@@ -1,10 +1,26 @@
 // file: type.ts
+import type { GetSmartModelOptions } from "$libs/model/balancer/get-smart-model.js";
 import type { IProjectContext } from "$libs/project/type.js";
 import type { ToolMeta } from "$libs/tooldb/index.js";
 import type { McpServerConfig } from "$libs/tooldb/type.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
+import {
+    PacTimeoutConfigSchema,
+    ReasoningLevelSchema,
+    ResolvedSettingsSchema,
+    type PacTimeoutConfig,
+    type ReasoningLevel,
+    type ResolvedSettings,
+} from "$types/blueprint/settings.js";
 import type { Tool } from "ai";
-import type { z } from "zod";
+import { z } from "zod";
+
+/**
+ * 设置相关的 schema 与类型真源位于 `$types/blueprint/settings.ts`；
+ * 这里重导出，供 $libs 内部与既有调用方继续从 `local/type.js` 导入。
+ */
+export { PacTimeoutConfigSchema, ReasoningLevelSchema, ResolvedSettingsSchema };
+export type { PacTimeoutConfig, ReasoningLevel, ResolvedSettings };
 
 /** 宽松的 JSON 值(front matter 解析结果) */
 export type JsonValue =
@@ -77,86 +93,13 @@ export interface ToolRef {
 }
 
 /**
- * getSmartModel 选项(与 $libs/model 的签名对齐)。
+ * 模型选择选项直接复用 model balancer 的公开类型，避免两处定义漂移。
+ *
+ * 保留 ModelSelectOptions 别名以降低现有调用点的影响面；
+ * 新代码应优先使用 GetSmartModelOptions。
  */
-export interface ModelSelectOptions {
-    requiredAbilities?: string[];
-    preferVersion?: string;
-    minScore?: number;
-    modelPattern?: RegExp;
-    exact?: { providerId: string; modelId: string };
-    streamHoldTimeoutMs?: number;
-    sort?: unknown;
-    minInctx?: number;
-}
-
-/**
- * PAC 超时配置,对齐 AI SDK:
- *   - number: 简单的总超时(毫秒)
- *   - object: 细粒度控制
- *     - totalMs:      整个调用总时长
- *     - stepMs:       单个 agent 步骤
- *     - firstChunkMs: 首个有意义 chunk 的等待时长(仅 stream 生效)
- *     - chunkMs:      相邻 chunk 之间的最大间隔(仅 stream 生效)
- */
-export type PacTimeoutConfig = number | {
-    totalMs?: number;
-    stepMs?: number;
-    firstChunkMs?: number;
-    chunkMs?: number;
-};
-
-/**
- * 推理级别。语义对齐 Vercel AI SDK:
- *   - provider-default: 使用 provider 默认行为(省略时的默认值)
- *   - none:            禁用推理(最低推理级别,如果不能禁用)
- *   - minimal:         最小推理
- *   - low:             快速、简洁推理
- *   - medium:          平衡推理
- *   - high:            深度推理
- *   - xhigh:           极高级推理
- *   - max:             最大推理
- */
-export type ReasoningLevel =
-    | "provider-default"
-    | "none"
-    | "minimal"
-    | "low"
-    | "medium"
-    | "high"
-    | "xhigh"
-    | "max";
-
-/**
- * 集中处理后的运行配置,所有开关都有默认值。
- */
-export interface ResolvedSettings {
-    /** 单个 agent 步数上限,默认 10 */
-    maxSteps: number;
-    /** 根 agent 是否流式输出(仅根生效),默认 true */
-    streaming: boolean;
-    /** 推理级别,默认 "provider-default" */
-    reasoning: ReasoningLevel;
-    /** 是否在 messages 表持久化消息,默认 true */
-    persist: boolean;
-    /**
-     * 历史消息策略:
-     *   null : 全部历史(默认)
-     *   0    : 禁用历史
-     *   N>0  : 最多取最近 N 条
-     */
-    history: number | null;
-    /** 本次调用的超时配置;undefined 表示使用 provider 默认 */
-    timeout?: PacTimeoutConfig;
-    /** 采样温度;undefined 表示使用 provider 默认 */
-    temperature?: number;
-    /** 输出 token 上限;undefined 表示使用 provider 默认 */
-    maxOutputTokens?: number;
-    /** 工具调用并发上限;undefined 表示由 SDK 决定 */
-    toolCallConcurrency?: number;
-    /** 是否启用 strict tool calling;undefined 表示不显式指定 */
-    strict?: boolean;
-}
+export type { GetSmartModelOptions };
+export type ModelSelectOptions = GetSmartModelOptions;
 
 /**
  * PAC front matter。所有字段可选。
@@ -169,6 +112,24 @@ export interface ResolvedSettings {
 export interface PacFrontMatter {
     name?: string;
     description?: string;
+    /**
+     * 期望模型描述。
+     *
+     * 客户端可通过 `ctx.settings.userSelModel` 传对象，以该字段为 key 选择 exact 模型；
+     * 例如 requireModel: "fast"，settings.userSelModel = { fast: "openai::gpt-4.1-mini" }。
+     */
+    requireModel?: string;
+    /**
+     * 本 agent 的模型选择配置。
+     *
+     * 语义与 `resolveModelOptions` 中 `PrjDB.ensure(ctx.prj).get("model")` 的返回值一致：
+     * - string：按 `modelPattern` 正则处理；
+     * - object：作为模型选择选项透传。
+     *
+     * 当前仅作为 front matter 类型声明保留，运行期仍读取 PrjDB 的 "model"；
+     * 后续可由 `resolveModelOptions` 优先消费该字段，以取代对 PrjDB 的读取。
+     */
+    model?: string | Record<string, unknown>;
     /** 根 agent 不应声明 inputs(用户原始录入即为输入),编译期告警并忽略 */
     inputs?: Record<string, unknown>;
     /** 根 agent 不应声明 outputs(直接响应用户),编译期告警并忽略 */
@@ -281,4 +242,9 @@ export interface CompileCache {
 export interface IPacAgent {
     run(ctx: IRunnerContext): Promise<string>;
     getCompiled(): CompiledPacAgent;
+    /**
+     * 返回当前 agent 树中所有 front matter.requireModel 的去重数组。
+     * 顺序为：根 agent 优先，然后按 toolRefs 深度优先顺序。
+     */
+    getRequireModels(): string[];
 }
