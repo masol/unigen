@@ -14,6 +14,7 @@ import FallbackComponent from "../../../route/page/fallback/Main.svelte";
 import FlowPage from "../../../route/page/flow/FlowPage.svelte";
 import DevSetting from "../../../route/page/settings/develops/DevSettingsPanel.svelte";
 import GeneralSetting from "../../../route/page/settings/general/general.svelte";
+import KbSetting from '../../../route/page/settings/kb/kb.svelte';
 import Keybindings from '../../../route/page/settings/Keybindings.svelte';
 import LLMSetting from "../../../route/page/settings/llm/llm.svelte";
 import MCPSetting from '../../../route/page/settings/mcp/mcp.svelte';
@@ -48,6 +49,7 @@ class RouterStore {
         "/settings/models/llm": LLMSetting,
         "/settings/api/mcp": MCPSetting,
         "/settings/api/search": MCPSearchSetting,
+        "/settings/api/kb": KbSetting,
         "/settings/api/skill": SkillSetting,
         "/settings/general": GeneralSetting,
         "/settings/develops": DevSetting,

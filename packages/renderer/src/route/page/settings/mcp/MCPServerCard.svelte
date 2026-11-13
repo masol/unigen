@@ -5,7 +5,6 @@
   import { Button } from "$lib/components/ui/button";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Separator } from "$lib/components/ui/separator";
-  import { Skeleton } from "$lib/components/ui/skeleton";
   import { Switch } from "$lib/components/ui/switch";
   import { safeApi } from "$lib/utils/api";
   import type {
@@ -13,9 +12,7 @@
     McpServerConfig,
   } from "@app/main/types";
   import {
-    IconAlertCircle,
     IconAlertTriangle,
-    IconCheck,
     IconChevronDown,
     IconCloudOff,
     IconDownload,
@@ -25,6 +22,7 @@
     IconTrash,
   } from "@tabler/icons-svelte";
   import { toast } from "svelte-sonner";
+  import McpTestResult from "./McpTestResult.svelte";
   import { testMcpConnection } from "./mcpConnection";
 
   let {
@@ -308,86 +306,7 @@
         </div>
 
         {#if testState !== "idle"}
-          <div class="rounded-xl border border-border/50 bg-background p-4">
-            {#if testState === "loading"}
-              <div class="space-y-3">
-                <Skeleton class="h-4 w-40 rounded-lg" />
-                <Skeleton class="h-3 w-64 rounded-lg" />
-                <Skeleton class="h-10 w-full rounded-xl" />
-              </div>
-            {:else if testState === "success" && testResult}
-              <div class="animate-fade-in space-y-4">
-                <div class="flex flex-wrap items-center gap-2">
-                  <Badge
-                    variant="secondary"
-                    class="rounded-lg border-none bg-primary/10 text-primary"
-                  >
-                    <IconCheck size={12} stroke={1.5} class="mr-1" />
-                    连接成功
-                  </Badge>
-                  <span class="text-xs text-muted-foreground">
-                    {testResult.latencyMs} ms
-                  </span>
-                  {#if testResult.protocolVersion}
-                    <span class="text-xs text-muted-foreground">
-                      协议 {testResult.protocolVersion}
-                    </span>
-                  {/if}
-                  {#if testResult.serverInfo}
-                    <span class="text-xs text-muted-foreground">
-                      {testResult.serverInfo.name} v{testResult.serverInfo
-                        .version}
-                    </span>
-                  {/if}
-                </div>
-
-                <div class="space-y-2">
-                  <p class="text-xs font-medium text-muted-foreground">
-                    可用工具 · {testResult.tools.length}
-                  </p>
-
-                  {#if testResult.tools.length > 0}
-                    <div class="space-y-2">
-                      {#each testResult.tools as tool (tool.name)}
-                        <div
-                          class="flex items-start gap-3 rounded-lg border border-border/50 bg-muted/20 p-3"
-                        >
-                          <IconPlugConnected
-                            size={14}
-                            stroke={1.5}
-                            class="mt-0.5 shrink-0 text-muted-foreground"
-                          />
-                          <div class="min-w-0">
-                            <p class="truncate font-mono text-xs font-medium">
-                              {tool.name}
-                            </p>
-                            {#if tool.description}
-                              <p class="text-xs text-muted-foreground">
-                                {tool.description}
-                              </p>
-                            {/if}
-                          </div>
-                        </div>
-                      {/each}
-                    </div>
-                  {:else}
-                    <p class="text-xs text-muted-foreground">
-                      该服务未返回工具
-                    </p>
-                  {/if}
-                </div>
-              </div>
-            {:else}
-              <div class="flex items-start gap-3 text-sm text-destructive">
-                <IconAlertCircle
-                  size={16}
-                  stroke={1.5}
-                  class="mt-0.5 shrink-0"
-                />
-                <p>{testError || "连接失败"}</p>
-              </div>
-            {/if}
-          </div>
+          <McpTestResult {testState} result={testResult} error={testError} />
         {/if}
       </div>
     </Collapsible.Content>

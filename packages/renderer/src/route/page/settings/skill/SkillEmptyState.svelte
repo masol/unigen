@@ -1,11 +1,11 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import {
-    IconFilterOff,
+    IconArrowsSort,
     IconLoader2,
     IconPlus,
-    IconSearch,
     IconSparkles,
+    IconX,
   } from "@tabler/icons-svelte";
   import SkillMarketGuide from "./SkillMarketGuide.svelte";
 
@@ -61,17 +61,17 @@
     class="flex animate-fade-in flex-col items-center justify-center space-y-6 py-24"
   >
     <div class="flex size-16 items-center justify-center rounded-2xl bg-muted">
-      <IconSearch size={24} stroke={1.5} class="text-muted-foreground" />
+      <IconArrowsSort size={24} stroke={1.5} class="text-muted-foreground" />
     </div>
 
     <div class="space-y-2 text-center">
-      <h3 class="text-lg font-medium">未找到匹配的技能</h3>
-      <p class="text-sm text-muted-foreground">尝试更换搜索关键词</p>
+      <h3 class="text-lg font-medium">没有可排序的技能</h3>
+      <p class="text-sm text-muted-foreground">尝试换个意图描述</p>
     </div>
 
     <Button class="gap-2 rounded-xl" onclick={() => onAction?.()}>
-      <IconFilterOff size={16} stroke={1.5} />
-      清除搜索
+      <IconX size={16} stroke={1.5} />
+      清除意图
     </Button>
   </div>
 {/if}

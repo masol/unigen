@@ -9,6 +9,7 @@
   import { toast } from "svelte-sonner";
   import ConfigHeader from "./ConfigHeader.svelte";
   import EmptyState from "./EmptyState.svelte";
+  import McpMarketGuideDialog from "./McpMarketGuideDialog.svelte";
   import MCPServerCard from "./MCPServerCard.svelte";
   import MCPServerConfigDialog from "./MCPServerConfigDialog.svelte";
   import { mcpStore } from "./mcpstore.svelte";
@@ -22,6 +23,24 @@
   let openStates = $state<Record<string, boolean>>({});
   let hasServers = $derived(mcpStore.servers.length > 0);
   let importing = $state(false);
+
+  async function openExternal(url: string) {
+    try {
+      await safeApi().system.openExternal({ url });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "打开链接失败");
+    }
+  }
+
+  async function showMarketGuide() {
+    await dialogStore.safeShow(
+      McpMarketGuideDialog,
+      {
+        onOpen: (url: string) => void openExternal(url),
+      },
+      { size: "xl6" },
+    );
+  }
 
   async function openAdd() {
     await dialogStore.safeShow(
@@ -109,6 +128,7 @@
       {importing}
       onAddServer={openAdd}
       onImportConfig={triggerImport}
+      onShowMarkets={showMarketGuide}
     />
 
     {#if hasServers}
@@ -137,7 +157,11 @@
       {/if}
 
       {#if !mcpStore.isFiltering && !hasServers}
-        <EmptyState variant="empty" onAction={openAdd} />
+        <EmptyState
+          variant="empty"
+          onAction={openAdd}
+          onOpenMarket={(url) => void openExternal(url)}
+        />
       {/if}
     </div>
   </div>

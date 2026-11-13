@@ -1,3 +1,4 @@
+<!-- file path="skill.svelte" -->
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
@@ -27,6 +28,14 @@
 
   onMount(() => {
     void skillStore.load();
+  });
+
+  // 技能不足 2 个时排序无意义：隐藏排序 UI 并清理残留意图，
+  // 避免列表被不可见的搜索态继续过滤。
+  $effect(() => {
+    if (totalCount < 2 && skillStore.query) {
+      skillStore.query = "";
+    }
   });
 
   $effect(() => {
@@ -152,7 +161,7 @@
         items={skillStore.filteredItems}
         itemKey={(skill) => skill.id}
         blocking={overlayVisible}
-        message="正在搜索…"
+        message="正在按相关性排序…"
         canLoadMore={skillStore.canLoadMore}
         loadingMore={skillStore.loadingMore}
         totalLoaded={visibleCount}

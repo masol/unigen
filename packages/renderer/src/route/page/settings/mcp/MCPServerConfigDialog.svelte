@@ -41,12 +41,10 @@
   import {
     IconAlertCircle,
     IconAlertTriangle,
-    IconCheck,
     IconChevronLeft,
     IconChevronRight,
     IconLoader2,
     IconRefresh,
-    IconTool,
   } from "@tabler/icons-svelte";
   import type { AuthMode } from "./McpAuthField.svelte";
   import McpAuthField, {
@@ -58,6 +56,7 @@
     pairsToRecord,
     recordToPairs,
   } from "./McpHeaderEditor.svelte";
+  import McpTestResult from "./McpTestResult.svelte";
   import { testMcpConnection } from "./mcpConnection";
 
   type Props = {
@@ -193,6 +192,17 @@
 
   const testPassed = $derived(
     testResult?.ok === true && testedSnapshot === connectionSnapshot(),
+  );
+
+  /** 供 McpTestResult 使用的统一状态枚举。 */
+  let testDisplayState = $derived(
+    testing
+      ? ("loading" as const)
+      : testResult?.ok
+        ? ("success" as const)
+        : testError
+          ? ("error" as const)
+          : ("idle" as const),
   );
 
   const isFinalValid = $derived(
@@ -430,125 +440,14 @@
     </div>
   {:else if currentStep === 1}
     <div class="animate-fade-in space-y-4">
-      {#if testing}
-        <div
-          class="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/20 p-4 text-sm text-muted-foreground"
-        >
-          <IconLoader2 size={16} stroke={1.5} class="animate-spin" />
-          正在测试连接…
-        </div>
-      {:else if testResult?.ok && testResult}
-        <div
-          class="animate-fade-in space-y-3 rounded-xl border border-border/50 bg-background p-4"
-        >
-          <div class="flex flex-wrap items-center gap-2">
-            <span
-              class="flex items-center gap-1.5 rounded-lg bg-primary/10 px-2 py-0.5 text-xs text-primary"
-            >
-              <IconCheck size={12} stroke={1.5} />
-              连接成功
-            </span>
-            <span class="text-xs text-muted-foreground">
-              {testResult.latencyMs} ms
-            </span>
-            {#if testResult.protocolVersion}
-              <span class="text-xs text-muted-foreground">
-                协议 {testResult.protocolVersion}
-              </span>
-            {/if}
-            {#if !testPassed}
-              <span class="text-xs text-destructive">
-                配置已变更，需重新测试
-              </span>
-            {/if}
-          </div>
+      <McpTestResult
+        testState={testDisplayState}
+        result={testResult}
+        error={testError}
+        stale={testResult?.ok === true && !testPassed}
+      />
 
-          {#if testResult.serverInfo}
-            <div class="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-              <div>
-                <p class="text-muted-foreground">服务名称</p>
-                <p class="font-medium">{testResult.serverInfo.name}</p>
-              </div>
-              <div>
-                <p class="text-muted-foreground">版本</p>
-                <p class="font-medium">{testResult.serverInfo.version}</p>
-              </div>
-            </div>
-          {/if}
-
-          {#if testResult.tools.length > 0}
-            <div class="space-y-2 border-t border-border/50 pt-3">
-              <p
-                class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
-              >
-                <IconTool size={12} stroke={1.5} />
-                可用工具 · {testResult.tools.length}
-              </p>
-              <div class="space-y-1.5">
-                {#each testResult.tools as tool (tool.name)}
-                  <div
-                    class="rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
-                  >
-                    <p class="truncate font-mono text-xs font-medium">
-                      {tool.name}
-                    </p>
-                    {#if tool.description}
-                      <p class="mt-0.5 text-xs text-muted-foreground">
-                        {tool.description}
-                      </p>
-                    {/if}
-                  </div>
-                {/each}
-              </div>
-            </div>
-          {/if}
-
-          {#if testResult.resources && testResult.resources.length > 0}
-            <div class="space-y-2 border-t border-border/50 pt-3">
-              <p class="text-xs font-medium text-muted-foreground">
-                资源 · {testResult.resources.length}
-              </p>
-              <div class="flex flex-wrap gap-1.5">
-                {#each testResult.resources as resource (resource.uri)}
-                  <span
-                    class="rounded-lg bg-muted/30 px-2 py-0.5 font-mono text-xs text-muted-foreground"
-                  >
-                    {resource.uri}
-                  </span>
-                {/each}
-              </div>
-            </div>
-          {/if}
-
-          {#if testResult.prompts && testResult.prompts.length > 0}
-            <div class="space-y-2 border-t border-border/50 pt-3">
-              <p class="text-xs font-medium text-muted-foreground">
-                提示模板 · {testResult.prompts.length}
-              </p>
-              <div class="flex flex-wrap gap-1.5">
-                {#each testResult.prompts as prompt (prompt.name)}
-                  <span
-                    class="rounded-lg bg-muted/30 px-2 py-0.5 font-mono text-xs text-muted-foreground"
-                  >
-                    {prompt.name}
-                  </span>
-                {/each}
-              </div>
-            </div>
-          {/if}
-        </div>
-      {:else if testError}
-        <div
-          class="animate-fade-in rounded-xl border border-destructive/20 bg-destructive/5 p-4"
-        >
-          <div class="flex items-start gap-2 text-sm text-destructive">
-            <IconAlertCircle size={16} stroke={1.5} class="mt-0.5 shrink-0" />
-            <p>{testError}</p>
-          </div>
-        </div>
-      {/if}
-
-      {#if !testing}
+      {#if !testing && testDisplayState !== "idle"}
         <Button
           type="button"
           variant="outline"

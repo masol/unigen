@@ -6,6 +6,7 @@
     IconPlus,
     IconShieldCheck,
     IconUpload,
+    IconWorld,
   } from "@tabler/icons-svelte";
 
   let {
@@ -14,20 +15,38 @@
     importing = false,
     onAddServer,
     onImportConfig,
+    onShowMarkets,
   }: {
     serverCount?: number;
     enabledCount?: number;
     importing?: boolean;
     onAddServer?: () => void;
     onImportConfig?: () => void;
+    onShowMarkets?: () => void;
   } = $props();
 </script>
 
 <header class="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
   <div class="space-y-2">
-    <h1 class="text-2xl font-semibold tracking-tight lg:text-3xl">MCP 服务</h1>
+    <div class="flex items-center gap-2">
+      <h1 class="text-2xl font-semibold tracking-tight lg:text-3xl">
+        MCP 服务
+      </h1>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        class="size-8 rounded-lg text-muted-foreground/70 transition-all duration-200 hover:text-foreground"
+        aria-label="MCP 市场"
+        title="MCP 市场"
+        onclick={() => onShowMarkets?.()}
+      >
+        <IconWorld size={16} stroke={1.5} />
+      </Button>
+    </div>
+
     <p class="text-sm text-muted-foreground">
-      管理 Model Context Protocol 服务连接
+      配置工具，需要时，AI会使用这些工具完成任务
     </p>
     <div
       class="flex flex-wrap items-center gap-3 pt-1 text-xs text-muted-foreground"

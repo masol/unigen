@@ -105,7 +105,7 @@
         },
         {
           id: "develops",
-          label: "开发(需技术知识)",
+          label: "开发(普通用户忽略)",
           description: "管理AI的内存与动态代码",
           icon: IconCodePlus,
           path: "develops",
@@ -181,7 +181,7 @@
         {
           id: "api-mcp",
           label: "MCP",
-          description: "为AI连接外部工具和数据",
+          description: "管理AI的可用工具",
           icon: IconPlugConnected,
           path: "api/mcp",
           keywords: ["MCP", "tool", "插件", "function calling"],
@@ -189,7 +189,7 @@
         {
           id: "api-skill",
           label: "技能",
-          description: "AI做事的方法和能力",
+          description: "管理AI做事的方法",
           icon: IconBolt,
           path: "api/skill",
           keywords: ["rag", "skill", "tool", "技能", "function calling"],
@@ -197,9 +197,9 @@
         {
           id: "api-knowlege",
           label: "知识库",
-          description: "维护个人偏好及私有知识",
+          description: "维护个人偏好及专属资料",
           icon: IconBooks,
-          path: "api/knowlege",
+          path: "api/kb",
           keywords: [
             "rag",
             "knowlegeBase",

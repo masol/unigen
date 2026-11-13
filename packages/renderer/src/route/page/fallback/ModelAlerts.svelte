@@ -67,7 +67,7 @@
 {#if !configStore.embedModel}
   <div class="flex items-center gap-1.5 px-1 text-xs text-muted-foreground/60">
     <IconInfoCircle class="size-3.5" />
-    <span>未设置默认的嵌入模型，知识库功能被禁用。</span>
+    <span>未配置嵌入模型，将退化为全文检索，影响召回质量。</span>
     <Button
       size="xs"
       variant="outline"
@@ -82,7 +82,7 @@
 {#if !configStore.localModel}
   <div class="flex items-center gap-1.5 px-1 text-xs text-muted-foreground/60">
     <IconInfoCircle class="size-3.5" />
-    <span>未设置重排模型，这会降低召回的正确度。</span>
+    <span>未配置重排模型，将降低召回质量，且无法进行结果截断。</span>
     <Button
       size="xs"
       variant="outline"
