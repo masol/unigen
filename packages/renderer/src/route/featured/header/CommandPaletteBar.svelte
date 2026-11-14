@@ -307,7 +307,7 @@
             bind:this={inputEl}
             bind:value={query}
             type="text"
-            placeholder="Type a command…"
+            placeholder="搜索命令(可用拼音)…"
             autocomplete="off"
             spellcheck="false"
             class="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"

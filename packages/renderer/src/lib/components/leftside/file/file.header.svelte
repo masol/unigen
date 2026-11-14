@@ -1,0 +1,173 @@
+<script lang="ts">
+  import { Button } from "$lib/components/ui/button";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import {
+    IconFilePlus,
+    IconFolderPlus,
+    IconLoader2,
+    IconPlus,
+    IconRefresh,
+    IconSearch,
+    IconX,
+  } from "@tabler/icons-svelte";
+  import { untrack } from "svelte";
+  import { promptCreateName } from "./file.prompt";
+  import { fileStore } from "./file.store.svelte";
+
+  let { isMaximized = false }: { isMaximized?: boolean } = $props();
+
+  let createMenuOpen = $state(false);
+  let isComposing = $state(false);
+
+  // 本地镜像：输入框即时回显，store 延迟同步（防抖）。
+  // 直接 value={fileStore.searchQuery} 在防抖期间会因重渲染把输入写回旧值。
+  let inputValue = $state(fileStore.searchQuery);
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // 仅当 store 的 searchQuery 被外部改变（Escape / X / 程序化清除）时同步回输入框。
+  $effect(() => {
+    const q = fileStore.searchQuery;
+    untrack(() => {
+      if (inputValue !== q) inputValue = q;
+    });
+  });
+
+  // 卸载时清理 pending timer
+  $effect(() => {
+    return () => clearTimeout(searchTimer);
+  });
+
+  function scheduleSearch(value: string) {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      searchTimer = undefined;
+      fileStore.setSearchQuery(value);
+    }, 150);
+  }
+
+  function handleSearchInput(e: Event) {
+    const value = (e.target as HTMLInputElement).value;
+    inputValue = value;
+    if (isComposing) return;
+    scheduleSearch(value);
+  }
+
+  function handleCompositionEnd(e: CompositionEvent) {
+    isComposing = false;
+    const value = (e.target as HTMLInputElement).value;
+    inputValue = value;
+    scheduleSearch(value);
+  }
+
+  function handleSearchKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      clearTimeout(searchTimer);
+      searchTimer = undefined;
+      inputValue = "";
+      fileStore.clearSearch();
+      (e.target as HTMLInputElement).blur();
+    }
+  }
+
+  function handleClearSearch() {
+    clearTimeout(searchTimer);
+    searchTimer = undefined;
+    inputValue = "";
+    fileStore.clearSearch();
+  }
+
+  async function handleReload() {
+    await fileStore.reload();
+  }
+
+  async function handleCreateFile() {
+    createMenuOpen = false;
+    const name = await promptCreateName("file", "/");
+    if (name) await fileStore.createFile("/", name);
+  }
+
+  async function handleCreateFolder() {
+    createMenuOpen = false;
+    const name = await promptCreateName("folder", "/");
+    if (name) await fileStore.createFolder("/", name);
+  }
+</script>
+
+<div class="flex h-full w-full min-w-0 items-center gap-1.5 px-1">
+  <div
+    class="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-border/50 bg-background px-2 transition-all duration-200 focus-within:border-primary/40"
+  >
+    <IconSearch class="size-3.5 shrink-0 text-muted-foreground" stroke={1.5} />
+    <input
+      type="text"
+      placeholder="搜索文件…"
+      value={inputValue}
+      oninput={handleSearchInput}
+      onkeydown={handleSearchKeydown}
+      oncompositionstart={() => (isComposing = true)}
+      oncompositionend={handleCompositionEnd}
+      class="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+      spellcheck="false"
+      autocomplete="off"
+    />
+    {#if inputValue}
+      <button
+        type="button"
+        aria-label="清除搜索"
+        class="shrink-0 text-muted-foreground transition-all duration-200 hover:text-foreground"
+        onclick={handleClearSearch}
+      >
+        <IconX class="size-3" stroke={1.5} />
+      </button>
+    {/if}
+  </div>
+
+  {#if isMaximized}
+    <span class="shrink-0 text-xs tabular-nums text-muted-foreground">
+      {fileStore.tree ? "已加载" : "未加载"}
+    </span>
+  {/if}
+
+  <Button
+    variant="ghost"
+    size="icon"
+    title="重新加载"
+    aria-label="重新加载文件树"
+    disabled={fileStore.isLoading}
+    class="size-7 shrink-0 rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground"
+    onclick={handleReload}
+  >
+    {#if fileStore.isLoading}
+      <IconLoader2 class="size-4 animate-spin" stroke={1.5} />
+    {:else}
+      <IconRefresh class="size-4" stroke={1.5} />
+    {/if}
+  </Button>
+
+  <DropdownMenu.Root bind:open={createMenuOpen}>
+    <DropdownMenu.Trigger>
+      {#snippet child({ props })}
+        <Button
+          {...props}
+          variant="ghost"
+          size="icon"
+          title="在根下新建"
+          aria-label="在根下新建"
+          class="size-7 shrink-0 rounded-lg text-primary transition-all duration-200 hover:bg-primary/10 hover:text-primary"
+        >
+          <IconPlus class="size-4" stroke={1.5} />
+        </Button>
+      {/snippet}
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content align="end" class="w-36">
+      <DropdownMenu.Item onSelect={handleCreateFile} class="gap-2 text-xs">
+        <IconFilePlus class="size-3.5" stroke={1.5} />
+        新建文件
+      </DropdownMenu.Item>
+      <DropdownMenu.Item onSelect={handleCreateFolder} class="gap-2 text-xs">
+        <IconFolderPlus class="size-3.5" stroke={1.5} />
+        新建文件夹
+      </DropdownMenu.Item>
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
+</div>

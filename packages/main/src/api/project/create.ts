@@ -21,8 +21,8 @@ const open = os
         if (!pathName) {
             const { canceled, filePaths } = await WindowService.instance.withModalWindow(context, (parent) => {
                 return dialog.showOpenDialog(parent, {
-                    title: "打开任务",
-                    message: "打开合法的Unigen任务。",
+                    title: "打开项目",
+                    message: "打开合法的Unigen项目。",
                     properties: ['openDirectory'],
                 });
             })

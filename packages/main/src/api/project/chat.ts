@@ -149,6 +149,15 @@ const pinSession = os
         return result;
     });
 
+
+const getReqModels = os
+    .input(z.void())
+    .output(z.array(z.string()))
+    .handler(async ({ context }) => {
+        const ctx = context as RpcContext;
+        return ctx.project.agent?.getReqModels() ?? []
+    });
+
 export default {
     listSessions,
     deleteSession,
@@ -158,5 +167,6 @@ export default {
     listMessage,
     deleteMessage,
     deleteMessagesAfter,
-    newMessage
+    newMessage,
+    getReqModels,
 }

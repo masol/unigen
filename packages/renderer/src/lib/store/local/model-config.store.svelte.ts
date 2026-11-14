@@ -164,11 +164,7 @@ class ModelConfigStore {
     }
 
     private async loadRequire() {
-        this.requireModelEntries = [
-            // '负责长篇内容创作与改写的写作 Agent（writer）',
-            // '负责事实核查与质量审查的审查 Agent（reviewer）',
-            // '负责多步骤任务拆解的规划 Agent（planner）',
-        ];
+        this.requireModelEntries = await safeApi().project.getReqModels();
     }
 
     private async loadSettings() {

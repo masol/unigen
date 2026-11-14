@@ -46,19 +46,19 @@ export const builtins: CommandDescriptor[] = [
         },
     },
     ...AppearanceBuildin,
-    {
-        id: 'appearance.scrollToTop',
-        label: '滚动到顶部',
-        category: 'Appearance',
-        handler: () => window.scrollTo({ top: 0, behavior: 'smooth' }),
-    },
-    {
-        id: 'appearance.scrollToBottom',
-        label: '滚动到底部',
-        category: 'Appearance',
-        handler: () =>
-            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }),
-    },
+    // {
+    //     id: 'appearance.scrollToTop',
+    //     label: '滚动到顶部',
+    //     category: 'Appearance',
+    //     handler: () => window.scrollTo({ top: 0, behavior: 'smooth' }),
+    // },
+    // {
+    //     id: 'appearance.scrollToBottom',
+    //     label: '滚动到底部',
+    //     category: 'Appearance',
+    //     handler: () =>
+    //         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }),
+    // },
     // ---项目执行---
     {
         id: 'project.open',

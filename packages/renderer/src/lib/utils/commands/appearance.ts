@@ -29,15 +29,6 @@ export const AppearanceBuildin = [
         },
     },
     {
-        id: 'appearance.showAssistance',
-        label: '显示助手',
-        category: 'Appearance',
-        handler: () => {
-            layoutStore.openPanel('right');
-            rightPanelStore.activeTab = "assistant"
-        },
-    },
-    {
         id: 'appearance.showBlueprint',
         label: '显示蓝图',
         category: 'Appearance',
@@ -52,7 +43,7 @@ export const AppearanceBuildin = [
         category: 'Appearance',
         handler: () => {
             layoutStore.openPanel('bottom');
-            bottomPanelStore.activeTab = "logger"
+            bottomPanelStore.setActiveTab("logger")
         },
     },
     {
@@ -61,7 +52,7 @@ export const AppearanceBuildin = [
         category: 'Appearance',
         handler: () => {
             layoutStore.openPanel('bottom');
-            bottomPanelStore.activeTab = "dag"
+            bottomPanelStore.setActiveTab("dag")
         },
     },
 ]

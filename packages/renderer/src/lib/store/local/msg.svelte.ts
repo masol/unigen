@@ -76,11 +76,11 @@ class MessageStore {
             await this.reload();
         })
 
-        hooks.hook("project:loaded", () => {
-            //项目加载完毕，清空已选择的skills和tools.
-            this.selectedSkills = [];
-            this.selectedTools = [];
-        })
+        // hooks.hook("project:loaded", () => {
+        //     //项目加载完毕，清空已选择的skills和tools.
+        //     this.selectedSkills = [];
+        //     this.selectedTools = [];
+        // })
     }
 
     // ── Public reactive state ───────────────────────────────────
@@ -177,6 +177,8 @@ class MessageStore {
                 sessionId: sessionStore.activeSessionId,
                 withTraces: true
             })
+            this.selectedSkills = [];
+            this.selectedTools = [];
             log.info(`[MessageStore] reload completed, loaded ${this.messages.length} messages`)
         } catch (err) {
             const errMessage = err instanceof Error ? err.message : String(err);

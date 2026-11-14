@@ -91,7 +91,7 @@
       messages={messageStore.messages}
       getMessageId={(msg) => msg.id}
       estimatedMessageHeight={120}
-      followBottomThresholdPx={120}
+      followBottomThresholdPx={24}
       containerClass="h-full"
       viewportClass="h-full chat-scroll"
       onFollowBottomChange={(v) => (following = v)}

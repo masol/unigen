@@ -1,6 +1,10 @@
 import DynEntry from '$lib/components/dyn/Entry.svelte';
+import PacExplorerHeader from '$lib/components/leftside/file/file.header.svelte';
+import PacExplorerBody from '$lib/components/leftside/file/file.list.svelte';
+
 import ModelCfgHeader from '$lib/components/leftside/model-config/ModelConfigHeader.svelte';
 import ModelCfgManager from '$lib/components/leftside/model-config/model-config.svelte';
+
 import SessionHeader from '$lib/components/leftside/session/session.header.svelte';
 import SessionManager from '$lib/components/leftside/session/session.list.svelte';
 import type { BlueprintFilters, ProjectActivityData } from '@app/main/types';
@@ -48,6 +52,13 @@ export class ProjectActivity {
             label: "对话设置",
             component: ModelCfgManager,
             header: ModelCfgHeader,
+        })
+        layoutStore.addActivity({
+            id: "pac-editor",
+            icon: "IconListDetails",
+            label: "AI的工作指南",
+            component: PacExplorerBody,
+            header: PacExplorerHeader,
         })
     }
 

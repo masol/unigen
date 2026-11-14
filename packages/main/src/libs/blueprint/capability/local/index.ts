@@ -117,6 +117,10 @@ export class PACFunctor implements ICapaFunctor {
         return `localAgent:${this.type}`;
     }
 
+    getReqModels(): string[] {
+        return this.agent?.getRequireModels() ?? [];
+    }
+
     /**
      * 编译入口。entry 为定位入口文件的分段路径。
      * - ready:    幂等返回
