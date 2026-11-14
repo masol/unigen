@@ -1,9 +1,11 @@
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { IProjectContext } from '$libs/project/type.js';
+import { ProjectDbKeys } from '$libs/utils/db/dbkeys.js';
 import type { CmdMode, CommandInfo, IRunnerContext } from '$types/blueprint/context.js';
 import { ResolvedSettings } from '$types/blueprint/settings.js';
 import type { ChatStreamEvent, RunnerParam } from '$types/index.js';
 import log from 'electron-log/main.js';
+import { isEmpty, isPlainObject } from 'radashi';
 import { loadFunctor } from './capability/index.js';
 import { ICapaFunctor } from './capability/type.js';
 
@@ -54,7 +56,13 @@ export class RunnerContext implements IRunnerContext {
         this.sessId = command.sessId;
         this.#mode = (command.mode ?? null);
         this.timestamp = command.timestamp;
-        this.settings = command.settings ?? {};
+        if (isPlainObject(command.settings) && !isEmpty(command.settings)) {
+            this.settings = command.settings
+        } else {
+            const prjdb = PrjDB.ensure(prj);
+            this.settings = prjdb.get(ProjectDbKeys.chat_settings) ?? {}
+        }
+        // Logger.debug("chat settings=", JSON.stringify(this.settings, null, 2))
         this.tools = command.tools ?? [];
         this.skills = command.skills ?? [];
 

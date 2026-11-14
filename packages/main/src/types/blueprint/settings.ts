@@ -66,6 +66,7 @@ export const ResolvedSettingsSchema = z.object({
     /**
      * 历史消息策略：
      *   null : 全部历史(默认)
+     *  -1    : 全部历史
      *   0    : 禁用历史
      *   N>0  : 最多取最近 N 条
      */

@@ -251,7 +251,8 @@ export function resolveModelOptions(
     } else if (isPlainObject(override)) {
         const key = requireModel?.trim();
         if (key) {
-            const raw = (override as Record<string, unknown>)[key];
+            // 自身请求模型,优先级高于默认。
+            const raw = override[key] || override["default"];
             if (typeof raw === "string") {
                 const exact = parseExactModel(raw, `ctx.settings.userSelModel["${key}"]`);
                 if (exact) return exact;

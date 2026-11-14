@@ -1,6 +1,7 @@
 // 这里导出的类型，目的是与renderer共享类型的--只能是type导出--默认的shared子目录为与renderer共享的类型定义。
 export type { AppConfig } from './appconfig.js'
 export type { CacheItem, IdentifiedItem } from './blueprint/blackboard/array.js'
+export type { ReasoningLevel } from './blueprint/settings.js'
 export type { RunState } from './blueprint/state.js'
 export type {
     BuiltinTool, ToolSearchItem,

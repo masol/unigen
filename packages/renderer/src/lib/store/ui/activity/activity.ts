@@ -1,11 +1,12 @@
 import DynEntry from '$lib/components/dyn/Entry.svelte';
+import ModelCfgHeader from '$lib/components/leftside/model-config/ModelConfigHeader.svelte';
+import ModelCfgManager from '$lib/components/leftside/model-config/model-config.svelte';
 import SessionHeader from '$lib/components/leftside/session/session.header.svelte';
 import SessionManager from '$lib/components/leftside/session/session.list.svelte';
 import type { BlueprintFilters, ProjectActivityData } from '@app/main/types';
 import { layoutStore } from '../layout.svelte';
 import type { IValueService } from './type';
 import { ValueService } from './value-service.svelte';
-
 
 export class ProjectActivity {
     readonly icon: string;
@@ -40,6 +41,13 @@ export class ProjectActivity {
             label: "会话管理",
             component: SessionManager,
             header: SessionHeader,
+        })
+        layoutStore.addActivity({
+            id: "model-config",
+            icon: "IconMessageCircleCog",
+            label: "对话设置",
+            component: ModelCfgManager,
+            header: ModelCfgHeader,
         })
     }
 

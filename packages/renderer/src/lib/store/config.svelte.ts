@@ -108,6 +108,17 @@ class ConfigStore {
         ),
     );
 
+    /** 可选 LLM 模型列表，格式为 `ProviderID::ModelID`，仅包含未禁用 Provider 下的 TextGeneration 模型 */
+    readonly llmModels = $derived.by((): string[] =>
+        this.#providers
+            .filter((p) => p.disabled !== true)
+            .flatMap((p) =>
+                p.models
+                    .filter((m) => m.abilities.includes(ModelTags.TextGeneration))
+                    .map((m) => `${p.id}::${m.id}`),
+            ),
+    );
+
     /** embed_model 是否指向外部服务 */
     readonly isExternalEmbed = $derived(this.#embedModel.startsWith('external:'))
 

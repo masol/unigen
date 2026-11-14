@@ -75,6 +75,12 @@ class MessageStore {
             //active session变化了，开始加载其message list.
             await this.reload();
         })
+
+        hooks.hook("project:loaded", () => {
+            //项目加载完毕，清空已选择的skills和tools.
+            this.selectedSkills = [];
+            this.selectedTools = [];
+        })
     }
 
     // ── Public reactive state ───────────────────────────────────
