@@ -11,6 +11,7 @@
   import { setup as setupEvtHanle } from "$lib/evthandle";
   import { configStore } from "$lib/store/config.svelte";
   import { i18nStore } from "$lib/store/i18n.svelte";
+  import { messageStore } from "$lib/store/local/msg.svelte";
   import { pluginStore } from "$lib/store/plugin.svelte";
   import { projectStore } from "$lib/store/project.svelte";
   import { recentProjectsStore } from "$lib/store/recent-projects.svelte";
@@ -89,6 +90,9 @@
           return undefined as void;
         },
       });
+
+      // 系统自举完成，数据等等已经就绪，开始初始化依赖数据的部分。
+      await Promise.all([messageStore.init()]);
 
       await windowStore.maximize();
 

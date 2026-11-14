@@ -1,3 +1,4 @@
+// packages/main/src/types/shared/api/agent.ts
 import { z } from "zod";
 
 /**
@@ -29,3 +30,21 @@ export const toolSearchOutputSchema = z.object({
 export type ToolSearchInput = z.infer<typeof toolSearchInputSchema>;
 export type ToolSearchItem = z.infer<typeof toolSearchItemSchema>;
 export type ToolSearchOutput = z.infer<typeof toolSearchOutputSchema>;
+
+/**
+ * 内建工具展示项。
+ *
+ * 仅包含输入栏展示/选择所需字段，不跨进程传输 schema、执行器等内部信息。
+ */
+export const builtinToolSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+});
+
+export const builtinToolsOutputSchema = z.object({
+    tools: z.array(builtinToolSchema),
+});
+
+export type BuiltinTool = z.infer<typeof builtinToolSchema>;
+export type BuiltinToolsOutput = z.infer<typeof builtinToolsOutputSchema>;

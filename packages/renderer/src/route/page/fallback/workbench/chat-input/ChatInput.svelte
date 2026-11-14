@@ -1,3 +1,4 @@
+<!-- packages/renderer/src/route/page/fallback/workbench/chat-input/ChatInput.svelte -->
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import {
@@ -9,26 +10,31 @@
   import { safeApi } from "$lib/utils/api";
   import {
     IconLoader2,
-    IconMicrophone,
     IconPlayerStopFilled,
     IconSend,
-    IconSlash,
   } from "@tabler/icons-svelte";
   import { onMount, tick } from "svelte";
-  import AttachmentButton from "./AttachmentButton.svelte";
   import AttachmentMenu from "./AttachmentMenu.svelte";
   import ChatCommandMenu from "./ChatCommandMenu.svelte";
+  import ChatInputToolbar from "./ChatInputToolbar.svelte";
+  import PickerMenu from "./PickerMenu.svelte";
+
+  type OpenMenu = null | "attachments" | "tools" | "skills";
 
   let {
     value = $bindable(""),
     placeholder = "Enter 换行，Ctrl+Enter 发送",
-    onSend = () => {},
+    onSend = (_files: string[]) => {},
     onCommand = () => {},
     onRecord = () => {},
   }: {
     value?: string;
     placeholder?: string;
-    /** 发送时回传当前已选择文件的完整路径数组 */
+    /**
+     * 发送时回传已选附件完整路径。
+     * tools/skills 的唯一真源是 messageStore.selectedTools/selectedSkills，
+     * 由 messageStore 内部在 AIResponse 启动时直接读取，不再经由此回调透传。
+     */
     onSend?: (files: string[]) => void;
     onCommand?: (cmd: ChatCommand) => void;
     onRecord?: () => void;
@@ -39,13 +45,14 @@
   let selectedIndex = $state(0);
   let isComposing = $state(false);
 
-  // 用户在发送动作后、本次 sending 转换为 false 的瞬间是否应被动恢复焦点。
-  // 用户若在流式期间点击他处 → activeElement 不再是 body → 跳过恢复。
+  // 三菜单互斥：同一时刻最多展开一个（附件 / 工具 / 技能）
+  let openMenu = $state<OpenMenu>(null);
+
+  // 用户在发送动作后、本次 sending 转换为 false 的瞬间是否应被动恢复焦点
   let shouldRefocusAfterSend = $state(false);
 
   /** 仅维护文件完整路径队列，不持有文件对象 */
   let files = $state<string[]>([]);
-  let showAttachments = $state(false);
 
   let commands = $derived(commandsStore.commands);
   let hasCommands = $derived(commands.length > 0);
@@ -73,7 +80,7 @@
     });
     if (!picked || picked.length === 0) return;
     mergeFiles(picked);
-    showAttachments = true;
+    openMenu = "attachments";
   }
 
   function mergeFiles(picked: string[]) {
@@ -89,33 +96,50 @@
     if (disabled) return;
     showCommands = false;
     if (files.length === 0) {
+      openMenu = null;
       void openFilePicker();
     } else {
-      showAttachments = !showAttachments;
+      openMenu = openMenu === "attachments" ? null : "attachments";
     }
+  }
+
+  function toggleMenu(menu: Exclude<OpenMenu, null>) {
+    if (disabled) return;
+    showCommands = false;
+    openMenu = openMenu === menu ? null : menu;
+  }
+
+  function closeMenu() {
+    openMenu = null;
   }
 
   function removeFile(path: string) {
     files = files.filter((file) => file !== path);
-    if (files.length === 0) showAttachments = false;
+    if (files.length === 0 && openMenu === "attachments") openMenu = null;
+  }
+
+  function clearFiles() {
+    files = [];
+    openMenu = null;
   }
 
   $effect(() => {
     if (disabled) {
       showCommands = false;
-      showAttachments = false;
+      openMenu = null;
     }
   });
 
   function send() {
     if (!canSend) return;
     showCommands = false;
-    showAttachments = false;
+    openMenu = null;
     shouldRefocusAfterSend = true;
     const outgoingFiles = files.slice();
     onSend(outgoingFiles);
     value = "";
     files = [];
+    // 工具/技能选择保持原样，不自动清空（由用户/业务显式清理）。
     selectedIndex = 0;
     tick().then(adjustHeight);
   }
@@ -124,10 +148,7 @@
     await messageStore.abort();
   }
 
-  // 显式 refocus 策略：
-  // 当 sending 结束时，仅在以下条件齐备时恢复焦点到输入框：
-  //   1. 用户本次发送动作触发过（shouldRefocusAfterSend === true）
-  //   2. 当前焦点仍在 document.body（即焦点是被 disabled textarea 自动踢出，而非用户主动移走）
+  // 显式 refocus 策略（保持原逻辑）
   $effect(() => {
     if (sending || !shouldRefocusAfterSend) return;
     shouldRefocusAfterSend = false;
@@ -158,6 +179,7 @@
     if (value.startsWith("/")) {
       showCommands = true;
       selectedIndex = 0;
+      openMenu = null;
     } else {
       showCommands = false;
     }
@@ -177,7 +199,7 @@
 
   function openCommands() {
     if (disabled || !hasCommands) return;
-    showAttachments = false;
+    openMenu = null;
     value = "/";
     handleInput();
     tick().then(() => {
@@ -222,7 +244,7 @@
       }
     }
 
-    // 与 placeholder 保持一致：Enter 换行，Ctrl+Enter 发送，Shift+Enter 也换行
+    // Enter 换行，Ctrl+Enter 发送
     if (event.key === "Enter" && event.ctrlKey) {
       event.preventDefault();
       send();
@@ -252,12 +274,31 @@
     {/if}
   {/if}
 
-  {#if showAttachments && files.length > 0 && !disabled}
+  {#if openMenu === "attachments" && files.length > 0 && !disabled}
     <AttachmentMenu
       {files}
       onRemove={removeFile}
       onAdd={() => void openFilePicker()}
-      onClose={() => (showAttachments = false)}
+      onClearAll={clearFiles}
+      onClose={closeMenu}
+    />
+  {/if}
+
+  {#if openMenu === "tools" && !disabled}
+    <PickerMenu
+      kind="tools"
+      bind:selectedItems={messageStore.selectedTools}
+      builtinItems={messageStore.builtinTools}
+      onClose={closeMenu}
+    />
+  {/if}
+
+  {#if openMenu === "skills" && !disabled}
+    <PickerMenu
+      kind="skills"
+      bind:selectedItems={messageStore.selectedSkills}
+      emptyLabel="没有匹配的技能，试试调整筛选词"
+      onClose={closeMenu}
     />
   {/if}
 
@@ -282,42 +323,20 @@
     <div
       class="flex items-center justify-between border-t border-border/50 px-2 py-1.5"
     >
-      <div class="flex items-center gap-0.5">
-        <AttachmentButton
-          count={files.length}
-          open={showAttachments}
-          {disabled}
-          onTrigger={handleAttachClick}
-        />
-        <button
-          type="button"
-          onclick={() => !disabled && onRecord()}
-          {disabled}
-          title="语音输入"
-          aria-label="语音输入"
-          class="group flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground active:scale-90 active:bg-accent/80 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-        >
-          <IconMicrophone
-            size={18}
-            stroke={1.5}
-            class="transition-transform duration-200 group-active:scale-110"
-          />
-        </button>
-        <button
-          type="button"
-          onclick={openCommands}
-          disabled={slashDisabled}
-          title={slashTitle}
-          aria-label={slashTitle}
-          class="group flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground active:scale-90 active:bg-accent/80 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-        >
-          <IconSlash
-            size={18}
-            stroke={1.5}
-            class="transition-transform duration-200 group-active:scale-110"
-          />
-        </button>
-      </div>
+      <ChatInputToolbar
+        filesCount={files.length}
+        toolsCount={messageStore.selectedTools.length}
+        skillsCount={messageStore.selectedSkills.length}
+        {openMenu}
+        {disabled}
+        commandsDisabled={slashDisabled}
+        commandsTitle={slashTitle}
+        onAttachClick={handleAttachClick}
+        onToolsClick={() => toggleMenu("tools")}
+        onSkillsClick={() => toggleMenu("skills")}
+        onRecordClick={() => !disabled && onRecord()}
+        onCommandsClick={openCommands}
+      />
 
       <Button
         size="sm"

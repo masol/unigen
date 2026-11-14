@@ -1,5 +1,5 @@
 // file: agent/tools.ts
-import { globalToolDB } from "$libs/tooldb/index.js";
+import { globalToolDB, toAiTool } from "$libs/tooldb/index.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { tool, type Tool } from "ai";
 import Logger from "electron-log/main.js";
@@ -82,7 +82,7 @@ export async function materializeTools(
         } else if (ref.meta) {
             const live = await globalToolDB.getToolMeta(ref.meta.id);
             if (live) {
-                out[ref.key] = live.tool;
+                out[ref.key] = toAiTool(live);
             } else {
                 Logger.warn(
                     `[PAC] ${compiled.name}: 工具 ${ref.meta.id} 已不在工具库中` +
@@ -120,7 +120,7 @@ export async function materializeTools(
                     continue;
                 }
 
-                out[key] = live.tool;
+                out[key] = toAiTool(live);
             } catch (e) {
                 Logger.warn(
                     `[PAC] ${compiled.name}: 运行期追加工具 ${id} 失败，本次运行跳过`,

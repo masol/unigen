@@ -1,5 +1,4 @@
 // packages/main/src/libs/tooldb/globaltooldb.ts
-// packages/main/src/libs/tooldb/globaltooldb.ts
 import {
     mcpRoute,
     wrapMcpTool,
@@ -7,7 +6,7 @@ import {
 } from "$libs/mcp/index.js";
 import { getGlobalSearchDB } from "$libs/searchsrv/index.js";
 import { throwPrecondition } from "$libs/utils/err.js";
-import type { Tool } from "ai";
+import { jsonSchema, type Tool } from "ai";
 import Logger from "electron-log/main.js";
 import { buildAiTool } from "./builder.js";
 import { getMetaTools } from "./builtins.js";
@@ -668,10 +667,10 @@ export class GlobalToolDB {
         const rawTool = {
             description,
             ...(inputSchema
-                ? { inputSchema: { jsonSchema: inputSchema } }
+                ? { inputSchema: jsonSchema(inputSchema) }
                 : {}),
             ...(outputSchema
-                ? { outputSchema: { jsonSchema: outputSchema } }
+                ? { outputSchema: jsonSchema(outputSchema) }
                 : {}),
         } as unknown as Tool;
 

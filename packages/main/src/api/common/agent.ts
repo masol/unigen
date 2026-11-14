@@ -17,16 +17,24 @@ import {
     openGlobalSearch,
     type SkillRow,
 } from "$libs/searchsrv/index.js";
-import { globalToolDB, type ToolMeta } from "$libs/tooldb/index.js";
+import { getBuiltinTools } from "$libs/tooldb/builtins.js";
+import {
+    builtinId,
+    globalToolDB,
+    type ToolMeta,
+} from "$libs/tooldb/index.js";
 import {
     queryAllKnowledge,
     type ChunkOutput,
 } from "$libs/tooldb/tools/meta-tools/rag.js";
+import { isMetaToolId } from "$libs/tooldb/tools/meta-tools/registry.js";
 import { throwPrecondition } from "$libs/utils/err.js";
 import { WindowService } from '$libs/utils/window.js';
 import {
+    builtinToolsOutputSchema,
     toolSearchInputSchema,
     toolSearchOutputSchema,
+    type BuiltinTool,
     type ToolSearchItem,
 } from "$types/shared/api/agent.js";
 import {
@@ -181,6 +189,63 @@ const searchTools = os
             items,
             hasMore,
         };
+    });
+
+/**
+ * 加载全部内建工具（供输入栏展示与选择）。
+ *
+ * 数据源合并两个来源，保证"框架声明的内建工具"与"运行期可达的内建工具"
+ * 都出现在结果里：
+ *   1. `getBuiltinTools()`：模块级声明源。`init()` 成功注册后与 registry
+ *      一致，但在注册逻辑异常（如 init 部分失败、未来新增 def 漏注册）时
+ *      仍能反映框架声明的内建工具，避免"注册漏洞 = 工具在 UI 上凭空消失"。
+ *   2. `globalToolDB.listBuiltinTools()`：registry 快照。除声明源外，还包含
+ *      运行期通过 `globalToolDB.register()` 动态注册的 builtin，覆盖声明源
+ *      未声明的场景。
+ *
+ * 两者按 id 去重：registry 优先（描述可能被运行期覆盖过），声明源补缺。
+ *
+ * 两类结果都过滤掉 meta tools（search_tools / invoke_tool / skill / knowledge
+ * 系列）——它们由框架直接挂载、面向 LLM 内部发现能力，不应出现在用户可选
+ * 工具列表中。
+ */
+const loadBuildin = os
+    .input(z.void())
+    .output(builtinToolsOutputSchema)
+    .handler(async () => {
+        const seen = new Set<string>();
+        const tools: BuiltinTool[] = [];
+
+        // 1) registry 快照（运行时真源，优先）
+        for (const meta of globalToolDB.listBuiltinTools()) {
+            if (meta.source !== "builtin") continue;
+            if (isMetaToolId(meta.id)) continue;
+            if (seen.has(meta.id)) continue;
+            seen.add(meta.id);
+            tools.push({
+                id: meta.id,
+                name: meta.name,
+                description: meta.description,
+            });
+        }
+
+        // 2) 声明源补缺（覆盖 registry 缺失或注册逻辑异常的极端场景）
+        for (const def of getBuiltinTools()) {
+            const id = builtinId(def.name);
+            if (seen.has(id)) continue;
+            seen.add(id);
+            tools.push({
+                id,
+                name: def.name,
+                description: def.description,
+            });
+        }
+
+        Logger.debug(
+            `[Agent] 内建工具加载完成: ${tools.length} 个`,
+        );
+
+        return { tools };
     });
 
 const searchSkills = os
@@ -477,6 +542,7 @@ const exportMcpServerConfig = os
 
 export default {
     searchTools,
+    loadBuildin,
     searchSkills,
     searchKnowledgeBases,
     listKnowledgeBases,

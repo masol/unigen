@@ -5,7 +5,6 @@
   import { PinyinFuseSearch } from "$lib/utils/fuse";
   import autoAnimate from "@formkit/auto-animate";
   import {
-    IconBolt,
     IconBooks,
     IconBrain,
     IconChevronDown,
@@ -15,7 +14,8 @@
     IconKeyboard,
     IconPlugConnected,
     IconSettings,
-    IconSettingsOff
+    IconSettingsOff,
+    IconSparkles
   } from "@tabler/icons-svelte";
   import { debounce } from "radashi";
   import { push, router } from "svelte-spa-router";
@@ -190,7 +190,7 @@
           id: "api-skill",
           label: "技能",
           description: "管理AI做事的方法",
-          icon: IconBolt,
+          icon: IconSparkles,
           path: "api/skill",
           keywords: ["rag", "skill", "tool", "技能", "function calling"],
         },

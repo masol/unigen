@@ -12,6 +12,7 @@ export {
     sanitizeToolName
 } from "./naming.js";
 export { syncToolsToSearchDB } from "./search-sync.js";
+export { toAiTool } from "./to-ai-tool.js";
 export {
     invokeTool,
     invokeToolDef,
@@ -41,3 +42,4 @@ export type {
     ToolMeta,
     ToolSource
 } from "./type.js";
+

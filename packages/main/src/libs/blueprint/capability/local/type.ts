@@ -140,6 +140,7 @@ export interface PacFrontMatter {
      *
      * 运行期会转换为完整 id：`skill:${name}`，并从项目 LanceDB 的 skill 表读取。
      * 命中的技能会以 `load_locskill` 工具注入当前 agent。
+     * 之所以不使用全局load_skill工具，是因为提示词有区别。但这带来潜在的重复加载相同tool的风险。
      */
     skills?: string[];
     /**

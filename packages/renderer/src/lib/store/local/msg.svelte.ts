@@ -1,9 +1,11 @@
+// packages/renderer/src/lib/store/local/msg.svelte.ts
 // src/lib/store/local/msg.svelte.ts
 import { projectStore } from "$lib/store/project.svelte";
 import { safeApi } from "$lib/utils/api";
 import evtbus from "$lib/utils/evtbus";
 import { hooks } from "$lib/utils/hook";
 import { truncate } from '$lib/utils/str';
+import type { BuiltinTool } from "@app/main/types";
 import log from 'electron-log/renderer';
 import Logger from "electron-log/renderer.js";
 import pTimeout, { TimeoutError } from "p-timeout";
@@ -17,7 +19,19 @@ import type {
 } from "./chat.types";
 import { sessionStore } from "./session.store.svelte";
 
+export type { BuiltinTool } from "@app/main/types";
+
 const RUNCOMMAND_END_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 1 day
+
+/**
+ * 输入栏已选项（工具 / 技能通用）。
+ * 保存完整展示信息，使菜单重新打开时已选区无需再次请求即可直接渲染。
+ */
+export type SelectedItem = {
+    id: string;
+    name: string;
+    description?: string;
+};
 
 type SeqDeferred = {
     promise: Promise<boolean>;
@@ -89,6 +103,25 @@ class MessageStore {
      */
     tracesVisible = $state(true);
 
+    /**
+     * 输入栏已选工具（内建 + 检索结果，可混选）。
+     * 保存完整信息（id + 展示字段），使菜单重新打开时已选区无需再次请求即可渲染。
+     * 唯一真源：ChatInput / ChatInputToolbar / PickerMenu 均读写本字段。
+     * 发送后不自动清空，由用户显式操作（或在业务需要时由调用方重置）。
+     */
+    selectedTools = $state<SelectedItem[]>([]);
+
+    /**
+     * 输入栏已选技能。
+     * 保存完整信息（id + 展示字段），使菜单重新打开时已选区无需再次请求即可渲染。
+     * 唯一真源：ChatInput / ChatInputToolbar / PickerMenu 均读写本字段。
+     * 发送后不自动清空，由用户显式操作（或在业务需要时由调用方重置）。
+     */
+    selectedSkills = $state<SelectedItem[]>([]);
+
+    /** 内建工具列表；系统启动后由 init 通过主进程 API 初始化 */
+    builtinTools = $state<BuiltinTool[]>([]);
+
     hasMessages = $derived(this.messages.length > 0);
     lastMessage = $derived(
         this.messages.length > 0
@@ -104,6 +137,29 @@ class MessageStore {
 
     /** 当前正在流式接收的助手消息 id */
     #activeAssistantId: string | null = null;
+
+    /**
+     * 系统启动时调用，用于初始化内建工具列表。
+     *
+     * 防御说明：safeApi() 在业务错误 / 路由未就绪等场景下可能返回 null
+     * （参见 installSkill 中的相同防御），此处必须显式判空，否则会在
+     * `result.tools` 上抛 TypeError 并打断 App 启动流程。
+     * 初始化失败时不阻断应用启动，内建工具列表保持为空；调用方可后续重试。
+     */
+    async init(): Promise<void> {
+        try {
+            const result = await safeApi().agent.loadBuildin();
+            if (!result) {
+                Logger.error(
+                    "[MessageStore] init builtin tools: loadBuildin 返回空结果（API 层可能尚未就绪或业务失败）",
+                );
+                return;
+            }
+            this.builtinTools = result.tools;
+        } catch (err) {
+            Logger.error("[MessageStore] init builtin tools failed", err);
+        }
+    }
 
     private async reload(): Promise<void> {
         this.messages = [];
@@ -527,6 +583,12 @@ class MessageStore {
             return;
         }
 
+        // 工具/技能唯一真源是 selectedTools/selectedSkills。
+        // 启动本次 run 前快照一份，避免运行期间用户继续改动输入栏导致参数漂移。
+        // 协议层仍只接收 id 数组，这里把完整对象映射为 id。
+        const tools = this.selectedTools.map((t) => t.id);
+        const skills = this.selectedSkills.map((s) => s.id);
+
         this.#controller = new AbortController();
         const { signal } = this.#controller;
         this.isAborting = false;
@@ -534,7 +596,7 @@ class MessageStore {
         if (userMessage.content) {
             sessionStore.autoTitle(truncate(userMessage.content))
         }
-        const run = this.#run(userMessage, signal, mode);
+        const run = this.#run(userMessage, signal, mode, tools, skills);
         this.#runPromise = run;
         try {
             await run;
@@ -543,18 +605,27 @@ class MessageStore {
         }
     }
 
-    async #run(userMessage: ChatMessage, signal: AbortSignal, mode: string | null): Promise<void> {
+    async #run(
+        userMessage: ChatMessage,
+        signal: AbortSignal,
+        mode: string | null,
+        tools: string[],
+        skills: string[],
+    ): Promise<void> {
         let stream: AsyncGenerator<ChatStreamEvent> | null = null;
         const seq = this.#nextSeq++;
         const deferred = createDeferred();
         this.#pendingSeqs.set(seq, deferred);
 
         try {
+            Logger.debug("skills,tools:", skills, tools)
             stream = (await safeApi().project.runCommand(
                 {
                     msg: userMessage.content,
                     msgId: userMessage.id,
                     files: userMessage.files ?? [],
+                    tools,
+                    skills,
                     timestamp: userMessage.timestamp,
                     seq,
                     mode,

@@ -1,9 +1,11 @@
+<!-- packages/renderer/src/route/page/fallback/workbench/Workbench.svelte -->
 <!-- Agent 对话工作台：唯一主视图 -->
 <script lang="ts">
+  import type { ChatCommand } from "$lib/store/local/commands.store.svelte";
   import { messageStore } from "$lib/store/local/msg.svelte";
   import { toast } from "svelte-sonner";
   import { fade } from "svelte/transition";
-  import { ChatInput, type ChatCommand } from "./chat-input";
+  import { ChatInput } from "./chat-input";
   import ChatMessageList from "./ChatMessageList.svelte";
   import { confirmClearAll } from "./confirm.svelte";
   import TypingDots from "./TypingDots.svelte";
@@ -22,6 +24,13 @@
     blurActive();
   });
 
+  /**
+   * 发送入口。
+   *
+   * tools / skills 的唯一真源是 messageStore.selectedTools/selectedSkills，
+   * 由 messageStore 在 AIResponse 启动时直接快照读取；此处只负责把附件路径落到
+   * 用户消息上，并驱动 AIResponse 启动本轮对话。
+   */
   async function handleSend(files: string[] = []) {
     const content = inputValue.trim();
     if (
@@ -42,11 +51,6 @@
 
     const userMsg = messageStore.addMessage({ role: "user", content, files });
     inputValue = "";
-
-    if (files.length > 0) {
-      // 文件完整路径随消息发送；持久化到消息记录需扩展 ChatMessage/AIResponse
-      console.debug("[chat] 附件文件:", files);
-    }
 
     await messageStore.AIResponse(userMsg);
   }

@@ -2,7 +2,6 @@
 import { LanceDB } from "$libs/project/controllers/lance/index.js";
 import type { ProjectSearchDB } from "$libs/project/controllers/lance/project-search-db.js";
 import type { KbCatalogRow } from "$libs/searchsrv/tables/kb-catalog-table.js";
-import type { SkillRow } from "$libs/searchsrv/tables/skill-table.js";
 import {
     loadSkillById,
     queryKnowledgeByIds,
@@ -18,6 +17,12 @@ export const QUERY_LOCAL_KB_TOOL_NAME = "query_lockc";
 
 const KB_DEFAULT_LIMIT = 5;
 const KB_MAX_LIMIT = 20;
+
+interface ResolvedSkillRef {
+    id: string;
+    name: string;
+    description: string;
+}
 
 function readStringList(
     raw: unknown,
@@ -76,6 +81,43 @@ async function getProjectSearchDB(
     }
 }
 
+function skillIdCandidates(id: string): string[] {
+    const candidates = [id];
+    if (id.startsWith("skill:")) {
+        const bare = id.slice("skill:".length);
+        if (bare) candidates.push(bare);
+    } else {
+        candidates.push(`skill:${id}`);
+    }
+    return [...new Set(candidates)];
+}
+
+async function resolveSkillRef(
+    id: string,
+    compiled: CompiledPacAgent,
+): Promise<ResolvedSkillRef | null> {
+    for (const candidate of skillIdCandidates(id)) {
+        try {
+            const result = await loadSkillById(candidate);
+            if (result.found) {
+                return {
+                    id: result.id ?? candidate,
+                    name: result.name ?? candidate,
+                    description: result.description ?? "",
+                };
+            }
+        } catch (error) {
+            Logger.warn(
+                `[PAC] ${compiled.name}: 读取技能失败，已忽略: ${candidate}`,
+                error,
+            );
+        }
+    }
+
+    Logger.warn(`[PAC] ${compiled.name}: 本地技能不存在，已忽略: ${id}`);
+    return null;
+}
+
 export async function attachLocalContextTools(
     tools: Record<string, Tool>,
     compiled: CompiledPacAgent,
@@ -88,7 +130,8 @@ export async function attachLocalContextTools(
         compiled.sourcePath,
     ).map(normalizeSkillId);
 
-    // ctx.skills 中的字符串已经是完整 skill id，不再补 skill: 前缀。
+    // ctx.skills 中的字符串通常已经是完整 skill id；这里仍保留原始值，
+    // 由 resolveSkillRef 做带/不带 skill: 前缀的候选回退。
     const runtimeSkillIds: string[] = [];
     for (const value of extraSkillIds) {
         if (typeof value !== "string") continue;
@@ -105,19 +148,18 @@ export async function attachLocalContextTools(
 
     if (skillIds.length === 0 && kbIds.length === 0) return;
 
-    const search = await getProjectSearchDB(ctx);
-    if (!search) {
-        Logger.warn(
-            `[PAC] ${compiled.name}: 项目 LanceDB 不可用，跳过 skills/knowledgeBases 工具注入`,
-        );
-        return;
-    }
-
     if (skillIds.length > 0) {
-        await attachSkillTool(tools, compiled, search, skillIds);
+        await attachSkillTool(tools, compiled, skillIds);
     }
 
     if (kbIds.length > 0) {
+        const search = await getProjectSearchDB(ctx);
+        if (!search) {
+            Logger.warn(
+                `[PAC] ${compiled.name}: 项目 LanceDB 不可用，跳过 knowledgeBases 工具注入`,
+            );
+            return;
+        }
         await attachKbTool(tools, compiled, search, kbIds);
     }
 }
@@ -125,7 +167,6 @@ export async function attachLocalContextTools(
 async function attachSkillTool(
     tools: Record<string, Tool>,
     compiled: CompiledPacAgent,
-    search: ProjectSearchDB,
     skillIds: string[],
 ): Promise<void> {
     if (tools[LOAD_LOCAL_SKILL_TOOL_NAME]) {
@@ -136,29 +177,23 @@ async function attachSkillTool(
     }
 
     const ids = [...new Set(skillIds)];
-    const byId = new Map<string, SkillRow>();
+    const resolved: ResolvedSkillRef[] = [];
+    const seen = new Set<string>();
 
     for (const id of ids) {
-        try {
-            const row = await search.skill.getById(id);
-            if (!row) {
-                Logger.warn(`[PAC] ${compiled.name}: 本地技能不存在，已忽略: ${id}`);
-                continue;
-            }
-            byId.set(row.id, row);
-        } catch (error) {
-            Logger.warn(`[PAC] ${compiled.name}: 读取本地技能失败，已忽略: ${id}`, error);
-        }
+        const ref = await resolveSkillRef(id, compiled);
+        if (!ref || seen.has(ref.id)) continue;
+        seen.add(ref.id);
+        resolved.push(ref);
     }
 
-    const skills = [...byId.values()];
-    if (skills.length === 0) return;
+    if (resolved.length === 0) return;
 
-    const skillIdsInDb = skills.map((skill) => skill.id);
+    const skillIdsInDb = resolved.map((skill) => skill.id);
     const idSchema = z.enum(skillIdsInDb as [string, ...string[]]);
 
     tools[LOAD_LOCAL_SKILL_TOOL_NAME] = tool({
-        description: buildSkillToolDescription(skills),
+        description: buildSkillToolDescription(resolved),
         inputSchema: z.object({
             id: idSchema.describe("要加载的 Skill id，必须使用描述中列出的完整 id"),
             path: z
@@ -198,11 +233,11 @@ async function attachSkillTool(
     });
 
     Logger.debug(
-        `[PAC] ${compiled.name}: 已注入本地技能工具 ${LOAD_LOCAL_SKILL_TOOL_NAME}，技能数=${skills.length}`,
+        `[PAC] ${compiled.name}: 已注入本地技能工具 ${LOAD_LOCAL_SKILL_TOOL_NAME}，技能数=${resolved.length}`,
     );
 }
 
-function buildSkillToolDescription(skills: SkillRow[]): string {
+function buildSkillToolDescription(skills: ResolvedSkillRef[]): string {
     const rows = skills
         .map((skill) => {
             const name = escapeTableCell(skill.name);
