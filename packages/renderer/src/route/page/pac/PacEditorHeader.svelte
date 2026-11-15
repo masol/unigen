@@ -1,9 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
 
-  import { Button } from "$lib/components/ui/button";
   import { pacStore } from "$lib/store/ui/pac.svelte";
-  import { IconDeviceFloppy, IconLoader2 } from "@tabler/icons-svelte";
 
   import { formatDate, prettyPath } from "./editor-utils";
 
@@ -15,25 +13,6 @@
     class="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto scrollbar-none"
   >
     {@render toolbar?.()}
-
-    {#if pacStore.saving}
-      <IconLoader2
-        size={18}
-        stroke={1.5}
-        class="shrink-0 animate-spin text-muted-foreground"
-      />
-    {/if}
-
-    <Button
-      variant="outline"
-      size="sm"
-      class="shrink-0 rounded-lg"
-      disabled={!pacStore.dirty || pacStore.saving}
-      onclick={() => void pacStore.save()}
-    >
-      <IconDeviceFloppy size={16} stroke={1.5} />
-      保存
-    </Button>
   </div>
 
   <div class="flex min-w-0 max-w-[40%] shrink-0 flex-col items-end gap-1">

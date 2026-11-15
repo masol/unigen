@@ -78,7 +78,7 @@
 
   // 通过修改： packages/renderer/src/lib/components/edra/shadcn/components/Toolbar.svelte 来修改toolbar内容。
   // packages/renderer/src/lib/components/edra/shadcn/components/menu/BubbleMenu.svelte 修改bubbleMenu.
-  // Editor的入口文件(下面的Edra)：
+  // Editor的入口文件(下面的Edra)：packages/renderer/src/lib/components/edra/shadcn/index.ts
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -97,6 +97,9 @@
               {#snippet toolbar()}
                 <Edra.Toolbar
                   class="max-w-full! shrink-0 justify-start overflow-x-auto scrollbar-none border-b-0 p-1"
+                  onSave={() => void pacStore.save()}
+                  canSave={pacStore.dirty}
+                  saving={pacStore.saving}
                 />
               {/snippet}
             </PacEditorHeader>

@@ -1,4 +1,5 @@
 import type { Extensions } from '@tiptap/core';
+import Code from '@tiptap/extension-code';
 import Highlight from '@tiptap/extension-highlight';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import Mathematics from '@tiptap/extension-mathematics';
@@ -11,6 +12,7 @@ import { CharacterCount, Placeholder } from '@tiptap/extensions';
 import { Markdown } from '@tiptap/markdown';
 import StarterKit from '@tiptap/starter-kit';
 import strings from './strings.js';
+import MarkdownPaste from './tiptap/extensions/MarkdownPaste.js';
 import {
 	ColorHighlighter,
 	SelectAcrossAtoms,
@@ -52,13 +54,18 @@ export function getDefaultExtensions(options: DefaultExtensionsOptions = {}): Ex
 			// 		rel: 'noopener noreferrer nofollow'
 			// 	}
 			// },
+			code: false,
 			codeBlock: false
+		}),
+		Code.extend({
+			excludes: ''       // 关键：把 '_' 改成 ''，允许与 bold/italic 等共存
 		}),
 		// Audio,
 		CharacterCount,
 		Highlight.configure({
 			multicolor: true
 		}),
+		MarkdownPaste.configure({ mode: 'smart' }),
 		Placeholder.configure({
 			emptyEditorClass: 'is-empty',
 			// Use a placeholder:

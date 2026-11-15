@@ -4,7 +4,9 @@ import { confirmStore } from '$lib/store/ui/confirm.svelte';
 import { safeApi } from '$lib/utils/api';
 import { push } from '@keenmate/svelte-spa-router';
 import { NavigationCancelledError } from '@keenmate/svelte-spa-router/helpers/navigation-guard';
+import type { Editor as EditorSink } from '@tiptap/core';
 import { default as log } from 'electron-log/renderer';
+import { history } from 'prosemirror-history'; // 或从 Tiptap 对应模块导入
 import type { PacFileDocument } from '../../../../../main/src/types/shared/api/pac';
 
 // ── 类型 ──
@@ -16,23 +18,29 @@ export type PacDocument = PacFileDocument & {
 
 type PacStatus = 'idle' | 'loading' | 'ready' | 'error';
 
-/**
- * 结构化 Editor 适配器接口。
- * 避免 pacStore 直接依赖 Tiptap 具体类型，同时保证与 `Editor` 结构兼容。
- */
-export interface EditorSink {
-    readonly isDestroyed: boolean;
-    commands: {
-        setContent: (
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            content: any,
-            options?: {
-                emitUpdate?: boolean;
-                contentType?: 'markdown' | 'html' | 'json';
-            },
-        ) => unknown;
-    };
-}
+// /**
+//  * 结构化 Editor 适配器接口。
+//  * 避免 pacStore 直接依赖 Tiptap 具体类型，同时保证与 `Editor` 结构兼容。
+//  */
+// export interface EditorSink {
+//     readonly isDestroyed: boolean;
+//     commands: {
+//         setContent: (
+//             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+//             content: any,
+//             options?: {
+//                 emitUpdate?: boolean;
+//                 contentType?: 'markdown' | 'html' | 'json';
+//             },
+//         ) => unknown;
+//     };
+//     view?: {
+//         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+//         updateState: (state: any) => void;
+//         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+//         state: any;
+//     };
+// }
 
 // ── 工具函数 ──
 
@@ -143,10 +151,40 @@ class PacStore {
             return;
         }
 
-        editor.commands.setContent(content, {
-            emitUpdate: false,
-            contentType: 'markdown',
-        });
+        // editor.commands.setContent(content, {
+        //     emitUpdate: false,
+        //     contentType: 'markdown',
+        // });
+
+        editor
+            .chain()
+            .focus()
+            .insertContent(content, { contentType: 'markdown' })
+            .setMeta('preventUpdate', true) // 本次插入不触发 onUpdate 回调
+            // .setMeta('addToHistory', false) // 本次粘贴不进入历史
+            .run();
+
+        this.#resetHistory(editor);
+    }
+
+    /**
+     * 加载新文档后重置编辑器状态，清空 undo/redo 历史。
+     *
+     * ProseMirror 的 history 插件没有暴露重置 API（官方 PR #11 已关闭），
+     * 作者建议通过创建新的 EditorState 来让插件重新初始化。
+     *
+     * 这里复用当前文档与插件列表，只重建状态，不触碰 DOM 和编辑器配置。
+     */
+    #resetHistory(editor: EditorSink): void {
+        // const view = editor.view;
+        // if (!view) return;
+        try {
+            editor.unregisterPlugin('history');
+            editor.registerPlugin(history());
+            // console.error("reset history!!")
+        } catch (error) {
+            log.warn('[PacStore] failed to reset editor history', error);
+        }
     }
 
     // ── Actions ──
