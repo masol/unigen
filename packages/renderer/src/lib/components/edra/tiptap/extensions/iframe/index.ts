@@ -1,7 +1,7 @@
 import { Node, type NodeViewProps } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { SvelteNodeViewRenderer } from '../../index.ts';
 import type { Component } from 'svelte';
+import { SvelteNodeViewRenderer } from '../../index.js';
 
 export interface IframeOptions {
 	allowFullscreen: boolean;
@@ -69,20 +69,20 @@ const IFrame = Node.create<IframeOptions>({
 		return {
 			setIframe:
 				(options: { src: string }) =>
-				({ tr, dispatch }) => {
-					const { selection } = tr;
-					const node = this.type.create(options);
+					({ tr, dispatch }) => {
+						const { selection } = tr;
+						const node = this.type.create(options);
 
-					if (dispatch) {
-						tr.replaceRangeWith(selection.from, selection.to, node);
-					}
+						if (dispatch) {
+							tr.replaceRangeWith(selection.from, selection.to, node);
+						}
 
-					return true;
-				},
+						return true;
+					},
 			removeIframe:
 				() =>
-				({ commands }) =>
-					commands.deleteNode(this.name)
+					({ commands }) =>
+						commands.deleteNode(this.name)
 		};
 	},
 

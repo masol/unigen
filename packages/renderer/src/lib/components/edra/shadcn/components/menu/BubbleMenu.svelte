@@ -15,9 +15,9 @@
     useEditorTransaction,
   } from "../../../tiptap/index.js";
   import AlignMent from "../tools/AlignMent.svelte";
-  import Colors from "../tools/Colors.svelte";
-  import FontSize from "../tools/FontSize.svelte";
-  import Link from "../tools/Link.svelte";
+// import Colors from "../tools/Colors.svelte";
+  // import FontSize from "../tools/FontSize.svelte";
+  // import Link from "../tools/Link.svelte";
   import Lists from "../tools/Lists.svelte";
   import Tooltip from "../Tooltip.svelte";
   interface Props {
@@ -161,8 +161,8 @@
       {#each group as command, idx (idx)}
         {#if command.name === "paragraph"}
           <span></span>
-        {:else if command.name === "link"}
-          <Link />
+          <!-- {:else if command.name === "link"}
+          <Link /> -->
         {:else}
           {@const Icon = command.icon}
           <Tooltip tooltip={command.tooltip} shortCut={command.shortCut ?? ""}>
@@ -183,6 +183,6 @@
       <Separator orientation="vertical" class="h-4!" />
     {/if}
   {/each}
-  <FontSize />
-  <Colors />
+  <!-- <FontSize />
+  <Colors /> -->
 </BubbleMenu>

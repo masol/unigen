@@ -1,2 +1,3 @@
-export * from './commands.ts';
-export * from './ai.ts';
+export * from './ai';
+export * from './commands';
+

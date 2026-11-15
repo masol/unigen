@@ -1,3 +1,9 @@
+import type { Extensions } from '@tiptap/core';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import TableOfContents, { getHierarchicalIndexes } from '@tiptap/extension-table-of-contents';
+import { all, createLowlight } from 'lowlight';
+import { getDefaultExtensions } from '../extensions';
+import { MediaPlaceholder } from '../tiptap/extensions/MediaPlaceHolder';
 import {
 	AIHighlight,
 	Callout,
@@ -8,22 +14,16 @@ import {
 	SvelteNodeViewRenderer,
 	useEditor,
 	VideoExtended
-} from '../tiptap/index.ts';
-import { all, createLowlight } from 'lowlight';
-import { getDefaultExtensions } from '../extensions.ts';
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+} from '../tiptap/index';
+import CalloutComp from './components/Callout.svelte';
 import CodeBlock from './components/CodeBlock.svelte';
-import { MediaPlaceholder } from '../tiptap/extensions/MediaPlaceHolder.ts';
-import MediaPlaceholderComp from './components/MediaPlaceHolder.svelte';
-import ImageExtendedComp from './components/ImageExtended.svelte';
-import VideoExtendedComp from './components/VideoExtended.svelte';
 import IFrameComp from './components/IFrame.svelte';
+import ImageExtendedComp from './components/ImageExtended.svelte';
+import MediaPlaceholderComp from './components/MediaPlaceHolder.svelte';
 import MermaidComp from './components/Mermaid.svelte';
 import SlashCommandComp from './components/SlashCommand.svelte';
-import CalloutComp from './components/Callout.svelte';
-import TableOfContents, { getHierarchicalIndexes } from '@tiptap/extension-table-of-contents';
+import VideoExtendedComp from './components/VideoExtended.svelte';
 import { setTocItems } from './toc.svelte';
-import type { Extensions } from '@tiptap/core';
 
 const lowlight = createLowlight(all);
 

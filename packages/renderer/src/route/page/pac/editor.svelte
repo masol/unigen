@@ -11,7 +11,29 @@
   import PacEditorHeader from "./PacEditorHeader.svelte";
   import PacEditorLoading from "./PacEditorLoading.svelte";
 
+  /**
+   * Edra AI 助手回调。
+   *
+   * 当前后端尚未接入。先通过 toast 明确告知用户
+   * “AI 功能尚未支持”，同时通过 onError 回传给 Edra，
+   * 使其清理 AIHighlight mark 并结束生成流程。
+   *
+   * 固定 toast id：Space 触发的 autocompletion 可能高频调用本回调，
+   * sonner 会用相同 id 复用同一个 toast，避免刷屏。
+   */
+  // async function callAI(
+  //   _prompt: string,
+  //   _onChunk: (chunk: string) => void,
+  //   onError: (error: Error) => void,
+  // ): Promise<void> {
+  //   const error = new Error("AI 功能尚未支持");
+  //   log.warn("[PacEditor] callAI invoked, but AI backend is not configured");
+  //   toast.error(error.message, { id: "pac-editor-ai-not-supported" });
+  //   onError(error);
+  // }
+
   let editor: ReturnType<typeof createEditor> | undefined = createEditor({
+    // callAI,
     onUpdate: () => {
       if (!editor) return;
 
@@ -53,6 +75,10 @@
       void pacStore.save();
     }
   }
+
+  // 通过修改： packages/renderer/src/lib/components/edra/shadcn/components/Toolbar.svelte 来修改toolbar内容。
+  // packages/renderer/src/lib/components/edra/shadcn/components/menu/BubbleMenu.svelte 修改bubbleMenu.
+  // Editor的入口文件(下面的Edra)：
 </script>
 
 <svelte:window onkeydown={handleKeydown} />

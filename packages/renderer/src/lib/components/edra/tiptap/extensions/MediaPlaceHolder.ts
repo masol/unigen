@@ -1,7 +1,7 @@
 import { mergeAttributes, Node, type NodeViewProps } from '@tiptap/core';
-import { SvelteNodeViewRenderer } from '../index.ts';
-import type { Component } from 'svelte';
 import { NodeSelection } from '@tiptap/pm/state';
+import type { Component } from 'svelte';
+import { SvelteNodeViewRenderer } from '../index';
 
 export interface MediaPlaceholderOptions {
 	HTMLAttributes: Record<string, unknown>;

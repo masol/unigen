@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { mergeAttributes, Node, wrappingInputRule, type NodeViewProps } from '@tiptap/core';
 import type { Component } from 'svelte';
-import { SvelteNodeViewRenderer } from '../index.ts';
+import { SvelteNodeViewRenderer } from '../index.js';
 
 declare module '@tiptap/core' {
 	interface Commands<ReturnType> {
@@ -89,14 +90,14 @@ export const Callout = (component: Component<NodeViewProps>) =>
 			return {
 				setCallout:
 					() =>
-					({ commands, editor }) => {
-						const { type = null } = editor.getAttributes(this.name);
-						if (type) {
-							return commands.lift(this.name);
-						} else {
-							return commands.toggleWrap(this.name);
+						({ commands, editor }) => {
+							const { type = null } = editor.getAttributes(this.name);
+							if (type) {
+								return commands.lift(this.name);
+							} else {
+								return commands.toggleWrap(this.name);
+							}
 						}
-					}
 			};
 		},
 

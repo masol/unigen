@@ -1,15 +1,15 @@
+import { autoUpdate, computePosition, flip, offset, type Placement } from '@floating-ui/dom';
+import Lightbulb from '@lucide/svelte/icons/lightbulb';
 import Minus from '@lucide/svelte/icons/minus';
 import Quote from '@lucide/svelte/icons/quote';
 import SquareCode from '@lucide/svelte/icons/square-code';
-import { commands, type EdraCommand } from '../../../commands/index.js';
-import { autoUpdate, computePosition, flip, offset, type Placement } from '@floating-ui/dom';
 import { Extension } from '@tiptap/core';
-import type { Editor } from '../../../tiptap/index.js';
 import { EditorState, PluginKey } from '@tiptap/pm/state';
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion';
 import type { Component } from 'svelte';
-import { SvelteRenderer } from '../../index.ts';
-import Lightbulb from '@lucide/svelte/icons/lightbulb';
+import { commands, type EdraCommand } from '../../../commands/index.js';
+import type { Editor } from '../../../tiptap/index.js';
+import { SvelteRenderer } from '../../index.js';
 
 interface Group {
 	name: string;
@@ -46,10 +46,10 @@ const GROUPS: Group[] = [
 		name: 'insert',
 		title: 'Insert',
 		actions: [
-			...commands.media,
+			// ...commands.media,
 			...commands.table,
 			...commands.math,
-			...commands.diagram,
+			// ...commands.diagram,
 			{
 				icon: Minus,
 				name: 'horizontalRule',

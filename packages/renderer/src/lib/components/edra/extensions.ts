@@ -5,14 +5,13 @@ import Mathematics from '@tiptap/extension-mathematics';
 import Subscript from '@tiptap/extension-subscript';
 import SuperScript from '@tiptap/extension-superscript';
 import TextAlign from '@tiptap/extension-text-align';
-import { Color, FontSize, TextStyle } from '@tiptap/extension-text-style';
+import { TextStyle } from '@tiptap/extension-text-style';
 import Typography from '@tiptap/extension-typography';
 import { CharacterCount, Placeholder } from '@tiptap/extensions';
 import { Markdown } from '@tiptap/markdown';
 import StarterKit from '@tiptap/starter-kit';
 import strings from './strings.js';
 import {
-	Audio,
 	ColorHighlighter,
 	SelectAcrossAtoms,
 	Table,
@@ -44,18 +43,18 @@ export function getDefaultExtensions(options: DefaultExtensionsOptions = {}): Ex
 			heading: {
 				levels: [1, 2, 3, 4]
 			},
-			link: {
-				openOnClick: false,
-				autolink: true,
-				linkOnPaste: true,
-				HTMLAttributes: {
-					target: '_blank',
-					rel: 'noopener noreferrer nofollow'
-				}
-			},
+			// link: {
+			// 	openOnClick: false,
+			// 	autolink: true,
+			// 	linkOnPaste: true,
+			// 	HTMLAttributes: {
+			// 		target: '_blank',
+			// 		rel: 'noopener noreferrer nofollow'
+			// 	}
+			// },
 			codeBlock: false
 		}),
-		Audio,
+		// Audio,
 		CharacterCount,
 		Highlight.configure({
 			multicolor: true
@@ -74,13 +73,13 @@ export function getDefaultExtensions(options: DefaultExtensionsOptions = {}): Ex
 				return '';
 			}
 		}),
-		Color,
+		// Color,
 		Subscript,
 		SuperScript,
 		Typography,
 		ColorHighlighter,
 		TextStyle,
-		FontSize,
+		// FontSize,
 		TextAlign.configure({
 			types: ['heading', 'paragraph']
 		}),

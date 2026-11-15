@@ -10,7 +10,7 @@ import Heading2 from '@lucide/svelte/icons/heading-2';
 import Heading3 from '@lucide/svelte/icons/heading-3';
 import Heading4 from '@lucide/svelte/icons/heading-4';
 import Italic from '@lucide/svelte/icons/italic';
-import Link from '@lucide/svelte/icons/link-2';
+// import Link from '@lucide/svelte/icons/link-2';
 import List from '@lucide/svelte/icons/list';
 import ListChecks from '@lucide/svelte/icons/list-checks';
 import ListOrdered from '@lucide/svelte/icons/list-ordered';
@@ -25,7 +25,7 @@ import Superscript from '@lucide/svelte/icons/superscript';
 import Table from '@lucide/svelte/icons/table';
 import Underline from '@lucide/svelte/icons/underline';
 import Undo from '@lucide/svelte/icons/undo-2';
-import Workflow from '@lucide/svelte/icons/workflow';
+// import Workflow from '@lucide/svelte/icons/workflow';
 import { isTextSelection } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import strings from '../strings.js';
@@ -145,24 +145,24 @@ export const commands: Record<string, EdraCommand[]> = {
 		}
 	],
 	'text-formatting': [
-		{
-			icon: Link,
-			name: 'link',
-			tooltip: strings.command.link,
-			onClick: (editor) => {
-				if (editor.isActive('link')) {
-					editor.chain().focus().unsetLink().run();
-				} else {
-					const url = window.prompt('Enter the URL of the link:');
-					if (url) {
-						editor.chain().focus().toggleLink({ href: url }).run();
-					}
-				}
-			},
-			isActive: (editor) => {
-				return editor.isActive('link');
-			}
-		},
+		// {
+		// 	icon: Link,
+		// 	name: 'link',
+		// 	tooltip: strings.command.link,
+		// 	onClick: (editor) => {
+		// 		if (editor.isActive('link')) {
+		// 			editor.chain().focus().unsetLink().run();
+		// 		} else {
+		// 			const url = window.prompt('Enter the URL of the link:');
+		// 			if (url) {
+		// 				editor.chain().focus().toggleLink({ href: url }).run();
+		// 			}
+		// 		}
+		// 	},
+		// 	isActive: (editor) => {
+		// 		return editor.isActive('link');
+		// 	}
+		// },
 		{
 			icon: Pilcrow,
 			name: 'paragraph',
@@ -455,8 +455,7 @@ export const commands: Record<string, EdraCommand[]> = {
 			}
 		}
 	],
-	// Prompt 编辑器不需要媒体插入：保留键位为空数组，避免其他模块遍历时报 not iterable。
-	media: [],
+	// media: [],
 	table: [
 		{
 			icon: Table,
@@ -503,15 +502,15 @@ export const commands: Record<string, EdraCommand[]> = {
 			isActive: (editor) => editor.isActive('blockMath')
 		}
 	],
-	diagram: [
-		{
-			icon: Workflow,
-			name: 'mermaid',
-			tooltip: strings.command.mermaidDiagram,
-			onClick: (editor) => {
-				editor.chain().focus().setMermaid(' ').run();
-			},
-			isActive: (editor) => editor.isActive('mermaid')
-		}
-	]
+	// diagram: [
+	// 	// {
+	// 	// 	icon: Workflow,
+	// 	// 	name: 'mermaid',
+	// 	// 	tooltip: strings.command.mermaidDiagram,
+	// 	// 	onClick: (editor) => {
+	// 	// 		editor.chain().focus().setMermaid(' ').run();
+	// 	// 	},
+	// 	// 	isActive: (editor) => editor.isActive('mermaid')
+	// 	// }
+	// ]
 };

@@ -1,7 +1,7 @@
 import type { Node, NodeViewProps } from '@tiptap/core';
 import Image, { type ImageOptions } from '@tiptap/extension-image';
-import { SvelteNodeViewRenderer } from '../../index.ts';
 import type { Component } from 'svelte';
+import { SvelteNodeViewRenderer } from '../../index.js';
 
 export const ImageExtended = (component: Component<NodeViewProps>): Node<ImageOptions, unknown> => {
 	return Image.extend({

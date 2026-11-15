@@ -2,16 +2,16 @@ import {
 	mergeAttributes,
 	Node,
 	textblockTypeInputRule,
-	type NodeViewProps,
 	type JSONContent,
-	type MarkdownToken,
 	type MarkdownLexerConfiguration,
 	type MarkdownParseHelpers,
 	type MarkdownRendererHelpers,
+	type MarkdownToken,
+	type NodeViewProps,
 	type RenderContext
 } from '@tiptap/core';
-import { SvelteNodeViewRenderer } from '../../index.ts';
 import type { Component } from 'svelte';
+import { SvelteNodeViewRenderer } from '../../index.js';
 
 declare module '@tiptap/core' {
 	interface Commands<ReturnType> {
@@ -101,17 +101,17 @@ export const Mermaid = (component: Component<NodeViewProps>) =>
 			return {
 				setMermaid:
 					(code) =>
-					({ commands }) => {
-						return commands.insertContent({
-							type: this.name,
-							content: [
-								{
-									type: 'text',
-									text: code || ''
-								}
-							]
-						});
-					}
+						({ commands }) => {
+							return commands.insertContent({
+								type: this.name,
+								content: [
+									{
+										type: 'text',
+										text: code || ''
+									}
+								]
+							});
+						}
 			};
 		},
 
