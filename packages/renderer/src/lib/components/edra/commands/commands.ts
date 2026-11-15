@@ -1,8 +1,8 @@
 import { FileCode } from '@lucide/svelte';
-import AlignCenter from '@lucide/svelte/icons/align-center';
-import AlighJustify from '@lucide/svelte/icons/align-justify';
-import AlignLeft from '@lucide/svelte/icons/align-left';
-import AlignRight from '@lucide/svelte/icons/align-right';
+// import AlignCenter from '@lucide/svelte/icons/align-center';
+// import AlighJustify from '@lucide/svelte/icons/align-justify';
+// import AlignLeft from '@lucide/svelte/icons/align-left';
+// import AlignRight from '@lucide/svelte/icons/align-right';
 import Bold from '@lucide/svelte/icons/bold';
 import Code from '@lucide/svelte/icons/code';
 import Heading1 from '@lucide/svelte/icons/heading-1';
@@ -20,8 +20,8 @@ import Radical from '@lucide/svelte/icons/radical';
 import Redo from '@lucide/svelte/icons/redo-2';
 import SquareRadical from '@lucide/svelte/icons/square-radical';
 import StrikeThrough from '@lucide/svelte/icons/strikethrough';
-import Subscript from '@lucide/svelte/icons/subscript';
-import Superscript from '@lucide/svelte/icons/superscript';
+// import Subscript from '@lucide/svelte/icons/subscript';
+// import Superscript from '@lucide/svelte/icons/superscript';
 import Table from '@lucide/svelte/icons/table';
 import Underline from '@lucide/svelte/icons/underline';
 import Undo from '@lucide/svelte/icons/undo-2';
@@ -307,103 +307,103 @@ export const commands: Record<string, EdraCommand[]> = {
 				return editor.isActive('codeBlock');
 			}
 		},
-		{
-			icon: Superscript,
-			name: 'superscript',
-			tooltip: strings.command.superscript,
-			shortCut: `${ISMAC ? '⌘' : 'Ctrl+'}.`,
-			onClick: (editor) => {
-				editor.chain().focus().toggleSuperscript().run();
-			},
-			clickable: (editor) => {
-				return editor.can().toggleSuperscript();
-			},
-			isActive: (editor) => {
-				return editor.isActive('superscript');
-			}
-		},
-		{
-			icon: Subscript,
-			name: 'subscript',
-			tooltip: strings.command.subscript,
-			shortCut: `${ISMAC ? '⌘' : 'Ctrl+'},`,
-			onClick: (editor) => {
-				editor.chain().focus().toggleSubscript().run();
-			},
-			clickable: (editor) => {
-				return editor.can().toggleSubscript();
-			},
-			isActive: (editor) => {
-				return editor.isActive('subscript');
-			}
-		}
+		// {
+		// 	icon: Superscript,
+		// 	name: 'superscript',
+		// 	tooltip: strings.command.superscript,
+		// 	shortCut: `${ISMAC ? '⌘' : 'Ctrl+'}.`,
+		// 	onClick: (editor) => {
+		// 		editor.chain().focus().toggleSuperscript().run();
+		// 	},
+		// 	clickable: (editor) => {
+		// 		return editor.can().toggleSuperscript();
+		// 	},
+		// 	isActive: (editor) => {
+		// 		return editor.isActive('superscript');
+		// 	}
+		// },
+		// {
+		// 	icon: Subscript,
+		// 	name: 'subscript',
+		// 	tooltip: strings.command.subscript,
+		// 	shortCut: `${ISMAC ? '⌘' : 'Ctrl+'},`,
+		// 	onClick: (editor) => {
+		// 		editor.chain().focus().toggleSubscript().run();
+		// 	},
+		// 	clickable: (editor) => {
+		// 		return editor.can().toggleSubscript();
+		// 	},
+		// 	isActive: (editor) => {
+		// 		return editor.isActive('subscript');
+		// 	}
+		// }
 	],
-	alignment: [
-		{
-			icon: AlignLeft,
-			name: 'align-left',
-			tooltip: strings.command.alignLeft,
-			shortCut: `${ISMAC ? '⌘⇧' : 'Ctrl+Shift+'}L`,
-			onClick: (editor) => {
-				editor.chain().focus().toggleTextAlign('left').run();
-			},
-			turnInto: (editor, node, pos) => {
-				editor.chain().setNodeSelection(pos).toggleTextAlign('left').run();
-			},
-			clickable: (editor) => {
-				return editor.can().toggleTextAlign('left');
-			},
-			isActive: (editor) => editor.isActive({ textAlign: 'left' })
-		},
-		{
-			icon: AlignCenter,
-			name: 'align-center',
-			tooltip: strings.command.alignCenter,
-			shortCut: `${ISMAC ? '⌘⇧' : 'Ctrl+Shift+'}E`,
-			onClick: (editor) => {
-				editor.chain().focus().toggleTextAlign('center').run();
-			},
-			turnInto: (editor, node, pos) => {
-				editor.chain().setNodeSelection(pos).toggleTextAlign('center').run();
-			},
-			clickable: (editor) => {
-				return editor.can().toggleTextAlign('center');
-			},
-			isActive: (editor) => editor.isActive({ textAlign: 'center' })
-		},
-		{
-			icon: AlignRight,
-			name: 'align-right',
-			tooltip: strings.command.alignRight,
-			shortCut: `${ISMAC ? '⌘⇧' : 'Ctrl+Shift+'}R`,
-			onClick: (editor) => {
-				editor.chain().focus().toggleTextAlign('right').run();
-			},
-			turnInto: (editor, node, pos) => {
-				editor.chain().setNodeSelection(pos).toggleTextAlign('right').run();
-			},
-			clickable: (editor) => {
-				return editor.can().toggleTextAlign('right');
-			},
-			isActive: (editor) => editor.isActive({ textAlign: 'right' })
-		},
-		{
-			icon: AlighJustify,
-			name: 'align-justify',
-			tooltip: strings.command.alignJustify,
-			shortCut: `${ISMAC ? '⌘⇧' : 'Ctrl+Shift+'}J`,
-			onClick: (editor) => {
-				editor.chain().focus().toggleTextAlign('justify').run();
-			},
-			turnInto: (editor, node, pos) => {
-				editor.chain().setNodeSelection(pos).toggleTextAlign('justify').run();
-			},
-			clickable: (editor) => {
-				return editor.can().toggleTextAlign('justify');
-			},
-			isActive: (editor) => editor.isActive({ textAlign: 'justify' })
-		}
-	],
+	// alignment: [
+	// 	{
+	// 		icon: AlignLeft,
+	// 		name: 'align-left',
+	// 		tooltip: strings.command.alignLeft,
+	// 		shortCut: `${ISMAC ? '⌘⇧' : 'Ctrl+Shift+'}L`,
+	// 		onClick: (editor) => {
+	// 			editor.chain().focus().toggleTextAlign('left').run();
+	// 		},
+	// 		turnInto: (editor, node, pos) => {
+	// 			editor.chain().setNodeSelection(pos).toggleTextAlign('left').run();
+	// 		},
+	// 		clickable: (editor) => {
+	// 			return editor.can().toggleTextAlign('left');
+	// 		},
+	// 		isActive: (editor) => editor.isActive({ textAlign: 'left' })
+	// 	},
+	// 	{
+	// 		icon: AlignCenter,
+	// 		name: 'align-center',
+	// 		tooltip: strings.command.alignCenter,
+	// 		shortCut: `${ISMAC ? '⌘⇧' : 'Ctrl+Shift+'}E`,
+	// 		onClick: (editor) => {
+	// 			editor.chain().focus().toggleTextAlign('center').run();
+	// 		},
+	// 		turnInto: (editor, node, pos) => {
+	// 			editor.chain().setNodeSelection(pos).toggleTextAlign('center').run();
+	// 		},
+	// 		clickable: (editor) => {
+	// 			return editor.can().toggleTextAlign('center');
+	// 		},
+	// 		isActive: (editor) => editor.isActive({ textAlign: 'center' })
+	// 	},
+	// 	{
+	// 		icon: AlignRight,
+	// 		name: 'align-right',
+	// 		tooltip: strings.command.alignRight,
+	// 		shortCut: `${ISMAC ? '⌘⇧' : 'Ctrl+Shift+'}R`,
+	// 		onClick: (editor) => {
+	// 			editor.chain().focus().toggleTextAlign('right').run();
+	// 		},
+	// 		turnInto: (editor, node, pos) => {
+	// 			editor.chain().setNodeSelection(pos).toggleTextAlign('right').run();
+	// 		},
+	// 		clickable: (editor) => {
+	// 			return editor.can().toggleTextAlign('right');
+	// 		},
+	// 		isActive: (editor) => editor.isActive({ textAlign: 'right' })
+	// 	},
+	// 	{
+	// 		icon: AlighJustify,
+	// 		name: 'align-justify',
+	// 		tooltip: strings.command.alignJustify,
+	// 		shortCut: `${ISMAC ? '⌘⇧' : 'Ctrl+Shift+'}J`,
+	// 		onClick: (editor) => {
+	// 			editor.chain().focus().toggleTextAlign('justify').run();
+	// 		},
+	// 		turnInto: (editor, node, pos) => {
+	// 			editor.chain().setNodeSelection(pos).toggleTextAlign('justify').run();
+	// 		},
+	// 		clickable: (editor) => {
+	// 			return editor.can().toggleTextAlign('justify');
+	// 		},
+	// 		isActive: (editor) => editor.isActive({ textAlign: 'justify' })
+	// 	}
+	// ],
 	lists: [
 		{
 			icon: List,

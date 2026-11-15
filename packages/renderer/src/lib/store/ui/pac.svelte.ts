@@ -6,7 +6,7 @@ import { push } from '@keenmate/svelte-spa-router';
 import { NavigationCancelledError } from '@keenmate/svelte-spa-router/helpers/navigation-guard';
 import type { Editor as EditorSink } from '@tiptap/core';
 import { default as log } from 'electron-log/renderer';
-import { history } from 'prosemirror-history'; // 或从 Tiptap 对应模块导入
+import { history } from 'prosemirror-history';
 import type { PacFileDocument } from '../../../../../main/src/types/shared/api/pac';
 
 // ── 类型 ──
@@ -17,30 +17,6 @@ export type PacDocument = PacFileDocument & {
 };
 
 type PacStatus = 'idle' | 'loading' | 'ready' | 'error';
-
-// /**
-//  * 结构化 Editor 适配器接口。
-//  * 避免 pacStore 直接依赖 Tiptap 具体类型，同时保证与 `Editor` 结构兼容。
-//  */
-// export interface EditorSink {
-//     readonly isDestroyed: boolean;
-//     commands: {
-//         setContent: (
-//             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-//             content: any,
-//             options?: {
-//                 emitUpdate?: boolean;
-//                 contentType?: 'markdown' | 'html' | 'json';
-//             },
-//         ) => unknown;
-//     };
-//     view?: {
-//         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-//         updateState: (state: any) => void;
-//         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-//         state: any;
-//     };
-// }
 
 // ── 工具函数 ──
 
@@ -93,6 +69,14 @@ class PacStore {
 
     #editor: EditorSink | null = null;
 
+    /**
+     * 编辑器填充中标志。
+     * attachEditor 调用 #pushToEditor 期间置 true，
+     * 用于阻断编辑器初始化触发的 onUpdate 反向同步，
+     * 防止空文档污染 store 中的真源内容。
+     */
+    #hydrating = false;
+
     // ── 响应式状态 ──
 
     status = $state<PacStatus>('idle');
@@ -107,6 +91,13 @@ class PacStore {
 
     // ── 派生 ──
 
+    /**
+     * 脏状态完全由内容比较决定，不做“无条件置 true”。
+     * Svelte 的 $state.raw 在赋值相同原始值时不会触发不必要的更新，
+     * 因此这里 `!==` 对字符串的值比较就是 dirty 的唯一真源：
+     * 用户撤销、改回原文时 currentContent 会重新等于 savedContent，
+     * dirty 自动回到 false。
+     */
     readonly dirty = $derived(
         this.doc !== null &&
         this.currentContent !== null &&
@@ -133,7 +124,12 @@ class PacStore {
     attachEditor(editor: EditorSink): void {
         this.#editor = editor;
         if (this.currentContent !== null) {
-            this.#pushToEditor(this.currentContent);
+            this.#hydrating = true;
+            try {
+                this.#pushToEditor(this.currentContent);
+            } finally {
+                this.#hydrating = false;
+            }
         }
     }
 
@@ -151,37 +147,21 @@ class PacStore {
             return;
         }
 
-        // editor.commands.setContent(content, {
-        //     emitUpdate: false,
-        //     contentType: 'markdown',
-        // });
-
-        editor
-            .chain()
-            .focus()
-            .insertContent(content, { contentType: 'markdown' })
-            .setMeta('preventUpdate', true) // 本次插入不触发 onUpdate 回调
-            // .setMeta('addToHistory', false) // 本次粘贴不进入历史
-            .run();
+        editor.commands.setContent(content, {
+            emitUpdate: false,
+            contentType: 'markdown',
+        });
 
         this.#resetHistory(editor);
     }
 
     /**
      * 加载新文档后重置编辑器状态，清空 undo/redo 历史。
-     *
-     * ProseMirror 的 history 插件没有暴露重置 API（官方 PR #11 已关闭），
-     * 作者建议通过创建新的 EditorState 来让插件重新初始化。
-     *
-     * 这里复用当前文档与插件列表，只重建状态，不触碰 DOM 和编辑器配置。
      */
     #resetHistory(editor: EditorSink): void {
-        // const view = editor.view;
-        // if (!view) return;
         try {
             editor.unregisterPlugin('history');
             editor.registerPlugin(history());
-            // console.error("reset history!!")
         } catch (error) {
             log.warn('[PacStore] failed to reset editor history', error);
         }
@@ -189,14 +169,6 @@ class PacStore {
 
     // ── Actions ──
 
-    /**
-     * 打开 PAC 文件。
-     *
-     * 这是 fileStore 打开指令进入 pac 模块的唯一入口：
-     * - 如果当前有未保存的更改，先询问用户是否保存；
-     * - 保存失败则中止打开，停留在当前文档；
-     * - 用户选择不保存或保存成功后，继续加载新文档。
-     */
     async openFile(path: string): Promise<boolean> {
         const normalizedPath = normalizePacPath(path);
 
@@ -205,8 +177,6 @@ class PacStore {
             return false;
         }
 
-        // 脏检查：当前文档有未保存更改时，询问是否保存。
-        // 如果保存失败，阻止切换；用户选择不保存则直接继续。
         const canProceed = await this.#confirmSaveIfDirty();
         if (!canProceed) return false;
 
@@ -223,7 +193,6 @@ class PacStore {
         this.savedContent = null;
         this.revision = 0;
 
-        // 先让路由进入 pacEditor，页面会看到 loading 骨架。
         push('/paceditor');
 
         try {
@@ -241,7 +210,12 @@ class PacStore {
             this.revision += 1;
             this.status = 'ready';
 
-            this.#pushToEditor(doc.content);
+            this.#hydrating = true;
+            try {
+                this.#pushToEditor(doc.content);
+            } finally {
+                this.#hydrating = false;
+            }
 
             log.info(`[PacStore] opened, path=${normalizedPath}`);
             return true;
@@ -256,18 +230,26 @@ class PacStore {
         }
     }
 
-    /** 由编辑器 onUpdate 调用，更新实时 markdown 内容。 */
+    /**
+     * 由编辑器 onUpdate 调用，更新实时 markdown 内容。
+     *
+     * #hydrating 期间（attach/填充中）拒绝任何回写，防止空文档污染真源。
+     *
+     * 注意：不再用“空内容不得覆盖非空已保存内容”作为守卫。
+     * 那个守卫会阻止用户合法地把文档清空到与已保存内容不同的空状态，
+     * 导致 dirty 无法正确反映“用户已删除全部内容”。
+     * 初始化期间的空串污染已经由 #hydrating 覆盖；如果编辑器在就绪后
+     * 产生空串，它应当被视为一次真实的编辑。
+     */
     setEditorContent(content: string): void {
         if (this.status !== 'ready') return;
+        if (this.#hydrating) return;
+
+        if (content === this.currentContent) return;
+
         this.currentContent = content;
     }
 
-    /**
-     * 保存当前文档。
-     * - 非 dirty 直接成功。
-     * - 并发调用复用同一 Promise。
-     * - 保存成功后 savedContent 为提交时快照；若期间继续编辑，dirty 仍为 true。
-     */
     async save(): Promise<boolean> {
         const doc = this.doc;
 
@@ -319,11 +301,6 @@ class PacStore {
         return this.#savePromise;
     }
 
-    /**
-     * 路由离开守卫。
-     * 由 PageWrapper 在 onMount 中注册。
-     * 如果当前有未保存的更改且保存失败，抛出 NavigationCancelledError 阻止离开。
-     */
     async beforeLeave(_ctx: unknown): Promise<void> {
         const canLeave = await this.#confirmSaveIfDirty();
         if (!canLeave) {
@@ -331,11 +308,6 @@ class PacStore {
         }
     }
 
-    /**
-     * 脏检查并询问是否保存。
-     * @returns true 表示可以继续（无脏数据、用户选择不保存、或保存成功）
-     *          false 表示应中止（保存失败）
-     */
     async #confirmSaveIfDirty(): Promise<boolean> {
         if (!this.dirty) return true;
         if (this.#confirmPromise) return this.#confirmPromise;
@@ -351,7 +323,6 @@ class PacStore {
                     return await this.save();
                 }
 
-                // 用户选择不保存，允许继续（离开或切换文件）。
                 return true;
             } finally {
                 this.#confirmPromise = null;
@@ -361,7 +332,6 @@ class PacStore {
         return this.#confirmPromise;
     }
 
-    /** 重置所有状态，并取消进行中的 load。 */
     reset(): void {
         this.#requestId += 1;
         this.status = 'idle';

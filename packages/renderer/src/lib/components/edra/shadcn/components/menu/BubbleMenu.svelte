@@ -125,11 +125,18 @@
   {shouldShow}
   options={{
     shift: true,
+    strategy: "fixed",
     autoPlacement: {
       allowedPlacements: ["top", "top-end", "top-start"],
     },
-    strategy: "absolute",
-    scrollTarget: editor.view.dom.parentElement ?? window,
+    scrollTarget: window,
+    onShow: () => {
+      requestAnimationFrame(() => {
+        editor.view.dispatch(
+          editor.state.tr.setMeta("edra-bubble-menu", { updatePosition: true }),
+        );
+      });
+    },
   }}
   class={cn(
     "z-100 flex w-fit items-center rounded-lg border bg-popover",
@@ -158,29 +165,34 @@
     {:else if key === "alignment"}
       <AlignMent />
     {:else}
-      {#each group as command, idx (idx)}
-        {#if command.name === "paragraph"}
-          <span></span>
-          <!-- {:else if command.name === "link"}
-          <Link /> -->
-        {:else}
-          {@const Icon = command.icon}
-          <Tooltip tooltip={command.tooltip} shortCut={command.shortCut ?? ""}>
-            <Button
-              variant="ghost"
-              size="icon"
-              class={cn(isActive(command) && "bg-muted text-primary")}
-              disabled={!isClickable(command)}
-              onclick={() => {
-                command.onClick?.(editor);
-              }}
+      {@const visibleCommands = group.filter((command) => isClickable(command))}
+      {#if visibleCommands.length > 0}
+        {#each visibleCommands as command (command.name)}
+          {#if command.name === "paragraph"}
+            <span></span>
+            <!-- {:else if command.name === "link"}
+            <Link /> -->
+          {:else}
+            {@const Icon = command.icon}
+            <Tooltip
+              tooltip={command.tooltip}
+              shortCut={command.shortCut ?? ""}
             >
-              <Icon />
-            </Button>
-          </Tooltip>
-        {/if}
-      {/each}
-      <Separator orientation="vertical" class="h-4!" />
+              <Button
+                variant="ghost"
+                size="icon"
+                class={cn(isActive(command) && "bg-muted text-primary")}
+                onclick={() => {
+                  command.onClick?.(editor);
+                }}
+              >
+                <Icon />
+              </Button>
+            </Tooltip>
+          {/if}
+        {/each}
+        <Separator orientation="vertical" class="h-4!" />
+      {/if}
     {/if}
   {/each}
   <!-- <FontSize />

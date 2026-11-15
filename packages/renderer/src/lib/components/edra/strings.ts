@@ -47,7 +47,7 @@ const strings = {
 	},
 	editor: {
 		headingPlaceholder: '请输入标题',
-		paragraphPlaceholder: '输入内容，按空格唤起 AI，按 / 唤起命令',
+		paragraphPlaceholder: '输入内容，按 / 唤起命令',
 		contentErrorTitle: '无法加载内容',
 		contentErrorDescription: '此页面的内容可能已损坏。'
 	},

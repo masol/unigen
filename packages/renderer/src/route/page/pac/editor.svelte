@@ -11,29 +11,7 @@
   import PacEditorHeader from "./PacEditorHeader.svelte";
   import PacEditorLoading from "./PacEditorLoading.svelte";
 
-  /**
-   * Edra AI 助手回调。
-   *
-   * 当前后端尚未接入。先通过 toast 明确告知用户
-   * “AI 功能尚未支持”，同时通过 onError 回传给 Edra，
-   * 使其清理 AIHighlight mark 并结束生成流程。
-   *
-   * 固定 toast id：Space 触发的 autocompletion 可能高频调用本回调，
-   * sonner 会用相同 id 复用同一个 toast，避免刷屏。
-   */
-  // async function callAI(
-  //   _prompt: string,
-  //   _onChunk: (chunk: string) => void,
-  //   onError: (error: Error) => void,
-  // ): Promise<void> {
-  //   const error = new Error("AI 功能尚未支持");
-  //   log.warn("[PacEditor] callAI invoked, but AI backend is not configured");
-  //   toast.error(error.message, { id: "pac-editor-ai-not-supported" });
-  //   onError(error);
-  // }
-
   let editor: ReturnType<typeof createEditor> | undefined = createEditor({
-    // callAI,
     onUpdate: () => {
       if (!editor) return;
 
@@ -75,10 +53,6 @@
       void pacStore.save();
     }
   }
-
-  // 通过修改： packages/renderer/src/lib/components/edra/shadcn/components/Toolbar.svelte 来修改toolbar内容。
-  // packages/renderer/src/lib/components/edra/shadcn/components/menu/BubbleMenu.svelte 修改bubbleMenu.
-  // Editor的入口文件(下面的Edra)：packages/renderer/src/lib/components/edra/shadcn/index.ts
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -89,28 +63,34 @@
   {:else if pacStore.isError}
     <PacEditorError />
   {:else if editor}
-    <div class="flex h-full w-full flex-col overflow-hidden p-8">
-      <div class="min-h-0 flex-1 *:h-full">
-        <Edra {editor}>
-          <div class="flex h-full min-h-0 flex-col gap-4">
-            <PacEditorHeader>
-              {#snippet toolbar()}
-                <Edra.Toolbar
-                  class="max-w-full! shrink-0 justify-start overflow-x-auto scrollbar-none border-b-0 p-1"
-                  onSave={() => void pacStore.save()}
-                  canSave={pacStore.dirty}
-                  saving={pacStore.saving}
-                />
-              {/snippet}
-            </PacEditorHeader>
+    <!-- 全高 flex 容器：header 固定，正文独立滚动，无外层卡片 padding -->
+    <div class="flex h-full w-full flex-col overflow-hidden">
+      <Edra {editor}>
+        <!--
+          Header 与 Toolbar 的定制入口说明（请勿删除，便于后续维护）：
+          - Toolbar 内容与按钮：修改 packages/renderer/src/lib/components/edra/shadcn/components/Toolbar.svelte
+          - 气泡菜单（BubbleMenu）：修改 packages/renderer/src/lib/components/edra/shadcn/components/menu/BubbleMenu.svelte
+          - Edra 编辑器整体入口：packages/renderer/src/lib/components/edra/shadcn/index.ts
+        -->
+        <PacEditorHeader
+          class="shrink-0 border-b border-border/50 px-8 pt-4 pb-3"
+        >
+          {#snippet toolbar()}
+            <Edra.Toolbar
+              class="max-w-full! shrink-0 justify-start overflow-x-auto scrollbar-none border-b-0 p-0"
+              onSave={() => void pacStore.save()}
+              canSave={pacStore.dirty}
+              saving={pacStore.saving}
+            />
+          {/snippet}
+        </PacEditorHeader>
 
-            <PacEditorCanvas />
-          </div>
+        <!-- 正文区域：占满剩余高度，独立滚动 -->
+        <PacEditorCanvas class="min-h-0 flex-1 overflow-y-auto" />
 
-          <Edra.BubbleMenu />
-          <Edra.DragHandle />
-        </Edra>
-      </div>
+        <Edra.BubbleMenu />
+        <Edra.DragHandle />
+      </Edra>
     </div>
   {/if}
 </PageWrapper>

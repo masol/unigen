@@ -102,7 +102,10 @@
       <Button
         variant="ghost"
         size="icon"
-        class={cn(isActive(command) && "bg-muted text-primary")}
+        class={cn(
+          "disabled:opacity-40",
+          isActive(command) && "bg-muted text-primary",
+        )}
         disabled={!isClickable(command)}
         onclick={() => runCommand(command)}
       >
@@ -116,7 +119,10 @@
       <Button
         variant="ghost"
         size="icon"
-        class={cn("text-muted-foreground", canSave && "text-primary")}
+        class={cn(
+          "text-muted-foreground disabled:opacity-40",
+          canSave && "text-primary",
+        )}
         disabled={!canSave || saving}
         onclick={() => onSave?.()}
       >
@@ -154,7 +160,11 @@
         <Button
           variant="ghost"
           size="icon"
-          class={cn(isActive(command) && "bg-muted text-primary")}
+          aria-pressed={isActive(command)}
+          class={cn(
+            "disabled:opacity-40",
+            isActive(command) && "bg-muted text-primary",
+          )}
           disabled={!isClickable(command)}
           onclick={() => runCommand(command)}
         >

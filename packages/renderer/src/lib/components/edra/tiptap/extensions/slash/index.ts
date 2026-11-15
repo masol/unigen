@@ -20,13 +20,13 @@ interface Group {
 const GROUPS: Group[] = [
 	{
 		name: 'format',
-		title: 'Format',
+		title: '格式',
 		actions: [
 			...commands.headings,
 			{
 				icon: Quote,
 				name: 'blockquote',
-				tooltip: 'Blockquote',
+				tooltip: '引用',
 				onClick: (editor: Editor) => {
 					editor.chain().focus().setBlockquote().run();
 				}
@@ -34,7 +34,7 @@ const GROUPS: Group[] = [
 			{
 				icon: SquareCode,
 				name: 'codeBlock',
-				tooltip: 'Code Block',
+				tooltip: '代码块',
 				onClick: (editor: Editor) => {
 					editor.chain().focus().setCodeBlock().run();
 				}
@@ -44,7 +44,7 @@ const GROUPS: Group[] = [
 	},
 	{
 		name: 'insert',
-		title: 'Insert',
+		title: '插入',
 		actions: [
 			// ...commands.media,
 			...commands.table,
@@ -53,7 +53,7 @@ const GROUPS: Group[] = [
 			{
 				icon: Minus,
 				name: 'horizontalRule',
-				tooltip: 'Horizontal Rule',
+				tooltip: '水平线',
 				onClick: (editor: Editor) => {
 					editor.chain().focus().setHorizontalRule().run();
 				}
@@ -61,7 +61,7 @@ const GROUPS: Group[] = [
 			{
 				icon: Lightbulb,
 				name: 'callOut',
-				tooltip: 'Callout',
+				tooltip: '标注',
 				onClick: (editor: Editor) => {
 					editor.chain().focus().setCallout().run();
 				}
