@@ -2,8 +2,8 @@
 <script lang="ts">
   import { Switch } from "$lib/components/ui/switch";
   import { modelConfigStore } from "$lib/store/local/model-config.store.svelte";
+  import { location, push } from "@keenmate/svelte-spa-router";
   import { onMount } from "svelte";
-  import { push, router } from "svelte-spa-router";
   import DebouncedNumberInput from "./DebouncedNumberInput.svelte";
   import { NAV_SECTIONS } from "./model-config.types";
   import ModelConfigSection from "./ModelConfigSection.svelte";
@@ -33,7 +33,7 @@
   }
 
   onMount(() => {
-    if (router.location !== "/") {
+    if (location() !== "/") {
       push("/");
     }
   });

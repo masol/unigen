@@ -4,6 +4,7 @@
   import { Separator } from "$lib/components/ui/separator";
   import { PinyinFuseSearch } from "$lib/utils/fuse";
   import autoAnimate from "@formkit/auto-animate";
+  import { location, push } from "@keenmate/svelte-spa-router";
   import {
     IconBooks,
     IconBrain,
@@ -15,10 +16,9 @@
     IconPlugConnected,
     IconSettings,
     IconSettingsOff,
-    IconSparkles
+    IconSparkles,
   } from "@tabler/icons-svelte";
   import { debounce } from "radashi";
-  import { push, router } from "svelte-spa-router";
   import { settingsPanelStore } from "./settingStore.svelte";
 
   /* ------------------------------------------------------------------ */
@@ -270,7 +270,7 @@
   /*  Derived — Route-based active state                                 */
   /* ------------------------------------------------------------------ */
 
-  const currentLocation = $derived(router.location);
+  const currentLocation = $derived(location());
 
   /** Extract the sub-path after /settings/ */
   let activePath = $derived.by((): string => {

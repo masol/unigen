@@ -4,6 +4,7 @@
   import { projectStore } from "$lib/store/project.svelte";
   import { commandCenter } from "$lib/utils/commands/center";
   import { PinyinFuseSearch } from "$lib/utils/fuse";
+  import { location, push } from "@keenmate/svelte-spa-router";
   import {
     IconArrowDown,
     IconArrowLeft,
@@ -17,7 +18,6 @@
   import hotkeys from "hotkeys-js";
   import { debounce } from "radashi";
   import { onDestroy, onMount, tick } from "svelte";
-  import { push, router } from "svelte-spa-router";
   import { quintOut } from "svelte/easing";
   import { fade, scale } from "svelte/transition";
 
@@ -34,7 +34,7 @@
   let selectedIndex = $state(0);
   let inputEl: HTMLInputElement | undefined = $state();
 
-  const currentLocation = $derived(router.location);
+  const currentLocation = $derived(location());
   const isNotHome = $derived(currentLocation !== "/");
 
   // 使用 Navigation API 管理导航状态

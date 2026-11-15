@@ -6,6 +6,7 @@
   import { bottomPanelStore } from "$lib/store/local/bottombar.store.svelte.js";
   import { confirmStore } from "$lib/store/ui/confirm.svelte.js";
   import { layoutStore } from "$lib/store/ui/layout.svelte.js";
+  import { push } from "@keenmate/svelte-spa-router";
   import {
     IconDotsVertical,
     IconEdit,
@@ -13,7 +14,6 @@
     IconSparkleHighlight,
     IconTrash,
   } from "@tabler/icons-svelte";
-  import { push } from "svelte-spa-router";
   import { flowStore } from "../../../page/flow/store.svelte.js";
   import { blueprintStore, type BlueprintTerm } from "./store.svelte.js";
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as Tooltip from "$lib/components/ui/tooltip";
-  import { push } from "svelte-spa-router";
+  import { push } from "@keenmate/svelte-spa-router";
 
   const handleClick = () => {
     push("/");

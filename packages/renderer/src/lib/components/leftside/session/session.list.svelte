@@ -11,7 +11,7 @@
   import SessionItem from "./session.item.svelte";
   import SessionSkeleton from "./session.skeleton.svelte";
 
-  import { push, router } from "svelte-spa-router";
+  import { location, push } from "@keenmate/svelte-spa-router";
 
   type VirtualListItem =
     | { type: "group"; data: TimeGroup }
@@ -49,7 +49,7 @@
   }
 
   onMount(() => {
-    if (router.location !== "/") {
+    if (location() !== "/") {
       push("/");
     }
   });

@@ -10,14 +10,10 @@
     IconLoader2,
     IconRefresh,
   } from "@tabler/icons-svelte";
-  import { onMount, tick } from "svelte";
+  import { tick } from "svelte";
   import { promptCreateName } from "./file.prompt";
   import { fileStore } from "./file.store.svelte";
   import FileTreeNode from "./file.tree-node.svelte";
-
-  onMount(() => {
-    fileStore.load();
-  });
 
   let creatingIndex = $state(false);
 

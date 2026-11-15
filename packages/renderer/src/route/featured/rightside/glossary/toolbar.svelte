@@ -3,10 +3,10 @@
   import PromptDialog from "$lib/components/dialog/Prompt.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
+  import { push } from "@keenmate/svelte-spa-router";
   import { IconPlus, IconRefresh } from "@tabler/icons-svelte";
   import Logger from "electron-log/renderer";
   import { debounce, getErrorMessage } from "radashi";
-  import { push } from "svelte-spa-router";
   import BlueprintSwitcher from "./blueprint-switcher.svelte";
   import NameFilterCombobox from "./name-filter-combobox.svelte";
   import { blueprintStore } from "./store.svelte.js";

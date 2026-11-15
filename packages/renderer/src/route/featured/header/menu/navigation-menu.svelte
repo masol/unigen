@@ -4,12 +4,12 @@
 <!-- ╰─────────────────────────────────────────────────────────╯ -->
 <script lang="ts">
   import * as Menubar from "$lib/components/ui/menubar";
+  import { push } from "@keenmate/svelte-spa-router";
   import {
     IconArrowLeft,
     IconArrowRight,
     IconHome2,
   } from "@tabler/icons-svelte";
-  import { push } from "svelte-spa-router";
   import MenuShortcut from "./menu-shortcut.svelte";
 </script>
 

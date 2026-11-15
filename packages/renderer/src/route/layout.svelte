@@ -4,7 +4,7 @@
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { layoutStore } from "$lib/store/ui/layout.svelte";
   import { routerStore } from "$lib/store/ui/route.svelte";
-  import Router from "svelte-spa-router";
+  import { Router } from "@keenmate/svelte-spa-router";
   import ActivityBar from "./featured/activity.svelte";
   import BottomBar from "./featured/bottom/bar.svelte";
   import HeaderBar from "./featured/header-bar.svelte";

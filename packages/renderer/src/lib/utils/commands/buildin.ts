@@ -6,7 +6,7 @@ import type { CommandDescriptor } from "./type";
 
 import {
     push
-} from "svelte-spa-router";
+} from "@keenmate/svelte-spa-router";
 
 export const builtins: CommandDescriptor[] = [
     // ── 命令中心 ──

@@ -7,7 +7,7 @@
   import { layoutStore } from "$lib/store/ui/layout.svelte";
   import { tourStore } from "$lib/store/ui/tour.svelte";
   import { delay } from "$lib/utils/promise";
-  import { push } from "svelte-spa-router";
+  import { push } from "@keenmate/svelte-spa-router";
 
   const SettingId = "settings";
   const steps: Step[] = [

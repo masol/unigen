@@ -17,6 +17,7 @@ import type {
     SizeEstimateT
 } from '@app/main/types';
 import dagre from '@dagrejs/dagre';
+import { push } from "@keenmate/svelte-spa-router";
 import {
     IconAdjustmentsCog,
     IconArrowMerge,
@@ -39,7 +40,6 @@ import {
 import type { Edge as XYEdge, Node as XYNode } from '@xyflow/svelte';
 import DirectedGraph from 'graphology';
 import { toast } from 'svelte-sonner';
-import { push } from "svelte-spa-router";
 import { messageStore } from '../../../lib/store/local/msg.svelte';
 import { pureInput } from './storeHelper';
 

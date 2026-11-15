@@ -5,12 +5,12 @@
   import * as Card from "$lib/components/ui/card";
   import { Slider } from "$lib/components/ui/slider";
   import { Textarea } from "$lib/components/ui/textarea";
+  import { push } from "@keenmate/svelte-spa-router";
   import {
     IconArrowRight,
     IconLibrary,
     IconMoodSmile,
   } from "@tabler/icons-svelte";
-  import { push } from "svelte-spa-router";
   let raw = $state("IconRocket");
   let size = $state([96]);
   const resolved = $derived(resolveIcon(raw));

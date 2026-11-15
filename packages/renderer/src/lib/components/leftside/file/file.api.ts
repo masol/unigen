@@ -1,4 +1,5 @@
-import type { FileNode } from './file.types';
+import { safeApi } from '$lib/utils/api';
+import type { FileDocument, FileNode } from './file.types';
 
 const MOCK_TREE: FileNode = {
     id: 'root',
@@ -17,7 +18,6 @@ const MOCK_TREE: FileNode = {
                     name: 'assistant.md',
                     type: 'file',
                     path: '/system/assistant.md',
-                    content: '# Assistant Prompt\n\nYou are a helpful assistant.',
                     updatedAt: Date.now() - 86_400_000,
                 },
                 {
@@ -25,7 +25,6 @@ const MOCK_TREE: FileNode = {
                     name: 'coder.md',
                     type: 'file',
                     path: '/system/coder.md',
-                    content: '# Coder Prompt\n\nYou are a senior engineer.',
                     updatedAt: Date.now() - 172_800_000,
                 },
             ],
@@ -41,7 +40,6 @@ const MOCK_TREE: FileNode = {
                     name: 'writing.md',
                     type: 'file',
                     path: '/user/writing.md',
-                    content: '# Writing Prompt\n\nYou are a creative writer.',
                     updatedAt: Date.now() - 3_600_000,
                 },
             ],
@@ -51,34 +49,33 @@ const MOCK_TREE: FileNode = {
             name: 'README.md',
             type: 'file',
             path: '/README.md',
-            content: '# Prompts\n\nManage your prompt files here.',
             updatedAt: Date.now() - 7_200_000,
         },
     ],
 };
 
-function clone<T>(v: T): T {
-    return JSON.parse(JSON.stringify(v));
-}
+// function clone<T>(v: T): T {
+//     return JSON.parse(JSON.stringify(v));
+// }
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function fetchFileTree(): Promise<FileNode> {
-    await delay(800);
-    return clone(MOCK_TREE);
+    return await safeApi().project.listPacTree();
 }
 
-export async function reloadFileTree(): Promise<FileNode> {
-    await delay(600);
-    return clone(MOCK_TREE);
-}
-
-export async function openFileApi(node: FileNode): Promise<FileNode> {
+export async function openFileApi(node: FileNode): Promise<FileDocument> {
     await delay(450);
     if (node.type !== 'file') {
         throw new Error('Only files can be opened');
     }
-    return clone(node);
+    // mock：空 front-matter + 默认正文；实际由服务端 readPacFile 提供。
+    return {
+        path: node.path,
+        meta: {},
+        content: `# ${node.name}\n`,
+        updatedAt: node.updatedAt,
+    };
 }
 
 export async function createFileApi(
@@ -91,7 +88,6 @@ export async function createFileApi(
         name,
         type: 'file',
         path: `${parentPath === '/' ? '' : parentPath}/${name}`,
-        content: '',
         updatedAt: Date.now(),
     };
 }

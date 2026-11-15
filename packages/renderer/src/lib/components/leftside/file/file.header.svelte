@@ -4,11 +4,11 @@
   import {
     IconFilePlus,
     IconFolderPlus,
-    IconLoader2,
     IconPlus,
     IconRefresh,
+    IconReload,
     IconSearch,
-    IconX,
+    IconX
   } from "@tabler/icons-svelte";
   import { untrack } from "svelte";
   import { promptCreateName } from "./file.prompt";
@@ -77,7 +77,7 @@
   }
 
   async function handleReload() {
-    await fileStore.reload();
+    // await fileStore.reload();
   }
 
   async function handleCreateFile() {
@@ -131,14 +131,14 @@
   <Button
     variant="ghost"
     size="icon"
-    title="重新加载"
-    aria-label="重新加载文件树"
+    title="为AI加载最新指南"
+    aria-label="为AI加载最新指南"
     disabled={fileStore.isLoading}
     class="size-7 shrink-0 rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground"
     onclick={handleReload}
   >
     {#if fileStore.isLoading}
-      <IconLoader2 class="size-4 animate-spin" stroke={1.5} />
+      <IconReload class="size-4 animate-spin" stroke={1.5} />
     {:else}
       <IconRefresh class="size-4" stroke={1.5} />
     {/if}

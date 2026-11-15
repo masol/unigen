@@ -1,13 +1,16 @@
 import type { Extensions } from '@tiptap/core';
-import StarterKit from '@tiptap/starter-kit';
-import { CharacterCount, Placeholder } from '@tiptap/extensions';
-import strings from './strings.ts';
 import Highlight from '@tiptap/extension-highlight';
+import { TaskItem, TaskList } from '@tiptap/extension-list';
+import Mathematics from '@tiptap/extension-mathematics';
+import Subscript from '@tiptap/extension-subscript';
+import SuperScript from '@tiptap/extension-superscript';
+import TextAlign from '@tiptap/extension-text-align';
 import { Color, FontSize, TextStyle } from '@tiptap/extension-text-style';
 import Typography from '@tiptap/extension-typography';
-import Subscript from '@tiptap/extension-subscript';
-import TextAlign from '@tiptap/extension-text-align';
-import SuperScript from '@tiptap/extension-superscript';
+import { CharacterCount, Placeholder } from '@tiptap/extensions';
+import { Markdown } from '@tiptap/markdown';
+import StarterKit from '@tiptap/starter-kit';
+import strings from './strings.js';
 import {
 	Audio,
 	ColorHighlighter,
@@ -16,10 +19,7 @@ import {
 	TableCell,
 	TableHeader,
 	TableRow
-} from './tiptap/index.ts';
-import { TaskItem, TaskList } from '@tiptap/extension-list';
-import { Markdown } from '@tiptap/markdown';
-import Mathematics from '@tiptap/extension-mathematics';
+} from './tiptap/index.js';
 
 export interface DefaultExtensionsOptions {
 	/** Whether to enable history (undo/redo). Disabled for collaboration (Yjs) */

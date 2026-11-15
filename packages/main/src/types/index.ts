@@ -10,6 +10,7 @@ export type {
 export type { AppClient, NotifyContract } from './shared/api/index.js'
 export type { KbCollection, KbCollectionInput, KbDoc, KbDocStatus, KnowledgeBaseSearchItem } from './shared/api/kb.js'
 export type { BlueprintKind } from './shared/api/list.js'
+export type { PacFileDocument, PacNode } from './shared/api/pac.js'
 export type { RecentProject } from './shared/api/recents.js'
 export type { RunnerParam } from './shared/api/runner.js'
 export type { SkillSearchItem } from './shared/api/skill.js'

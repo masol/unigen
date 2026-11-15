@@ -1,12 +1,12 @@
 <script lang="ts">
   // ── Tabler Icons ──
+  import { location } from "@keenmate/svelte-spa-router";
   import {
     IconAlertTriangle,
     IconCircleCheck,
     IconFolder,
     IconMail,
   } from "@tabler/icons-svelte";
-  import { router } from "svelte-spa-router";
 // ── Stores ──
   import { projectStore } from "$lib/store/project.svelte";
   // ── Sub-views ──
@@ -15,7 +15,6 @@
   import { onMount } from "svelte";
   import EditorStatusBar from "../page/editor/EditorStatusBar.svelte";
   import FlowStatusBar from "../page/flow/FlowStatusBar.svelte";
-
 
   // ═══════════════════════════════════════════════════════════
   // App meta — 软件名 / 版本号 / 作者 / 联系邮箱
@@ -33,7 +32,7 @@
   // ═══════════════════════════════════════════════════════════
   // Location → 决定使用哪套状态栏
   // ═══════════════════════════════════════════════════════════
-  const currentLocation = $derived(router.location);
+  const currentLocation = $derived(location());
 
   type StatusCompType = "normal" | "editor" | "flow";
 

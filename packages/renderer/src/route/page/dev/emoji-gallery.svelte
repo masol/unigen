@@ -4,6 +4,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { push } from "@keenmate/svelte-spa-router";
   import {
     IconArrowRight,
     IconCheck,
@@ -13,7 +14,6 @@
     IconX,
   } from "@tabler/icons-svelte";
   import { debounce } from "radashi";
-  import { push } from "svelte-spa-router";
   let query = $state("");
   let debouncedQuery = $state("");
   let copied = $state<string | null>(null);

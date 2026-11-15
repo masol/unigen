@@ -2,16 +2,18 @@
 
 import log from "electron-log/renderer";
 import type { Component } from "svelte";
+// 改动1：wrap 的导入路径更新为新包
 import {
     wrap,
-    type AsyncSvelteComponent, // 懒加载 loader 标准类型
-} from "svelte-spa-router/wrap";
+    type WrapOptions, // 懒加载 loader 标准类型
+} from "@keenmate/svelte-spa-router/wrap";
 import EmojiGallery from '../../../route/page/dev/emoji-gallery.svelte';
 import IconGallery from '../../../route/page/dev/icon-gallery.svelte';
 import IconPlayground from "../../../route/page/dev/icon-playground.svelte";
 import EditorPage from '../../../route/page/editor/EditorPage.svelte';
 import FallbackComponent from "../../../route/page/fallback/Main.svelte";
 import FlowPage from "../../../route/page/flow/FlowPage.svelte";
+import PacEditor from '../../../route/page/pac/editor.svelte';
 import DevSetting from "../../../route/page/settings/develops/DevSettingsPanel.svelte";
 import GeneralSetting from "../../../route/page/settings/general/general.svelte";
 import KbSetting from '../../../route/page/settings/kb/kb.svelte';
@@ -23,8 +25,10 @@ import MCPSearchSetting from '../../../route/page/settings/search/search.svelte'
 import SkillSetting from '../../../route/page/settings/skill/skill.svelte';
 
 // ── 类型 ──
+type LazyLoader = NonNullable<WrapOptions['asyncComponent']>;
 
-/** svelte-spa-router 路由值：普通组件 或 wrap() 返回的包装对象 */
+
+/** 路由值：普通组件 或 wrap() 返回的包装对象 */
 type RouteDefinitionValue = Component | ReturnType<typeof wrap>;
 
 /** 路由表：路径 → 组件 */
@@ -42,7 +46,7 @@ class RouterStore {
     // ── 私有状态 ──
 
     /**
-     * 路由表 — 整体替换触发 svelte-spa-router 重渲染 → $state.raw
+     * 路由表 — 整体替换触发重渲染 → $state.raw
      * 初始即包含 fallback '*'
      */
     #routes: RouteMap = $state.raw({
@@ -56,6 +60,7 @@ class RouterStore {
         "/settings/keybindings": Keybindings,
         "/settings/projectype": ProjectTypeManager,
         '/flow/view/:id': FlowPage,
+        '/paceditor': PacEditor,
         // content 为可选查询/路径参数
         '/editor/:kind/:id': EditorPage,
         '/editor/:kind/:id/:content?': EditorPage,
@@ -115,7 +120,7 @@ class RouterStore {
      * @param loader 动态导入函数，如 () => import('./pages/Foo.svelte')
      * @returns true 成功，false 路径已存在
      */
-    addLazyRoute(path: string, loader: AsyncSvelteComponent): boolean {
+    addLazyRoute(path: string, loader: LazyLoader): boolean {
         log.debug(`[RouterStore] addLazyRoute(), path=${path}`);
 
         if (this.#routes[path]) {
@@ -125,7 +130,7 @@ class RouterStore {
             return false;
         }
 
-        // 不再粗暴断言 object，完全匹配 WrapOptions.asyncComponent 类型
+        // 改动2：wrap({ asyncComponent: loader }) 用法不变，完全兼容
         const wrapped = wrap({ asyncComponent: loader });
         this.#routes = { ...this.#routes, [path]: wrapped };
         log.info(

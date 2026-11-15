@@ -1,16 +1,14 @@
+import { FileCode } from '@lucide/svelte';
 import AlignCenter from '@lucide/svelte/icons/align-center';
 import AlighJustify from '@lucide/svelte/icons/align-justify';
 import AlignLeft from '@lucide/svelte/icons/align-left';
 import AlignRight from '@lucide/svelte/icons/align-right';
-import Audio from '@lucide/svelte/icons/audio-lines';
 import Bold from '@lucide/svelte/icons/bold';
 import Code from '@lucide/svelte/icons/code';
-import IFrame from '@lucide/svelte/icons/code-xml';
 import Heading1 from '@lucide/svelte/icons/heading-1';
 import Heading2 from '@lucide/svelte/icons/heading-2';
 import Heading3 from '@lucide/svelte/icons/heading-3';
 import Heading4 from '@lucide/svelte/icons/heading-4';
-import Image from '@lucide/svelte/icons/image';
 import Italic from '@lucide/svelte/icons/italic';
 import Link from '@lucide/svelte/icons/link-2';
 import List from '@lucide/svelte/icons/list';
@@ -27,18 +25,16 @@ import Superscript from '@lucide/svelte/icons/superscript';
 import Table from '@lucide/svelte/icons/table';
 import Underline from '@lucide/svelte/icons/underline';
 import Undo from '@lucide/svelte/icons/undo-2';
-import Video from '@lucide/svelte/icons/video';
+import Workflow from '@lucide/svelte/icons/workflow';
 import { isTextSelection } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import { ISMAC } from '../utils.js';
 import strings from '../strings.js';
-import { type Editor } from '../tiptap/index.ts';
-import { FileCode, type Icon } from '@lucide/svelte';
-import Workflow from '@lucide/svelte/icons/workflow';
+import { type Editor } from '../tiptap/index';
+import { ISMAC } from '../utils.js';
 
 export interface EdraCommand {
 	name: string;
-	icon: typeof Icon;
+	icon: typeof Undo;
 	tooltip: string;
 	shortCut?: string;
 	onClick?: (editor: Editor) => void;
@@ -170,7 +166,7 @@ export const commands: Record<string, EdraCommand[]> = {
 		{
 			icon: Pilcrow,
 			name: 'paragraph',
-			tooltip: 'Paragraph',
+			tooltip: strings.command.paragraph,
 			shortCut: `${ISMAC ? '⌘⇧' : 'Ctrl+Shift+'}0`,
 			onClick: (editor) => {
 				editor.chain().focus().setParagraph().run();
@@ -459,44 +455,8 @@ export const commands: Record<string, EdraCommand[]> = {
 			}
 		}
 	],
-	media: [
-		{
-			icon: Image,
-			name: 'image-placeholder',
-			tooltip: strings.command.imagePlaceholder,
-			onClick: (editor) => {
-				editor.chain().focus().insertMediaPlaceholder({ mediaType: 'image' }).run();
-			},
-			isActive: (editor) => editor.isActive('mediaPlaceholder', { mediaType: 'image' })
-		},
-		{
-			icon: Video,
-			name: 'video-placeholder',
-			tooltip: strings.command.videoPlaceholder,
-			onClick: (editor) => {
-				editor.chain().focus().insertMediaPlaceholder({ mediaType: 'video' }).run();
-			},
-			isActive: (editor) => editor.isActive('mediaPlaceholder', { mediaType: 'video' })
-		},
-		{
-			icon: Audio,
-			name: 'audio-placeholder',
-			tooltip: strings.command.audioPlaceholder,
-			onClick: (editor) => {
-				editor.chain().focus().insertMediaPlaceholder({ mediaType: 'audio' }).run();
-			},
-			isActive: (editor) => editor.isActive('mediaPlaceholder', { mediaType: 'audio' })
-		},
-		{
-			icon: IFrame,
-			name: 'iframe-placeholder',
-			tooltip: strings.command.iframePlaceholder,
-			onClick: (editor) => {
-				editor.chain().focus().insertMediaPlaceholder({ mediaType: 'iframe' }).run();
-			},
-			isActive: (editor) => editor.isActive('mediaPlaceholder', { mediaType: 'iframe' })
-		}
-	],
+	// Prompt 编辑器不需要媒体插入：保留键位为空数组，避免其他模块遍历时报 not iterable。
+	media: [],
 	table: [
 		{
 			icon: Table,
@@ -547,7 +507,7 @@ export const commands: Record<string, EdraCommand[]> = {
 		{
 			icon: Workflow,
 			name: 'mermaid',
-			tooltip: 'Mermaid Diagram',
+			tooltip: strings.command.mermaidDiagram,
 			onClick: (editor) => {
 				editor.chain().focus().setMermaid(' ').run();
 			},
