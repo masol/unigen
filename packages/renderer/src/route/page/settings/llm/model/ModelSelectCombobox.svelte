@@ -1,5 +1,6 @@
 <!-- ModelSelectCombobox.svelte -->
 <script lang="ts">
+  import { Button } from "$lib/components/ui/button";
   import * as Command from "$lib/components/ui/command";
   import * as Popover from "$lib/components/ui/popover";
   import { cn } from "$lib/utils";
@@ -50,13 +51,10 @@
   let fetchedOptions = $state<ModelOption[]>([]);
   let internalLoading = $state(false);
   let internalFailed = $state(false);
-
-  $effect(() => {
-    if (hasExplicitOptions) return; // 显式传入时跳过内部 fetch
-    void loadInternal();
-  });
+  let internalAttempted = $state(false);
 
   async function loadInternal() {
+    if (internalLoading) return;
     internalLoading = true;
     internalFailed = false;
     try {
@@ -67,6 +65,26 @@
     } finally {
       internalLoading = false;
     }
+  }
+
+  /** 首次打开下拉框时懒加载一次；失败/空列表都不自动重试。 */
+  function tryLoadOnce() {
+    if (hasExplicitOptions || internalAttempted || internalLoading) return;
+    internalAttempted = true;
+    void loadInternal();
+  }
+
+  /** 显式重试：重置 attempted 后重新拉取。 */
+  function retryLoadInternal() {
+    if (internalLoading) return;
+    internalAttempted = false;
+    void loadInternal();
+  }
+
+  /** Popover 受控 open 的唯一入口：打开时懒加载一次。 */
+  function handleOpenChange(next: boolean) {
+    open = next;
+    if (next) tryLoadOnce();
   }
 
   // —— 统一暴露给模板的派生值 ——
@@ -101,7 +119,7 @@
 </script>
 
 <div bind:clientWidth={triggerWidth}>
-  <Popover.Root bind:open>
+  <Popover.Root {open} onOpenChange={handleOpenChange}>
     <Popover.Trigger disabled={loading}>
       {#snippet child({ props })}
         <button
@@ -151,7 +169,7 @@
             {/if}
           {:else if failed}
             <span class="min-w-0 flex-1 text-left text-muted-foreground">
-              无法获取列表，可手动输入
+              无法获取列表，点开可重试
             </span>
           {:else}
             <span class="min-w-0 flex-1 text-left text-muted-foreground">
@@ -201,40 +219,66 @@
         </div>
 
         <Command.List class="max-h-72">
-          <Command.Empty>未找到匹配的模型</Command.Empty>
+          {#if loading}
+            <div
+              class="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"
+            >
+              <IconLoader2 size={16} stroke={1.5} class="animate-spin" />
+              正在获取可用模型…
+            </div>
+          {:else if failed}
+            <div class="flex flex-col items-center justify-center gap-2 py-8">
+              <IconAlertTriangle
+                size={18}
+                stroke={1.5}
+                class="text-amber-500"
+              />
+              <p class="text-sm text-muted-foreground">无法获取列表</p>
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-8 rounded-lg px-3 text-xs"
+                onclick={retryLoadInternal}
+              >
+                重试
+              </Button>
+            </div>
+          {:else}
+            <Command.Empty>未找到匹配的模型</Command.Empty>
 
-          {#each groups as group (group.heading)}
-            <Command.Group heading={group.heading || undefined}>
-              {#each group.items as option (option.id)}
-                <Command.Item
-                  value={option.id}
-                  keywords={[getLabel(option), option.description ?? ""]}
-                  onSelect={() => select(option)}
-                >
-                  <div class="min-w-0 flex-1 space-y-0.5">
-                    <p class="truncate text-sm font-medium">
-                      {getLabel(option)}
-                    </p>
-                    {#if option.description}
-                      <p class="truncate text-xs text-muted-foreground">
-                        {option.description}
+            {#each groups as group (group.heading)}
+              <Command.Group heading={group.heading || undefined}>
+                {#each group.items as option (option.id)}
+                  <Command.Item
+                    value={option.id}
+                    keywords={[getLabel(option), option.description ?? ""]}
+                    onSelect={() => select(option)}
+                  >
+                    <div class="min-w-0 flex-1 space-y-0.5">
+                      <p class="truncate text-sm font-medium">
+                        {getLabel(option)}
                       </p>
+                      {#if option.description}
+                        <p class="truncate text-xs text-muted-foreground">
+                          {option.description}
+                        </p>
+                      {/if}
+                    </div>
+                    {#if selectedId === option.id}
+                      <IconCheck
+                        size={16}
+                        stroke={1.5}
+                        class="ml-auto shrink-0 text-primary"
+                      />
                     {/if}
-                  </div>
-                  {#if selectedId === option.id}
-                    <IconCheck
-                      size={16}
-                      stroke={1.5}
-                      class="ml-auto shrink-0 text-primary"
-                    />
-                  {/if}
-                </Command.Item>
-              {/each}
-            </Command.Group>
-            {#if group !== groups[groups.length - 1]}
-              <Command.Separator />
-            {/if}
-          {/each}
+                  </Command.Item>
+                {/each}
+              </Command.Group>
+              {#if group !== groups[groups.length - 1]}
+                <Command.Separator />
+              {/if}
+            {/each}
+          {/if}
         </Command.List>
       </Command.Root>
     </Popover.Content>

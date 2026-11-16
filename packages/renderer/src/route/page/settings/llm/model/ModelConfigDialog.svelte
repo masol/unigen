@@ -142,8 +142,10 @@
   let fetchedModels = $state<ModelOption[]>([]);
   let isFetchingModels = $state(false);
   let fetchModelsFailed = $state(false);
+  let modelsLoadAttempted = $state(false);
 
   async function loadModels() {
+    if (isFetchingModels) return;
     isFetchingModels = true;
     fetchModelsFailed = false;
     try {
@@ -156,17 +158,25 @@
     }
   }
 
-  // 弹层打开且没有静态模型清单时触发 fetch
-  $effect(() => {
-    if (
-      modelDropdownOpen &&
-      !hasStaticModels &&
-      fetchedModels.length === 0 &&
-      !isFetchingModels
-    ) {
-      loadModels();
-    }
-  });
+  /** 首次打开下拉框时触发一次加载；失败/空列表都不自动重试。 */
+  function tryLoadOnce() {
+    if (hasStaticModels || modelsLoadAttempted || isFetchingModels) return;
+    modelsLoadAttempted = true;
+    void loadModels();
+  }
+
+  /** 显式重试：重置 attempted 后重新拉取。 */
+  function retryLoadModels() {
+    if (isFetchingModels) return;
+    modelsLoadAttempted = false;
+    void loadModels();
+  }
+
+  /** Popover 受控 open 的唯一入口：打开时懒加载一次。 */
+  function handleDropdownOpenChange(next: boolean) {
+    modelDropdownOpen = next;
+    if (next) tryLoadOnce();
+  }
 
   const modelOptions = $derived(
     hasStaticModels ? (staticModels as ModelOption[]) : fetchedModels,
@@ -207,7 +217,7 @@
     if (!info) return undefined;
     const ret: Preset = {
       abilities: info.abilities,
-      score: info.score || 50,
+      score: info.score ?? 50,
     };
     if (info.inctx) ret.inctx = info.inctx;
     if (info.outctx) ret.outctx = info.outctx;
@@ -320,7 +330,10 @@
     <div class="space-y-2">
       <Label for="dlg-model-id">模型标识 (ID)</Label>
       <div bind:clientWidth={triggerWidth} bind:clientHeight={triggerHeight}>
-        <Popover.Root bind:open={modelDropdownOpen}>
+        <Popover.Root
+          open={modelDropdownOpen}
+          onOpenChange={handleDropdownOpenChange}
+        >
           <Popover.Trigger>
             {#snippet child({ props })}
               <button
@@ -412,6 +425,14 @@
                     <p class="text-sm text-muted-foreground">
                       无法获取列表，可手动输入
                     </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="h-8 rounded-lg px-3 text-xs"
+                      onclick={retryLoadModels}
+                    >
+                      重试
+                    </Button>
                   </div>
                 {:else if modelOptions.length === 0 && id.trim() === ""}
                   <div class="py-6 text-center text-sm text-muted-foreground">

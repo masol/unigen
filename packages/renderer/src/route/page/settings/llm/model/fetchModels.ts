@@ -30,8 +30,8 @@ const memoizedFetch = pMemoize(fetchImpl, {
 export async function fetchAvailableModels(
     ctx: { baseUrl?: string; apiKey?: string },
 ): Promise<ModelOption[]> {
-    if (!ctx.baseUrl || !ctx.apiKey) {
-        throw new Error("试图获取模型，但是未给出baseUrl或者apiKey。");
+    if (!ctx.baseUrl) {
+        throw new Error("试图获取模型，但是未给出baseUrl。");
     }
-    return await memoizedFetch(ctx.baseUrl, ctx.apiKey);
+    return await memoizedFetch(ctx.baseUrl, ctx.apiKey ?? "");
 }
