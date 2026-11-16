@@ -1,10 +1,13 @@
+// packages/renderer/src/lib/components/leftside/file/file.store.svelte.ts
 import { pacStore } from "$lib/store/ui/pac.svelte";
 import { hooks } from "$lib/utils/hook";
 import log from 'electron-log/renderer';
+import { toast } from "svelte-sonner";
 import {
     createFileApi,
     createFolderApi,
     fetchFileTree,
+    reCompile,
     renameNodeApi,
 } from './file.api';
 import type { FileDocument, FileNode } from './file.types';
@@ -116,6 +119,24 @@ class FileStore {
 
     readonly hasSearch = $derived(this.#searchQuery.trim().length > 0);
 
+    /**
+     * 文件树中应显示为“已打开”的节点 id。
+     *
+     * 不能直接用 #openedFileId：离开 /paceditor 后 pacStore 仍保留当前文档，
+     * 但主界面已不在编辑器，文件树不应继续显示打开态。
+     * 该 derived 只影响展示，不改变 #openedFileId（编辑器/关闭流程仍使用原字段）。
+     */
+    readonly displayedOpenedFileId = $derived.by(() => {
+        const id = this.#openedFileId;
+        if (!id) return null;
+        if (!pacStore.isEditorRouteActive) return null;
+        if (pacStore.status !== 'ready') return null;
+        // FileNode.id 与 path 同为服务端路径；与 pacStore 当前文档对齐，
+        // 避免 fileStore/pacStore 短暂不同步时误显示。
+        if (pacStore.currentId !== id) return null;
+        return id;
+    });
+
     /** 该 folder 是否应在当前 reveal 中展开。 */
     shouldExpandFolder(path: string): boolean {
         return this.#revealPathChain.includes(path);
@@ -143,6 +164,28 @@ class FileStore {
         return (parent.children ?? []).some(
             (c) => (excludeId === null || c.id !== excludeId) && c.name === name,
         );
+    }
+
+    async reCompile(): Promise<boolean> {
+        this.#isLoading = true;
+        this.#error = null;
+        try {
+            const tree = await reCompile();
+            if (!tree) {
+                this.#error = '为AI加载工作指南失败';
+                return false;
+            }
+            toast.success("AI已加载最新工作指南")
+            this.#tree = tree;
+            log.info('[FileStore] reCompile');
+            return true;
+        } catch (err) {
+            this.#error = err instanceof Error ? err.message : String(err);
+            log.error('[FileStore] reCompile failed', err);
+            return false;
+        } finally {
+            this.#isLoading = false;
+        }
     }
 
     async reload(): Promise<boolean> {

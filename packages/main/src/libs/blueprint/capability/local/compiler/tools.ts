@@ -1,5 +1,6 @@
 import type { IProjectContext } from "$libs/project/type.js";
 import Logger from "electron-log/main.js";
+import { basename } from "node:path";
 import { loadExternalTools } from "../loader.js";
 import type {
     CompiledPacAgent,
@@ -18,8 +19,10 @@ export async function loadToolRefs(
     sourcePath: string,
     taken: Set<string>,
     compileSubAgent: CompileSubAgent,
+    isRoot: boolean,
 ): Promise<ToolRef[]> {
     const refs: ToolRef[] = [];
+    let failed = 0;
 
     for (const cfg of configs) {
         try {
@@ -58,11 +61,20 @@ export async function loadToolRefs(
                 refs.push({ key, origin, meta, agent: null, declaredAs: cfg });
             }
         } catch (e) {
-            Logger.error(
+            failed++;
+            Logger.warn(
                 `[PAC] ${sourcePath}: 加载工具失败 ${JSON.stringify(cfg)}`,
                 e,
             );
         }
+    }
+
+    // 只在根 agent 编译时通知用户，避免子 agent 逐个弹 toast。
+    if (failed > 0 && isRoot) {
+        prj.notify("toast", {
+            type: "warning",
+            msg: `${basename(sourcePath)}: ${failed} 个工具加载失败，已跳过`,
+        });
     }
 
     return refs;

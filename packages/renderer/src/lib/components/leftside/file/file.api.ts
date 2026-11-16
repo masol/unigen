@@ -5,6 +5,12 @@ export async function fetchFileTree(): Promise<FileNode | null> {
     return (await safeApi().project.listPacTree()) ?? null;
 }
 
+
+export async function reCompile(): Promise<FileNode | null> {
+    return (await safeApi().project.reCompile()) ?? null;
+}
+
+
 export async function readFileApi(path: string): Promise<FileDocument | null> {
     return (await safeApi().project.readPacFile({ path })) ?? null;
 }

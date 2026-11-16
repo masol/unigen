@@ -70,8 +70,8 @@
     fileStore.clearSearch();
   }
 
-  async function handleReload() {
-    await fileStore.reload();
+  async function handleRecompile() {
+    await fileStore.reCompile();
   }
 </script>
 
@@ -117,7 +117,7 @@
     aria-label="为AI加载最新指南"
     disabled={fileStore.isLoading}
     class="size-7 shrink-0 rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground"
-    onclick={handleReload}
+    onclick={handleRecompile}
   >
     {#if fileStore.isLoading}
       <IconReload class="size-4 animate-spin" stroke={1.5} />

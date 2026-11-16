@@ -1,5 +1,6 @@
 import type { IProjectContext } from "$libs/project/type.js";
 import { throwPrecondition } from "$libs/utils/err.js";
+import Logger from "electron-log/main.js";
 import { pathExists } from "fs-extra";
 import type { CompileCache, CompiledPacAgent } from "../type.js";
 import { compileFile } from "./agent.js";
@@ -48,7 +49,17 @@ export async function compilePacAgent(
         throwPrecondition(`[PAC] 编译需要 prj（运行期上下文或编译期参数）`);
     }
 
-    return compileFile(cc, entry, prj);
+    try {
+        return await compileFile(cc, entry, prj);
+    } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e);
+        Logger.warn(`[PAC] 编译入口失败，降级为直通 agent: ${detail}`);
+        prj.notify("toast", {
+            type: "warning",
+            msg: "Agent 编译失败，已降级为直通模式",
+        });
+        return buildPassthroughAgent(prjType, entry.slice(0, -1));
+    }
 }
 
 export {

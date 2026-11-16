@@ -31,6 +31,7 @@ export class ProjectContainer implements IProjectContext {
     #wid = -1;
     #prjId = -1; // used for ProjectMananger(not for controller).
     #agent: PACFunctor | null = null;  // 本地Agent,在项目打开或新建时创建，可以随时刷新。
+    #compilePromise: Promise<void> | null = null; // 当前正在执行的 Agent 编译任务。
 
     // 在构造容器时初始化全部IProjectController(某个具体的剖面)
     constructor(wid: number, prjId: number) {
@@ -65,12 +66,39 @@ export class ProjectContainer implements IProjectContext {
         return this.#agent?.hasAgent ? this.#agent : null;
     }
 
-    async reloadAgent(): Promise<void>  // 重新加载本地Agent.
+    async reloadAgent(bForce = false): Promise<void>  // 重新加载本地Agent.
     {
+        if (!bForce) {
+            if (this.#compilePromise && this.#agent) {
+                return this.#compilePromise;
+            }
+            return this.#startCompile();
+        }
+
+        // 强制刷新：等待调用时已存在的编译，以及等待期间新排入的编译，
+        // 然后再基于最新文件发起一次新的编译。
+        while (this.#compilePromise) {
+            await this.#compilePromise.catch(() => undefined);
+        }
+
+        // 强制刷新必须替换旧的 Agent 实例；否则 #startCompile 会复用旧对象，
+        // 无法确保 compile 基于最新文件和新实例执行。
+        this.#agent = null;
+        return this.#startCompile();
+    }
+
+    #startCompile(): Promise<void> {
         if (!this.#agent) {
             this.#agent = new PACFunctor(this.#type, [MetaDirname, AgentDirName, 'index.md']);
         }
-        return await this.#agent.compile(this);
+
+        const compilePromise = this.#agent.compile(this).finally(() => {
+            if (this.#compilePromise === compilePromise) {
+                this.#compilePromise = null;
+            }
+        });
+        this.#compilePromise = compilePromise;
+        return compilePromise;
     }
 
     getCmd(cmdName: string): ICapaFunctor | null {

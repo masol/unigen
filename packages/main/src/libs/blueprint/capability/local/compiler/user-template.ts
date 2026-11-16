@@ -8,6 +8,7 @@ import type { JsonValue, PacFrontMatter } from "../type.js";
 import { resolveProjectPath } from "./paths.js";
 
 const USER_TEMPLATE_FM_ALLOWED = new Set(["setDefault"]);
+const FALLBACK_TEMPLATE = `{{${INPUT_VAR}}}`;
 
 export async function resolveUserTemplate(
     fm: PacFrontMatter,
@@ -38,15 +39,27 @@ export async function resolveUserTemplate(
         try {
             raw = await fs.readFile(resolved.abs, "utf-8");
         } catch (e) {
-            throwPrecondition(
-                `[PAC] 读取 userTemplatePath 失败 ${path}: ` +
-                `${e instanceof Error ? e.message : String(e)} (${sourcePath})`,
+            Logger.warn(
+                `[PAC] 读取 userTemplatePath 失败，回退 ${FALLBACK_TEMPLATE}: ${path} ` +
+                `(${e instanceof Error ? e.message : String(e)}) (${sourcePath})`,
             );
-            return { template: "", extraDefaults: {} };
+            return { template: FALLBACK_TEMPLATE, extraDefaults: {} };
         }
 
-        const parsed = matter(raw) as { data: Record<string, unknown>; content: string };
-        const utFm = structuredClone(parsed.data ?? {});
+        let utFm: Record<string, unknown> = {};
+        let content = raw;
+
+        try {
+            const parsed = matter(raw) as { data: Record<string, unknown>; content: string };
+            utFm = structuredClone(parsed.data ?? {});
+            content = parsed.content ?? "";
+        } catch (e) {
+            Logger.warn(
+                `[PAC] 用户模板 front matter 解析失败，已忽略: ${path} ` +
+                `(${e instanceof Error ? e.message : String(e)})`,
+            );
+        }
+
         const extraDefaults: Record<string, JsonValue> = {};
         const relAbs = resolved.segments.slice(rootBase.length).join("/");
 
@@ -67,14 +80,16 @@ export async function resolveUserTemplate(
             }
         }
 
-        const tpl = (parsed.content ?? "").trim();
+        const tpl = content.trim();
         if (tpl.length === 0) {
-            throwPrecondition(
-                `[PAC] userTemplatePath 文件正文为空 ${path} (${sourcePath})`,
+            Logger.warn(
+                `[PAC] userTemplatePath 文件正文为空，回退 ${FALLBACK_TEMPLATE}: ${path} ` +
+                `(${sourcePath})`,
             );
+            return { template: FALLBACK_TEMPLATE, extraDefaults };
         }
         return { template: tpl, extraDefaults };
     }
 
-    return { template: `{{${INPUT_VAR}}}`, extraDefaults: {} };
+    return { template: FALLBACK_TEMPLATE, extraDefaults: {} };
 }

@@ -1,3 +1,4 @@
+<!-- packages/renderer/src/lib/components/leftside/file/file.tree-node.svelte -->
 <script lang="ts">
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
@@ -31,7 +32,7 @@
 
   const isOpening = $derived(fileStore.openingFileId === node.id);
   const isOpenedFile = $derived(
-    node.type === "file" && fileStore.openedFileId === node.id,
+    node.type === "file" && fileStore.displayedOpenedFileId === node.id,
   );
   const errorCount = $derived(
     isOpenedFile && fileStore.errorCount > 0 ? fileStore.errorCount : 0,

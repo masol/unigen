@@ -36,6 +36,12 @@ const listPacTreeRes = os.output(pacNodeSchema).handler(async ({ context }) => {
     return ret;
 });
 
+const reCompileRes = os.output(pacNodeSchema).handler(async ({ context }) => {
+    const ctx = context as RpcContext;
+    await ctx.project.reloadAgent(true);
+    return listPacTree(getPacRoot(ctx.project));
+});
+
 const readPacFileRes = os
     .input(z.object({ path: z.string() }))
     .output(pacFileDocumentSchema)
@@ -127,6 +133,7 @@ const deletePacNodeRes = os
 
 export default {
     listPacTree: listPacTreeRes,
+    reCompile: reCompileRes,
     readPacFile: readPacFileRes,
     savePacFile: savePacFileRes,
     createPacFile: createPacFileRes,

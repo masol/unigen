@@ -57,10 +57,21 @@ async function compileOne(
     const sourcePath = getAbsPath(prj, sourceSegments);
     const { fm, body } = await extractFrontMatter(sourcePath);
 
+    const isRoot = !!cc.rootEntry && sameSegments(sourceSegments, cc.rootEntry);
+
     // Stage 2: 正文处理。
     // 当前直接使用原文；未来如需 LLM 介入（例如检查正文是否可转化为纯代码），
     // 应通过显式注入的模型/上下文实现，不在此处隐式调用。
     let systemTemplate = body;
+    if (systemTemplate.length === 0) {
+        Logger.warn(`[PAC] 正文为空，将以空系统提示词编译: ${sourcePath}`);
+        // if (isRoot) {
+        //     prj.notify("toast", {
+        //         type: "warning",
+        //         msg: "Agent 正文为空，将以无系统提示词方式运行",
+        //     });
+        // }
+    }
 
     const name = fm.name ?? basename(sourcePath, ".md");
     const relSrc = sourceSegments.slice(cc.rootBase.length).join("/");
@@ -68,7 +79,6 @@ async function compileOne(
         fm.description ?? `PAC agent "${name}" (${relSrc})`;
     const base = sourceSegments.slice(0, -1);
     const id = buildAgentId(cc.rootBase, sourceSegments);
-    const isRoot = !!cc.rootEntry && sameSegments(sourceSegments, cc.rootEntry);
 
     Logger.debug(`[PAC] 编译 ${name} [id=${id}, root=${isRoot}] ← ${relSrc}`);
 
@@ -108,6 +118,7 @@ async function compileOne(
         sourcePath,
         taken,
         compileSubAgent,
+        isRoot,
     );
 
     // Stage 5: 工具目录。

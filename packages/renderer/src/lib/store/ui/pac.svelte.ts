@@ -1,3 +1,4 @@
+// packages/renderer/src/lib/store/ui/pac.svelte.ts
 // src/lib/store/ui/pac.svelte.ts
 
 import { confirmStore } from '$lib/store/ui/confirm.svelte';
@@ -157,6 +158,13 @@ class PacStore {
     readonly isLoading = $derived(this.status === 'loading' || this.status === 'idle');
     readonly isReady = $derived(this.status === 'ready');
     readonly isError = $derived(this.status === 'error');
+
+    /**
+     * 当前路由是否处于 PAC 编辑器。
+     *
+     * 供 fileStore 做展示层派生使用，不改变 pacStore 现有字段语义。
+     */
+    readonly isEditorRouteActive = $derived(isPacEditorRouteActive());
 
     // ── 构造 ──
 

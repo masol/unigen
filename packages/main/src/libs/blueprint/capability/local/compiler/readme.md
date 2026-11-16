@@ -2,17 +2,19 @@
 
 本目录（`compiler/`）负责把一份 PAC markdown（front matter + 正文模板）连同其声明的工具、子 agent、用户模板、默认值，编译成一棵与运行期上下文无关的 `CompiledPacAgent` 树。编译是纯函数式的：只依赖源文件与 `prj.getPath`，不持有 `prj`，不接触 `ctx`。
 
+编译原则：**可运行优先**。正文为空、front matter 非法、用户模板读取失败、单个工具加载失败，均降级为 warning 并继续编译；只有真正无法定位入口/循环引用/入口为空才抛错。顶层入口编译抛错时最终仍降级为直通 agent，保证 agent 可运行。
+
 ## 文件职责
 
 | 文件               | 职责                                                                  |
 | ------------------ | --------------------------------------------------------------------- |
-| `index.ts`         | `compilePacAgent`：顶层入口，负责缓存创建、入口缺失时降级为直通 agent |
+| `index.ts`         | `compilePacAgent`：顶层入口，负责缓存创建、入口缺失或编译失败时降级为直通 agent |
 | `agent.ts`         | `compileFile` / `compileOne`：单个 agent 文件的七阶段编译             |
-| `frontmatter.ts`   | 读取文件、解析 front matter、校验正文非空                             |
+| `frontmatter.ts`   | 读取文件、解析 front matter（解析失败安全忽略）、正文允许为空         |
 | `paths.ts`         | 路径分段解析、越界校验、`CompileCache`、`buildAgentId`、工具名去重    |
 | `tools.ts`         | `loadToolRefs`：把 front matter 的 tools 声明解析为 `ToolRef[]`       |
-| `user-template.ts` | 解析 `userTemplate` / `userTemplatePath` 及其 front matter            |
-| `passthrough.ts`   | 构造入口文件缺失时的直通 agent                                        |
+| `user-template.ts` | 解析 `userTemplate` / `userTemplatePath` 及其 front matter（失败回退） |
+| `passthrough.ts`   | 构造入口文件缺失或编译失败时的直通 agent                              |
 | `body.ts`          | 正文后处理钩子（预留，未实现）                                        |
 
 相关但不在本目录的文件：`../schema.ts`（JSON Schema ↔ Zod、工具目录、输出语义）、`../settings.ts`（settings 解析、默认值、模型选项）、`../template.ts`（变量扫描与 Handlebars 渲染）、`../context/`（内置变量与存储变量）、`../loader.ts` + `../mcp.ts`（外部工具加载）。
@@ -29,10 +31,11 @@ compilePacAgent(prjType, entry, cache?, prj?)
   - 存在 → `createCompileCache(entry.slice(0, -1), entry)`。
 - `rootBase` = 入口所在目录；`rootEntry` = 入口文件，二者共同用于识别「根 agent」。
 - 编译结果按 `segments.join("/")` 缓存在 `CompileCache.compiled`；`compiling` 集合用于循环引用检测。
+- 顶层 `compileFile` 抛错时：`Logger.warn` + `prj.notify("toast", { type: "warning", ... })`，然后返回 `buildPassthroughAgent`，确保 agent 可运行。
 
 ## compileOne 的七阶段
 
-1. **定位与读取**：`getAbsPath` → `extractFrontMatter`。正文为空直接抛错。
+1. **定位与读取**：`getAbsPath` → `extractFrontMatter`。正文允许为空：空正文以空系统提示词编译（`Logger.warn`；若为根 agent 额外 toast warning）。
 2. **正文**：当前直接使用原文作为 `systemTemplate`；`refinePacBody` 是预留钩子。
 3. **元信息**：`name`（缺省用文件名）、`description`（缺省自动生成）、`id`（`buildAgentId`，相对 `rootBase` 去 `.md`）、`isRoot`（`sameSegments(sourceSegments, rootEntry)`）。
 4. **输入 / 输出契约**：
@@ -43,11 +46,13 @@ compilePacAgent(prjType, entry, cache?, prj?)
    - `builtin` / `search`：`loadExternalTools` 返回 `meta`，工具来自全局工具库；`globalToolDB.getToolMeta` 已改为**异步查表**，因此这一阶段是异步的；
    - **全局 MCP 不再作为独立配置类型**：agent 侧统一通过 `builtin` + 全局工具 id 引用，`builtin` / `mcp` 的来源差异由 tooldb 隔离，agent 不感知；
    - `mcp_local`：编译期 `probeMcpMetadata` 拿元数据，运行期才真正连接；
-   - 所有 `key` 经 `uniqueKey` 去重（非法字符替换、冲突加 `_2`）。
+   - 所有 `key` 经 `uniqueKey` 去重（非法字符替换、冲突加 `_2`）；
+   - 单个工具加载失败仅 `Logger.warn` 并跳过；仅当 `isRoot` 时汇总 toast（`${basename}: N 个工具加载失败，已跳过`），避免子 agent 逐条刷屏。
 6. **工具目录**：`buildToolDoc(toolRefs)` 生成 markdown（描述、输入字段、返回语义），供父 agent 模板的 `{{_BI_tool}}` 使用。
 7. **用户模板与默认值**：`resolveUserTemplate`：
    - `userTemplate` / `userTemplatePath` 二选一，同时声明报错；
-   - 外部文件只允许 `setDefault` 字段，其它 front matter 字段告警忽略；
+   - `userTemplatePath` 读取失败或正文为空 → 回退 `{{_BI_input}}` 并 `Logger.warn`（不中断编译）；
+   - 外部文件只允许 `setDefault` 字段，其它 front matter 字段告警忽略；外部文件 front matter 解析失败则视为空并告警；
    - 都未声明时默认 `{{_BI_input}}`；
    - 用户模板的 `setDefault` 与主 agent 的 `setDefault` 合并，主 agent 优先。
 
@@ -67,7 +72,7 @@ compilePacAgent(prjType, entry, cache?, prj?)
 
 ## 直通 agent
 
-入口文件不存在时返回 `buildPassthroughAgent`：无系统提示词、无工具、`userTemplate = {{_BI_input}}`，等价于把用户输入直送 LLM。`id` 为 `__passthrough__/<prjType>`。
+入口文件不存在、或顶层 `compileFile` 抛错时返回 `buildPassthroughAgent`：无系统提示词、无工具、`userTemplate = {{_BI_input}}`，等价于把用户输入直送 LLM。`id` 为 `__passthrough__/<prjType>`。编译失败路径会额外 toast warning 告知用户已降级。
 
 ## 路径与安全
 
@@ -76,8 +81,20 @@ compilePacAgent(prjType, entry, cache?, prj?)
 - 缺扩展名时自动补 `.md`。
 - 工具名 `sanitizeToolKey`：`[^a-zA-Z0-9_-]` 替换为 `_`，截断 64 字符。
 
+## front matter 容错
+
+- 非法 YAML 解析失败：`extractFrontMatter` 安全忽略，`fm = {}`，正文回退为**全文**（无法可靠剥离分隔符边界），并 `Logger.warn`。
+- 用户模板文件的 front matter 解析失败：同样视为空，正文仍按全文处理，只告警。
+
 ## 编译期 / 运行期边界
 
 - `CompiledPacAgent` 是纯数据：模板字符串、Zod schema、`ToolRef[]`、`toolDoc`、`vars`、`ownDefaults`、`settings`、路径信息。不含 `prj`、不含 `ctx`、不含已连接的 MCP client。
 - 需要 `prj` 的工具（如依赖项目上下文的 `LocalToolSpec.build`）在运行期由 `materializeTools` 用 `ctx.prj` 构造。
 - 局部 MCP 在编译期只探测元数据（3s 超时，失败则用占位描述），运行期由 `connectLocalMcp` 真正连接，并在 run 结束时统一关闭。
+
+## 用户通知策略
+
+- 编译期仅使用 `prj.notify("toast", { type: "warning", msg })`，不使用 `error`/`success`/`info`/`message`。
+- 通知克制、简短、面向普通用户；细节写入 `Logger`。
+- 触发点限定为根 agent 级别的可恢复问题：根 agent 正文为空、根 agent 工具批量加载失败、顶层编译失败降级直通。
+- 子 agent 的同类问题只记日志，不重复 toast。
