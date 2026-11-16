@@ -1,13 +1,11 @@
 import { pacStore } from "$lib/store/ui/pac.svelte";
 import { hooks } from "$lib/utils/hook";
-import { default as log, default as Logger } from 'electron-log/renderer';
+import log from 'electron-log/renderer';
 import {
-    attachNodeToMockTree,
     createFileApi,
     createFolderApi,
     fetchFileTree,
     renameNodeApi,
-    renameNodeInMockTree
 } from './file.api';
 import type { FileDocument, FileNode } from './file.types';
 
@@ -72,9 +70,9 @@ class FileStore {
 
     constructor() {
         hooks.hook("project:loaded", async () => {
-            //项目加载完毕，开始加载treenNode.
+            // 项目加载完毕，开始加载 treeNode。
             await this.reload();
-        })
+        });
     }
 
     #tree = $state<FileNode | null>(null);
@@ -82,8 +80,6 @@ class FileStore {
     #error = $state<string | null>(null);
     #activeFileId = $state<string | null>(null);
     #openedFileId = $state<string | null>(null);
-    #openedDocument = $state<FileDocument | null>(null);
-    #selectedFolderPath = $state<string | null>(null);
     #searchQuery = $state('');
     #openingFileId = $state<string | null>(null);
     #openError = $state<string | null>(null);
@@ -95,12 +91,28 @@ class FileStore {
     get error() { return this.#error; }
     get activeFileId() { return this.#activeFileId; }
     get openedFileId() { return this.#openedFileId; }
-    get openedDocument() { return this.#openedDocument; }
-    get selectedFolderPath() { return this.#selectedFolderPath; }
     get searchQuery() { return this.#searchQuery; }
     get openingFileId() { return this.#openingFileId; }
     get openError() { return this.#openError; }
     get revealNodeId() { return this.#revealNodeId; }
+
+    /** 当前打开文件的错误数（来自 pacStore，单向依赖）。 */
+    get errorCount() { return pacStore.errorCount; }
+
+    /**
+     * 兼容旧调用：打开文档真源统一在 pacStore，
+     * 这里只做只读投影，避免 fileStore 再维护一份可能失真的 document。
+     */
+    get openedDocument(): FileDocument | null {
+        const doc = pacStore.doc;
+        if (!doc) return null;
+        return {
+            path: doc.path,
+            meta: doc.meta,
+            content: doc.content,
+            updatedAt: doc.updatedAt,
+        };
+    }
 
     readonly hasSearch = $derived(this.#searchQuery.trim().length > 0);
 
@@ -133,25 +145,28 @@ class FileStore {
         );
     }
 
-    async reload(): Promise<void> {
+    async reload(): Promise<boolean> {
         this.#isLoading = true;
         this.#error = null;
         try {
-            this.#tree = await fetchFileTree();
+            const tree = await fetchFileTree();
+            if (!tree) {
+                this.#error = '加载文件树失败';
+                return false;
+            }
+            this.#tree = tree;
             log.info('[FileStore] tree reloaded');
+            return true;
         } catch (err) {
             this.#error = err instanceof Error ? err.message : String(err);
             log.error('[FileStore] reload failed', err);
+            return false;
         } finally {
             this.#isLoading = false;
         }
     }
 
     setActiveFile(id: string): void { this.#activeFileId = id; }
-
-    setSelectedFolder(path: string | null): void {
-        this.#selectedFolderPath = path;
-    }
 
     setSearchQuery(value: string): void { this.#searchQuery = value; }
     clearSearch(): void { this.#searchQuery = ''; }
@@ -162,12 +177,11 @@ class FileStore {
 
         this.#openingFileId = node.id;
         this.#openError = null;
-        this.#openedDocument = null;
 
         try {
             // 打开链条统一进入 pacStore：
             // pacStore.openFile 负责 loading、push('/paceditor')、readPacFile 与 editor 推送。
-            Logger.debug("open pac file:", node.path)
+            log.debug("open pac file:", node.path);
             const ok = await pacStore.openFile(node.path);
 
             if (!ok) {
@@ -189,6 +203,22 @@ class FileStore {
         }
     }
 
+    /**
+     * 关闭当前打开的文件：委托 pacStore 完成导航与未保存确认，
+     * 成功后同步清空 fileStore 侧打开状态（保持两侧状态一致）。
+     */
+    async closeFile(): Promise<boolean> {
+        if (this.#openedFileId === null) return true;
+
+        const ok = await pacStore.closeFile();
+        if (!ok) return false;
+
+        this.#openedFileId = null;
+        this.#activeFileId = null;
+        log.info('[FileStore] closed current file');
+        return true;
+    }
+
     async createFile(parentPath = '/', name: string): Promise<boolean> {
         if (!this.#tree) return false;
         const trimmed = name.trim();
@@ -200,8 +230,9 @@ class FileStore {
 
         try {
             const created = await createFileApi(parentPath, trimmed);
+            if (!created) return false;
+
             this.#tree = insertChild(this.#tree, parentPath, created);
-            attachNodeToMockTree(parentPath, created);
             this.#activeFileId = created.id;
             this.#reveal(created.id, parentPath);
             log.info(`[FileStore] file created: ${created.path}`);
@@ -223,9 +254,9 @@ class FileStore {
 
         try {
             const created = await createFolderApi(parentPath, trimmed);
+            if (!created) return false;
+
             this.#tree = insertChild(this.#tree, parentPath, created);
-            attachNodeToMockTree(parentPath, created);
-            this.#selectedFolderPath = created.path;
             this.#reveal(created.id, parentPath);
             log.info(`[FileStore] folder created: ${created.path}`);
             return true;
@@ -246,18 +277,25 @@ class FileStore {
         }
 
         const oldPath = node.path;
-        const newPath = `${parentPath === '/' ? '' : parentPath}/${trimmed}`;
 
         try {
-            await renameNodeApi(node.id, trimmed);
-            renameNodeInMockTree(node.id, trimmed);
-            this.#tree = await fetchFileTree();
-            this.#reveal(node.id, parentPath);
-            // 当前打开的就是被改名文件：同步 document.path，避免保存写回旧路径。
-            if (this.#openedDocument && this.#openedDocument.path === oldPath) {
-                this.#openedDocument = { ...this.#openedDocument, path: newPath };
+            const result = await renameNodeApi(oldPath, trimmed);
+            if (!result) return false;
+
+            const reloaded = await this.reload();
+            if (reloaded) {
+                this.#reveal(result.newPath, parentPath);
             }
-            log.info(`[FileStore] renamed ${oldPath} → ${newPath}`);
+
+            // FileNode.id 与 path 同为服务端路径；同步选中态。
+            // 注意：pacStore 中当前文档路径需由 pacStore 侧提供 repath 方法同步，
+            // 否则“重命名已打开文件后再次保存”仍可能写回旧路径。
+            if (this.#openedFileId === node.id) {
+                this.#openedFileId = result.newPath;
+                this.#activeFileId = result.newPath;
+            }
+
+            log.info(`[FileStore] renamed ${oldPath} → ${result.newPath}`);
             return true;
         } catch (err) {
             log.error('[FileStore] rename failed', err);

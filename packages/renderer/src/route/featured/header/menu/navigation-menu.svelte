@@ -11,6 +11,9 @@
     IconHome2,
   } from "@tabler/icons-svelte";
   import MenuShortcut from "./menu-shortcut.svelte";
+
+  const itemHoverClass =
+    "hover:bg-accent hover:text-accent-foreground hover:**:text-accent-foreground";
 </script>
 
 <Menubar.Menu>
@@ -20,7 +23,7 @@
     导航
   </Menubar.Trigger>
   <Menubar.Content align="start" class="select-none z-200 min-w-48">
-    <Menubar.Item onSelect={() => push("/")}>
+    <Menubar.Item class={itemHoverClass} onSelect={() => push("/")}>
       <IconHome2 size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
       主控台
       <MenuShortcut command="navigation.home" />
@@ -28,7 +31,7 @@
 
     <Menubar.Separator />
 
-    <Menubar.Item onSelect={() => history.back()}>
+    <Menubar.Item class={itemHoverClass} onSelect={() => history.back()}>
       <IconArrowLeft
         size={20}
         stroke={1.5}
@@ -37,7 +40,7 @@
       后退
       <MenuShortcut command="navigation.back" />
     </Menubar.Item>
-    <Menubar.Item onSelect={() => history.forward()}>
+    <Menubar.Item class={itemHoverClass} onSelect={() => history.forward()}>
       <IconArrowRight
         size={20}
         stroke={1.5}

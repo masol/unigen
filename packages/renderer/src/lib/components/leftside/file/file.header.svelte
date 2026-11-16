@@ -1,22 +1,16 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import {
-    IconFilePlus,
-    IconFolderPlus,
-    IconPlus,
     IconRefresh,
     IconReload,
     IconSearch,
-    IconX
+    IconX,
   } from "@tabler/icons-svelte";
   import { untrack } from "svelte";
-  import { promptCreateName } from "./file.prompt";
   import { fileStore } from "./file.store.svelte";
 
   let { isMaximized = false }: { isMaximized?: boolean } = $props();
 
-  let createMenuOpen = $state(false);
   let isComposing = $state(false);
 
   // 本地镜像：输入框即时回显，store 延迟同步（防抖）。
@@ -77,19 +71,7 @@
   }
 
   async function handleReload() {
-    // await fileStore.reload();
-  }
-
-  async function handleCreateFile() {
-    createMenuOpen = false;
-    const name = await promptCreateName("file", "/");
-    if (name) await fileStore.createFile("/", name);
-  }
-
-  async function handleCreateFolder() {
-    createMenuOpen = false;
-    const name = await promptCreateName("folder", "/");
-    if (name) await fileStore.createFolder("/", name);
+    await fileStore.reload();
   }
 </script>
 
@@ -143,31 +125,4 @@
       <IconRefresh class="size-4" stroke={1.5} />
     {/if}
   </Button>
-
-  <DropdownMenu.Root bind:open={createMenuOpen}>
-    <DropdownMenu.Trigger>
-      {#snippet child({ props })}
-        <Button
-          {...props}
-          variant="ghost"
-          size="icon"
-          title="在根下新建"
-          aria-label="在根下新建"
-          class="size-7 shrink-0 rounded-lg text-primary transition-all duration-200 hover:bg-primary/10 hover:text-primary"
-        >
-          <IconPlus class="size-4" stroke={1.5} />
-        </Button>
-      {/snippet}
-    </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" class="w-36">
-      <DropdownMenu.Item onSelect={handleCreateFile} class="gap-2 text-xs">
-        <IconFilePlus class="size-3.5" stroke={1.5} />
-        新建文件
-      </DropdownMenu.Item>
-      <DropdownMenu.Item onSelect={handleCreateFolder} class="gap-2 text-xs">
-        <IconFolderPlus class="size-3.5" stroke={1.5} />
-        新建文件夹
-      </DropdownMenu.Item>
-    </DropdownMenu.Content>
-  </DropdownMenu.Root>
 </div>

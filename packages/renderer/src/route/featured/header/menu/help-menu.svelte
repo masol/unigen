@@ -13,6 +13,9 @@
     IconWorld,
   } from "@tabler/icons-svelte";
 
+  const itemHoverClass =
+    "hover:bg-accent hover:text-accent-foreground hover:**:text-accent-foreground";
+
   async function openUrl(url: string) {
     await safeApi().system.openExternal({ url });
   }
@@ -26,16 +29,21 @@
   </Menubar.Trigger>
   <Menubar.Content align="start" class="select-none z-200 min-w-48">
     <Menubar.Item
+      class={itemHoverClass}
       onSelect={() => openUrl("https://github.com/masol/unigen/wiki")}
     >
       <IconBook size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
       查看文档
     </Menubar.Item>
-    <Menubar.Item onSelect={() => openUrl("https://github.com/masol/unigen")}>
+    <Menubar.Item
+      class={itemHoverClass}
+      onSelect={() => openUrl("https://github.com/masol/unigen")}
+    >
       <IconWorld size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
       查看代码
     </Menubar.Item>
     <Menubar.Item
+      class={itemHoverClass}
       onSelect={() => openUrl("https://github.com/masol/unigen/issues")}
     >
       <IconBug size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
@@ -43,12 +51,16 @@
     </Menubar.Item>
     <Menubar.Separator />
     <Menubar.Item
+      class={itemHoverClass}
       onSelect={() => openUrl("https://github.com/masol/unigen/releases")}
     >
       <IconRefresh size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
       检查更新
     </Menubar.Item>
-    <Menubar.Item onSelect={() => openUrl("https://www.lizt.top")}>
+    <Menubar.Item
+      class={itemHoverClass}
+      onSelect={() => openUrl("https://www.lizt.top")}
+    >
       <IconInfoCircle
         size={20}
         stroke={1.5}

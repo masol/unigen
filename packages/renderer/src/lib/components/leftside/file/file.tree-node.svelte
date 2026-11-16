@@ -15,6 +15,7 @@
     IconLoader2,
     IconPencil,
     IconTrash,
+    IconX,
   } from "@tabler/icons-svelte";
   import { promptCreateName, promptRename } from "./file.prompt";
   import { fileStore } from "./file.store.svelte";
@@ -24,22 +25,23 @@
   let { node, depth = 0 }: { node: FileNode; depth?: number } = $props();
 
   let menuOpen = $state(false);
+  let fileContextMenuOpen = $state(false);
+  let folderMenuOpen = $state(false);
   let folderOpen = $state(depth === 0);
 
   const isOpening = $derived(fileStore.openingFileId === node.id);
-  const isActiveFile = $derived(
-    node.type === "file" && fileStore.activeFileId === node.id,
-  );
   const isOpenedFile = $derived(
     node.type === "file" && fileStore.openedFileId === node.id,
   );
-  const isSelectedFolder = $derived(
-    node.type === "folder" && fileStore.selectedFolderPath === node.path,
+  const errorCount = $derived(
+    isOpenedFile && fileStore.errorCount > 0 ? fileStore.errorCount : 0,
   );
+  const hasError = $derived(errorCount > 0);
   const searchQuery = $derived(fileStore.searchQuery.trim().toLowerCase());
   const isMatch = $derived(
     searchQuery.length > 0 && node.name.toLowerCase().includes(searchQuery),
   );
+  const isFileMenuOpen = $derived(menuOpen || fileContextMenuOpen);
 
   const MENU_LABEL_MAX = 18;
 
@@ -50,27 +52,48 @@
 
   const menuNodeName = $derived(truncateLabel(node.name));
 
-  const folderItemClass = $derived([
-    "rounded-lg transition-colors duration-150",
-    isMatch
-      ? "bg-primary/10 ring-1 ring-inset ring-primary/40 shadow-[inset_2px_0_0_var(--primary)] dark:bg-primary/20 dark:ring-primary/50"
-      : isSelectedFolder
-        ? "bg-accent/70 dark:bg-accent/60"
+  // 新建操作的落点目录：文件夹为自身，文件为所在目录。
+  const parentDirPath = $derived(
+    node.type === "folder" ? node.path : getParentPath(node.path),
+  );
+  const parentDirName = $derived(
+    parentDirPath === "/"
+      ? "根"
+      : (parentDirPath.split("/").filter(Boolean).at(-1) ?? "根"),
+  );
+
+  const folderHeaderClass = $derived(
+    [
+      "min-w-0 rounded-md outline-none",
+      "transition-colors duration-150 cursor-default",
+      "hover:bg-primary/10 dark:hover:bg-primary/15",
+      folderMenuOpen ? "bg-primary/10 dark:bg-primary/15" : "",
+      isMatch
+        ? "bg-primary/10 ring-1 ring-inset ring-primary/40 shadow-[inset_2px_0_0_var(--primary)] dark:bg-primary/20 dark:ring-primary/50"
         : "",
-  ]);
+      "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 dark:focus-visible:ring-primary/50",
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
 
   const fileItemClass = $derived([
-    "group/item relative flex items-center rounded-lg outline-none transition-colors duration-150",
+    "group/item flex min-w-0 items-center rounded-lg outline-none transition-colors duration-150",
     "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 dark:focus-visible:ring-primary/50",
-    isActiveFile ? "font-medium" : "",
+    "hover:bg-primary/10 dark:hover:bg-primary/15",
     isMatch
       ? "bg-primary/10 ring-1 ring-inset ring-primary/40 shadow-[inset_2px_0_0_var(--primary)] dark:bg-primary/20 dark:ring-primary/50"
-      : isActiveFile
+      : isFileMenuOpen
         ? "bg-primary/10 dark:bg-primary/15"
         : "",
   ]);
 
-  // 搜索时自动展开包含匹配项的文件夹
+  const openedFileIconClass = $derived(
+    hasError
+      ? "size-4 text-destructive"
+      : "size-4 text-emerald-600 dark:text-emerald-400",
+  );
+
   const shouldForceOpen = $derived.by(() => {
     if (!searchQuery) return false;
     if (node.type !== "folder") return false;
@@ -82,7 +105,6 @@
     return (n.children ?? []).some((c) => subtreeContainsMatch(c, query));
   }
 
-  // 新建/重命名命中当前路径链时，自动展开本文件夹。
   $effect(() => {
     if (node.type !== "folder") return;
     if (fileStore.shouldExpandFolder(node.path)) {
@@ -107,7 +129,6 @@
   function handleFileClick(e: MouseEvent) {
     if (node.type !== "file") return;
     e.stopPropagation();
-    fileStore.setActiveFile(node.id);
   }
 
   async function handleFileDblClick(e: MouseEvent) {
@@ -118,10 +139,7 @@
   }
 
   function handleFileKeydown(e: KeyboardEvent) {
-    if (e.key === "F2") {
-      e.preventDefault();
-      void handleRename();
-    } else if (e.key === "Enter") {
+    if (e.key === "Enter") {
       e.preventDefault();
       void fileStore.openFile(node);
     }
@@ -130,14 +148,6 @@
   function handleFolderClick(e: MouseEvent) {
     if (node.type !== "folder") return;
     e.stopPropagation();
-    fileStore.setSelectedFolder(node.path);
-  }
-
-  function handleFolderKeydown(e: KeyboardEvent) {
-    if (e.key === "F2") {
-      e.preventDefault();
-      void handleRename();
-    }
   }
 
   async function handleDelete() {
@@ -156,13 +166,17 @@
     });
     if (!confirmed) return;
 
-    // TODO: 接入真实删除 API；成功后需清理 activeFileId / openedFileId / selectedFolderPath 等。
     console.info("[FileTreeNode] delete not implemented in mock:", node.path);
   }
 
   async function handleContextAction(action: string) {
-    const targetPath = node.type === "folder" ? node.path : "/";
-    if (action === "rename") {
+    const targetPath =
+      node.type === "folder" ? node.path : getParentPath(node.path);
+    if (action === "open") {
+      if (node.type === "file") await fileStore.openFile(node);
+    } else if (action === "close") {
+      await fileStore.closeFile();
+    } else if (action === "rename") {
       await handleRename();
     } else if (action === "new-file") {
       const name = await promptCreateName("file", targetPath);
@@ -192,16 +206,14 @@
 
 {#if node.type === "folder"}
   <div
-    class={folderItemClass}
     role="presentation"
     data-tree-node
     data-node-type="folder"
     data-node-id={node.id}
     data-node-path={node.path}
     onclick={handleFolderClick}
-    onkeydown={handleFolderKeydown}
   >
-    <ContextMenu.Root>
+    <ContextMenu.Root bind:open={folderMenuOpen}>
       <ContextMenu.Trigger>
         {#snippet child({ props })}
           <div {...props} role="presentation">
@@ -210,7 +222,7 @@
               bind:open={folderOpen}
               forceOpen={shouldForceOpen}
               icon={folderIcon}
-              class="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 dark:focus-visible:ring-primary/50"
+              class={folderHeaderClass}
             >
               {#each node.children ?? [] as child (child.id)}
                 <Self node={child} depth={depth + 1} />
@@ -249,7 +261,8 @@
         <ContextMenu.Separator />
         <ContextMenu.Item
           onSelect={() => handleContextAction("delete")}
-          class="gap-2 text-xs text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive"
+          variant="destructive"
+          class="gap-2 text-xs"
         >
           <IconTrash class="size-3.5" stroke={1.5} />
           <span class="min-w-0 truncate" title={node.name}>
@@ -260,7 +273,7 @@
     </ContextMenu.Root>
   </div>
 {:else}
-  <ContextMenu.Root>
+  <ContextMenu.Root bind:open={fileContextMenuOpen}>
     <ContextMenu.Trigger>
       {#snippet child({ props })}
         <div
@@ -277,23 +290,35 @@
           ondblclick={handleFileDblClick}
           onkeydown={handleFileKeydown}
         >
-          <TreeView.File name={node.name} tabindex={-1}>
-            {#snippet icon(_args)}
-              {#if isOpening}
-                <IconLoader2
-                  class="size-4 animate-spin text-primary"
-                  stroke={1.5}
-                />
-              {:else if isOpenedFile}
-                <IconFileText
-                  class="size-4 text-emerald-600 dark:text-emerald-400"
-                  stroke={2}
-                />
-              {:else}
-                <IconFile class="size-4 text-muted-foreground" stroke={1.75} />
-              {/if}
-            {/snippet}
-          </TreeView.File>
+          <!-- 文件名区域：min-w-0 允许收缩，truncate 禁止换行并裁剪溢出 -->
+          <div class="min-w-0 flex-1 truncate">
+            <TreeView.File name={node.name} tabindex={-1} class="min-w-0">
+              {#snippet icon(_args)}
+                {#if isOpening}
+                  <IconLoader2
+                    class="size-4 animate-spin text-primary"
+                    stroke={1.5}
+                  />
+                {:else if isOpenedFile}
+                  <IconFileText class={openedFileIconClass} stroke={2} />
+                {:else}
+                  <IconFile
+                    class="size-4 text-muted-foreground"
+                    stroke={1.75}
+                  />
+                {/if}
+              {/snippet}
+            </TreeView.File>
+          </div>
+
+          {#if hasError}
+            <span
+              class="ml-1 inline-flex min-w-4 shrink-0 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium leading-4 text-white"
+              title={`${errorCount} 个错误`}
+            >
+              {errorCount > 99 ? "99+" : errorCount}
+            </span>
+          {/if}
 
           <DropdownMenu.Root bind:open={menuOpen}>
             <DropdownMenu.Trigger>
@@ -303,7 +328,7 @@
                   type="button"
                   aria-label="文件操作"
                   class={[
-                    "absolute right-1 flex size-6 items-center justify-center rounded-md text-muted-foreground transition-opacity duration-150 hover:bg-accent hover:text-foreground",
+                    "ml-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-opacity duration-150 hover:bg-accent hover:text-foreground",
                     menuOpen
                       ? "opacity-100"
                       : "opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100",
@@ -325,7 +350,8 @@
               <DropdownMenu.Separator />
               <DropdownMenu.Item
                 onSelect={() => handleContextAction("delete")}
-                class="gap-2 text-xs text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive"
+                variant="destructive"
+                class="gap-2 text-xs"
               >
                 <IconTrash class="size-3.5" stroke={1.5} />
                 <span class="min-w-0 truncate" title={node.name}>
@@ -337,7 +363,25 @@
         </div>
       {/snippet}
     </ContextMenu.Trigger>
-    <ContextMenu.Content class="w-40">
+    <ContextMenu.Content class="w-44">
+      {#if isOpenedFile}
+        <ContextMenu.Item
+          onSelect={() => handleContextAction("close")}
+          class="gap-2 text-xs"
+        >
+          <IconX class="size-3.5" stroke={1.5} />
+          关闭
+        </ContextMenu.Item>
+      {:else}
+        <ContextMenu.Item
+          onSelect={() => handleContextAction("open")}
+          class="gap-2 text-xs"
+        >
+          <IconFileText class="size-3.5" stroke={1.5} />
+          打开
+        </ContextMenu.Item>
+      {/if}
+      <ContextMenu.Separator />
       <ContextMenu.Item
         onSelect={() => handleContextAction("rename")}
         class="gap-2 text-xs"
@@ -347,8 +391,28 @@
       </ContextMenu.Item>
       <ContextMenu.Separator />
       <ContextMenu.Item
+        onSelect={() => handleContextAction("new-file")}
+        class="gap-2 text-xs"
+      >
+        <IconFilePlus class="size-3.5" stroke={1.5} />
+        <span class="min-w-0 truncate" title={parentDirPath}>
+          新建文件于 {parentDirName}
+        </span>
+      </ContextMenu.Item>
+      <ContextMenu.Item
+        onSelect={() => handleContextAction("new-folder")}
+        class="gap-2 text-xs"
+      >
+        <IconFolderPlus class="size-3.5" stroke={1.5} />
+        <span class="min-w-0 truncate" title={parentDirPath}>
+          新建文件夹于 {parentDirName}
+        </span>
+      </ContextMenu.Item>
+      <ContextMenu.Separator />
+      <ContextMenu.Item
         onSelect={() => handleContextAction("delete")}
-        class="gap-2 text-xs text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive"
+        variant="destructive"
+        class="gap-2 text-xs"
       >
         <IconTrash class="size-3.5" stroke={1.5} />
         <span class="min-w-0 truncate" title={node.name}>

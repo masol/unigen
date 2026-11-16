@@ -79,12 +79,18 @@
   triggerProps: Record<string, unknown>,
   GroupIcon: EdraCommand["icon"],
   active: boolean,
+  disabled: boolean,
 )}
   <Button
     {...triggerProps}
     variant="ghost"
     size="icon"
-    class={cn("relative", active && "bg-muted text-primary")}
+    {disabled}
+    class={cn(
+      "relative",
+      active && !disabled && "bg-muted text-primary",
+      disabled && "opacity-40",
+    )}
   >
     <GroupIcon />
     <span
@@ -174,20 +180,31 @@
     {:else if group.length > 1}
       {@const GroupIcon = group[0].icon}
       {@const groupActive = group.some((c) => isActive(c))}
+      {@const groupDisabled = group.every((c) => !isClickable(c))}
       {@const groupTitle = groupTitles[key]}
       <DropdownMenu.Root>
         {#if groupTitle}
           <Tooltip tooltip={groupTitle}>
             <DropdownMenu.Trigger>
               {#snippet child({ props })}
-                {@render groupTriggerButton(props, GroupIcon, groupActive)}
+                {@render groupTriggerButton(
+                  props,
+                  GroupIcon,
+                  groupActive,
+                  groupDisabled,
+                )}
               {/snippet}
             </DropdownMenu.Trigger>
           </Tooltip>
         {:else}
           <DropdownMenu.Trigger>
             {#snippet child({ props })}
-              {@render groupTriggerButton(props, GroupIcon, groupActive)}
+              {@render groupTriggerButton(
+                props,
+                GroupIcon,
+                groupActive,
+                groupDisabled,
+              )}
             {/snippet}
           </DropdownMenu.Trigger>
         {/if}

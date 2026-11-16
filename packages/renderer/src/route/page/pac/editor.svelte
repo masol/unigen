@@ -23,7 +23,7 @@
         return;
       }
 
-      pacStore.setEditorContent(markdown);
+      pacStore.setEditorContent(markdown, editor);
     },
   });
 

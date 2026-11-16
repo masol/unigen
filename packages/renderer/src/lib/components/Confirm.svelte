@@ -1,6 +1,6 @@
 <script lang="ts">
   import ChatMessage from "$lib/components/markdown/Message.svelte";
-  import type { Message } from "$lib/components/markdown/type";
+  import type { MarkdownMessage } from "$lib/components/markdown/type";
   import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
   import {
@@ -17,13 +17,10 @@
   } from "@tabler/icons-svelte";
   import { RuntimeIcon } from "./runtimeicon";
 
-  const message: Message = $derived.by(() => {
+  const message: MarkdownMessage = $derived.by(() => {
     return {
-      role: "assistant",
-      id: crypto.randomUUID(),
       content: confirmStore.message,
       isError: confirmStore.variant === "error",
-      timestamp: new Date(),
     };
   });
 </script>

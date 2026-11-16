@@ -31,6 +31,9 @@
   const recentsLoading = $derived(recentProjectsStore.isLoading);
   const recentsEmpty = $derived(recentProjectsStore.isEmpty);
 
+  const itemHoverClass =
+    "hover:bg-accent hover:text-accent-foreground hover:**:text-accent-foreground";
+
   async function openProject() {
     if (isBusy) return;
     await projectStore.open();
@@ -68,7 +71,7 @@
     窗口
   </Menubar.Trigger>
   <Menubar.Content align="start" class="select-none z-200 min-w-52">
-    <Menubar.Item disabled={isBusy} onSelect={newWindow}>
+    <Menubar.Item class={itemHoverClass} disabled={isBusy} onSelect={newWindow}>
       <IconAppWindow
         size={20}
         stroke={1.5}
@@ -80,12 +83,20 @@
 
     <Menubar.Separator />
 
-    <Menubar.Item disabled={isBusy} onSelect={newProject}>
+    <Menubar.Item
+      class={itemHoverClass}
+      disabled={isBusy}
+      onSelect={newProject}
+    >
       <IconFilePlus size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
       新建项目
       <MenuShortcut command="project.create" />
     </Menubar.Item>
-    <Menubar.Item disabled={isBusy} onSelect={openProject}>
+    <Menubar.Item
+      class={itemHoverClass}
+      disabled={isBusy}
+      onSelect={openProject}
+    >
       <IconFolderOpen
         size={20}
         stroke={1.5}
@@ -96,7 +107,7 @@
     </Menubar.Item>
 
     <Menubar.Sub>
-      <Menubar.SubTrigger disabled={isBusy}>
+      <Menubar.SubTrigger class={itemHoverClass} disabled={isBusy}>
         <IconHistory
           size={20}
           stroke={1.5}
@@ -118,7 +129,11 @@
           </div>
         {:else}
           {#each recents as r (r.path)}
-            <Menubar.Item disabled={isBusy} onSelect={() => openRecent(r)}>
+            <Menubar.Item
+              class={itemHoverClass}
+              disabled={isBusy}
+              onSelect={() => openRecent(r)}
+            >
               <span
                 class="mr-2 flex size-5 shrink-0 items-center justify-center text-muted-foreground"
               >
@@ -133,7 +148,11 @@
             </Menubar.Item>
           {/each}
           <Menubar.Separator></Menubar.Separator>
-          <Menubar.Item disabled={isBusy} onSelect={() => clearRecent()}>
+          <Menubar.Item
+            class={itemHoverClass}
+            disabled={isBusy}
+            onSelect={() => clearRecent()}
+          >
             <span
               class="mr-2 flex size-5 shrink-0 items-center justify-center text-muted-foreground"
             >
@@ -149,7 +168,11 @@
 
     <Menubar.Separator />
 
-    <Menubar.Item disabled={!canClose} onSelect={closeProject}>
+    <Menubar.Item
+      class={itemHoverClass}
+      disabled={!canClose}
+      onSelect={closeProject}
+    >
       <IconFolderX size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
       关闭项目
       <MenuShortcut command="project.close" />
@@ -157,7 +180,7 @@
 
     <Menubar.Separator />
 
-    <Menubar.Item onSelect={quit}>
+    <Menubar.Item class={itemHoverClass} onSelect={quit}>
       <IconLogout size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
       退出
     </Menubar.Item>
