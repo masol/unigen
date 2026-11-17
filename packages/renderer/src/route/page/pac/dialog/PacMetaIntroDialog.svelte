@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import type { PacFrontMatter } from "@app/main/types";
+  import { onMount } from "svelte";
 
   import {
     buildStringPatch,
@@ -10,8 +11,15 @@
 
   let { value, onClose, onCancel }: PacMetaDialogCommonProps = $props();
 
-  let name = $state(readString(value, "name"));
-  let description = $state(readString(value, "description"));
+  const initialName = readString(value, "name");
+  const initialDescription = readString(value, "description");
+
+  let name = $state(initialName);
+  let description = $state(initialDescription);
+
+  let hasChanges = $derived(
+    name !== initialName || description !== initialDescription,
+  );
 
   function save() {
     const patch: Partial<PacFrontMatter> = {
@@ -20,6 +28,21 @@
     };
     onClose?.(patch);
   }
+
+  function handleKeydown(e: KeyboardEvent): void {
+    if (e.key === "Escape") {
+      onCancel?.();
+    } else if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && hasChanges) {
+      save();
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener("keydown", handleKeydown);
+    return () => {
+      window.removeEventListener("keydown", handleKeydown);
+    };
+  });
 </script>
 
 <div class="space-y-6 p-6">
@@ -53,6 +76,8 @@
     <Button variant="outline" class="rounded-xl" onclick={() => onCancel?.()}>
       取消
     </Button>
-    <Button class="rounded-xl" onclick={save}>保存</Button>
+    <Button class="rounded-xl" disabled={!hasChanges} onclick={save}
+      >保存</Button
+    >
   </div>
 </div>

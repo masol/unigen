@@ -3,13 +3,13 @@
 
 import { confirmStore } from '$lib/store/ui/confirm.svelte';
 import { safeApi } from '$lib/utils/api';
-import type { PacFrontMatter } from '@app/main/types';
+import type { PacFileDocument, PacFrontMatter } from '@app/main/types';
 import { location, push } from '@keenmate/svelte-spa-router';
 import { NavigationCancelledError } from '@keenmate/svelte-spa-router/helpers/navigation-guard';
 import type { Editor as EditorSink } from '@tiptap/core';
 import { default as log } from 'electron-log/renderer';
 import { history } from 'prosemirror-history';
-import type { PacFileDocument } from '../../../../../main/src/types/shared/api/pac';
+import { toast } from 'svelte-sonner';
 import {
     clonePacMeta,
     isPacMetaEqual,
@@ -94,6 +94,12 @@ function markdownCodeSpan(value: string): string {
         return `\`\` ${value} \`\``;
     }
     return `\`${value}\``;
+}
+
+function describeError(error: unknown, fallback: string): string {
+    if (error instanceof Error && error.message) return error.message;
+    if (typeof error === 'string' && error) return error;
+    return fallback;
 }
 
 // ── Store ──
@@ -217,6 +223,34 @@ class PacStore {
      */
     setErrorCount(count: number): void {
         this.#errorCount = Math.max(0, count);
+    }
+
+    // ── 错误上报 ──
+
+    /**
+     * 统一错误提示出口。
+     *
+     * 提示本身是“锦上添花”，不能反过来把业务流程带崩：toast 实现异常
+     * （例如宿主未挂载）时只记日志，不重新抛出。
+     */
+    #notifyError(message: string): void {
+        try {
+            toast.error(message);
+        } catch (toastError) {
+            log.warn('[PacStore] failed to show error toast', toastError);
+        }
+    }
+
+    /**
+     * 保存失败的统一出口：写入 saveError、记录日志、弹出 toast。
+     * 返回 false，便于调用方 `return this.#failSave(...)`。
+     */
+    #failSave(error: unknown, docPath: string): false {
+        const message = describeError(error, '保存失败');
+        this.saveError = message;
+        log.error(`[PacStore] save failed, path=${docPath}`, error);
+        this.#notifyError(`保存失败：${message}`);
+        return false;
     }
 
     // ── 编辑器绑定 ──
@@ -427,13 +461,59 @@ class PacStore {
      * 合并元信息补丁。由元信息编辑对话框返回后调用。
      *
      * PacFrontMatter 的协调逻辑集中在 store，避免 editor 直接拼装 meta。
-     * 当前对话框未实现字段编辑时，返回的补丁通常与当前值相等，
-     * merge + isPacMetaEqual 会直接跳过，不会产生脏状态。
+     *
+     * 补丁语义约定（与对话框实现一致）：
+     *   - 字段不在 patch 中：无变化；
+     *   - 字段值为 undefined：从 meta 中删除该字段（用户把可选字段改回“未设置”）；
+     *   - 其他值：设置为该值。
+     *
+     * 为什么不能直接把 undefined 交给 mergePacMeta：
+     * mergePacMeta 按“有值才写入”实现，值为 undefined 的字段会被静默忽略，
+     * 于是“把 true/false 改回未设置”这一删除意图丢失，isPacMetaEqual 认为
+     * 无变化，doc.meta 不更新，save() 随之不脏、不落盘——表现为“保存按钮点了
+     * 没反应 / 重新打开仍是旧值”。这里显式分离删除与设置，保证删除语义可达。
+     *
+     * 合并结果必须做一次深拷贝再落库：补丁通常直接来自对话框里绑定在
+     * `$state` 上的对象，浅拷贝会把响应式代理留在 doc.meta 里，
+     * 后续任何结构化克隆 / 序列化路径都会踩坑。
      */
     updateMeta(patch: Partial<PacFrontMatter>): void {
         if (this.status !== 'ready' || !this.doc) return;
 
-        const nextMeta = mergePacMeta(this.doc.meta, patch);
+        let nextMeta: PacFrontMatter;
+        try {
+            // eslint-disable-next-line svelte/prefer-svelte-reactivity
+            const removals = new Set<string>();
+            const changes: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(patch)) {
+                if (value === undefined) {
+                    removals.add(key);
+                } else {
+                    changes[key] = value;
+                }
+            }
+
+            const merged = mergePacMeta(
+                this.doc.meta,
+                changes as Partial<PacFrontMatter>,
+            );
+
+            let filtered: PacFrontMatter = merged;
+            if (removals.size > 0) {
+                const copy: Record<string, unknown> = { ...merged };
+                for (const key of removals) {
+                    delete copy[key];
+                }
+                filtered = copy as PacFrontMatter;
+            }
+
+            nextMeta = clonePacMeta(filtered);
+        } catch (error) {
+            log.error('[PacStore] updateMeta failed', error);
+            this.#notifyError(`更新元信息失败：${describeError(error, '未知错误')}`);
+            return;
+        }
+
         if (isPacMetaEqual(nextMeta, this.doc.meta)) return;
 
         this.doc = {
@@ -451,7 +531,21 @@ class PacStore {
 
         const docPath = doc.path;
         const snapshot = this.currentContent ?? '';
-        const metaSnapshot = clonePacMeta(doc.meta);
+
+        /**
+         * 元信息快照在进入异步之前完成，并且必须在这里兜住异常。
+         *
+         * 旧实现把它放在 try 之外：一旦 meta 里混入不可克隆的值
+         * （例如 $state 代理），异常会冒泡到导航守卫，用户既没看到提示，
+         * 也无法离开页面。现在失败即视为“保存失败”，走统一出口并返回 false，
+         * 由 #confirmSaveIfDirty 取消本次导航。
+         */
+        let metaSnapshot: PacFrontMatter;
+        try {
+            metaSnapshot = clonePacMeta(doc.meta);
+        } catch (error) {
+            return this.#failSave(error, docPath);
+        }
 
         this.saving = true;
         this.saveError = null;
@@ -485,9 +579,7 @@ class PacStore {
                 log.info(`[PacStore] saved, path=${docPath}`);
                 return true;
             } catch (error) {
-                this.saveError = error instanceof Error ? error.message : '保存失败';
-                log.error(`[PacStore] save failed, path=${docPath}`, error);
-                return false;
+                return this.#failSave(error, docPath);
             } finally {
                 this.saving = false;
                 this.#savePromise = null;
@@ -542,6 +634,14 @@ class PacStore {
 
                 this.#discardConfirmed = true;
                 return true;
+            } catch (error) {
+                // 确认流程自身出错时保守处理：取消本次导航，保持文档可编辑，
+                // 同时把原因告诉用户，避免"点了没反应"。
+                log.error('[PacStore] confirm before leave failed', error);
+                this.#notifyError(
+                    `保存前确认失败：${describeError(error, '未知错误')}`,
+                );
+                return false;
             } finally {
                 this.#confirmPromise = null;
             }

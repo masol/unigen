@@ -2,6 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Switch } from "$lib/components/ui/switch";
   import { IconInfoCircle, IconPlus, IconTrash } from "@tabler/icons-svelte";
+  import { onMount } from "svelte";
   import { toast } from "svelte-sonner";
   import { SvelteSet } from "svelte/reactivity";
 
@@ -35,6 +36,7 @@
     initialRoot: unknown;
     hasOriginal: boolean;
     items: InputItem[];
+    snapshot: string;
   }
 
   let { value, onClose, onCancel }: PacMetaDialogCommonProps = $props();
@@ -52,7 +54,7 @@
       try {
         return structuredClone(value);
       } catch {
-        // Svelte 5 proxy / 含不可克隆值时回退到 JSON。
+        // Svelte 5 proxy / 含不可克隆值时回退到 JSON
       }
     }
 
@@ -85,10 +87,6 @@
     }
   }
 
-  /**
-   * 单行预览：外部不可编辑项只展示一行截断 JSON，
-   * 避免大段 JSON 把列表撑散。
-   */
   function jsonPreviewOneLine(value: unknown, maxLength = 120): string {
     const text = (() => {
       try {
@@ -144,7 +142,6 @@
           });
         }
       } catch {
-        // 单个 property 解析失败不能拖垮整个列表，降级为原始项保留。
         result.push({
           kind: "raw",
           id: nextId++,
@@ -158,10 +155,14 @@
     return result;
   }
 
-  /**
-   * 所有外部数据解析的入口。任何异常都不得逃逸到 Svelte 渲染层，
-   * 否则整个对话框会卡死。
-   */
+  function serializeItems(items: InputItem[]): string {
+    try {
+      return JSON.stringify(items);
+    } catch {
+      return `__error_${Date.now()}`;
+    }
+  }
+
   function parseInitial(inputs: unknown): InitialState {
     try {
       if (inputs === undefined) {
@@ -170,6 +171,7 @@
           initialRoot: undefined,
           hasOriginal: false,
           items: [],
+          snapshot: serializeItems([]),
         };
       }
 
@@ -179,6 +181,7 @@
           initialRoot: inputs,
           hasOriginal: true,
           items: [],
+          snapshot: serializeItems([]),
         };
       }
 
@@ -196,6 +199,7 @@
             initialRoot: root,
             hasOriginal: true,
             items: [],
+            snapshot: serializeItems([]),
           };
         }
 
@@ -210,6 +214,7 @@
           initialRoot: root,
           hasOriginal: true,
           items,
+          snapshot: serializeItems(items),
         };
       }
 
@@ -219,6 +224,7 @@
           initialRoot: root,
           hasOriginal: true,
           items: [],
+          snapshot: serializeItems([]),
         };
       }
 
@@ -231,6 +237,7 @@
         initialRoot: root,
         hasOriginal: true,
         items,
+        snapshot: serializeItems(items),
       };
     } catch {
       toast.warning("内容解析失败，已按原始格式展示，你可以删除它。");
@@ -239,6 +246,7 @@
         initialRoot: inputs,
         hasOriginal: true,
         items: [],
+        snapshot: serializeItems([]),
       };
     }
   }
@@ -247,17 +255,17 @@
   const mode = initial.mode;
   const initialRoot = initial.initialRoot;
   const hasOriginal = initial.hasOriginal;
-  const initialItemsSnapshot = (() => {
-    try {
-      return JSON.stringify(initial.items);
-    } catch {
-      return "";
-    }
-  })();
+  const initialItemsSnapshot = initial.snapshot;
 
   let items = $state<InputItem[]>(initial.items);
   let rootDeleted = $state(false);
   let error = $state<string | null>(null);
+
+  let hasChanges = $derived(
+    (mode === "unsupported" && rootDeleted) ||
+      (mode !== "unsupported" &&
+        serializeItems(items) !== initialItemsSnapshot),
+  );
 
   function addItem() {
     items = [
@@ -294,11 +302,11 @@
         if (!name) return "请填写信息名称。";
 
         if (!/^[\p{L}\p{N}_-]+$/u.test(name)) {
-          return `信息名称“${name}”不合法：只能包含中文、字母、数字、下划线或短横线，不能有空格或标点。`;
+          return `信息名称"${name}"不合法：只能包含中文、字母、数字、下划线或短横线，不能有空格或标点。`;
         }
 
         if (names.has(name)) {
-          return `信息名称“${name}”重复，请换一个名称。`;
+          return `信息名称"${name}"重复，请换一个名称。`;
         }
 
         names.add(name);
@@ -343,7 +351,7 @@
           setJsonProperty(properties, item.key, cloneJson(item.value));
         }
       } catch {
-        // 单个字段构建失败时跳过，不中断整个保存。
+        // 单个字段构建失败时跳过
       }
     }
 
@@ -384,11 +392,11 @@
     if (!hasOriginal && items.length === 0) return undefined;
 
     try {
-      if (hasOriginal && JSON.stringify(items) === initialItemsSnapshot) {
+      if (hasOriginal && serializeItems(items) === initialItemsSnapshot) {
         return cloneJson(initialRoot);
       }
     } catch {
-      // 序列化失败（如循环引用）时不走“未修改”短路，继续重建。
+      // 序列化失败时继续重建
     }
 
     const root: Record<string, unknown> = isPlainObject(initialRoot)
@@ -432,20 +440,33 @@
       toast.warning("保存时出现意外，已取消本次操作。你的修改仍然保留。");
     }
   }
+
+  function handleKeydown(e: KeyboardEvent): void {
+    if (e.key === "Escape") {
+      onCancel?.();
+    } else if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && hasChanges) {
+      save();
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener("keydown", handleKeydown);
+    return () => {
+      window.removeEventListener("keydown", handleKeydown);
+    };
+  });
 </script>
 
 <div class="space-y-4 p-4">
-  <!-- 头部：标题 + 说明 -->
   <div class="space-y-1">
     <h2 class="text-base font-medium">调用时需要提供的信息</h2>
     <p class="text-sm text-muted-foreground leading-relaxed">
-      其他 Agent
-      调用它时，会按照下面的清单告诉它这些信息。每一项都是一段文字，名称可以用中文。
+      当本 Agent被
+      调用时，调用方按下面清单准备信息。
     </p>
   </div>
 
   {#if mode === "unsupported"}
-    <!-- 不支持的根：原始 JSON 保留 + 删除 -->
     <div class="space-y-3 rounded-xl border bg-muted/20 p-3">
       <div class="flex items-start gap-2.5">
         <div
@@ -487,19 +508,17 @@
       {/if}
     </div>
   {:else}
-    <!-- 主列表：独立静态卡片 + 斑马线，提升条目间的辨识度 -->
     {#if items.length === 0}
       <div class="rounded-xl border border-dashed p-6 text-center">
         <p class="text-sm text-muted-foreground">还没有需要提供的信息。</p>
         <p class="mt-1 text-xs text-muted-foreground">
-          添加后，其他 Agent 调用它时就会知道需要提供什么。
+          添加后，其他 Agent 调用时就知道需要提供什么。
         </p>
       </div>
     {:else}
       <div class="flex flex-col gap-2">
         {#each items as item (item.id)}
           {#if item.kind === "editable"}
-            <!-- 可编辑项：两行布局。第一行名称 + 必填开关 + 删除，第二行描述。 -->
             <div class="space-y-2.5 rounded-xl border p-3 even:bg-muted/20">
               <div class="flex items-center gap-2">
                 <input
@@ -539,7 +558,6 @@
               ></textarea>
             </div>
           {:else}
-            <!-- 外部不可编辑项：单行 JSON 裁剪，只保留删除能力 -->
             <div class="space-y-2 rounded-xl border p-3 even:bg-muted/20">
               <div class="flex items-center gap-2">
                 <div class="min-w-0 flex-1">
@@ -598,7 +616,7 @@
   {/if}
 
   <p class="text-[11px] text-muted-foreground leading-relaxed">
-    名称可以使用中文；手动修改过的内容会原样保留，不会被这里覆盖。
+    名称是否可以使用中文，取决于最终使用的文本模型。
   </p>
 
   {#if error}
@@ -618,6 +636,8 @@
     >
       取消
     </Button>
-    <Button size="sm" class="rounded-lg" onclick={save}>保存</Button>
+    <Button size="sm" class="rounded-xl" disabled={!hasChanges} onclick={save}
+      >保存</Button
+    >
   </div>
 </div>

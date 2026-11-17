@@ -24,4 +24,3 @@ export type { Facets, GDagJSON, GuardKind, NodeKindT, NodeStatus, PNode, RegArti
 export type { ModuleSource, PluginInfo, PluginScope, PluginStatus } from './shared/plugin.js'
 export type { WindowEventPayload, WindowEventType } from './shared/rpcevt.js'
 export type * from './shared/template/index.js'
-

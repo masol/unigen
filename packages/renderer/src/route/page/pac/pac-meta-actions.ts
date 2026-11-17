@@ -14,11 +14,11 @@ import {
 } from "@tabler/icons-svelte";
 import type { Component } from "svelte";
 
-import PacMetaEnvironmentDialog from "./dialog/PacMetaEnvironmentDialog.svelte";
+import PacMetaEnvironmentDialog from "./dialog/env/PacMetaEnvironmentDialog.svelte";
 import PacMetaInputsContractDialog from "./dialog/PacMetaInputsContractDialog.svelte";
 import PacMetaIntroDialog from "./dialog/PacMetaIntroDialog.svelte";
-import PacMetaToolsDialog from "./dialog/PacMetaToolsDialog.svelte";
 import PacMetaUserTemplateDialog from "./dialog/PacMetaUserTemplateDialog.svelte";
+import PacMetaToolsDialog from "./dialog/tools/PacMetaToolsDialog.svelte";
 
 /**
  * Tabler 图标是 class 组件，与 Lucide 的 `Component<LucideProps>` 函数签名不兼容。
@@ -61,17 +61,34 @@ type MetaDialogComponent = Component<{
     onCancel?: () => void;
 }>;
 
+/**
+ * 为每个对话框分配唯一 ID，用于关闭已打开的同类对话框。
+ */
+const DIALOG_IDS = {
+    intro: "pac-meta-intro",
+    inputs_contract: "pac-meta-inputs-contract",
+    tools: "pac-meta-tools",
+    user_template: "pac-meta-user-template",
+    environment: "pac-meta-environment",
+} as const;
+
 async function openMetaDialog(
     store: PacMetaStore,
     component: MetaDialogComponent,
     fields: readonly (keyof PacFrontMatter)[],
+    dialogId: string,
 ): Promise<void> {
+    // 关闭已打开的同类对话框
+    if (dialogStore.isDialogOpen(dialogId)) {
+        dialogStore.cancel(dialogId, "replaced");
+    }
+
     const initial = pickPacMetaSection(store.doc?.meta ?? {}, { fields });
 
     const result = (await dialogStore.safeShow(
         component,
         { value: initial },
-        { size: "xl6", showCloseButton: true },
+        { size: "xl6", showCloseButton: true, id: dialogId },
     )) as Partial<PacFrontMatter> | null;
 
     if (result === null) return;
@@ -94,26 +111,37 @@ export function createPacMetaActions(store: PacMetaStore): PacMetaMenu[] {
                 icon: IconUserCircle,
                 hotKey: 1,
                 onSelect: () => {
-                    void openMetaDialog(store, PacMetaIntroDialog, INTRO_GROUP.fields);
+                    void openMetaDialog(
+                        store,
+                        PacMetaIntroDialog,
+                        INTRO_GROUP.fields,
+                        DIALOG_IDS.intro,
+                    );
                 },
             },
             {
-                label: "可用工具",
-                icon: IconTool,
-                hotKey: 2,
-                onSelect: () => {
-                    void openMetaDialog(store, PacMetaToolsDialog, TOOLS_GROUP.fields);
-                },
-            },
-            {
-                label: "输入要求",
+                label: "前置信息",
                 icon: IconListCheck,
-                hotKey: 3,
+                hotKey: 2,
                 onSelect: () => {
                     void openMetaDialog(
                         store,
                         PacMetaInputsContractDialog,
                         CONTRACT_GROUP.fields,
+                        DIALOG_IDS.inputs_contract,
+                    );
+                },
+            },
+            {
+                label: "AI装备栏",
+                icon: IconTool,
+                hotKey: 3,
+                onSelect: () => {
+                    void openMetaDialog(
+                        store,
+                        PacMetaToolsDialog,
+                        TOOLS_GROUP.fields,
+                        DIALOG_IDS.tools,
                     );
                 },
             },
@@ -130,6 +158,7 @@ export function createPacMetaActions(store: PacMetaStore): PacMetaMenu[] {
                 store,
                 PacMetaUserTemplateDialog,
                 PAC_META_SECTIONS.inputs.fields,
+                DIALOG_IDS.user_template,
             );
         },
     };
@@ -144,6 +173,7 @@ export function createPacMetaActions(store: PacMetaStore): PacMetaMenu[] {
                 store,
                 PacMetaEnvironmentDialog,
                 PAC_META_SECTIONS.environment.fields,
+                DIALOG_IDS.environment,
             );
         },
     };
