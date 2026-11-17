@@ -21,6 +21,7 @@ export function ensureIconifyCollections(): Promise<void> {
     if (registering) return registering;
 
     registering = (async () => {
+        /* @vite-ignore */
         const mod = await import('@iconify-json/twemoji/icons.json');
         // icons.json 被 TS 推断为 {}，此处断言为 IconifyJSON
         addCollection((mod.default ?? mod) as unknown as IconifyJSON);

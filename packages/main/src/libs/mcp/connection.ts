@@ -1,10 +1,9 @@
 // packages/main/src/libs/mcp/connection.ts
-// packages/main/src/libs/mcp/connection.ts
+import { SerializedQueue } from "$libs/utils/async-queue.js";
 import type { Tool } from "ai";
 import Logger from "electron-log/main.js";
 import { randomUUID } from "node:crypto";
 import pMap from "p-map";
-import PQueue from "p-queue";
 import {
     closeMcpClient,
     connectMcpServer,
@@ -80,11 +79,11 @@ export interface McpConnectionPoolOptions {
  *   ready    ── idle 超时 ─▶ closed  （refCount==0 时由计时器触发）
  *
  * 并发：
- *   - 所有状态变更经过单并发 p-queue 串行化；
+ *   - 所有状态变更经过 SerializedQueue 串行化；
  *   - close() 中多个独立 entry 用 p-map 并发关闭。
  */
 export class McpConnectionPool {
-    readonly #queue = new PQueue({ concurrency: 1 });
+    readonly #queue = new SerializedQueue();
     readonly #configs = new Map<string, ConfigRecord>();
     readonly #entries = new Map<string, Entry>();
     readonly #connect: typeof connectMcpServer;

@@ -1,7 +1,8 @@
+// packages/main/src/libs/searchsrv/search-db-base.ts
 import type { EmbedType } from "$libs/model/factory/type.js";
+import { SerializedQueue } from "$libs/utils/async-queue.js";
 import type { Connection } from "@lancedb/lancedb";
 import Logger from "electron-log/main.js";
-import PQueue from "p-queue";
 import { throwPrecondition } from "../utils/err.js";
 import {
     EmbeddingManager,
@@ -13,7 +14,7 @@ import { getLanceRuntime, type LanceRuntime } from "./lance-runtime.js";
 
 export abstract class SearchDbBase {
     protected readonly embedding = new EmbeddingManager();
-    protected readonly queue = new PQueue({ concurrency: 1 });
+    protected readonly queue = new SerializedQueue();
 
     #db: Connection | null = null;
     #lance: LanceRuntime | null = null;

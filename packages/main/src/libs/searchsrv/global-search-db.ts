@@ -3,7 +3,6 @@ import { KcDirName, SkillsDirName } from "$libs/const.js";
 import { dataCenter } from "$libs/utils/sys/data.js";
 import Logger from "electron-log/main.js";
 import { pathExists } from "fs-extra";
-import PQueue from "p-queue";
 import { lanceGlobalDir } from "../utils/sys/dir.js";
 import type { EmbeddingState } from "./embedding/embedding-manager.js";
 import {
@@ -140,14 +139,10 @@ export class GlobalSearchDB extends SearchDbBase {
         paths: string[],
         sync: (path: string) => Promise<void>,
     ): Promise<void> {
-        const queue = new PQueue({ concurrency: 1 });
-
         for (const path of paths) {
-            await queue.add(async () => {
-                if (await pathExists(path)) {
-                    await sync(path);
-                }
-            });
+            if (await pathExists(path)) {
+                await sync(path);
+            }
         }
     }
 

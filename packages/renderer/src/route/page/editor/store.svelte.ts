@@ -3,7 +3,7 @@ import { projectStore } from '$lib/store/project.svelte';
 import { layoutStore } from '$lib/store/ui/layout.svelte';
 import { safeApi } from '$lib/utils/api';
 import Logger from 'electron-log/renderer';
-import * as monaco from 'monaco-editor';
+import type { editor as MonacoEditor } from 'monaco-editor';
 import type { BlueprintKind } from '../../featured/rightside/glossary/store.svelte';
 
 export type { BlueprintKind };
@@ -224,14 +224,14 @@ export class EditorStore {
         }
     }
 
-    private _editor: monaco.editor.IStandaloneCodeEditor | null = null;
-    attachEditor(ed: monaco.editor.IStandaloneCodeEditor) {
+    private _editor: MonacoEditor.IStandaloneCodeEditor | null = null;
+    attachEditor(ed: MonacoEditor.IStandaloneCodeEditor) {
         this._editor = ed;
     }
-    detachEditor(ed?: monaco.editor.IStandaloneCodeEditor) {
+    detachEditor(ed?: MonacoEditor.IStandaloneCodeEditor) {
         if (!ed || this._editor === ed) this._editor = null;
     }
-    private runFocused(fn: (ed: monaco.editor.IStandaloneCodeEditor) => void) {
+    private runFocused(fn: (ed: MonacoEditor.IStandaloneCodeEditor) => void) {
         const ed = this._editor;
         if (!ed) return;
         ed.focus();

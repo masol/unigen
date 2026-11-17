@@ -69,7 +69,6 @@
     "mitt": "^3.0.1",
     "node-llama-cpp": "^3.22.3",
     "p-map": "^7.0.5",
-    "p-queue": "^10.0.0",
     "p-timeout": "^7.0.1",
     "quick-lru": "^5.1.1",
     "radashi": "^12.9.1",

@@ -4,22 +4,19 @@
 <!-- 主题走Shiki（亮/暗两套），跟随 <html> 的 dark class 响应 tailwind 主题。       -->
 <!-- 用户自定义配色（VS Code/TextMate 主题 JSON）作为 Shiki 主题加载，替换内置亮/暗主题。-->
 <!-- 注意：Shiki 只接管"语法高亮"，校验/格式化/补全等语言服务仍由 Monaco worker 提供。 -->
+<!-- Monaco 核心及 Workers 均为动态导入，避免打入首屏主包。 -->
 <script lang="ts">
   /* eslint-disable @typescript-eslint/no-explicit-any */
 
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { configStore } from "$lib/store/config.svelte";
   import { safeApi } from "$lib/utils/api";
-  import { shikiToMonaco } from "@shikijs/monaco";
   import Logger from "electron-log/renderer.js";
-  import * as monaco from "monaco-editor";
-  import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-  import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
-  import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
   import { getErrorMessage } from "radashi";
-  import { createHighlighter } from "shiki";
   import { getExtraLib } from "./libs";
   import { editorStore as store } from "./store.svelte";
+// ── 类型仅用于编译期，不参与运行时打包 ──
+  import type * as monacoTypes from "monaco-editor";
 
   // 内置亮/暗 Shiki 主题（无自定义时使用）
   const THEME_DARK = "vitesse-dark";
@@ -38,20 +35,43 @@
   let lightThemeName = THEME_LIGHT;
 
   let container = $state<HTMLDivElement | null>(null);
-  let editor = $state.raw<monaco.editor.IStandaloneCodeEditor | null>(null);
+  let editor = $state.raw<monacoTypes.editor.IStandaloneCodeEditor | null>(
+    null,
+  );
   /** 防止内部 setValue 与外部同步互相触发 */
   let syncingFromStore = false;
   /** tailwind 主题（dark class）监听器，卸载时断开 */
   let themeObserver: MutationObserver | null = null;
 
-  function setupWorkerEnv() {
+  /**
+   * 动态设置 Monaco Worker 环境。
+   * Workers 通过动态 import() 加载，Vite 会自动将其拆分为独立 chunk。
+   */
+  async function setupWorkerEnv() {
     if ((self as any).__monacoEnvReady) return;
+
+    const [
+      { default: EditorWorker },
+      { default: JsonWorker },
+      { default: TsWorker },
+    ] = await Promise.all([
+      import(
+        /* @vite-ignore */ "monaco-editor/esm/vs/editor/editor.worker?worker"
+      ),
+      import(
+        /* @vite-ignore */ "monaco-editor/esm/vs/language/json/json.worker?worker"
+      ),
+      import(
+        /* @vite-ignore */ "monaco-editor/esm/vs/language/typescript/ts.worker?worker"
+      ),
+    ]);
+
     self.MonacoEnvironment = {
       getWorker(_: unknown, label: string) {
-        if (label === "json") return new jsonWorker();
+        if (label === "json") return new JsonWorker();
         if (label === "typescript" || label === "javascript")
-          return new tsWorker();
-        return new editorWorker();
+          return new TsWorker();
+        return new EditorWorker();
       },
     };
     (self as any).__monacoEnvReady = true;
@@ -92,7 +112,8 @@
   }
 
   //── Shiki → Monaco：全局单例；解析结果随 promise 返回，避免竞态旁路 ──
-  function ensureShiki(): Promise<{
+  // monaco 命名空间由调用方传入，避免此函数内部再持有一份静态引用
+  function ensureShiki(monaco: typeof monacoTypes): Promise<{
     ok: boolean;
     dark: string;
     light: string;
@@ -103,6 +124,11 @@
     g.__shikiSetup = (async () => {
       const nameOf = (s: any) => (typeof s === "string" ? s : s.name);
       try {
+        const { shikiToMonaco } = await import(
+          /* @vite-ignore */ "@shikijs/monaco"
+        );
+        const { createHighlighter } = await import(/* @vite-ignore */ "shiki");
+
         const themeInfo = await safeApi().config.getTheme();
         const darkCustom = toShikiTheme(
           getheme(themeInfo.dark),
@@ -173,7 +199,10 @@
     NODE_AND_CUSTOM_DTS: string | null;
   };
 
-  function setupJsLanguageOnce(comfiles: CompleteInfo) {
+  function setupJsLanguageOnce(
+    monaco: typeof monacoTypes,
+    comfiles: CompleteInfo,
+  ) {
     if ((self as any).__jsLangReady) return;
 
     const ts = monaco.typescript;
@@ -195,7 +224,7 @@
       noSemanticValidation: false,
       noSyntaxValidation: false,
       diagnosticCodesToIgnore: [
-        1108, // 'return' can only be used within a function body],
+        1108, // 'return' can only be used within a function body
       ],
     });
 
@@ -263,9 +292,9 @@
     };
   }
 
-  //── 创建编辑器：只依赖 container，与 store.loading 解耦 ──
-  // 容器常驻 DOM；因Shiki 高亮器为异步，创建流程改为 await 就绪后再建editor，
-  // 保证设置Shiki 主题时主题已注册。Shiki 失败则用内置主题回退，不阻断创建。
+  //── 创建编辑器：Monaco 核心动态加载，与 store.loading 解耦 ──
+  // 容器常驻 DOM；因 Shiki 高亮器为异步，创建流程改为 await 就绪后再建 editor，
+  // 保证设置 Shiki 主题时主题已注册。Shiki 失败则用内置主题回退，不阻断创建。
   $effect(() => {
     if (!container || editor) return;
 
@@ -273,12 +302,18 @@
     let disposed = false;
 
     (async () => {
-      setupWorkerEnv();
-      const comfiles = await loadCompleteFiles();
-      setupJsLanguageOnce(comfiles);
+      // 1. 动态加载 Monaco 核心（首次 await 即触发 chunk 拉取）
+      const monaco = await import(/* @vite-ignore */ "monaco-editor");
 
-      // 先等Shiki 就绪（失败也会resolve，回退内置主题）
-      const shiki = await ensureShiki();
+      // 2. Worker 环境必须在 create 之前就绪
+      await setupWorkerEnv();
+
+      // 3. 加载补全数据 & 配置 JS 语言服务
+      const comfiles = await loadCompleteFiles();
+      setupJsLanguageOnce(monaco, comfiles);
+
+      // 4. 等 Shiki 就绪（失败也会 resolve，回退内置主题）
+      const shiki = await ensureShiki(monaco);
       darkThemeName = shiki.dark;
       lightThemeName = shiki.light;
 
@@ -343,7 +378,7 @@
         store.save();
       });
 
-      //赋值放最后：editor 一旦响应式就绪，各同步 effect 立即以 store 当前值收敛
+      // 赋值放最后：editor 一旦响应式就绪，各同步 effect 立即以 store 当前值收敛
       editor = ed;
     })();
 
@@ -367,7 +402,18 @@
     const lang = store.language;
     if (!editor) return;
     const model = editor.getModel();
-    if (model) monaco.editor.setModelLanguage(model, lang);
+    if (model) {
+      // 动态导入后 monaco 命名空间不在模块顶层，需通过 editor 实例反查
+      // IStandaloneCodeEditor.getModel() 返回的 model 自带语言切换能力
+      // 但 setModelLanguage 是 monaco.editor 上的静态方法，这里安全地复用
+      // 由于 editor 已创建，monaco 必然已加载，通过全局访问是安全的
+      const monacoGlobal = (self as any).monaco as
+        | typeof monacoTypes
+        | undefined;
+      if (monacoGlobal) {
+        monacoGlobal.editor.setModelLanguage(model, lang);
+      }
+    }
   });
 
   // ── 只读态同步 ──
@@ -410,7 +456,7 @@
     <div
       class="absolute inset-0 z-20 flex gap-4 bg-background p-4 animate-fade-in"
     >
-      <div class="flex w-10 shrink-0 flex-col gap-3pt-1">
+      <div class="flex w-10 shrink-0 flex-col gap-3 pt-1">
         {#each Array(18) as _, i (i)}<Skeleton class="h-4 w-6 rounded-lg" />
         {/each}
       </div>
