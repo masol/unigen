@@ -3,18 +3,26 @@
 
 import { confirmStore } from '$lib/store/ui/confirm.svelte';
 import { safeApi } from '$lib/utils/api';
+import type { PacFrontMatter } from '@app/main/types';
 import { location, push } from '@keenmate/svelte-spa-router';
 import { NavigationCancelledError } from '@keenmate/svelte-spa-router/helpers/navigation-guard';
 import type { Editor as EditorSink } from '@tiptap/core';
 import { default as log } from 'electron-log/renderer';
 import { history } from 'prosemirror-history';
 import type { PacFileDocument } from '../../../../../main/src/types/shared/api/pac';
+import {
+    clonePacMeta,
+    isPacMetaEqual,
+    mergePacMeta,
+    normalizePacMeta,
+} from './pac-meta-sections';
 
 // ── 类型 ──
 
-export type PacDocument = PacFileDocument & {
+export type PacDocument = Omit<PacFileDocument, 'meta'> & {
     id: string;
     title: string;
+    meta: PacFrontMatter;
 };
 
 type PacStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -62,10 +70,19 @@ function normalizeDocument(
         id: requestedPath,
         title: titleFromPath(actualPath),
         path: actualPath,
-        meta: source?.meta ?? {},
+        meta: normalizePacMeta(source?.meta),
         content: typeof source?.content === 'string' ? source.content : '',
         updatedAt: source?.updatedAt,
     };
+}
+
+/**
+ * `PacFrontMatter` 未声明索引签名（见类型定义约束），
+ * 而 IPC 契约 `savePacFile.meta` 要求 `Record<string, unknown>`。
+ * 在边界处用 `Object.fromEntries` 生成一个普通记录，避免类型断言。
+ */
+function toMetaRecord(meta: PacFrontMatter): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(meta));
 }
 
 /**
@@ -113,6 +130,9 @@ class PacStore {
      */
     #hydrating = false;
 
+    /** 已保存的元信息快照，用于与当前 doc.meta 比较 dirty。 */
+    #savedMeta = $state.raw<PacFrontMatter | null>(null);
+
     // ── 响应式状态 ──
 
     status = $state<PacStatus>('idle');
@@ -131,22 +151,34 @@ class PacStore {
     // ── 派生 ──
 
     /**
-     * 脏状态的唯一真源：只做内容比较，不做“无条件置 true”。
+     * 脏状态的唯一真源：内容比较 + 元信息比较，不做“无条件置 true”。
      *
      * Svelte 的 $state.raw 在赋值相同原始值时不会触发不必要的更新，
-     * 因此 `!==` 对字符串的值比较就是 dirty 的唯一真源：用户撤销、
-     * 改回原文时 currentContent 会重新等于 savedContent，dirty 自动回到 false。
+     * 因此 `!==` 对字符串的值比较就是内容 dirty 的唯一真源：用户撤销、
+     * 改回原文时 currentContent 会重新等于 savedContent，内容 dirty 自动回到 false。
+     *
+     * 元信息通过 #savedMeta 快照比较，编辑元信息后同样会进入 dirty，
+     * 保存成功后更新快照。
      *
      * UI（dirty 派生）和导航守卫（#confirmSaveIfDirty）都走这里，
      * 避免两处各自实现导致逻辑漂移。
      */
-    #isDirty(): boolean {
+    #isMetaDirty(): boolean {
         return (
+            this.doc !== null &&
+            this.#savedMeta !== null &&
+            !isPacMetaEqual(this.doc.meta, this.#savedMeta)
+        );
+    }
+
+    #isDirty(): boolean {
+        const contentDirty =
             this.doc !== null &&
             this.currentContent !== null &&
             this.savedContent !== null &&
-            this.currentContent !== this.savedContent
-        );
+            this.currentContent !== this.savedContent;
+
+        return contentDirty || this.#isMetaDirty();
     }
 
     readonly dirty = $derived(this.#isDirty());
@@ -284,6 +316,7 @@ class PacStore {
         this.doc = null;
         this.currentContent = null;
         this.savedContent = null;
+        this.#savedMeta = null;
         this.revision = 0;
         this.#errorCount = 0; // 打开新文件：错误数先归零，等解析完成再写入
 
@@ -303,6 +336,7 @@ class PacStore {
             this.doc = doc;
             this.currentContent = doc.content;
             this.savedContent = doc.content;
+            this.#savedMeta = clonePacMeta(doc.meta);
             this.revision += 1;
             this.status = 'ready';
             this.#discardConfirmed = false;
@@ -389,6 +423,26 @@ class PacStore {
         this.#discardConfirmed = false;
     }
 
+    /**
+     * 合并元信息补丁。由元信息编辑对话框返回后调用。
+     *
+     * PacFrontMatter 的协调逻辑集中在 store，避免 editor 直接拼装 meta。
+     * 当前对话框未实现字段编辑时，返回的补丁通常与当前值相等，
+     * merge + isPacMetaEqual 会直接跳过，不会产生脏状态。
+     */
+    updateMeta(patch: Partial<PacFrontMatter>): void {
+        if (this.status !== 'ready' || !this.doc) return;
+
+        const nextMeta = mergePacMeta(this.doc.meta, patch);
+        if (isPacMetaEqual(nextMeta, this.doc.meta)) return;
+
+        this.doc = {
+            ...this.doc,
+            meta: nextMeta,
+        };
+        this.#discardConfirmed = false;
+    }
+
     async save(): Promise<boolean> {
         const doc = this.doc;
 
@@ -397,6 +451,7 @@ class PacStore {
 
         const docPath = doc.path;
         const snapshot = this.currentContent ?? '';
+        const metaSnapshot = clonePacMeta(doc.meta);
 
         this.saving = true;
         this.saveError = null;
@@ -407,7 +462,7 @@ class PacStore {
             try {
                 const result = await safeApi().project.savePacFile({
                     path: docPath,
-                    meta: doc.meta,
+                    meta: toMetaRecord(metaSnapshot),
                     content: snapshot,
                 });
 
@@ -419,6 +474,7 @@ class PacStore {
                         : Date.now();
 
                 this.savedContent = snapshot;
+                this.#savedMeta = metaSnapshot;
                 this.#discardConfirmed = false;
                 this.doc = {
                     ...this.doc,
@@ -501,6 +557,7 @@ class PacStore {
         this.doc = null;
         this.currentContent = null;
         this.savedContent = null;
+        this.#savedMeta = null;
         this.error = null;
         this.saveError = null;
         this.saving = false;

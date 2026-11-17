@@ -18,11 +18,40 @@
   import { ISMAC } from "../../utils.js";
   import Tooltip from "./Tooltip.svelte";
 
+  type ToolbarMetaMenuItem = {
+    label: string;
+    icon: typeof IconChevronDown;
+    /** 数字 1-5，对应 Alt+1 … Alt+5。 */
+    hotKey?: number;
+    onSelect: () => void;
+  };
+
+  type ToolbarMetaMenu = {
+    id: string;
+    label: string;
+    /**
+     * 使用 Tabler 图标 class 的构造签名作为类型来源（本文件已导入
+     * IconChevronDown）。EdraCommand["icon"] 是 Lucide 的
+     * `Component<LucideProps>` 函数签名，无法与 Tabler 的 class 组件互赋。
+     */
+    icon: typeof IconChevronDown;
+    /** 数字 1-5，对应 Alt+1 … Alt+5。 */
+    hotKey?: number;
+    /**
+     * 下拉菜单项：非空时渲染为下拉菜单。
+     * 为空或未提供时，若存在 `onSelect` 则渲染为普通按钮。
+     */
+    items?: ToolbarMetaMenuItem[];
+    /** 无 items 时点击按钮直接触发的回调。 */
+    onSelect?: () => void;
+  };
+
   interface Props {
     class?: string;
     onSave?: () => void;
     canSave?: boolean;
     saving?: boolean;
+    metaMenus?: ToolbarMetaMenu[];
   }
 
   const {
@@ -30,6 +59,7 @@
     onSave,
     canSave = false,
     saving = false,
+    metaMenus = [],
   }: Props = $props();
 
   const editor = getEditor();
@@ -52,6 +82,11 @@
   );
 
   const saveShortCut = `${ISMAC ? "⌘" : "Ctrl+"}S`;
+
+  function formatHotKey(hotKey?: number): string {
+    if (!hotKey) return "";
+    return ISMAC ? `⌥${hotKey}` : `Alt+${hotKey}`;
+  }
 
   function useAI() {
     void transaction.version;
@@ -229,4 +264,66 @@
       </DropdownMenu.Root>
     {/if}
   {/each}
+
+  {#if metaMenus.length > 0}
+    <Separator orientation="vertical" class="h-6!" />
+
+    {#each metaMenus as menu (menu.id)}
+      {@const MenuIcon = menu.icon}
+      {#if menu.items && menu.items.length > 0}
+        <DropdownMenu.Root>
+          <Tooltip tooltip={menu.label} shortCut={formatHotKey(menu.hotKey)}>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  variant="ghost"
+                  size="icon"
+                  class="relative"
+                  aria-label={menu.label}
+                >
+                  <MenuIcon />
+                  <span
+                    class="absolute -right-0.5 -bottom-0.5 flex size-4 items-center justify-center rounded-full bg-background"
+                  >
+                    <IconChevronDown
+                      size={10}
+                      stroke={2.5}
+                      class="text-foreground/70"
+                    />
+                  </span>
+                </Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+          </Tooltip>
+
+          <DropdownMenu.Content align="end" class="w-56">
+            {#each menu.items as item (item.label)}
+              {@const ItemIcon = item.icon}
+              <DropdownMenu.Item onSelect={item.onSelect}>
+                <ItemIcon size={16} />
+                <span>{item.label}</span>
+                {#if item.hotKey}
+                  <DropdownMenu.Shortcut>
+                    {formatHotKey(item.hotKey)}
+                  </DropdownMenu.Shortcut>
+                {/if}
+              </DropdownMenu.Item>
+            {/each}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      {:else if menu.onSelect}
+        <Tooltip tooltip={menu.label} shortCut={formatHotKey(menu.hotKey)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={menu.label}
+            onclick={() => menu.onSelect?.()}
+          >
+            <MenuIcon />
+          </Button>
+        </Tooltip>
+      {/if}
+    {/each}
+  {/if}
 </div>

@@ -6,6 +6,7 @@
   import { onDestroy, onMount } from "svelte";
 
   import { readEditorMarkdown } from "./editor-utils";
+  import { createPacMetaActions, matchPacMetaHotkey } from "./pac-meta-actions";
   import PacEditorCanvas from "./PacEditorCanvas.svelte";
   import PacEditorError from "./PacEditorError.svelte";
   import PacEditorHeader from "./PacEditorHeader.svelte";
@@ -29,6 +30,8 @@
 
   editor?.setEditable(true);
 
+  const metaActions = createPacMetaActions(pacStore);
+
   onMount(() => {
     if (editor) pacStore.attachEditor(editor);
   });
@@ -46,11 +49,16 @@
   function handleKeydown(event: KeyboardEvent) {
     const isSaveCombo =
       (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s";
-    if (!isSaveCombo) return;
+    if (isSaveCombo) {
+      event.preventDefault();
+      if (pacStore.dirty && !pacStore.saving) {
+        void pacStore.save();
+      }
+      return;
+    }
 
-    event.preventDefault();
-    if (pacStore.dirty && !pacStore.saving) {
-      void pacStore.save();
+    if (matchPacMetaHotkey(metaActions, event)) {
+      return;
     }
   }
 </script>
@@ -81,6 +89,8 @@
               onSave={() => void pacStore.save()}
               canSave={pacStore.dirty}
               saving={pacStore.saving}
+              {metaActions}
+              metaMenus={metaActions}
             />
           {/snippet}
         </PacEditorHeader>

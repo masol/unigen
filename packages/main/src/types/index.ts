@@ -7,6 +7,8 @@ export type {
     BuiltinTool, ToolSearchItem,
     ToolSearchOutput
 } from './shared/api/agent.js'
+
+export type { JsonValue, PacFrontMatter, PacToolConfig } from "./blueprint/frontmatter.js"
 export type { AppClient, NotifyContract } from './shared/api/index.js'
 export type { KbCollection, KbCollectionInput, KbDoc, KbDocStatus, KnowledgeBaseSearchItem } from './shared/api/kb.js'
 export type { BlueprintKind } from './shared/api/list.js'
