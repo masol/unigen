@@ -10,8 +10,9 @@ import { getErrorMessage } from "radashi";
 import type { IProjectContext } from "../type.js";
 import { BaseProjectController } from "./base.js";
 
-
-const runnerContextTLS = new AsyncLocalStorage<IRunnerContext>();
+const RUNNER_CONTEXT_TLS_KEY = Symbol.for('unigen.singleton.runnerContextTLS');
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const runnerContextTLS: AsyncLocalStorage<IRunnerContext> = ((globalThis as any)[RUNNER_CONTEXT_TLS_KEY] ??= new AsyncLocalStorage<IRunnerContext>());
 
 export function getRunnerContextWithNull(): IRunnerContext | null {
     return runnerContextTLS.getStore() ?? null;

@@ -3,6 +3,7 @@ import type { EmbedType } from "$libs/model/factory/type.js";
 import { SerializedQueue } from "$libs/utils/async-queue.js";
 import type { Connection } from "@lancedb/lancedb";
 import Logger from "electron-log/main.js";
+import { ensureDir } from "fs-extra";
 import { throwPrecondition } from "../utils/err.js";
 import {
     EmbeddingManager,
@@ -90,6 +91,8 @@ export abstract class SearchDbBase {
 
         try {
             this.#lance = await getLanceRuntime();
+            await ensureDir(this.dbPath())
+            Logger.debug("dbpath=", this.dbPath())
             this.#db = await this.#lance.connect(this.dbPath(), {
                 storageOptions: { timeout: "10s" },
             });

@@ -1,5 +1,7 @@
+import { ensureDir } from 'fs-extra';
 import { access, opendir } from 'node:fs/promises';
 import { join } from 'node:path';
+
 /**
  * 判断 unknown 是否为带 code 的 Node 系统错误
  */
@@ -30,18 +32,20 @@ export async function isDirEmpty(dirPath: string): Promise<boolean> {
 }
 
 /**
- * 在 dir 下生成形如 `${prefix}${n}` 的名称（n 从 1 递增），只检查不创建。
+ * 在 dir 下生成形如 `${prefix}${n}` 的名称（n 从 1 递增），只检查不创建文件。
+ * - 目录不存在时自动创建（通过 fs-extra ensureDir）
  * - 优先复用被删除后留下的空位（如已有 1,2,4，则返回 3）
- * - 目录不存在直接抛错，不创建
  * - 返回前用 access 确认候选名未被占用
  * @param dir 目标目录
- * @param prefix 名称前缀，默认 'untitle'
+ * @param prefix 名称前缀，默认 'untitled'
  * @returns 有效的名称（不含目录）
  */
 export async function nextIncrementalName(
     dir: string,
     prefix = 'untitled'
 ): Promise<string> {
+    // 0. 确保目录存在，不存在则自动创建
+    await ensureDir(dir);
 
     // 1. 流式读取目录，收集所有已存在的序号
     const used = new Set<number>();
