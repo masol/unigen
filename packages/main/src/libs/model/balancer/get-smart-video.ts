@@ -1,4 +1,4 @@
-import { throwNotfound } from '$libs/utils/err.js';
+import { throwNotfound, throwUnprcessable } from '$libs/utils/err.js';
 import { IRunnerContext } from '$types/blueprint/context.js';
 import { ModelTags } from '$types/shared/model.js';
 import type {
@@ -73,11 +73,21 @@ function buildVideoProxy(
 
             for (let i = 0; i < models.length; i++) {
                 if (ctx?.isAborted) {
-                    throw new DOMException('Aborted by context', 'AbortError');
+                    throwUnprcessable('Aborted by context,AbortError');
                 }
                 const { c, model } = models[i];
+
+                const doGenerate = model?.doGenerate;
+                if (!doGenerate) {
+                    lastErr = new Error(
+                        `[video] 模型 [${c.provider.id}::${c.model.id}] 不支持 doGenerate（仅实现了 start/status）`,
+                    );
+                    (ctx?.warn ?? Logger.warn)(String(lastErr));
+                    continue;
+                }
+
                 try {
-                    return await c.limiter.run(() => model.doGenerate(merged));
+                    return await c.limiter.run(() => doGenerate.call(model, merged));
                 } catch (e) {
                     lastErr = e;
                     if (isAbortError(e) || ctx?.isAborted) {
