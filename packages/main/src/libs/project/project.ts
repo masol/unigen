@@ -13,7 +13,7 @@ import { projectActivityDataSchema } from "$types/shared/template/project.js";
 import { BrowserWindow } from "electron";
 import Logger from "electron-log/main.js";
 import { filenamifyPath } from "filenamify";
-import fsExtra from 'fs-extra';
+import fsExtra, { ensureDir } from 'fs-extra';
 import fs from 'node:fs/promises';
 import { isAbsolute, join, resolve } from "node:path";
 import pMap from "p-map";
@@ -233,6 +233,7 @@ export class ProjectContainer implements IProjectContext {
         const resolvedPath = this.#resolveAndSanitizePath(path);
         try {
             await this.close();
+            await ensureDir(resolvedPath); // 确保路径存在。
             this.#path = resolvedPath;
             this.#type = type;
             // 提前加载插件，才能注册tapable事件响应点。支持无插件运行。
