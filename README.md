@@ -100,33 +100,47 @@ tools:
 ```markdown
 ---
 name: ecom-visual
-description: 电商视觉内容生产协调者。调度调研定位、风格、分镜、交付四个子 Agent。
-inputs:
-  type: object
-  properties:
-    design_brief:     { type: string, description: 客户提供的设计信息原文 }
-    product_category: { type: string, description: 产品类目 }
-    channel_type:     { type: string, enum: [main_image, detail_page], description: 主图或详情页 }
+description: 电商视觉内容生产协调者。调度调研定位、风格、分镜、交付四个子 Agent，按阶段接力产出成品。
 tools:
-  - { type: agent, path: .briefing-and-positioning.md }
-  - { type: agent, path: .style-direction.md }
-  - { type: agent, path: .shot-design.md }
-  - { type: agent, path: .delivery.md }
-storage:
-  kv: shared_context
+  - { type: agent, path: ./steps/briefing-and-positioning.md }
+  - { type: agent, path: ./steps/style-direction.md }
+  - { type: agent, path: ./steps/shot-design.md }
+  - { type: agent, path: ./steps/delivery.md }
 ---
 
-你是电商视觉内容的协调者。收到选题后：
+# 电商视觉设计调度官
 
-1. 调用 briefing-and-positioning 完成调研与定位 → 结论写入 shared_context
-2. 调用 style-direction 确定风格方向 → 写入 shared_context
-3. 调用 shot-design 生成分镜与画面方案 → 写入 shared_context
-4. 调用 delivery 终审交付
+你负责把客户给的设计资料转化为可落地的电商视觉成品。从信息提炼到市场定位，再到风格确定、出图规格、最终交付，每一步都有专门的执行人。
 
-遇到事实性问题，优先查 shared_context，禁止猜测。
+## 全局约束
+
+以下规则贯穿全程，任何步骤不得违反：
+
+...
+
+## 阶段 A：信息提炼与定位
+
+调用 briefing-and-positioning 消费原始设计资料，产出核心卖点、slogan、目标市场、参考案例。这是后续所有决策的基础。
+
+## 阶段 B：风格确定
+
+调用 style-direction，基于阶段 A 的产出，归纳目标人群主流风格、提取产品设计内涵、总结情绪价值，给出一个视觉风格令牌。这个令牌是后续出图规格的唯一风格依据。
+
+## 阶段 C：出图规格
+
+调用 shot-design，把风格令牌落到完整的画面规格：主体、材质、环境、光影、镜头、文字排版、色彩方案、画面质感、负面提示词。它产出的 `render_spec` 是一段可直接投喂文生图模型、一次性产出含文字成品的完整中文提示词。
+
+## 阶段 D：交付
+
+调用 delivery，消费 shot-design 的 `render_spec`，逐条核对全局约束，补齐产品文字信息与 Logo，输出最终成品及交付说明。任一约束不满足，退回对应阶段重做，不放行。
 ```
 
-`inputs` 声明这个 Agent 接收的结构化入参；`type: agent` 的每一项指向一份子指南文件——子 Agent 之间通过 `storage` 通信，协作逻辑写在正文里。这是长链条任务的标准拆法：一条长流程拆成多个各司其职的子 Agent，每个只负责一段，靠共享存储接力。
+`type: agent` 的每一项指向一份子指南文件。调度官依次调用四个子 Agent，把上一步的产出作为下一步的输入——子 Agent 只负责自己那一段，接力完成整条流程。
+### 子 Agent 之间怎么传数据
+
+上面这份指南读起来像一份流程说明，没有变量，没有存储。子 Agent 之间的信息像函数调用一样逐层传递：调度官调用 briefing-and-positioning，拿回它的产出，再把产出交给 style-direction。上游的输出就是下游的输入，调用返回即完成交接。这是**堆栈式协作**——贴近自然语言，不留痕迹，多数流程用它就够。
+
+需要让多个子 Agent、跨多个步骤反复读写同一份上下文时，可以使用共享存储。
 
 ### 例 3 · 接外部工具（MCP）
 
