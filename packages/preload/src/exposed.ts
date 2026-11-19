@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 // Window functions
 function getWindowId() {
@@ -19,6 +19,12 @@ if (typeof window !== 'undefined') {
   });
 }
 
+function getPathForFile(file: File): string {
+  return webUtils.getPathForFile(file);
+}
+
 // Expose all functions to renderer context
 contextBridge.exposeInMainWorld('getWindowId', getWindowId);
 contextBridge.exposeInMainWorld('onNotification', onNotification);
+contextBridge.exposeInMainWorld('getPathForFile', getPathForFile);
+
