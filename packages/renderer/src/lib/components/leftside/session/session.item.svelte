@@ -12,6 +12,7 @@
     IconEdit,
     IconLoader2,
     IconPin,
+    IconProgress,
     IconTrash,
     IconX,
   } from "@tabler/icons-svelte";
@@ -29,6 +30,8 @@
   let isMenuOpen = $state(false);
 
   const isActive = $derived(sessionStore.activeSessionId === session.id);
+  // 运行状态与 active/switching 正交，作为独立派生读取
+  const isRunning = $derived(sessionStore.isRunning(session.id));
   const createdText = $derived(
     i18nStore.dayjs(session.createdAt).format("YYYY-MM-DD HH:mm"),
   );
@@ -88,7 +91,11 @@
 <div
   class={[
     "group/item relative flex h-9 min-w-0 items-center rounded-lg transition-colors duration-150",
-    isActive ? "bg-primary/10" : "hover:bg-accent/60",
+    isActive
+      ? "bg-primary/10"
+      : isRunning
+        ? "bg-primary/6 hover:bg-primary/10"
+        : "hover:bg-accent/60",
     isSwitching ? "opacity-60" : "",
   ]}
 >
@@ -126,21 +133,31 @@
       </button>
     </div>
   {:else}
-    <!-- 单行标题 + 悬停显示会话元信息；超长由 truncate 处理，不会撑出横向滚动 -->
+    <!-- 运行中：左侧 spinner + 标题主色；与右侧消息流加载指示在位置/图标/色彩上区分 -->
     <Tooltip.Root delayDuration={1500}>
       <Tooltip.Trigger>
         {#snippet child({ props })}
           <button
             {...props}
             type="button"
-            class="flex h-full min-w-0 flex-1 items-center px-2.5 text-left disabled:pointer-events-none"
+            class="flex h-full min-w-0 flex-1 items-center gap-1.5 px-2.5 text-left disabled:pointer-events-none"
             disabled={isSwitching}
             onclick={handleSelect}
           >
+            {#if isRunning}
+              <IconProgress
+                class="size-3.5 shrink-0 animate-spin text-primary"
+                stroke={2}
+              />
+            {/if}
             <span
               class={[
-                "w-full min-w-0 truncate text-sm",
-                isActive ? "font-medium text-foreground" : "text-foreground/80",
+                "min-w-0 flex-1 truncate text-sm",
+                isRunning
+                  ? "font-medium text-primary"
+                  : isActive
+                    ? "font-medium text-foreground"
+                    : "text-foreground/80",
               ]}
             >
               {session.title}

@@ -32,6 +32,19 @@ class SessionStore {
     #activeSessionId = $state<string | undefined>(undefined)
     #searchQuery = $state('')
 
+    /**
+     * 运行中会话 id 列表（瞬态，不持久化、不属于 ChatSession）。
+     *
+     * 为什么用「数组 + 整体替换」而不是 Set：
+     * $state(new Set()) 的深层响应式在「写入发生在方法内、读取穿透到另一个方法」
+     * 这种间接访问路径下不可靠——add()/delete() 后，读取方的 $derived 不会重跑，
+     * 表现为「状态已变但 UI 不刷新，切换其它过滤条件后才出现」。
+     * 数组整体替换引用能 100% 触发所有读取方的派生重算。
+     * running 数量通常为 0~数个，includes 的 O(n) 开销可忽略。
+     */
+    #runningSessionIds = $state<string[]>([])
+    #runningOnly = $state(false)
+
     // 异步状态机 - init（唯一需要完整状态机的操作）
     #isLoadingInit = $state(false)
     #errorInit = $state<string | null>(null)
@@ -55,6 +68,7 @@ class SessionStore {
     get sessions() { return this.#sessions }
     get activeSessionId() { return this.#activeSessionId }
     get searchQuery() { return this.#searchQuery }
+    get runningOnly() { return this.#runningOnly }
 
     get isLoadingInit() { return this.#isLoadingInit }
     get errorInit() { return this.#errorInit }
@@ -77,12 +91,26 @@ class SessionStore {
         ),
     )
 
-    /** 搜索过滤结果：无搜索词时直接返回全量；有搜索词时跑 Fuse */
+    /**
+     * 过滤结果：搜索词（Fuse）与「只看执行中」可组合。
+     * 无搜索词时不构建/读取 Fuse 索引。
+     */
     readonly filteredSessions = $derived.by((): ChatSession[] => {
-        if (!this.hasSearch) return this.#sessions
-        const query = this.#searchQuery.trim()
-        const matchedIds = new Set(this.#fuseIndex.search(query))
-        return this.#sessions.filter((s) => matchedIds.has(s.id))
+        let result = this.#sessions
+
+        if (this.hasSearch) {
+            const query = this.#searchQuery.trim()
+            const matchedIds = new Set(this.#fuseIndex.search(query))
+            result = result.filter((s) => matchedIds.has(s.id))
+        }
+
+        if (this.#runningOnly) {
+            // 读取 #runningSessionIds（数组）以建立依赖，运行集合变化时本派生会重算
+            const runningIds = this.#runningSessionIds
+            result = result.filter((s) => runningIds.includes(s.id))
+        }
+
+        return result
     })
 
     /** 按时间分组：基于 filteredSessions，而非全量 */
@@ -132,6 +160,9 @@ class SessionStore {
         try {
             const sessInfo = await safeApi().project.listSessions();
             this.#sessions = sessInfo.sesses;
+            // 丢弃已不存在的会话的运行标记（刷新可能发生在项目切换后）
+            const validIds = new Set(sessInfo.sesses.map((s) => s.id))
+            this.#runningSessionIds = this.#runningSessionIds.filter((id) => validIds.has(id))
             this.#lastUpdatedInit = Date.now()
             await this.onSessionChange(sessInfo.active);
             log.info(`[SessionStore] init completed, loaded ${sessInfo.sesses.length} sessions`)
@@ -176,6 +207,7 @@ class SessionStore {
             await safeApi().project.deleteSession(id);
 
             this.#sessions = this.#sessions.filter((s) => s.id !== id)
+            this.#runningSessionIds = this.#runningSessionIds.filter((x) => x !== id)
             if (this.#sessions.length === 0) {
                 await this.reload();
             } else if (this.#activeSessionId === id) {
@@ -250,6 +282,38 @@ class SessionStore {
             log.error(`[SessionStore] setPinned() failed, id=${id}`, err)
             return false
         }
+    }
+
+    // ── 运行状态（瞬态、本地）──
+
+    /**
+     * 设置某会话的运行状态。
+     * 由消息流 / 任务执行事件源调用；重复设置相同值不做任何事。
+     *
+     * 用数组整体替换（而非 Set.add/delete），确保写入一定触发
+     * filteredSessions 与 session.item 中 isRunning 的派生重算。
+     */
+    setSessionRunning(id: string, running: boolean): void {
+        const current = this.#runningSessionIds
+        const exists = current.includes(id)
+        if (exists === running) return
+
+        this.#runningSessionIds = running
+            ? [...current, id]
+            : current.filter((x) => x !== id)
+    }
+
+    /** 供条目组件在 $derived 中读取；includes 遍历数组会建立依赖 */
+    isRunning(id: string): boolean {
+        return this.#runningSessionIds.includes(id)
+    }
+
+    setRunningOnly(value: boolean): void {
+        this.#runningOnly = value
+    }
+
+    toggleRunningOnly(): void {
+        this.#runningOnly = !this.#runningOnly
     }
 
     // ── 本地状态操作（无异步、无状态机）──

@@ -3,6 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import { sessionStore } from "$lib/store/local/session.store.svelte";
   import {
+    IconActivity,
     IconLoader2,
     IconPlus,
     IconSearch,
@@ -76,6 +77,24 @@
       {sessionStore.sessions.length} 个会话
     </span>
   {/if}
+
+  <!-- 只看执行中的会话 -->
+  <Button
+    variant="ghost"
+    size="icon"
+    title={sessionStore.runningOnly ? "显示全部会话" : "只看任务中的会话"}
+    aria-label="只看任务中的会话"
+    aria-pressed={sessionStore.runningOnly}
+    class={[
+      "size-7 shrink-0 rounded-lg transition-all duration-200",
+      sessionStore.runningOnly
+        ? "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+        : "text-muted-foreground hover:bg-accent hover:text-foreground",
+    ].join(" ")}
+    onclick={() => sessionStore.toggleRunningOnly()}
+  >
+    <IconActivity class="size-4" stroke={1.5} />
+  </Button>
 
   <!-- 新建会话 -->
   <Button

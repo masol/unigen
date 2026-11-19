@@ -3,6 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import { sessionStore } from "$lib/store/local/session.store.svelte";
   import {
+    IconActivity,
     IconMessage,
     IconRefresh,
     IconSearchOff,
@@ -15,6 +16,8 @@
   <div class="flex size-12 items-center justify-center rounded-2xl bg-muted">
     {#if sessionStore.hasSearch}
       <IconSearchOff class="size-5 text-muted-foreground" stroke={1.5} />
+    {:else if sessionStore.runningOnly}
+      <IconActivity class="size-5 text-muted-foreground" stroke={1.5} />
     {:else}
       <IconMessage class="size-5 text-muted-foreground" stroke={1.5} />
     {/if}
@@ -22,11 +25,19 @@
 
   <div class="space-y-1">
     <p class="text-sm font-medium text-foreground">
-      {sessionStore.hasSearch ? "未找到匹配的会话" : "暂无会话"}
+      {#if sessionStore.hasSearch}
+        未找到匹配的会话
+      {:else if sessionStore.runningOnly}
+        暂无任务中的会话
+      {:else}
+        暂无会话
+      {/if}
     </p>
     <p class="text-xs text-muted-foreground">
       {#if sessionStore.hasSearch}
         没有找到与「{sessionStore.searchQuery.trim()}」相关的会话
+      {:else if sessionStore.runningOnly}
+        启动任务后会显示在这里
       {:else}
         新会话将显示在这里
       {/if}
@@ -42,6 +53,16 @@
     >
       <IconRefresh class="size-3.5" stroke={1.5} />
       重置搜索
+    </Button>
+  {:else if sessionStore.runningOnly}
+    <Button
+      variant="outline"
+      size="sm"
+      class="h-8 gap-1.5 rounded-xl px-3 text-xs"
+      onclick={() => sessionStore.setRunningOnly(false)}
+    >
+      <IconRefresh class="size-3.5" stroke={1.5} />
+      显示全部
     </Button>
   {/if}
 </div>
