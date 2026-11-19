@@ -50,6 +50,11 @@ export class PrjRunner extends BaseProjectController {
         });
     }
 
+    // 检查指定的seq是否运行中--位于cmdRunners Map中。true表示运行中，false未运行。
+    isRunning(seq: number): boolean {
+        return this.#cmdRunners.has(seq);
+    }
+
     /**
      * 任务销毁时调用，注销 beforeQuit 钩子，释放内存。
      */

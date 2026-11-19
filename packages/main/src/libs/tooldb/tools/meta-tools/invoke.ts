@@ -1,5 +1,5 @@
 // packages/main/src/libs/tooldb/tools/meta-tools/invoke.ts
-// packages/main/src/libs/tooldb/tools/meta-tools/invoke.ts
+import Logger from "electron-log/main.js";
 import { z } from "zod";
 import { buildAiTool } from "../../builder.js";
 import { globalToolDB } from "../../globaltooldb.js";
@@ -36,7 +36,30 @@ export type InvokeInput = z.infer<typeof invokeInputSchema>;
 const searchToolMetaId = builtinId(searchToolsToolName);
 const invokeToolMetaId = builtinId(invokeToolName);
 
-export const invokeToolDef: ToolDefinition<InvokeInput, unknown> = {
+interface InvokeSuccessOutput {
+    ok: true;
+    tool: { id: string; name: string };
+    validated: boolean;
+    repaired: boolean;
+    result: unknown;
+    /** 实际传给目标工具的 args（可能经过修复），仅为 toModelOutput 透传保留 */
+    usedArgs: unknown;
+}
+
+interface InvokeFailureOutput {
+    ok: false;
+    tool?: { id: string; name: string };
+    error: string;
+    issues?: unknown;
+    receivedArgs?: unknown;
+    repairedArgs?: unknown;
+    repaired?: boolean;
+    hint?: string;
+}
+
+type InvokeExecuteOutput = InvokeSuccessOutput | InvokeFailureOutput;
+
+export const invokeToolDef: ToolDefinition<InvokeInput, InvokeExecuteOutput> = {
     name: invokeToolName,
     description:
         "调用由 search_tools 发现的具体工具。args 为 unknown，" +
@@ -129,6 +152,7 @@ export const invokeToolDef: ToolDefinition<InvokeInput, unknown> = {
                 validated: validation.validated,
                 repaired,
                 result,
+                usedArgs: validation.value,
             };
         } catch (error) {
             return {
@@ -140,6 +164,69 @@ export const invokeToolDef: ToolDefinition<InvokeInput, unknown> = {
                     "不要用相同参数重复提交。",
             };
         }
+    },
+    toModelOutput: async ({ output }) => {
+        const out = output as InvokeExecuteOutput;
+
+        // 失败路径：直接回 JSON。
+        // InvokeFailureOutput 是我们自己定义的结构，没有 JSONValue 的索引签名，
+        // 需要显式 cast 以满足 ToolResultOutput 的 { type: "json", value: JSONValue }。
+        if (!out.ok) {
+            return {
+                type: "json",
+                value: out as never,
+            };
+        }
+
+        // 成功路径：优先透传目标工具自身的 toModelOutput。
+        //
+        // 这是 invoke_tool 让 read_file / read_attachment 的多模态输出
+        // （图片 image block 等）能穿过 invoke_tool 的关键；
+        // 若这里直接回 JSON，二进制会被序列化成数字数组，模型无法视觉解析。
+        try {
+            const meta = await globalToolDB.getToolMeta(out.tool.id);
+            const rawToModelOutput = (
+                meta?.tool as { toModelOutput?: unknown } | undefined
+            )?.toModelOutput;
+
+            if (typeof rawToModelOutput === "function") {
+                const fn = rawToModelOutput as (opts: {
+                    toolCallId: string;
+                    input: unknown;
+                    output: unknown;
+                }) => unknown | Promise<unknown>;
+
+                const formatted = await fn({
+                    toolCallId: `invoke_tool:${out.tool.id}`,
+                    input: out.usedArgs,
+                    output: out.result,
+                });
+
+                if (formatted) {
+                    // 目标工具的 toModelOutput 返回的已是 ToolResultOutput；
+                    // 这里 unknown → ToolResultOutput 的契约由目标工具自身保证。
+                    return formatted as never;
+                }
+            }
+        } catch (error) {
+            Logger.warn(
+                `[ToolDB] invoke_tool: 透传 ${out.tool.id} 的 toModelOutput 失败，降级为 JSON。`,
+                error,
+            );
+        }
+
+        // fallback：剥除内部字段 usedArgs，其余字段原样保留。
+        // 与失败路径同理，自定义结构需要 cast 以满足 { value: JSONValue }。
+        return {
+            type: "json",
+            value: {
+                ok: true,
+                tool: out.tool,
+                validated: out.validated,
+                repaired: out.repaired,
+                result: out.result,
+            } as never,
+        };
     },
 };
 

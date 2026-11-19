@@ -1,4 +1,4 @@
-// file-text-loader.ts
+// packages/main/src/libs/searchsrv/file-text-loader.ts
 import { toMarkdown } from "@mdgate/converters";
 import Logger from "electron-log/main.js";
 import { readFile } from "node:fs/promises";
@@ -6,13 +6,15 @@ import { readFile } from "node:fs/promises";
 /**
  * 读取文件并严格转换为 Markdown 字符串。
  *
- * 与 loadTextFile 不同：读取/转换失败会抛错，调用方（如 tool）可以
- * 明确区分“空文件”和“失败”，不会把失败误当成空内容。
+ * 可选传入 bytes：调用方如果已经读取了文件内容，直接复用，
+ * 避免同一文件被二次读盘。path 仅作为格式提示，不会触发额外磁盘读取。
  */
-export async function loadTextFileStrict(filePath: string): Promise<string> {
-    const bytes = await readFile(filePath);
-    // path 仅作为格式提示，不会触发二次磁盘读取。
-    return await toMarkdown(bytes, { path: filePath });
+export async function loadTextFileStrict(
+    filePath: string,
+    bytes?: Buffer,
+): Promise<string> {
+    const content = bytes ?? (await readFile(filePath));
+    return await toMarkdown(content, { path: filePath });
 }
 
 /**
@@ -23,14 +25,14 @@ export async function loadTextFileStrict(filePath: string): Promise<string> {
  * - Office/PDF/HTML/CSV 等：对应转换器解析为 GFM。
  *
  * 目录同步时单个文件失败不应中断同步，失败只告警并返回空串。
- * 扩展性：将来如果要支持图片/音频/视频，只需在 toMarkdown 调用时传入
- * image() / audio() / video() 回调，无需改动整体结构。
- *
- * 注意：需要区分失败与空内容的调用方应使用 loadTextFileStrict。
+ * 需要区分失败与空内容的调用方应使用 loadTextFileStrict。
  */
-export async function loadTextFile(filePath: string): Promise<string> {
+export async function loadTextFile(
+    filePath: string,
+    bytes?: Buffer,
+): Promise<string> {
     try {
-        return await loadTextFileStrict(filePath);
+        return await loadTextFileStrict(filePath, bytes);
     } catch (error) {
         Logger.warn(`[Search] 读取文件失败，已忽略: ${filePath}`, error);
         return "";

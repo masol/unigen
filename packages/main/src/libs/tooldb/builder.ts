@@ -18,5 +18,11 @@ export function buildAiTool<TInput, TOutput>(def: ToolDefinition<TInput, TOutput
         outputSchema: def.outputSchema as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         execute: ((input: unknown) => def.execute(input as TInput)) as any,
+        ...(def.toModelOutput
+            ? {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                toModelOutput: def.toModelOutput as any,
+            }
+            : {}),
     }) as Tool;
 }

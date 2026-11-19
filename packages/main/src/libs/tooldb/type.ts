@@ -61,6 +61,8 @@ export interface ToolDefinition<TInput = unknown, TOutput = unknown> {
     inputSchema: z.ZodType<TInput>;
     outputSchema?: z.ZodType<TOutput>;
     execute: (input: TInput) => Promise<TOutput> | TOutput;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    toModelOutput?: Tool<any, any>['toModelOutput'];
 }
 
 /** MCP 服务器配置 */
