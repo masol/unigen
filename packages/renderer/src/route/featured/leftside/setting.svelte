@@ -2,6 +2,7 @@
 <script lang="ts">
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Separator } from "$lib/components/ui/separator";
+  import { longTaskStore } from "$lib/store/ui/longTask.svelte";
   import { PinyinFuseSearch } from "$lib/utils/fuse";
   import autoAnimate from "@formkit/auto-animate";
   import { location, push } from "@keenmate/svelte-spa-router";
@@ -9,10 +10,12 @@
     IconBooks,
     IconBrain,
     IconChevronDown,
-    IconCode,
+    IconCloud,
     IconCodePlus,
+    IconDeviceDesktopCog,
     IconFolders,
     IconKeyboard,
+    IconPlayHandball,
     IconPlugConnected,
     IconServer2,
     IconSettings,
@@ -36,6 +39,11 @@
     /** 路由路径片段，拼接为 /settings/{path} */
     path: string;
     keywords?: string[];
+    /**
+     * 长时任务角标 key —— 对应 LongTaskStore 注册的 key。
+     * 存在时该条目右上角渲染角标；未注册 / 计数为 0 时不渲染。
+     */
+    longTaskKey?: string;
   };
 
   type SettingsGroup = {
@@ -59,16 +67,15 @@
   /**
    * 设计说明：
    *  · "模型"作为顶级条目，涵盖 LLM / 图像 / 音频 / 视频等所有 AIGC 模型配置。
-   *    后续若音频/视频差异巨大，可在 /settings/models/* 下拆分子路由（llm/audio/video），
-   *    但当前统一收敛为单个配置入口，避免一级导航过度膨胀。
    *  · "API 管理"下保留 search 与 mcp 两个并列入口，二者职责独立：
    *      - search：出站能力（联网搜索 API Key / 搜索引擎配置）
    *      - mcp   ：入站能力（Model Context Protocol 服务器注册）
    *  · "运行环境"分组承载"让 AI 跑起来 / 跑得动"相关配置：
    *      - code-runtime：AI 代码执行能力（Python / Node.js 独立环境）
+   *      - sandbox     ：AI 代码执行能力（云端沙盒，隔离本机环境）
    *      - environments：本机或 SSH 的自有环境（llama.cpp、嵌入模型等）
-   *    之所以独立成一级分组而非塞入"通用"：两者都是 AI 能力的基础设施，
-   *    语义距离近，且未来很可能再扩展（沙盒、算力调度、GPU 池等）。
+   *    之所以独立成一级分组而非塞入"通用"：三者都是 AI 能力的基础设施，
+   *    语义距离近，且未来很可能再扩展（算力调度、GPU 池等）。
    */
   const builtinGroups: SettingsGroup[] = [
     {
@@ -121,14 +128,14 @@
       ],
     },
     {
-      id: "api",
-      label: "AI 能力",
-      icon: IconCode,
+      id: "runtime",
+      label: "环境",
+      icon: IconDeviceDesktopCog,
       items: [
         {
           id: "models-all",
           label: "AIGC 模型",
-          description: "配置生成内容的AI模型",
+          description: "管理可使用的AI模型",
           icon: IconBrain,
           path: "models/llm",
           keywords: [
@@ -178,6 +185,35 @@
           ],
         },
         {
+          id: "environments",
+          label: "自有环境",
+          description: "基于自有设备的AI运行环境",
+          icon: IconServer2,
+          path: "environments",
+          // 由 environments store 模块底部注册（参见 LongTaskStore.register）
+          longTaskKey: "environments",
+          keywords: [
+            "环境",
+            "environment",
+            "ssh",
+            "远端",
+            "remote",
+            "llama.cpp",
+            "推理",
+            "embeddings",
+            "嵌入模型",
+            "本地模型",
+            "self-host",
+          ],
+        },
+      ],
+    },
+    {
+      id: "api",
+      label: "AI 能力",
+      icon: IconPlayHandball,
+      items: [
+        {
           id: "api-mcp",
           label: "MCP",
           description: "管理AI的可用工具",
@@ -208,19 +244,14 @@
             "function calling",
           ],
         },
-      ],
-    },
-    {
-      id: "runtime",
-      label: "运行环境",
-      icon: IconTerminal2,
-      items: [
         {
           id: "code-runtime",
           label: "代码执行",
-          description: "AI 可以跑 Python 和 JS",
+          description: "管理AI执行代码的环境",
           icon: IconTerminal2,
           path: "code-runtime",
+          // 由 code-runtime store 模块底部注册
+          longTaskKey: "code-runtime",
           keywords: [
             "code",
             "runtime",
@@ -238,24 +269,12 @@
           ],
         },
         {
-          id: "environments",
-          label: "自有环境",
-          description: "本机或 SSH 连接的推理基础环境",
-          icon: IconServer2,
-          path: "environments",
-          keywords: [
-            "环境",
-            "environment",
-            "ssh",
-            "远端",
-            "remote",
-            "llama.cpp",
-            "推理",
-            "embeddings",
-            "嵌入模型",
-            "本地模型",
-            "self-host",
-          ],
+          id: "sandbox",
+          label: "云端沙盒",
+          description: "让AI在云端执行代码",
+          icon: IconCloud,
+          path: "sandbox",
+          keywords: ["sandbox", "cloud", "云", "云端", "隔离", "远程", "code"],
         },
       ],
     },
@@ -294,10 +313,8 @@
     runtime: true,
   });
 
-  /** 防抖后的查询词，真正驱动过滤逻辑 */
   let debouncedQuery = $state("");
 
-  /** 输入变化后延迟 200ms 更新 debouncedQuery，减少高频搜索计算 */
   const applyDebouncedQuery = debounce({ delay: 200 }, (q: string) => {
     debouncedQuery = q;
   });
@@ -308,18 +325,25 @@
   });
 
   /* ------------------------------------------------------------------ */
+  /*  Utilities                                                          */
+  /* ------------------------------------------------------------------ */
+
+  function formatBadge(n: number): string | null {
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n > 99 ? "99+" : String(n);
+  }
+
+  /* ------------------------------------------------------------------ */
   /*  Derived — Route-based active state                                 */
   /* ------------------------------------------------------------------ */
 
   const currentLocation = $derived(location());
 
-  /** Extract the sub-path after /settings/ */
   let activePath = $derived.by((): string => {
     const loc = currentLocation;
     if (loc.startsWith(SETTINGS_BASE + "/")) {
       return loc.slice(SETTINGS_BASE.length + 1);
     }
-    // Fallback: if exactly /settings, default to first item
     if (loc === SETTINGS_BASE) {
       return builtinGroups[0].items[0].path;
     }
@@ -333,7 +357,6 @@
 
   let hasSearch = $derived(debouncedQuery.trim().length > 0);
 
-  /** 命中的条目 id 集合；无查询词时为 null 表示不过滤 */
   let matchedIds = $derived.by((): Set<string | number> | null => {
     const q = debouncedQuery.trim();
     if (!q) return null;
@@ -443,6 +466,9 @@
             {#each group.items as item (item.id)}
               {@const isActive = activePath === item.path}
               {@const Icon = item.icon}
+              {@const longTaskBadge = item.longTaskKey
+                ? formatBadge(longTaskStore.countFor(item.longTaskKey))
+                : null}
 
               <button
                 class={[
@@ -470,14 +496,24 @@
                 />
 
                 <div class="flex min-w-0 flex-1 flex-col">
-                  <span
-                    class={[
-                      "truncate text-sm transition-colors duration-200",
-                      isActive ? "font-medium" : "font-normal",
-                    ]}
-                  >
-                    {item.label}
-                  </span>
+                  <div class="flex items-center gap-2">
+                    <span
+                      class={[
+                        "truncate text-sm transition-colors duration-200",
+                        isActive ? "font-medium" : "font-normal",
+                      ]}
+                    >
+                      {item.label}
+                    </span>
+                    {#if longTaskBadge}
+                      <span
+                        class="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground tabular-nums"
+                        aria-label={`${longTaskBadge} 个长时任务进行中`}
+                      >
+                        {longTaskBadge}
+                      </span>
+                    {/if}
+                  </div>
                   <span
                     class={[
                       "truncate text-xs transition-colors duration-200",

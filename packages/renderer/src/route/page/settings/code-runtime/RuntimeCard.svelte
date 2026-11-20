@@ -1,18 +1,17 @@
 <script lang="ts">
-  import { RuntimeIcon } from '$lib/components/runtimeicon';
-  import ToggleRow from '$lib/components/toggle-row/ToggleRow.svelte';
-  import { Button } from '$lib/components/ui/button';
-  import { Switch } from '$lib/components/ui/switch';
-  import { IconCode, IconLoader2 } from '@tabler/icons-svelte';
-  import { fade } from 'svelte/transition';
-  import { STATUS_CLASS, STATUS_LABEL } from './constants';
-  import RuntimeProgress from './RuntimeProgress.svelte';
-  import { codeRuntimeStore } from './store.svelte';
+  import { RuntimeIcon } from "$lib/components/runtimeicon";
+  import { Button } from "$lib/components/ui/button";
+  import { Switch } from "$lib/components/ui/switch";
+  import { IconCode, IconLoader2 } from "@tabler/icons-svelte";
+  import { fade } from "svelte/transition";
+  import { STATUS_CLASS, STATUS_LABEL } from "./constants";
+  import RuntimeProgress from "./RuntimeProgress.svelte";
+  import { codeRuntimeStore } from "./store.svelte";
   import type {
     CodeRuntimeInfo,
     CodeRuntimeState,
     CodeRuntimeTestResult,
-  } from './types';
+  } from "./types";
 
   type Props = {
     info: CodeRuntimeInfo;
@@ -24,11 +23,7 @@
   };
   let { info, runtimeState }: Props = $props();
 
-  const enabled = $derived(runtimeState.status !== 'disabled');
-  const showAdvanced = $derived(
-    runtimeState.status === 'ready' &&
-      (info.advancedOptions?.length ?? 0) > 0,
-  );
+  const enabled = $derived(runtimeState.status !== "disabled");
 
   let testing = $state(false);
   let testResult = $state<CodeRuntimeTestResult | null>(null);
@@ -49,9 +44,7 @@
   }
 </script>
 
-<div
-  class="rounded-2xl border border-border/50 bg-card p-5 transition-colors"
->
+<div class="rounded-2xl border border-border/50 bg-card p-5 transition-colors">
   <div class="flex items-start gap-3">
     <span
       class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground"
@@ -68,7 +61,7 @@
         <p class="truncate text-sm font-semibold text-foreground">
           {info.name}
         </p>
-        {#if info.kind === 'sandbox'}
+        {#if info.kind === "sandbox"}
           <span
             class="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
           >
@@ -88,7 +81,7 @@
         >
           {STATUS_LABEL[runtimeState.status]}{runtimeState.version
             ? ` · ${runtimeState.version}`
-            : ''}
+            : ""}
         </span>
       {/if}
       <Switch
@@ -104,19 +97,19 @@
       transition:fade={{ duration: 150 }}
       class="mt-3 space-y-3 border-t border-border/40 pt-3"
     >
-      {#if runtimeState.status === 'preparing'}
+      {#if runtimeState.status === "preparing"}
         <RuntimeProgress
           progress={runtimeState.progress ?? 0}
           message={runtimeState.message}
         />
         <p class="text-[11px] text-muted-foreground/80">
-          首次启用需要下载 {info.approximateDownloadMB ?? '少量'} MB，请稍候。
+          首次启用需要下载 {info.approximateDownloadMB ?? "少量"} MB，请稍候。
         </p>
-      {:else if runtimeState.status === 'failed'}
+      {:else if runtimeState.status === "failed"}
         <div
           class="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"
         >
-          启动失败：{runtimeState.error ?? '未知错误'}
+          启动失败：{runtimeState.error ?? "未知错误"}
         </div>
         <Button
           variant="outline"
@@ -127,7 +120,7 @@
           <IconLoader2 class="size-3.5" />
           重新安装
         </Button>
-      {:else if runtimeState.status === 'ready'}
+      {:else if runtimeState.status === "ready"}
         <p class="text-xs leading-relaxed text-muted-foreground">
           开启后 AI 能：{info.capability}
         </p>
@@ -141,7 +134,7 @@
               onclick={runTest}
               disabled={testing}
             >
-              {testing ? '测试中…' : '测试一下'}
+              {testing ? "测试中…" : "测试一下"}
             </Button>
             {#if testResult}
               <div
@@ -152,33 +145,16 @@
                 <span>→ {testResult.output}</span>
                 <span
                   class={testResult.ok
-                    ? 'text-emerald-600'
-                    : 'text-destructive'}
+                    ? "text-emerald-600"
+                    : "text-destructive"}
                 >
-                  {testResult.ok ? '✅' : '❌'}
+                  {testResult.ok ? "✅" : "❌"}
                 </span>
                 <span class="text-muted-foreground/70">
                   用时 {formatElapsed(testResult.elapsedMs)}
                 </span>
               </div>
             {/if}
-          </div>
-        {/if}
-
-        {#if showAdvanced}
-          <div class="space-y-2 rounded-xl bg-muted/30 p-3">
-            <p class="text-[11px] font-medium text-muted-foreground">
-              高级 · 仅在了解风险时开启
-            </p>
-            {#each info.advancedOptions ?? [] as opt (opt.key)}
-              <ToggleRow
-                label={opt.label}
-                description={opt.description}
-                checked={runtimeState.options?.[opt.key] ?? false}
-                onChange={(v) =>
-                  codeRuntimeStore.setOption(info.id, opt.key, v)}
-              />
-            {/each}
           </div>
         {/if}
       {/if}

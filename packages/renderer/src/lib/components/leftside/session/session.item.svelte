@@ -1,6 +1,7 @@
 <!-- packages/renderer/src/lib/components/leftside/session/session.item.svelte -->
 <script lang="ts">
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { Marquee } from "$lib/components/ui/marquee";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { i18nStore } from "$lib/store/i18n.svelte";
   import type { ChatSession } from "$lib/store/local/chat.types";
@@ -29,19 +30,68 @@
   // 仅用于控制三点按钮的常显态；菜单的开关/定位/关闭由 Bits 接管。
   let isMenuOpen = $state(false);
 
+  // 标题悬停滚动状态
+  let isTitleHovered = $state(false);
+  let isTitleOverflowing = $state(false);
+  let titleContentWidth = $state(0);
+  let titleContainerRef: HTMLDivElement | undefined = $state();
+  let titleMeasureRef: HTMLSpanElement | undefined = $state();
+
   const isActive = $derived(sessionStore.activeSessionId === session.id);
   // 运行状态与 active/switching 正交，作为独立派生读取
   const isRunning = $derived(sessionStore.isRunning(session.id));
-  const createdText = $derived(
-    i18nStore.dayjs(session.createdAt).format("YYYY-MM-DD HH:mm"),
+  const titleToneClass = $derived(
+    isRunning
+      ? "font-medium text-primary"
+      : isActive
+        ? "font-medium text-foreground"
+        : "text-foreground/80",
   );
-  const updatedText = $derived(
-    i18nStore
-      .dayjs(session.lastMessageAt ?? session.updatedAt)
-      .format("YYYY-MM-DD HH:mm"),
+  const marqueeSpeed = $derived(
+    Math.max(6, Math.min(45, (titleContentWidth + 32) / 40)),
   );
 
+  function measureTitleOverflow() {
+    const containerEl = titleContainerRef;
+    const measureEl = titleMeasureRef;
+    if (!containerEl || !measureEl) return;
+
+    const contentWidth = measureEl.scrollWidth;
+    titleContentWidth = contentWidth;
+    isTitleOverflowing = contentWidth > containerEl.clientWidth + 1;
+  }
+
+  // 标题文本变化会改变 titleMeasureRef 的尺寸，从而经 ResizeObserver 触发重新测量，
+  // 无需再显式追踪 session.title。
+  $effect(() => {
+    const containerEl = titleContainerRef;
+    const measureEl = titleMeasureRef;
+    if (!containerEl || !measureEl) return;
+
+    // 首次布局测量：兜底 ResizeObserver 在某些浏览器下的首帧时序差异。
+    const rafId = requestAnimationFrame(() => measureTitleOverflow());
+
+    const observer = new ResizeObserver(() => measureTitleOverflow());
+    observer.observe(containerEl);
+    observer.observe(measureEl);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
+  });
+
+  function handleTitleMouseEnter() {
+    measureTitleOverflow();
+    isTitleHovered = true;
+  }
+
+  function handleTitleMouseLeave() {
+    isTitleHovered = false;
+  }
+
   function startEdit() {
+    isTitleHovered = false;
     isEditing = true;
     editingTitle = session.title;
     setTimeout(() => {
@@ -51,10 +101,15 @@
   }
 
   async function saveEdit() {
-    if (editingTitle.trim() && editingTitle !== session.title) {
-      await sessionStore.updateSessionTitle(session.id, editingTitle.trim());
-    }
+    if (!isEditing) return;
+
+    const nextTitle = editingTitle.trim();
     isEditing = false;
+    editingTitle = "";
+
+    if (nextTitle && nextTitle !== session.title) {
+      await sessionStore.updateSessionTitle(session.id, nextTitle);
+    }
   }
 
   function cancelEdit() {
@@ -133,49 +188,87 @@
       </button>
     </div>
   {:else}
-    <!-- 运行中：左侧 spinner + 标题主色；与右侧消息流加载指示在位置/图标/色彩上区分 -->
-    <Tooltip.Root delayDuration={1500}>
-      <Tooltip.Trigger>
-        {#snippet child({ props })}
-          <button
-            {...props}
-            type="button"
-            class="flex h-full min-w-0 flex-1 items-center gap-1.5 px-2.5 text-left disabled:pointer-events-none"
-            disabled={isSwitching}
-            onclick={handleSelect}
+    <!-- 该 wrapper 仅用于侦测悬停以驱动 marquee，交互语义由内部 button 承担，故标记为 presentation -->
+    <div
+      role="presentation"
+      class="relative flex h-full min-w-0 flex-1 items-center"
+      onmouseenter={handleTitleMouseEnter}
+      onmouseleave={handleTitleMouseLeave}
+    >
+      <Tooltip.Root delayDuration={1500}>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <button
+              {...props}
+              type="button"
+              aria-label={session.title}
+              class="absolute inset-0 rounded-md text-left disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              disabled={isSwitching}
+              onclick={handleSelect}
+            ></button>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content
+          side="right"
+          class="max-w-xs whitespace-normal wrap-break-word text-xs"
+        >
+          <div class="space-y-1">
+            <div>创建：{i18nStore.dayjs(session.createdAt).fromNow()}</div>
+            <div>
+              最后更新：{i18nStore
+                .dayjs(session.lastMessageAt ?? session.updatedAt)
+                .fromNow()}
+            </div>
+            <div>消息数：{session.messageCount}</div>
+          </div>
+        </Tooltip.Content>
+      </Tooltip.Root>
+
+      <div
+        aria-hidden="true"
+        class="pointer-events-none flex h-full min-w-0 flex-1 items-center gap-1.5 px-2.5"
+      >
+        {#if isRunning}
+          <IconProgress
+            class="size-3.5 shrink-0 animate-spin text-primary"
+            stroke={2}
+          />
+        {/if}
+
+        <div
+          bind:this={titleContainerRef}
+          class="relative min-w-0 flex-1 overflow-hidden"
+        >
+          <span
+            bind:this={titleMeasureRef}
+            class={[
+              "pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap text-sm",
+              titleToneClass,
+            ]}
           >
-            {#if isRunning}
-              <IconProgress
-                class="size-3.5 shrink-0 animate-spin text-primary"
-                stroke={2}
-              />
-            {/if}
-            <span
-              class={[
-                "min-w-0 flex-1 truncate text-sm",
-                isRunning
-                  ? "font-medium text-primary"
-                  : isActive
-                    ? "font-medium text-foreground"
-                    : "text-foreground/80",
-              ]}
+            {session.title}
+          </span>
+
+          {#if isTitleHovered && isTitleOverflowing}
+            <Marquee
+              class="w-full"
+              direction="left"
+              speed={marqueeSpeed}
+              gap={32}
+              repeat={2}
             >
+              <span class={["whitespace-nowrap text-sm", titleToneClass]}>
+                {session.title}
+              </span>
+            </Marquee>
+          {:else}
+            <span class={["block truncate text-sm", titleToneClass]}>
               {session.title}
             </span>
-          </button>
-        {/snippet}
-      </Tooltip.Trigger>
-      <Tooltip.Content
-        side="right"
-        class="max-w-xs whitespace-normal wrap-break-word text-xs"
-      >
-        <div class="space-y-1">
-          <div>创建：{i18nStore.dayjs(createdText).fromNow()}</div>
-          <div>最后更新：{i18nStore.dayjs(updatedText).fromNow()}</div>
-          <div>消息数：{session.messageCount}</div>
+          {/if}
         </div>
-      </Tooltip.Content>
-    </Tooltip.Root>
+      </div>
+    </div>
   {/if}
 
   {#if isSwitching}

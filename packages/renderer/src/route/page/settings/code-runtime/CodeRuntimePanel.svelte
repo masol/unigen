@@ -16,7 +16,7 @@
       代码执行
     </h1>
     <p class="text-sm text-muted-foreground">
-      决定 AI 是否可以在你的电脑上运行脚本，以及运行在哪个环境里。
+      AI 运行代码的环境。启用后安装与下载在后台进行，进度显示在下列卡片中。
     </p>
   </header>
 

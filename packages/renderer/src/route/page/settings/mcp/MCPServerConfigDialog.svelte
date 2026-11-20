@@ -399,7 +399,7 @@
             class="mt-0.5 shrink-0 text-destructive"
           />
           <p>
-            stdio 会在本机启动进程。请确认命令来源可信；非必要建议使用 HTTP /
+            stdio 会在本机启动进程。请确认命令来源可信；建议使用 HTTP /
             SSE。
           </p>
         </div>

@@ -3,18 +3,10 @@ export type CodeRuntimeStatus = 'disabled' | 'preparing' | 'ready' | 'failed';
 /** 环境类型：语言级 / 沙盒级。未来统一在此扩展即可。 */
 export type CodeRuntimeKind = 'language' | 'sandbox';
 
-export interface CodeRuntimeAdvancedOption {
-    key: string;
-    label: string;
-    description: string;
-    defaultValue?: boolean;
-}
-
 /**
  * 由服务器提供、前端只读：
  *  - 环境清单不能硬编码在 UI，未来新增语言 / 沙盒只改后端；
  *  - 每个条目的文案（tagline / capability）都面向用户，不用内部术语；
- *  - `options` 是每个环境独立的高级开关（如安装库、网络访问），默认为 false。
  */
 export interface CodeRuntimeInfo {
     id: string;
@@ -31,7 +23,6 @@ export interface CodeRuntimeInfo {
     approximateDownloadMB?: number;
     /** 就绪后点击"测试一下"运行的代码片段 */
     testSnippet: string;
-    advancedOptions?: CodeRuntimeAdvancedOption[];
 }
 
 /**
@@ -49,8 +40,6 @@ export interface CodeRuntimeState {
     /** preparing 阶段展示的当前步骤描述 */
     message?: string;
     error?: string;
-    /** 每个环境的独立高级选项值 */
-    options?: Record<string, boolean>;
 }
 
 /** 服务器推送的事件 —— 完整 state 快照，前端直接替换，避免 merge 逻辑 */

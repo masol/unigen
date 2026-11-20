@@ -24,12 +24,12 @@ import Keybindings from '../../../route/page/settings/Keybindings.svelte';
 import LLMSetting from "../../../route/page/settings/llm/llm.svelte";
 import MCPSetting from '../../../route/page/settings/mcp/mcp.svelte';
 import ProjectTypeManager from '../../../route/page/settings/project-type/ProjectTypeManager.svelte';
+import SandboxPanel from '../../../route/page/settings/sandbox/SandboxPanel.svelte';
 import MCPSearchSetting from '../../../route/page/settings/search/search.svelte';
 import SkillSetting from '../../../route/page/settings/skill/skill.svelte';
 
 // ── 类型 ──
 type LazyLoader = NonNullable<WrapOptions['asyncComponent']>;
-
 
 /** 路由值：普通组件 或 wrap() 返回的包装对象 */
 type RouteDefinitionValue = Component | ReturnType<typeof wrap>;
@@ -46,8 +46,6 @@ interface RouteEntry {
 // ── Store ──
 
 class RouterStore {
-    // ── 私有状态 ──
-
     /**
      * 路由表 — 整体替换触发重渲染 → $state.raw
      * 初始即包含 fallback '*'
@@ -60,6 +58,7 @@ class RouterStore {
         "/settings/api/skill": SkillSetting,
         "/settings/general": GeneralSetting,
         "/settings/code-runtime": CodeRuntimePanel,
+        "/settings/sandbox": SandboxPanel,
         "/settings/environments": EnvironmentsPanel,
         "/settings/environments/:id": EnvironmentDetail,
         "/settings/develops": DevSetting,
@@ -76,35 +75,18 @@ class RouterStore {
         "*": FallbackComponent,
     });
 
-    // ── 只读门面 ──
-
     get routes() {
         return this.#routes;
     }
 
-    // ── 派生 ──
-
-    /** 已注册路径列表 */
     readonly registeredPaths = $derived(Object.keys(this.#routes));
-
-    /** 路由总数 */
     readonly routeCount = $derived(Object.keys(this.#routes).length);
-
-    /** 路由表是否非空 */
     readonly hasRoutes = $derived(Object.keys(this.#routes).length > 0);
-
-    // ── 构造 ──
 
     constructor() {
         log.info("[RouterStore] initialized");
     }
 
-    // ── Actions ──
-
-    /**
-     * 添加一条静态路由
-     * @returns true 成功，false 路径已存在
-     */
     addRoute(path: string, component: RouteDefinitionValue): boolean {
         log.debug(`[RouterStore] addRoute(), path=${path}`);
 
@@ -120,12 +102,6 @@ class RouterStore {
         return true;
     }
 
-    /**
-     * 添加一条懒加载路由
-     * @param path   路径
-     * @param loader 动态导入函数，如 () => import('./pages/Foo.svelte')
-     * @returns true 成功，false 路径已存在
-     */
     addLazyRoute(path: string, loader: LazyLoader): boolean {
         log.debug(`[RouterStore] addLazyRoute(), path=${path}`);
 
@@ -136,7 +112,6 @@ class RouterStore {
             return false;
         }
 
-        // 改动2：wrap({ asyncComponent: loader }) 用法不变，完全兼容
         const wrapped = wrap({ asyncComponent: loader });
         this.#routes = { ...this.#routes, [path]: wrapped };
         log.info(
@@ -145,10 +120,6 @@ class RouterStore {
         return true;
     }
 
-    /**
-     * 批量添加（仅一次引用替换）
-     * @returns 实际成功添加的数量
-     */
     addBatchRoutes(entries: RouteEntry[]): number {
         log.debug(`[RouterStore] addBatchRoutes(), count=${entries.length}`);
 
@@ -174,10 +145,6 @@ class RouterStore {
         return added;
     }
 
-    /**
-     * 删除一条路由（禁止删除 fallback '*'）
-     * @returns true 成功，false 不存在或为 fallback
-     */
     removeRoute(path: string): boolean {
         log.debug(`[RouterStore] removeRoute(), path=${path}`);
 
@@ -200,10 +167,6 @@ class RouterStore {
         return true;
     }
 
-    /**
-     * 更新已有路由的组件
-     * @returns true 成功，false 路径不存在
-     */
     updateRoute(path: string, component: RouteDefinitionValue): boolean {
         log.debug(`[RouterStore] updateRoute(), path=${path}`);
 
@@ -217,15 +180,10 @@ class RouterStore {
         return true;
     }
 
-    /** 检查路径是否已注册 */
     hasRoute(path: string): boolean {
         return path in this.#routes;
     }
 
-    /**
-     * 重置：清除除 fallback 外的所有路由
-     * 保留 '*' 条目（若存在）
-     */
     reset(): void {
         log.debug("[RouterStore] reset() called");
 

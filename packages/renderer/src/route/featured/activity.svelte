@@ -4,16 +4,34 @@
   import { Separator } from "$lib/components/ui/separator";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { layoutStore } from "$lib/store/ui/layout.svelte";
+  import { longTaskStore } from "$lib/store/ui/longTask.svelte";
   import type { LeftSidebarItem } from "$lib/utils/plugin/extpoint/leftsidebar";
 
   /**
+   * 设置入口 icon 的 id 约定（对应 `leftside/bottom` 中 setting item 的 id）。
+   * 这些 id 的角标走 longTaskStore.total —— 显示设置内所有进行中的长时任务总数。
+   * 若 bottom item 的 id 不是下列任一值，请同步修正此常量；
+   * 或在 bottom 中让 setting item 直接 `badge: () => longTaskStore.total`。
+   */
+  const SETTINGS_ACTIVITY_IDS: ReadonlySet<string> = new Set(["settings"]);
+
+  /**
    * 解析角标展示文本。
+   * 优先级：长时任务汇总（setting / 已注册 key） > item.badge > 无角标。
    * - 0 / 负数 / 非有限数 / 空值 → 不展示，避免活动栏出现无意义 “0”。
    * - 超过 99 → 99+，控制宽度，避免挤压图标。
    */
   function resolveBadge(item: LeftSidebarItem): string | null {
-    const source = item.badge;
-    const value = typeof source === "function" ? source() : source;
+    let value: number | null | undefined;
+
+    if (SETTINGS_ACTIVITY_IDS.has(item.id)) {
+      value = longTaskStore.total;
+    } else if (longTaskStore.has(item.id)) {
+      value = longTaskStore.countFor(item.id);
+    } else {
+      const source = item.badge;
+      value = typeof source === "function" ? source() : source;
+    }
 
     if (value === null || value === undefined || !Number.isFinite(value)) {
       return null;
@@ -73,56 +91,7 @@
 
   <!-- 下部按钮组 -->
   <div class="flex flex-col items-center gap-0.5 pb-2">
-    <!-- 快捷面板切换 -->
-    <!-- <Tooltip.Root>
-      <Tooltip.Trigger>
-        {#snippet child({ props })}
-          <button
-            {...props}
-            class={[
-              "flex size-10 items-center justify-center rounded-lg transition-all duration-200 hover:bg-accent/60",
-              layoutStore.isBottomOpen
-                ? "text-foreground"
-                : "text-muted-foreground",
-            ]}
-            onclick={() => layoutStore.togglePanel("bottom")}
-          >
-            {#if layoutStore.isBottomOpen}
-              <IconLayoutBottombarCollapseFilled class="size-5" />
-            {:else}
-              <IconLayoutBottombarExpand class="size-5" />
-            {/if}
-          </button>
-        {/snippet}
-      </Tooltip.Trigger>
-      <Tooltip.Content side="right" sideOffset={6}>
-        <p class="text-xs">切换面板</p>
-      </Tooltip.Content>
-    </Tooltip.Root><Tooltip.Root>
-      <Tooltip.Trigger>
-        {#snippet child({ props })}
-          <button
-            {...props}
-            class={[
-              "flex size-10 items-center justify-center rounded-lg transition-all duration-200 hover:bg-accent/60",
-              layoutStore.isRightOpen
-                ? "text-foreground"
-                : "text-muted-foreground",
-            ]}
-            onclick={() => layoutStore.togglePanel("right")}
-          >
-            {#if layoutStore.isRightOpen}
-              <IconLayoutSidebarRightCollapseFilled class="size-5" />
-            {:else}
-              <IconLayoutSidebarRightExpand class="size-5" />
-            {/if}
-          </button>
-        {/snippet}
-      </Tooltip.Trigger>
-      <Tooltip.Content side="right" sideOffset={6}>
-        <p class="text-xs">切换辅助侧栏</p>
-      </Tooltip.Content>
-    </Tooltip.Root> -->
+    <!-- 快捷面板切换（保留注释，不启用） -->
     <Separator class="my-1 w-6" />
 
     {#each layoutStore.bottomActivities as activity (activity.id)}

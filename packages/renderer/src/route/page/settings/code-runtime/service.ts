@@ -14,53 +14,31 @@ import type {
  *  2. service 只负责"抛"，UI/store 负责"显示"（toast 在 store）；
  *  3. enable 只触发安装，进度通过事件流推送给前端；立即返回不阻塞；
  *  4. 未接入真实主进程前，下面这一段是 fake：listCodeRuntimes / enable / disable /
- *     setOption / test 四个动作 + 一条事件通道，与真实 ipc 形状对齐。
+ *     test 四个动作 + 一条事件通道，与真实 ipc 形状对齐。
  */
 
 const FAKE_INFOS: CodeRuntimeInfo[] = [
     {
         id: 'python',
         name: 'Python',
+        icon: 'IconBrandPython',
         kind: 'language',
         tagline: '用于数据分析、Excel/CSV 处理、图表、PDF',
         capability: '计算和分析数据、生成图表、处理表格与 PDF。',
         language: 'python',
         approximateDownloadMB: 120,
         testSnippet: 'print(1 + 1)',
-        advancedOptions: [
-            {
-                key: 'allowInstall',
-                label: '允许 AI 安装新的库',
-                description: '开启后 AI 可联网下载依赖，可能会改动该环境。',
-            },
-            {
-                key: 'allowNetwork',
-                label: '允许访问网络',
-                description: '开启后 AI 运行的代码可以访问外部网站。',
-            },
-        ],
     },
     {
         id: 'nodejs',
         name: 'Node.js',
         kind: 'language',
+        icon: 'IconBrandNodejs',
         tagline: '用于网页抓取、文档转换、调用本地工具',
         capability: '运行 JS 脚本、处理文档与网页内容。',
         language: 'node',
         approximateDownloadMB: 60,
         testSnippet: 'console.log(1 + 1)',
-        advancedOptions: [
-            {
-                key: 'allowInstall',
-                label: '允许 AI 安装新的库',
-                description: '开启后 AI 可联网下载 npm 依赖。',
-            },
-            {
-                key: 'allowNetwork',
-                label: '允许访问网络',
-                description: '开启后 AI 运行的代码可以访问外部网站。',
-            },
-        ],
     },
 ];
 
@@ -74,11 +52,7 @@ const STATES = new Map<string, CodeRuntimeState>();
 function initStates() {
     for (const info of FAKE_INFOS) {
         if (STATES.has(info.id)) continue;
-        const options: Record<string, boolean> = {};
-        for (const opt of info.advancedOptions ?? []) {
-            options[opt.key] = opt.defaultValue ?? false;
-        }
-        STATES.set(info.id, { id: info.id, status: 'disabled', options });
+        STATES.set(info.id, { id: info.id, status: 'disabled' });
     }
 }
 initStates();
@@ -114,7 +88,7 @@ function patch(
 // ── 对外接口 ──
 
 export async function listCodeRuntimes(): Promise<CodeRuntimeEntry[]> {
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 2000));
     return FAKE_INFOS.map((info) => ({
         info,
         state: { ...STATES.get(info.id)! },
@@ -145,16 +119,6 @@ export async function disableCodeRuntime(id: string): Promise<void> {
         message: undefined,
         error: undefined,
     });
-}
-
-export async function setCodeRuntimeOption(
-    id: string,
-    key: string,
-    value: boolean,
-): Promise<void> {
-    const state = STATES.get(id);
-    if (!state) return;
-    patch(id, { options: { ...(state.options ?? {}), [key]: value } });
 }
 
 export async function testCodeRuntime(
