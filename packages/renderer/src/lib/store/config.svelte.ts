@@ -3,7 +3,13 @@ import { api } from '$lib/utils/api';
 import { KeybindConfig } from '$lib/utils/commands/config.svelte';
 import evtbus from '$lib/utils/evtbus';
 import { ModelTags } from '$lib/utils/model/base_models';
-import type { AppConfig, McpServerConfig, Model, Provider } from '@app/main/types';
+import type {
+    AppConfig,
+    MarkdownFontFamily,
+    McpServerConfig,
+    Model,
+    Provider,
+} from '@app/main/types';
 import log from 'electron-log/renderer';
 import { setMode } from "mode-watcher";
 import { toast } from 'svelte-sonner';
@@ -12,8 +18,17 @@ export const DefInputToken = 256000;
 export const DefOutputToken = 8192;
 export const DefScore = 50;
 
-
 const themeOrder: AppConfig['theme'][] = ["light", "dark", "system"];
+
+// ── Markdown 外观默认值 ─────────────────────────────────────
+const MD_DEFAULTS = {
+    markdownFontSize: 15,
+    markdownLineHeight: 1.7,
+    markdownFontFamily: 'system' as MarkdownFontFamily,
+    markdownCodeFontSize: 13,
+    markdownMaxWidth: 860,
+    markdownAutoCollapseCode: 0,
+};
 
 // ── Store ──
 
@@ -38,6 +53,14 @@ class ConfigStore {
     #lineHeight = $state(22);
     #lineNumbers = $state(true);
     #rmblueprint = $state(false);
+
+    // ── Markdown 阅读外观 ──
+    #markdownFontSize = $state<number>(MD_DEFAULTS.markdownFontSize);
+    #markdownLineHeight = $state<number>(MD_DEFAULTS.markdownLineHeight);
+    #markdownFontFamily = $state<MarkdownFontFamily>(MD_DEFAULTS.markdownFontFamily);
+    #markdownCodeFontSize = $state<number>(MD_DEFAULTS.markdownCodeFontSize);
+    #markdownMaxWidth = $state<number>(MD_DEFAULTS.markdownMaxWidth);
+    #markdownAutoCollapseCode = $state<number>(MD_DEFAULTS.markdownAutoCollapseCode);
 
     // ── 私有状态：init 异步状态机 ──
     #isLoading = $state(false)
@@ -68,6 +91,14 @@ class ConfigStore {
     get telemetry() { return this.#telemetry }
     get concurrency() { return this.#concurrency }
     get task_dir() { return this.#task_dir }
+
+    // ── 只读门面：Markdown 阅读外观 ──
+    get markdownFontSize() { return this.#markdownFontSize }
+    get markdownLineHeight() { return this.#markdownLineHeight }
+    get markdownFontFamily() { return this.#markdownFontFamily }
+    get markdownCodeFontSize() { return this.#markdownCodeFontSize }
+    get markdownMaxWidth() { return this.#markdownMaxWidth }
+    get markdownAutoCollapseCode() { return this.#markdownAutoCollapseCode }
 
     // ── 只读门面：init 异步状态 ──
     get isLoading() { return this.#isLoading }
@@ -193,6 +224,45 @@ class ConfigStore {
             case 'keybindings':
                 this.keybinding.onKeybindingUpdate(value as AppConfig['keybindings'])
                 break;
+
+            // ── Markdown 阅读外观 ──
+            case 'markdownFontSize':
+                this.#markdownFontSize =
+                    typeof value === 'number' && Number.isFinite(value)
+                        ? value
+                        : MD_DEFAULTS.markdownFontSize;
+                break;
+            case 'markdownLineHeight':
+                this.#markdownLineHeight =
+                    typeof value === 'number' && Number.isFinite(value)
+                        ? value
+                        : MD_DEFAULTS.markdownLineHeight;
+                break;
+            case 'markdownFontFamily': {
+                const v = value as MarkdownFontFamily;
+                this.#markdownFontFamily =
+                    v === 'sans' || v === 'serif' ? v : 'system';
+                break;
+            }
+            case 'markdownCodeFontSize':
+                this.#markdownCodeFontSize =
+                    typeof value === 'number' && Number.isFinite(value)
+                        ? value
+                        : MD_DEFAULTS.markdownCodeFontSize;
+                break;
+            case 'markdownMaxWidth':
+                this.#markdownMaxWidth =
+                    typeof value === 'number' && Number.isFinite(value)
+                        ? value
+                        : MD_DEFAULTS.markdownMaxWidth;
+                break;
+            case 'markdownAutoCollapseCode':
+                this.#markdownAutoCollapseCode =
+                    typeof value === 'number' && Number.isFinite(value)
+                        ? value
+                        : MD_DEFAULTS.markdownAutoCollapseCode;
+                break;
+
             default:
                 log.warn(`[ConfigStore] received cfg:set but not implement:${name}`)
         }
@@ -211,7 +281,6 @@ class ConfigStore {
         const that = this;
         evtbus.on("before-input-evt", (evt) => {
             if ((evt.ctrlKey || evt.metaKey) && evt.key === 'w') {
-                // console.log("keybinding=", that.keybinding)
                 setTimeout(() => {
                     that.keybinding.trigger('ctrl+w')
                 }, 10);
@@ -249,6 +318,18 @@ class ConfigStore {
         this.#telemetry = config.telemetry
         this.#concurrency = config.concurrency
         this.#task_dir = config.task_dir
+
+        // Markdown 阅读外观（缺省回退到 MD_DEFAULTS，兼容旧 config.json）
+        this.#markdownFontSize = config.markdownFontSize ?? MD_DEFAULTS.markdownFontSize
+        this.#markdownLineHeight = config.markdownLineHeight ?? MD_DEFAULTS.markdownLineHeight
+        this.#markdownFontFamily =
+            config.markdownFontFamily === 'sans' || config.markdownFontFamily === 'serif'
+                ? config.markdownFontFamily
+                : 'system'
+        this.#markdownCodeFontSize = config.markdownCodeFontSize ?? MD_DEFAULTS.markdownCodeFontSize
+        this.#markdownMaxWidth = config.markdownMaxWidth ?? MD_DEFAULTS.markdownMaxWidth
+        this.#markdownAutoCollapseCode =
+            config.markdownAutoCollapseCode ?? MD_DEFAULTS.markdownAutoCollapseCode
 
         this.applyTheme();
         this.keybinding.onKeybindingUpdate(config.keybindings);
@@ -597,10 +678,7 @@ class ConfigStore {
                 return m
             })
             if (!found) {
-                //新建模型。
                 await this.addModel(provider, model);
-                // log.error(`[ConfigStore] updateModel() id="${model.id}" in ${pid} not found`)
-                // this.#saveError = `id="${model.id}" in Provider "${pid}" not found`
                 return
             }
             await this.setModels(pid, next)
@@ -613,9 +691,6 @@ class ConfigStore {
 
     /**
      * 按 id 新增或整体替换单个 MCP Server。
-     *
-     * 主进程 `setMcpServer` 内部走通用 `set('mcpServers')`，会通过 `cfg:set` 广播最新全量列表；
-     * 本方法同时做乐观本地更新，二者幂等（收到广播会以主进程结果为准再覆盖一次）。
      */
     async setMcpServer(config: McpServerConfig): Promise<void> {
         log.debug(`[ConfigStore] setMcpServer() called, id=${config.id}`)
@@ -640,9 +715,6 @@ class ConfigStore {
 
     /**
      * 按 id 移除单个 MCP Server。
-     *
-     * 主进程 `removeMcpServer` 内部走通用 `set('mcpServers')`，会通过 `cfg:set` 广播最新全量列表；
-     * 本方法同时做乐观本地更新，二者幂等。
      */
     async removeMcpServer(id: string): Promise<void> {
         log.debug(`[ConfigStore] removeMcpServer() called, id=${id}`)

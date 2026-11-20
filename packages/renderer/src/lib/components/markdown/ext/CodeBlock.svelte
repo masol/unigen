@@ -2,8 +2,14 @@
 <script lang="ts">
   /* eslint-disable svelte/no-at-html-tags */
   import { BorderBeam } from "$lib/components/ui/border-beam";
+  import { configStore } from "$lib/store/config.svelte";
   import { getCodeHighlighter } from "@humanspeak/svelte-markdown/extensions/highlight";
-  import { IconCheck, IconCopy } from "@tabler/icons-svelte";
+  import {
+    IconCheck,
+    IconChevronDown,
+    IconChevronUp,
+    IconCopy,
+  } from "@tabler/icons-svelte";
 
   let {
     code = "",
@@ -26,6 +32,17 @@
 
   let copied = $state(false);
   let timer: ReturnType<typeof setTimeout> | null = null;
+
+  // ── 折叠状态 ─────────────────────────────────────────────
+  // userCollapsed: 用户显式操作后的状态，undefined 表示尚未操作
+  // autoCollapsed : 由设置的 markdownAutoCollapseCode 阈值决定
+  let userCollapsed = $state<boolean | undefined>(undefined);
+  let lineCount = $derived(source ? source.split("\n").length : 0);
+  let autoCollapsed = $derived(
+    configStore.markdownAutoCollapseCode > 0 &&
+      lineCount > configStore.markdownAutoCollapseCode,
+  );
+  let isCollapsed = $derived(userCollapsed ?? autoCollapsed);
 
   const fallbackPreClass =
     "m-0 overflow-x-auto bg-muted p-4 font-mono text-sm text-foreground";
@@ -59,6 +76,10 @@
     }
   }
 
+  function toggleCollapse() {
+    userCollapsed = !isCollapsed;
+  }
+
   function escapeHtml(s: string) {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
@@ -87,28 +108,48 @@
       {langName || ""}
     </span>
 
-    <button
-      type="button"
-      onclick={handleCopy}
-      disabled={!source}
-      aria-label={copied ? "已复制" : "复制代码"}
-      title={copied ? "已复制" : "复制代码"}
-      class="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-30"
-    >
-      {#if copied}
-        <IconCheck size={14} stroke={1.5} />
-      {:else}
-        <IconCopy size={14} stroke={1.5} />
-      {/if}
-    </button>
+    <div class="flex items-center gap-0.5">
+      <!-- 折叠/展开 -->
+      <button
+        type="button"
+        onclick={toggleCollapse}
+        aria-label={isCollapsed ? "展开代码" : "收起代码"}
+        title={isCollapsed ? "展开代码" : "收起代码"}
+        class="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+      >
+        {#if isCollapsed}
+          <IconChevronDown size={14} stroke={1.5} />
+        {:else}
+          <IconChevronUp size={14} stroke={1.5} />
+        {/if}
+      </button>
+
+      <!-- 复制 -->
+      <button
+        type="button"
+        onclick={handleCopy}
+        disabled={!source}
+        aria-label={copied ? "已复制" : "复制代码"}
+        title={copied ? "已复制" : "复制代码"}
+        class="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-30"
+      >
+        {#if copied}
+          <IconCheck size={14} stroke={1.5} />
+        {:else}
+          <IconCopy size={14} stroke={1.5} />
+        {/if}
+      </button>
+    </div>
   </div>
 
-  <!-- 代码主体：高度自适应，无垂直滚动 -->
-  <div class="[&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:p-4">
-    {#if htmlMarkup}
-      {@html htmlMarkup}
-    {:else}
-      <pre class={fallbackPreClass}><code>{source}</code></pre>
-    {/if}
-  </div>
+  {#if !isCollapsed}
+    <!-- 代码主体：高度自适应，无垂直滚动 -->
+    <div class="[&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:p-4">
+      {#if htmlMarkup}
+        {@html htmlMarkup}
+      {:else}
+        <pre class={fallbackPreClass}><code>{source}</code></pre>
+      {/if}
+    </div>
+  {/if}
 </div>

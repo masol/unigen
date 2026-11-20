@@ -6,6 +6,7 @@
   import BackRestore from "./BackRestore.svelte";
   import GeneralSection from "./GeneralSection.svelte";
   import LocalModel from "./LocalModel.svelte";
+  import MarkdownSection from "./MarkdownSection.svelte";
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
@@ -38,6 +39,7 @@
     <ScrollArea class="h-full">
       <div class="px-8 lg:px-12 py-8 space-y-8">
         <GeneralSection></GeneralSection>
+        <MarkdownSection></MarkdownSection>
         <LocalModel></LocalModel>
         <AutoUpdator></AutoUpdator>
 

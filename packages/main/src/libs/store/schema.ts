@@ -93,4 +93,41 @@ export const configSchema: Schema<AppConfig> = {
         items: mcpServerSchema,
     },
     keybindings: keybindingsSchema,
+
+    // ── Markdown 阅读外观 ─────────────────────────────────────
+    markdownFontSize: {
+        type: 'integer',
+        default: 15,
+        minimum: 10,
+        maximum: 40,
+    },
+    markdownLineHeight: {
+        type: 'number',
+        default: 1.7,
+        minimum: 1.2,
+        maximum: 3.0,
+    },
+    markdownFontFamily: {
+        type: 'string',
+        enum: ['system', 'sans', 'serif'],
+        default: 'system',
+    },
+    markdownCodeFontSize: {
+        type: 'integer',
+        default: 13,
+        minimum: 8,
+        maximum: 30,
+    },
+    markdownMaxWidth: {
+        type: 'integer',
+        default: 860,
+        minimum: 0,
+        maximum: 2000,
+    },
+    markdownAutoCollapseCode: {
+        type: 'integer',
+        default: 0,
+        minimum: 0,
+        maximum: 1000,
+    },
 };

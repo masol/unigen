@@ -1,9 +1,16 @@
-<!-- 用户消息气泡 · 右对齐 · 操作内联到 header（无右键菜单） -->
+<!-- 用户消息气泡 · 纯文本（不渲染 Markdown）· 长内容默认收 6 行 · 字体/行高跟随 Markdown 阅读外观配置 -->
+<!--
+  宽度策略（关键）：
+  - 内部不再声明 max-width / items-end；
+  - 让父级（ChatMessageList）的 w-fit max-w-2xl wrapper 负责宽度；
+  - 这样可以避免 flex-col + min-w-0 + max-w-full 形成的 shrink-to-fit 循环依赖，
+    进而出现"一列宽"的问题。
+-->
 <script lang="ts">
   import PromptDialog from "$lib/components/dialog/Prompt.svelte";
-  import MarkdownView from "$lib/components/markdown/Message.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as Chat from "$lib/components/ui/chat";
+  import { configStore } from "$lib/store/config.svelte";
   import type { ChatMessage } from "$lib/store/local/chat.types";
   import { messageStore } from "$lib/store/local/msg.svelte";
   import { dialogStore } from "$lib/store/ui/dialog.svelte";
@@ -26,10 +33,26 @@
   let { message }: { message: ChatMessage } = $props();
 
   let copied = $state(false);
+
+  // 长内容折叠：默认 6 行，展开后显示全部。
+  let contentExpanded = $state(false);
+
   let collapsed = $derived(messageStore.collapsedMessages[message.id] === true);
   let deleting = $derived(messageStore.deletingMessages[message.id] === true);
 
   let files = $derived(message.files ?? []);
+
+  // 字体/行高与 Markdown 阅读外观保持一致
+  let fontSize = $derived(configStore.markdownFontSize);
+  let lineHeight = $derived(configStore.markdownLineHeight);
+
+  let isLongContent = $derived.by(() => {
+    const text = message.content ?? "";
+    if (text.length > 600) return true;
+    return text.split("\n").length > 6;
+  });
+
+  let showFullContent = $derived(!isLongContent || contentExpanded);
 
   function copy() {
     navigator.clipboard?.writeText(message.content);
@@ -194,10 +217,36 @@
 
   {#if !collapsed}
     <div
-      class="min-w-0 rounded-2xl border border-primary/15 bg-primary/8 p-3 text-sm leading-relaxed text-foreground wrap-break-word"
+      class="min-w-0 rounded-2xl border border-primary/15 bg-primary/8 p-3 text-foreground wrap-break-word"
+      style:font-size="{fontSize}px"
+      style:line-height={lineHeight}
     >
-      <MarkdownView {message} />
+      {#if showFullContent}
+        <div class="whitespace-pre-wrap wrap-break-word">
+          {message.content ?? ""}
+        </div>
+      {:else}
+        <div class="whitespace-pre-wrap wrap-break-word line-clamp-6">
+          {message.content ?? ""}
+        </div>
+      {/if}
     </div>
+
+    {#if isLongContent}
+      <button
+        type="button"
+        onclick={() => (contentExpanded = !contentExpanded)}
+        class="flex items-center gap-1 self-end rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        {#if contentExpanded}
+          <IconChevronUp size={12} stroke={1.5} />
+          <span>收起</span>
+        {:else}
+          <IconChevronDown size={12} stroke={1.5} />
+          <span>展开全部</span>
+        {/if}
+      </button>
+    {/if}
 
     {#if files.length > 0}
       <MessageAttachments {files} />

@@ -1,13 +1,10 @@
 <!-- Message.svelte（全文） -->
 <script module lang="ts">
   import { setCodeHighlighter } from "@humanspeak/svelte-markdown/extensions/highlight";
-  import {
-    createTanstackHighlighter
-  } from "@humanspeak/svelte-markdown/extensions/tanstack-highlight";
+  import { createTanstackHighlighter } from "@humanspeak/svelte-markdown/extensions/tanstack-highlight";
   import CodeBlock from "./ext/CodeBlock.svelte";
 
   // 从 TanStack 官方子路径导入语言定义对象（LanguageDefinition）
-  // 注意：bash 是 shell 的别名，不存在独立的 bash 模块。
   import { c } from "@tanstack/highlight/languages/c";
   import { cpp } from "@tanstack/highlight/languages/cpp";
   import { csharp } from "@tanstack/highlight/languages/csharp";
@@ -74,6 +71,7 @@
   const baseProse = [
     "[&_code]:break-words",
     "[&_pre]:w-full [&_pre]:min-w-0 [&_pre]:overflow-x-auto",
+    "[&_pre]:text-[length:var(--md-code-size,13px)]",
     "[&_pre_code]:whitespace-pre",
     "[&_a]:underline [&_a]:underline-offset-2",
     "[&_hr]:border-border/60",
@@ -114,6 +112,8 @@
     MarkdownMessage,
     MarkdownRenderers,
   } from "$lib/components/markdown/type";
+  import { configStore } from "$lib/store/config.svelte";
+  import type { MarkdownFontFamily } from "@app/main/types";
   import SvelteMarkdown, {
     Html,
     type HtmlRenderers,
@@ -157,6 +157,32 @@
   });
 
   let extensions = [markedKatex()];
+
+  // ── Markdown 外观（来自 configStore） ─────────────────────
+  // 字体栈集中在此处映射：schema 仅存语义 key，方便将来切换
+  const FONT_STACKS: Record<MarkdownFontFamily, string> = {
+    system:
+      "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans SC', 'Noto Sans', 'PingFang SC', 'Hiragino Sans', 'Microsoft YaHei', 'Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif",
+    sans: "'Inter', 'Source Sans Pro', 'Noto Sans SC', 'Noto Sans', 'PingFang SC', 'Hiragino Sans', 'Microsoft YaHei', system-ui, sans-serif",
+    serif:
+      "'Source Serif Pro', 'Source Serif 4', 'Noto Serif SC', Georgia, 'Songti SC', 'SimSun', 'Times New Roman', serif",
+  };
+
+  let fontFamily = $derived(
+    FONT_STACKS[configStore.markdownFontFamily] ?? FONT_STACKS.system,
+  );
+  let fontSize = $derived(
+    configStore.markdownFontSize > 0 ? configStore.markdownFontSize : 15,
+  );
+  let lineHeight = $derived(
+    configStore.markdownLineHeight > 0 ? configStore.markdownLineHeight : 1.7,
+  );
+  let codeSize = $derived(
+    configStore.markdownCodeFontSize > 0
+      ? configStore.markdownCodeFontSize
+      : 13,
+  );
+  let maxWidth = $derived(configStore.markdownMaxWidth);
 </script>
 
 <div
@@ -164,7 +190,11 @@
     "prose prose-sm w-full min-w-0 max-w-none wrap-break-word select-text",
     proseClass,
   ]}
-  style="font-family: system-ui, 'Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;"
+  style:font-family={fontFamily}
+  style:font-size={`${fontSize}px`}
+  style:line-height={lineHeight}
+  style:max-width={maxWidth > 0 ? `${maxWidth}px` : "none"}
+  style:--md-code-size={`${codeSize}px`}
 >
   <SvelteMarkdown
     source={message.content}

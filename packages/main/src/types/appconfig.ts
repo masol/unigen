@@ -3,6 +3,11 @@ import type { McpServerConfig } from "./shared/mcp.js";
 import type { Provider } from "./shared/model.js";
 
 
+/**
+ * Markdown 正文可用字体族集合。
+ * 具体字体栈由 renderer 侧映射，此处仅存语义键，便于将来切换/扩展。
+ */
+export type MarkdownFontFamily = "system" | "sans" | "serif";
 
 export interface AppConfig {
     theme: 'light' | 'dark' | 'system';
@@ -27,6 +32,20 @@ export interface AppConfig {
     showDevUI: boolean; // 是否显示开发用界面.
     keybindings: Record<string, string[]>;
     // 其他配置...
+
+    // ── Markdown 阅读外观 ─────────────────────────────────────
+    /** Markdown 正文字号，单位 px */
+    markdownFontSize: number;
+    /** Markdown 正文行高倍数（无单位），推荐 1.5 ~ 2.0 */
+    markdownLineHeight: number;
+    /** Markdown 正文字体族，见 MarkdownFontFamily */
+    markdownFontFamily: MarkdownFontFamily;
+    /** 代码块字号，单位 px */
+    markdownCodeFontSize: number;
+    /** 单条消息的最大阅读宽度（px），0 表示跟随容器 */
+    markdownMaxWidth: number;
+    /** 代码行数超过该阈值时默认折叠；0 表示不自动折叠 */
+    markdownAutoCollapseCode: number;
 }
 
 
