@@ -14,7 +14,10 @@ import EditorPage from '../../../route/page/editor/EditorPage.svelte';
 import FallbackComponent from "../../../route/page/fallback/Main.svelte";
 import FlowPage from "../../../route/page/flow/FlowPage.svelte";
 import PacEditor from '../../../route/page/pac/editor.svelte';
+import CodeRuntimePanel from '../../../route/page/settings/code-runtime/CodeRuntimePanel.svelte';
 import DevSetting from "../../../route/page/settings/develops/DevSettingsPanel.svelte";
+import EnvironmentDetail from '../../../route/page/settings/environments/EnvironmentDetail.svelte';
+import EnvironmentsPanel from '../../../route/page/settings/environments/EnvironmentsPanel.svelte';
 import GeneralSetting from "../../../route/page/settings/general/general.svelte";
 import KbSetting from '../../../route/page/settings/kb/kb.svelte';
 import Keybindings from '../../../route/page/settings/Keybindings.svelte';
@@ -56,6 +59,9 @@ class RouterStore {
         "/settings/api/kb": KbSetting,
         "/settings/api/skill": SkillSetting,
         "/settings/general": GeneralSetting,
+        "/settings/code-runtime": CodeRuntimePanel,
+        "/settings/environments": EnvironmentsPanel,
+        "/settings/environments/:id": EnvironmentDetail,
         "/settings/develops": DevSetting,
         "/settings/keybindings": Keybindings,
         "/settings/projectype": ProjectTypeManager,

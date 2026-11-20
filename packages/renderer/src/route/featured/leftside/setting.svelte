@@ -14,9 +14,11 @@
     IconFolders,
     IconKeyboard,
     IconPlugConnected,
+    IconServer2,
     IconSettings,
     IconSettingsOff,
     IconSparkles,
+    IconTerminal2,
   } from "@tabler/icons-svelte";
   import { debounce } from "radashi";
   import { settingsPanelStore } from "./settingStore.svelte";
@@ -62,6 +64,11 @@
    *  · "API 管理"下保留 search 与 mcp 两个并列入口，二者职责独立：
    *      - search：出站能力（联网搜索 API Key / 搜索引擎配置）
    *      - mcp   ：入站能力（Model Context Protocol 服务器注册）
+   *  · "运行环境"分组承载"让 AI 跑起来 / 跑得动"相关配置：
+   *      - code-runtime：AI 代码执行能力（Python / Node.js 独立环境）
+   *      - environments：本机或 SSH 的自有环境（llama.cpp、嵌入模型等）
+   *    之所以独立成一级分组而非塞入"通用"：两者都是 AI 能力的基础设施，
+   *    语义距离近，且未来很可能再扩展（沙盒、算力调度、GPU 池等）。
    */
   const builtinGroups: SettingsGroup[] = [
     {
@@ -170,14 +177,6 @@
             "ElevenLabs",
           ],
         },
-        // {
-        //   id: "api-search",
-        //   label: "搜索",
-        //   description: "搜索引擎与联网",
-        //   icon: IconSearch,
-        //   path: "api/search",
-        //   keywords: ["search", "联网", "搜索引擎", "Google", "Bing"],
-        // },
         {
           id: "api-mcp",
           label: "MCP",
@@ -209,14 +208,55 @@
             "function calling",
           ],
         },
-        // {
-        //   id: "api-sandbox",
-        //   label: "沙盒",
-        //   description: "技能中脚本的运行环境",
-        //   icon: IconCube,
-        //   path: "api/sandbox",
-        //   keywords: ["runtime", "sandbox", "tool", "沙盒", "function calling"],
-        // },
+      ],
+    },
+    {
+      id: "runtime",
+      label: "运行环境",
+      icon: IconTerminal2,
+      items: [
+        {
+          id: "code-runtime",
+          label: "代码执行",
+          description: "AI 可以跑 Python 和 JS",
+          icon: IconTerminal2,
+          path: "code-runtime",
+          keywords: [
+            "code",
+            "runtime",
+            "python",
+            "node",
+            "nodejs",
+            "脚本",
+            "执行",
+            "代码",
+            "数据分析",
+            "pandas",
+            "excel",
+            "csv",
+            "脚本沙箱",
+          ],
+        },
+        {
+          id: "environments",
+          label: "自有环境",
+          description: "本机或 SSH 连接的推理基础环境",
+          icon: IconServer2,
+          path: "environments",
+          keywords: [
+            "环境",
+            "environment",
+            "ssh",
+            "远端",
+            "remote",
+            "llama.cpp",
+            "推理",
+            "embeddings",
+            "嵌入模型",
+            "本地模型",
+            "self-host",
+          ],
+        },
       ],
     },
   ];
@@ -251,6 +291,7 @@
     general: true,
     models: true,
     api: true,
+    runtime: true,
   });
 
   /** 防抖后的查询词，真正驱动过滤逻辑 */
