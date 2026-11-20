@@ -4,6 +4,27 @@
   import { Separator } from "$lib/components/ui/separator";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { layoutStore } from "$lib/store/ui/layout.svelte";
+  import type { LeftSidebarItem } from "$lib/utils/plugin/extpoint/leftsidebar";
+
+  /**
+   * 解析角标展示文本。
+   * - 0 / 负数 / 非有限数 / 空值 → 不展示，避免活动栏出现无意义 “0”。
+   * - 超过 99 → 99+，控制宽度，避免挤压图标。
+   */
+  function resolveBadge(item: LeftSidebarItem): string | null {
+    const source = item.badge;
+    const value = typeof source === "function" ? source() : source;
+
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+      return null;
+    }
+
+    const count = Math.trunc(value);
+
+    if (count <= 0) return null;
+
+    return count > 99 ? "99+" : String(count);
+  }
 </script>
 
 <div
@@ -12,11 +33,15 @@
   <!-- 上部按钮组 -->
   <div class="flex flex-col items-center gap-0.5 pt-1">
     {#each layoutStore.topActivities as activity (activity.id)}
+      {@const badge = resolveBadge(activity)}
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
             <button
               {...props}
+              aria-label={badge
+                ? `${activity.label}（${badge}）`
+                : activity.label}
               class={[
                 "relative flex size-10 items-center justify-center rounded-lg transition-all duration-200",
                 "hover:bg-accent/60",
@@ -28,6 +53,14 @@
               onclick={() => layoutStore.handleActivityClick(activity.id)}
             >
               <RuntimeIcon name={activity.icon} class="size-5" />
+              {#if badge}
+                <span
+                  class="pointer-events-none absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground tabular-nums shadow-sm ring-2 ring-background"
+                  aria-hidden="true"
+                >
+                  {badge}
+                </span>
+              {/if}
             </button>
           {/snippet}
         </Tooltip.Trigger>
@@ -93,12 +126,16 @@
     <Separator class="my-1 w-6" />
 
     {#each layoutStore.bottomActivities as activity (activity.id)}
+      {@const badge = resolveBadge(activity)}
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
             <button
               {...props}
               id="botactivity-{activity.id}"
+              aria-label={badge
+                ? `${activity.label}（${badge}）`
+                : activity.label}
               class={[
                 "relative flex size-10 items-center justify-center rounded-lg transition-all duration-200",
                 "hover:bg-accent/60",
@@ -110,6 +147,14 @@
               onclick={() => layoutStore.handleActivityClick(activity.id)}
             >
               <RuntimeIcon name={activity.icon} class="size-5" />
+              {#if badge}
+                <span
+                  class="pointer-events-none absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground tabular-nums shadow-sm ring-2 ring-background"
+                  aria-hidden="true"
+                >
+                  {badge}
+                </span>
+              {/if}
             </button>
           {/snippet}
         </Tooltip.Trigger>

@@ -1,4 +1,5 @@
 import { appLife } from '$libs/utils/tapable/applife.js';
+import { getStartupProgress } from './libs/utils/startup-progress.js';
 import { createModuleRunner } from './ModuleRunner.js';
 import { terminateAppOnLastWindowClose } from './modules/ApplicationTerminatorOnLastWindowClose.js';
 import { autoUpdater } from './modules/AutoUpdater.js';
@@ -14,7 +15,10 @@ import { createWindowManagerModule } from './modules/WindowManager.js';
 import type { AppInitConfig } from './types/AppInitConfig.js';
 
 export async function initApp(initConfig: AppInitConfig) {
+  const progress = getStartupProgress();
+
   try {
+    progress.report("starting", "正在启动应用...", 2);
     registerSchemes();
 
     const moduleRunner = createModuleRunner()
@@ -47,6 +51,13 @@ export async function initApp(initConfig: AppInitConfig) {
       .init(unigenModule());
 
     await moduleRunner;
+    progress.report("ready", "初始化完成", 100);
+  } catch (error) {
+    progress.fail(
+      "初始化失败，请查看日志或重试。",
+      error instanceof Error ? error.message : String(error),
+    );
+    throw error;
   } finally {
     appLife.bootstrapped.resolve();
   }

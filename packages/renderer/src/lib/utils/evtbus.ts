@@ -3,6 +3,39 @@ import type { AppConfig, RecentProject, WindowEventPayload } from '@app/main/typ
 import mitt, { type Emitter } from "mitt";
 
 /**
+ * 启动过程阶段。与 main 侧 StartupPhase 保持一致。
+ */
+export type StartupPhase =
+    | "starting"
+    | "app-ready"
+    | "search-db"
+    | "search-sync"
+    | "embedding"
+    | "rerank"
+    | "mcp"
+    | "ready"
+    | "failed";
+
+export interface StartupWarning {
+    /** 稳定 id，用于去重 */
+    id: string;
+    level: "info" | "warn" | "error";
+    code: string;
+    message: string;
+    detail?: string;
+    timestamp: number;
+}
+
+export interface StartupProgress {
+    phase: StartupPhase;
+    message: string;
+    /** 0 ~ 100 */
+    progress: number;
+    warnings: StartupWarning[];
+    timestamp: number;
+}
+
+/**
  * 1. 在这里定义你的事件映射类型
  *  key: 事件名（推荐用命名空间，如 "user:login"）
  *  value: 该事件对应的 payload 类型（void 表示无参数）
@@ -27,6 +60,12 @@ export type Events = {
         altKey: boolean;
     },
     "switch-session": { state: "start" | "failed" } // 切换session.
+
+    // ── 启动进度 / 警告 ────────────────────────────────────
+    /** 启动进度快照（每阶段更新一次） */
+    "startup:progress": StartupProgress;
+    /** 新增一条启动/运行期警告 */
+    "startup:warning": StartupWarning;
 };
 
 export type EventNameType = keyof Events;

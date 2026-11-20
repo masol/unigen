@@ -1,6 +1,6 @@
 import { AppInitConfig } from "$types/AppInitConfig.js";
 import { WindowEventPayload, WindowEventType } from "$types/shared/rpcevt.js";
-import { BrowserWindow, Rectangle, screen } from "electron";
+import { BrowserWindow, Rectangle, nativeTheme, screen } from "electron";
 import { RpcContext } from "../../api/type.js";
 import { notify } from "./rpcevt.js";
 
@@ -107,6 +107,8 @@ export class WindowService {
       transparent: false,
       hasShadow: true,
       resizable: true,
+      // 用主题色填充首帧，避免加载 loading-screen 之前的白闪
+      backgroundColor: nativeTheme.shouldUseDarkColors ? "#020617" : "#f8fafc",
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -130,6 +132,14 @@ export class WindowService {
 
   async createWindow(): Promise<BrowserWindow> {
     const browserWindow = this.createWindowInstance();
+
+    // 首次绘制即显示窗口，避免等待 renderer 整包加载完成才 show。
+    // 配合 backgroundColor，可让窗口"立刻出现"。
+    browserWindow.once("ready-to-show", () => {
+      if (!browserWindow.isDestroyed() && !browserWindow.isVisible()) {
+        browserWindow.show();
+      }
+    });
 
     if (this.#renderer instanceof URL) {
       await browserWindow.loadURL(this.#renderer.href);

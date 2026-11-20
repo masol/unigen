@@ -9,7 +9,8 @@
   } from "@tabler/icons-svelte";
 // ── Stores ──
   import { projectStore } from "$lib/store/project.svelte";
-  // ── Sub-views ──
+  import { warningsStore } from "$lib/store/warnings.svelte";
+// ── Sub-views ──
   import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { safeApi } from "$lib/utils/api";
   import { onMount } from "svelte";
@@ -70,6 +71,13 @@
       url: `mailto:${AUTHOR_EMAIL}`,
     });
   }
+
+  // 警告颜色判定
+  const warningTone = $derived.by(() => {
+    if (warningsStore.errorCount > 0) return "error";
+    if (warningsStore.warnCount > 0) return "warn";
+    return "idle";
+  });
 </script>
 
 <div
@@ -96,10 +104,18 @@
         <span class="truncate">{displayPath}</span>
       </button>
       <button
-        class="flex items-center gap-1 text-xs text-muted-foreground transition-all duration-200 hover:text-foreground"
+        title={warningsStore.count > 0
+          ? `${warningsStore.count} 条警告`
+          : "无警告"}
+        class="flex items-center gap-1 text-xs transition-all duration-200
+               {warningTone === 'error'
+          ? 'text-red-500 hover:text-red-600'
+          : warningTone === 'warn'
+            ? 'text-amber-500 hover:text-amber-600'
+            : 'text-muted-foreground hover:text-foreground'}"
       >
         <IconAlertTriangle class="size-3.5" stroke={1.5} />
-        <span>0</span>
+        <span>{warningsStore.count}</span>
       </button>
     </div>
 

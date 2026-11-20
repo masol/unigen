@@ -7,6 +7,7 @@ import ModelCfgManager from '$lib/components/leftside/model-config/model-config.
 
 import SessionHeader from '$lib/components/leftside/session/session.header.svelte';
 import SessionManager from '$lib/components/leftside/session/session.list.svelte';
+import { modelConfigStore } from '$lib/store/local/model-config.store.svelte';
 import type { BlueprintFilters, ProjectActivityData } from '@app/main/types';
 import { layoutStore } from '../layout.svelte';
 import type { IValueService } from './type';
@@ -52,6 +53,7 @@ export class ProjectActivity {
             label: "对话设置",
             component: ModelCfgManager,
             header: ModelCfgHeader,
+            badge: () => modelConfigStore.overrideCount,
         })
         layoutStore.addActivity({
             id: "pac-editor",

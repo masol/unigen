@@ -15,7 +15,12 @@
   import { pluginStore } from "$lib/store/plugin.svelte";
   import { projectStore } from "$lib/store/project.svelte";
   import { recentProjectsStore } from "$lib/store/recent-projects.svelte";
+  import { warningsStore } from "$lib/store/warnings.svelte";
   import { windowStore } from "$lib/store/window.svelte";
+  import evtbus, {
+    type StartupProgress,
+    type StartupWarning,
+  } from "$lib/utils/evtbus";
   import { highlightThemeCss } from "$lib/utils/highlight";
   import { ModeWatcher } from "mode-watcher";
   import pTimeout from "p-timeout";
@@ -56,6 +61,20 @@
       event.preventDefault();
     }
   };
+
+  // ── 警告收集（运行期警告也进入 store） ─────────────────────
+  // 与 LoadingScreen 的订阅并存：LoadingScreen 负责展示，
+  // 本订阅保证 loading 结束后仍能捕获运行期警告。
+  onMount(() => {
+    const onWarning = (w: StartupWarning) => warningsStore.add(w);
+    const onProgress = (p: StartupProgress) => warningsStore.addAll(p.warnings);
+    evtbus.on("startup:warning", onWarning);
+    evtbus.on("startup:progress", onProgress);
+    return () => {
+      evtbus.off("startup:warning", onWarning);
+      evtbus.off("startup:progress", onProgress);
+    };
+  });
 
   onMount(async () => {
     try {

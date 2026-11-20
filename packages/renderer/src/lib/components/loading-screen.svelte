@@ -1,27 +1,48 @@
 <!-- src/lib/components/loading-screen.svelte -->
 <script lang="ts">
+  import { warningsStore } from "$lib/store/warnings.svelte";
+  import evtbus, {
+    type StartupProgress,
+    type StartupWarning,
+  } from "$lib/utils/evtbus";
+  import { IconAlertTriangle, IconInfoCircle } from "@tabler/icons-svelte";
+  import { onMount } from "svelte";
   import { Motion } from "svelte-motion";
 
-  // 可由外部传入提示文案与步骤，默认值保证独立可运行
-  let {
-    message = "系统初始化中，请稍候",
-    steps = [
-      "连接核心服务",
-      "加载用户配置",
-      "同步运行环境",
-      "准备就绪",
-    ] as string[],
-  } = $props();
+  // ── 局部状态：随本组件销毁而回收 ────────────────────────────
+  let progress = $state<StartupProgress>({
+    phase: "starting",
+    message: "正在启动",
+    progress: 0,
+    warnings: [],
+    timestamp: Date.now(),
+  });
 
-  // 当前步骤索引（演示用，自动推进）
-  let stepIndex = $state(0);
+  // 本组件只展示本地 warnings，store 负责跨组件持久化
+  let localWarnings = $state<StartupWarning[]>([]);
 
-  // 自动轮播步骤，营造"进行中"的氛围
-  $effect(() => {
-    const timer = setInterval(() => {
-      stepIndex = (stepIndex + 1) % steps.length;
-    }, 1400);
-    return () => clearInterval(timer);
+  onMount(() => {
+    const onProgress = (payload: StartupProgress) => {
+      progress = payload;
+      localWarnings = payload.warnings;
+      // 同步到全局 store（status bar 用）
+      warningsStore.addAll(payload.warnings);
+    };
+    const onWarning = (payload: StartupWarning) => {
+      if (!localWarnings.some((w) => w.id === payload.id)) {
+        localWarnings = [...localWarnings, payload];
+      }
+      warningsStore.add(payload);
+    };
+
+    evtbus.on("startup:progress", onProgress);
+    evtbus.on("startup:warning", onWarning);
+
+    return () => {
+      evtbus.off("startup:progress", onProgress);
+      evtbus.off("startup:warning", onWarning);
+      // localWarnings / progress 会随组件销毁
+    };
   });
 
   // 装饰性流动光斑配置
@@ -81,10 +102,11 @@
   {/each}
 
   <!-- 中心内容 -->
-  <div class="relative z-10 flex flex-col items-center gap-8 px-6">
+  <div
+    class="relative z-10 flex w-full max-w-xl flex-col items-center gap-6 px-6"
+  >
     <!-- 旋转双环 + 脉冲核心 -->
     <div class="relative grid place-items-center">
-      <!-- 外环 -->
       <Motion
         let:motion
         animate={{ rotate: 360 }}
@@ -98,7 +120,6 @@
         ></div>
       </Motion>
 
-      <!-- 内环（反向旋转） -->
       <Motion
         let:motion
         animate={{ rotate: -360 }}
@@ -112,7 +133,6 @@
         ></div>
       </Motion>
 
-      <!-- 脉冲核心 -->
       <Motion
         let:motion
         animate={{ scale: [1, 1.25, 1], opacity: [0.7, 1, 0.7] }}
@@ -127,12 +147,12 @@
     </div>
 
     <!-- 标题文案 + 跳动省略号 -->
-    <div class="flex flex-col items-center gap-2 text-center">
+    <div class="flex w-full flex-col items-center gap-1.5 text-center">
       <h1
         class="flex items-center text-xl font-semibold tracking-wide
                text-slate-800 sm:text-2xl dark:text-slate-100"
       >
-        {message}
+        {progress.message}
         <span class="ml-0.5 inline-flex">
           {#each [0, 1, 2] as dot (dot)}
             <Motion
@@ -150,45 +170,78 @@
           {/each}
         </span>
       </h1>
-
-      <!-- 当前步骤提示（切换时上下滑入） -->
-      <div class="relative h-6 overflow-hidden">
-        {#key stepIndex}
-          <Motion
-            let:motion
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
-          >
-            <p
-              use:motion
-              class="text-sm text-slate-500 sm:text-base dark:text-slate-400"
-            >
-              {steps[stepIndex]}
-            </p>
-          </Motion>
-        {/key}
-      </div>
+      <p class="text-xs text-slate-500 sm:text-sm dark:text-slate-400">
+        阶段：{progress.phase}
+      </p>
     </div>
 
-    <!-- 进度条（不确定态，循环扫动） -->
+    <!-- 进度条 -->
     <div
-      class="relative h-1 w-48 overflow-hidden rounded-full bg-slate-200/70
-             sm:w-64 dark:bg-slate-700/50"
+      class="relative h-1 w-full max-w-md overflow-hidden rounded-full bg-slate-200/70
+             dark:bg-slate-700/50"
     >
       <Motion
         let:motion
-        animate={{ x: ["-100%", "250%"] }}
-        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+        initial={{ width: "0%" }}
+        animate={{ width: `${Math.max(2, progress.progress)}%` }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
       >
         <div
           use:motion
-          class="h-full w-1/3 rounded-full
-                 bg-linear-to-r from-transparent via-sky-500 to-transparent
-                 dark:via-sky-400"
+          class="h-full rounded-full bg-linear-to-r from-sky-500 to-indigo-500
+                 dark:from-sky-400 dark:to-indigo-400"
         ></div>
       </Motion>
     </div>
+
+    <div class="text-[11px] text-slate-400 dark:text-slate-500">
+      {progress.progress}%
+    </div>
+
+    <!-- 警告列表（本地展示） -->
+    {#if localWarnings.length > 0}
+      <Motion
+        let:motion
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+      >
+        <div use:motion class="mt-2 w-full space-y-2">
+          {#each localWarnings as w (w.id)}
+            <div
+              class="flex items-start gap-2 rounded-lg border px-3 py-2 text-left
+                     {w.level === 'error'
+                ? 'border-red-500/30 bg-red-500/10'
+                : w.level === 'warn'
+                  ? 'border-amber-500/30 bg-amber-500/10'
+                  : 'border-sky-500/30 bg-sky-500/10'}"
+            >
+              {#if w.level === "error"}
+                <IconAlertTriangle
+                  class="mt-0.5 size-4 shrink-0 text-red-500"
+                />
+              {:else if w.level === "warn"}
+                <IconAlertTriangle
+                  class="mt-0.5 size-4 shrink-0 text-amber-500"
+                />
+              {:else}
+                <IconInfoCircle class="mt-0.5 size-4 shrink-0 text-sky-500" />
+              {/if}
+              <div class="min-w-0 flex-1">
+                <p class="text-xs font-medium text-foreground">{w.message}</p>
+                {#if w.detail}
+                  <p
+                    class="mt-0.5 text-[11px] leading-relaxed wrap-break-word text-muted-foreground"
+                  >
+                    {w.detail}
+                  </p>
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
+      </Motion>
+    {/if}
   </div>
 
   <!-- 底部品牌占位 -->

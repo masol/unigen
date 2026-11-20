@@ -6,6 +6,14 @@ import Logger from 'electron-log/renderer';
 import type { Component } from 'svelte';
 
 /**
+ * 角标数据源。
+ * - 数字：静态角标。
+ * - 函数：响应式角标；在渲染时调用，可读取 $derived / store。
+ * 返回 <=0、NaN、null、undefined 时不渲染。
+ */
+export type SidebarBadgeSource = number | (() => number | null | undefined);
+
+/**
  * 左侧边栏扩展项定义
  */
 export interface LeftSidebarItem extends PluginBaseItem {
@@ -19,6 +27,12 @@ export interface LeftSidebarItem extends PluginBaseItem {
     header?: Component<any> | null;
     // 添加属性信息。
     props?: Record<string, unknown>;
+    /**
+     * 图标右上角数字角标。
+     * 对动态数据请传函数，例如：`badge: () => modelConfigStore.overrideCount`。
+     * 不传或返回 <= 0 时不渲染，保持历史组件完全无感。
+     */
+    badge?: SidebarBadgeSource;
 }
 
 /**
