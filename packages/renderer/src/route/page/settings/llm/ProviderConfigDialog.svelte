@@ -16,7 +16,6 @@
   import {
     allProtocols,
     type ProviderConfig,
-    type ProviderPreset,
     type ProviderProtocol,
   } from "$lib/utils/model/types";
   import autoAnimate from "@formkit/auto-animate";
@@ -30,18 +29,19 @@
   } from "@tabler/icons-svelte";
   import { toast } from "svelte-sonner";
   import { isURL } from "validator";
+  import type { ComboboxItem } from "./combobox/combobox.types";
+  import ComboboxSearch from "./combobox/ComboboxSearch.svelte";
   import ConnectionSection from "./ConnectionSection.svelte";
   import HeaderEntriesSection from "./HeaderEntriesSection.svelte";
-  import ProviderPresetCombobox from "./ProviderPresetCombobox.svelte";
-  import { findPresetByBaseUrl } from "./providers";
+  import {
+    KNOWN_PROVIDERS,
+    findPreset,
+    findPresetByBaseUrl,
+    searchPresets,
+  } from "./providers";
 
   type Props = {
     config?: Partial<ProviderConfig>;
-    /**
-     * 已存在的 Provider id 列表（来自 configStore.providers）。
-     * 用于在提交时检测重名，避免在界面层提前拦截。
-     * 编辑模式下，列表中应排除"自己"当前的 id（由调用方负责处理）。
-     */
     existingProviderIds?: string[];
     onSave?: (config: ProviderConfig) => Promise<void>;
   } & DialogComponentProps<ProviderConfig>;
@@ -56,17 +56,7 @@
 
   const isEditMode = !!config?.id;
 
-  // ═══════════════════════════════════════════════════════════
-  // 改进：通过端点地址（baseUrl）来判断是哪个供应商预设，
-  // 而非依赖易变的名称（id）。
-  // ═══════════════════════════════════════════════════════════
-  const initialPreset = config?.baseUrl
-    ? findPresetByBaseUrl(config.baseUrl)
-    : null;
-
-  let selectedPresetId = $state<string | null>(initialPreset?.id ?? null);
-  let isCustomMode = $state(isEditMode && !initialPreset);
-
+  // ── 单一输入源：名称即搜索词；选预设时应用其连接配置 ──
   let providerId = $state(config?.id ?? "");
   let protocol = $state<ProviderProtocol | undefined>(
     config?.protocol ?? allProtocols.openai,
@@ -74,8 +64,10 @@
   let baseUrl = $state(config?.baseUrl ?? "");
   let apiKey = $state(config?.apiKey ?? "");
   let maxConn = $state<number | undefined>(config?.maxConn ?? 1);
-  let websiteUrl = $state(initialPreset?.website ?? "");
   let proxyUrl = $state(config?.proxyUrl ?? "");
+
+  // 官网链接以 baseUrl（稳定锚点）为唯一来源派生
+  const websiteUrl = $derived(findPresetByBaseUrl(baseUrl)?.website ?? "");
 
   async function openExternal(url: string) {
     await api().system.openExternal({ url });
@@ -100,7 +92,50 @@
   let isSubmitting = $state(false);
   let errorMessage = $state("");
 
-  /** 当前输入的 id 是否与其他 Provider 冲突。编辑模式下调用方已剔除自己。 */
+  // ── 预设下拉：query 由 ComboboxSearch.onQueryChange 回填 ──
+  let query = $state("");
+
+  const presetItems = $derived.by<ComboboxItem[]>(() => {
+    const q = query.trim();
+    if (!q) {
+      return KNOWN_PROVIDERS.flatMap((g) =>
+        g.presets.map((p) => ({
+          id: p.id,
+          label: p.label,
+          description: p.note,
+          group: g.heading,
+        })),
+      );
+    }
+    return searchPresets(q).map((p) => ({
+      id: p.id,
+      label: p.label,
+      description: p.note,
+      group: "搜索结果",
+    }));
+  });
+
+  /** 当前 providerId / baseUrl 对应的预设 id（供列表选中标记） */
+  const matchedPresetId = $derived.by(() => {
+    const byId = findPreset(providerId.trim());
+    if (byId) return byId.id;
+    return findPresetByBaseUrl(baseUrl)?.id ?? "";
+  });
+
+  /**
+   * 用户点击 / 回车选中某个预设项。
+   * providerId 由 ComboboxSearch 的 bind:value 自动写入；这里只应用连接配置。
+   */
+  function handlePresetSelect(item: ComboboxItem) {
+    const preset = findPreset(item.id);
+    if (!preset) return;
+    protocol = preset.protocol as ProviderProtocol;
+    baseUrl = preset.baseUrl;
+    maxConn = preset.maxconn;
+    if (preset.apiKey) apiKey = preset.apiKey;
+  }
+
+  /** 目前 providerId 是否与其他 Provider 冲突（编辑模式下调用方已剔除自己） */
   const duplicateIdError = $derived.by(() => {
     const trimmed = providerId.trim();
     if (!trimmed) return "";
@@ -116,24 +151,6 @@
       duplicateIdError === "",
   );
 
-  function handlePresetSelect(preset: ProviderPreset | null) {
-    if (preset) {
-      selectedPresetId = preset.id;
-      isCustomMode = false;
-      providerId = preset.id;
-      protocol = preset.protocol as ProviderProtocol;
-      baseUrl = preset.baseUrl;
-      websiteUrl = preset.website;
-      maxConn = preset.maxconn;
-      if (preset.apiKey) {
-        apiKey = preset.apiKey;
-      }
-    } else {
-      selectedPresetId = null;
-      isCustomMode = true;
-    }
-  }
-
   function handleOpenWebsite() {
     if (websiteUrl) openExternal(websiteUrl);
   }
@@ -141,7 +158,6 @@
   async function handleSubmit() {
     if (!isValid || isSubmitting) return;
 
-    // 防御性二次校验（即便 isValid 通过，也兜底一次）
     if (duplicateIdError) {
       toast.error(duplicateIdError);
       document.getElementById("dlg-provider-id")?.focus();
@@ -192,22 +208,6 @@
       isSubmitting = false;
     }
   }
-
-  // ── 当 baseUrl 改变时，自动检测是否匹配已知预设 ──
-  $effect(() => {
-    const currentUrl = baseUrl;
-    if (!currentUrl || isCustomMode) return;
-    const matched = findPresetByBaseUrl(currentUrl);
-    if (matched && matched.id !== selectedPresetId) {
-      selectedPresetId = matched.id;
-      websiteUrl = matched.website;
-    } else if (!matched && selectedPresetId && !isCustomMode) {
-      // baseUrl 已改变，不再匹配原预设 → 切换为自定义模式
-      selectedPresetId = null;
-      isCustomMode = true;
-      websiteUrl = "";
-    }
-  });
 </script>
 
 <DialogHeader>
@@ -221,30 +221,34 @@
 
 <div class="space-y-6 py-4" use:autoAnimate>
   <div class="space-y-4">
-    <ProviderPresetCombobox
-      selectedId={selectedPresetId ?? ""}
-      isCustom={isCustomMode}
-      onSelect={handlePresetSelect}
-    />
-
+    <!--╭─────────────────────────────────────────────────────╮ -->
+    <!-- │ 单一输入源：名称 = 预设搜索词                          │ -->
+    <!-- │ 空输入 → 全量预设；输入即拼音过滤；                 │ -->
+    <!-- │ 不点预设直接 Enter/对勾 → 采用自定义名称。            │ -->
+    <!-- ╰─────────────────────────────────────────────────────╯ -->
     <div class="space-y-2">
       <Label for="dlg-provider-id">提供商名称</Label>
-      <Input
-        id="dlg-provider-id"
+      <ComboboxSearch
         bind:value={providerId}
-        placeholder="输入名称标识此提供商…"
-        class="rounded-xl"
-        aria-invalid={duplicateIdError ? "true" : undefined}
-        aria-describedby={duplicateIdError ? "dlg-provider-id-err" : undefined}
+        items={presetItems}
+        selectedValue={matchedPresetId}
+        placeholder="输入或搜索提供商名称…"
+        emptyText="未找到匹配的预设，回车或点对勾可直接使用当前输入"
+        shouldFilter={false}
+        onQueryChange={(q) => (query = q)}
+        onSelect={handlePresetSelect}
       />
-      {#if duplicateIdError}
-        <p
-          id="dlg-provider-id-err"
-          class="animate-fade-in text-xs text-destructive"
-        >
-          {duplicateIdError}
-        </p>
-      {/if}
+      <!-- 错误区预留空间：防止对话框高度抖动 -->
+      <div class="min-h-5">
+        {#if duplicateIdError}
+          <p
+            id="dlg-provider-id-err"
+            class="animate-fade-in text-xs text-destructive"
+          >
+            {duplicateIdError}
+          </p>
+        {/if}
+      </div>
     </div>
 
     <div class="space-y-2">

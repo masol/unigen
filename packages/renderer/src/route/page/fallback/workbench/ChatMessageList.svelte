@@ -80,6 +80,16 @@
     following = true;
     chat?.scrollToBottom({ smooth: true });
   }
+
+  function errorText(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    if (typeof err === "string") return err;
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  }
 </script>
 
 <div class="relative h-full w-full">
@@ -98,19 +108,46 @@
     >
       {#snippet renderMessage(message, _index)}
         <div class="px-4 py-3 sm:px-6 lg:px-8">
-          {#if message.role === "user"}
-            <!-- 用户：右对齐 + 左侧强制留白 -->
-            <div class="flex justify-end pl-10 sm:pl-20 md:pl-32">
-              <div class="w-fit max-w-2xl">
-                <UserMessage {message} />
+          <!--
+            单条消息级渲染兜底：
+            即便某条消息内容/traces 结构异常，也只损坏这一条，其它消息与
+            输入框、header 全都保持可用。reset 后仅该条消息重新挂载。
+          -->
+          <svelte:boundary>
+            {#if message.role === "user"}
+              <!-- 用户：右对齐 + 左侧强制留白 -->
+              <div class="flex justify-end pl-10 sm:pl-20 md:pl-32">
+                <div class="w-fit max-w-2xl">
+                  <UserMessage {message} />
+                </div>
               </div>
-            </div>
-          {:else}
-            <!-- AI：填满可用宽度 + 右侧小留白 -->
-            <div class="pr-6 sm:pr-10 lg:pr-16">
-              <AssistantMessage {message} />
-            </div>
-          {/if}
+            {:else}
+              <!-- AI：填满可用宽度 + 右侧小留白 -->
+              <div class="pr-6 sm:pr-10 lg:pr-16">
+                <AssistantMessage {message} />
+              </div>
+            {/if}
+
+            {#snippet failed(error, reset)}
+              <div
+                class="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs"
+              >
+                <p class="font-medium text-destructive">消息渲染出错</p>
+                <p
+                  class="mt-1 leading-relaxed text-muted-foreground wrap-break-word"
+                >
+                  {errorText(error)}
+                </p>
+                <button
+                  type="button"
+                  onclick={reset}
+                  class="mt-2 text-xs text-destructive underline"
+                >
+                  重试
+                </button>
+              </div>
+            {/snippet}
+          </svelte:boundary>
         </div>
       {/snippet}
     </SvelteVirtualChat>

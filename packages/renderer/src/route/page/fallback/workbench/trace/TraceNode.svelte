@@ -76,12 +76,52 @@
       view.reasoning != null;
     return hasAny ? view : null;
   }
+
+  /**
+   * 将 usage 转成多行文本，作为原生 title。
+   *
+   * 为什么不用 bits-ui Tooltip：
+   *   1. 本行可能被 Trace.CollapsibleTrigger（button）包裹，
+   *      使用 Tooltip.Trigger 的默认渲染会产生非法的按钮嵌套；
+   *      走 `child` snippet 把 props 展开到 span 上又会引入
+   *      "InvalidCharacterError: '=' is not a valid attribute name"，
+   *      该错误会打断 Svelte 5 的 effect flush，使整个工作台卡在同步态。
+   *   2. 原生 title 由浏览器绘制，无运行时依赖，零风险。
+   */
+  function buildUsageTooltip(view: UsageView): string {
+    const lines: string[] = [];
+    if (view.total != null) {
+      lines.push(`总计: ${view.total.toLocaleString()} tok`);
+    }
+    const push = (label: string, value?: number, indent = false) => {
+      if (value == null) return;
+      lines.push(`${indent ? "  " : ""}${label}: ${value.toLocaleString()}`);
+    };
+    if (
+      view.input != null ||
+      view.noCache != null ||
+      view.cacheRead != null ||
+      view.cacheWrite != null
+    ) {
+      lines.push("输入:");
+      push("总计", view.input, true);
+      push("无缓存", view.noCache, true);
+      push("缓存读取", view.cacheRead, true);
+      push("缓存写入", view.cacheWrite, true);
+    }
+    if (view.output != null || view.text != null || view.reasoning != null) {
+      lines.push("输出:");
+      push("总计", view.output, true);
+      push("正文", view.text, true);
+      push("推理", view.reasoning, true);
+    }
+    return lines.join("\n");
+  }
 </script>
 
 <script lang="ts">
   import MarkdownView from "$lib/components/markdown/Message.svelte";
   import { RuntimeIcon } from "$lib/components/runtimeicon";
-  import * as Tooltip from "$lib/components/ui/tooltip";
   import * as Trace from "$lib/components/ui/trace";
   import { hasTraceChildren } from "$lib/store/local/chat.guards";
   import type { TraceNode } from "$lib/store/local/chat.types";
@@ -137,7 +177,8 @@
   // 修复类型错误：直接在判断中使用守卫，避免 $derived 类型收窄失效
   let children = $derived.by(() => {
     if (!hasTraceChildren(node)) return [];
-    return node.children;
+    const list = node.children;
+    return Array.isArray(list) ? list : [];
   });
 
   let hasChildren = $derived(children.length > 0);
@@ -199,131 +240,16 @@
   </span>
 {/snippet}
 
-<!--╭─────────────────────────────────────────────────────╮ -->
-<!-- │ [可抽取子组件 → UsageBadge.svelte]                  │ -->
-<!-- │ 职责：agent 行末的紧凑 token 徽章 + 悬停明细 Tooltip │ -->
-<!-- ╰─────────────────────────────────────────────────────╯ -->
 {#snippet usageBadge(view: UsageView)}
   {#if view.total != null}
-    <Tooltip.Root>
-      <Tooltip.Trigger>
-        {#snippet child({ props })}
-          <!--
-            用 span 而非 button 作 Trigger：本行在 expandable 时已被
-            CollapsibleTrigger（button）包裹，禁止按钮嵌套。
-            该徽章仅承载悬停/辅助描述，不承担键盘独立操作，
-            故不加 tabindex，避免 button 内出现可聚焦子元素的 a11y 问题。
-          -->
-          <span
-            {...props}
-            class="ml-1 shrink-0 cursor-help rounded-md border border-border/50 bg-muted/30 px-1.5 py-px font-mono text-xs text-muted-foreground tabular-nums transition-colors hover:border-border hover:text-foreground"
-          >
-            {formatTokens(view.total)} tok
-          </span>
-        {/snippet}
-      </Tooltip.Trigger>
-
-      <Tooltip.Content
-        side="top"
-        align="end"
-        sideOffset={6}
-        class="w-60 rounded-xl border border-border/50 bg-popover p-0 text-popover-foreground shadow-xl"
-      >
-        <div class="space-y-2 p-3">
-          <div class="flex items-center justify-between gap-4">
-            <span class="text-xs font-medium text-foreground">模型用量</span>
-            {#if view.total != null}
-              <span
-                class="font-mono text-xs font-medium tabular-nums text-foreground"
-              >
-                {view.total.toLocaleString()} tok
-              </span>
-            {/if}
-          </div>
-
-          <div class="h-px bg-border/50"></div>
-
-          {#if view.input != null || view.noCache != null || view.cacheRead != null || view.cacheWrite != null}
-            <div class="space-y-1">
-              {#if view.input != null}
-                <div class="flex items-center justify-between gap-4 text-xs">
-                  <span class="text-muted-foreground">输入</span>
-                  <span class="font-mono tabular-nums text-foreground">
-                    {view.input.toLocaleString()}
-                  </span>
-                </div>
-              {/if}
-              {#if view.noCache != null}
-                <div
-                  class="flex items-center justify-between gap-4 pl-3 text-xs"
-                >
-                  <span class="text-muted-foreground/80">无缓存</span>
-                  <span class="font-mono tabular-nums text-muted-foreground">
-                    {view.noCache.toLocaleString()}
-                  </span>
-                </div>
-              {/if}
-              {#if view.cacheRead != null}
-                <div
-                  class="flex items-center justify-between gap-4 pl-3 text-xs"
-                >
-                  <span class="text-muted-foreground/80">缓存读取</span>
-                  <span class="font-mono tabular-nums text-muted-foreground">
-                    {view.cacheRead.toLocaleString()}
-                  </span>
-                </div>
-              {/if}
-              {#if view.cacheWrite != null}
-                <div
-                  class="flex items-center justify-between gap-4 pl-3 text-xs"
-                >
-                  <span class="text-muted-foreground/80">缓存写入</span>
-                  <span class="font-mono tabular-nums text-muted-foreground">
-                    {view.cacheWrite.toLocaleString()}
-                  </span>
-                </div>
-              {/if}
-            </div>
-          {/if}
-
-          {#if view.output != null || view.text != null || view.reasoning != null}
-            <div class="space-y-1">
-              {#if view.output != null}
-                <div class="flex items-center justify-between gap-4 text-xs">
-                  <span class="text-muted-foreground">输出</span>
-                  <span class="font-mono tabular-nums text-foreground">
-                    {view.output.toLocaleString()}
-                  </span>
-                </div>
-              {/if}
-              {#if view.text != null}
-                <div
-                  class="flex items-center justify-between gap-4 pl-3 text-xs"
-                >
-                  <span class="text-muted-foreground/80">正文</span>
-                  <span class="font-mono tabular-nums text-muted-foreground">
-                    {view.text.toLocaleString()}
-                  </span>
-                </div>
-              {/if}
-              {#if view.reasoning != null}
-                <div
-                  class="flex items-center justify-between gap-4 pl-3 text-xs"
-                >
-                  <span class="text-muted-foreground/80">推理</span>
-                  <span class="font-mono tabular-nums text-muted-foreground">
-                    {view.reasoning.toLocaleString()}
-                  </span>
-                </div>
-              {/if}
-            </div>
-          {/if}
-        </div>
-      </Tooltip.Content>
-    </Tooltip.Root>
+    <span
+      title={buildUsageTooltip(view)}
+      class="ml-1 shrink-0 cursor-help rounded-md border border-border/50 bg-muted/30 px-1.5 py-px font-mono text-xs text-muted-foreground tabular-nums transition-colors hover:border-border hover:text-foreground"
+    >
+      {formatTokens(view.total)} tok
+    </span>
   {/if}
 {/snippet}
-<!-- ╭─── / UsageBadge ───╮ -->
 
 {#snippet line()}
   <Trace.Line status={traceStatus}>
@@ -332,7 +258,7 @@
     </Trace.Icon>
     <Trace.Title>{node.title}</Trace.Title>
 
-    {#if node.kind === "agent"}
+    {#if node.kind === "agent" && node.agent}
       <Trace.Description>
         <span>{node.agent.name}</span>
         {#if node.agent.model}

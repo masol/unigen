@@ -449,7 +449,7 @@
     {/if}
   </div>
 
-  <!-- 回到主控台按钮（不变） -->
+  <!-- 回到工作台按钮（不变） -->
   <button
     type="button"
     id="headerbar-goHome"
@@ -459,7 +459,7 @@
     class="flex size-6 shrink-0 items-center justify-center rounded-md transition-all duration-200 {isNotHome
       ? 'bg-linear-to-br from-blue-500 to-purple-600 text-white shadow-md hover:scale-110 hover:shadow-lg active:scale-95 dark:from-blue-600 dark:to-purple-700'
       : 'cursor-not-allowed bg-transparent text-muted-foreground/15 opacity-40'}"
-    aria-label="回到主控台"
+    aria-label="回到工作台"
   >
     <IconHome2
       size={14}

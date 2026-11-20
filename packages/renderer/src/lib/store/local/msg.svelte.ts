@@ -243,11 +243,22 @@ class MessageStore {
      *
      * 消息一旦不处于运行态，任何 streaming=true 或 status=running/pending 的
      * trace 都是异常落盘（进程中断、旧版本残留等），必须收尾，否则 UI 会永久转圈。
+     *
+     * 每条消息独立 try/catch：单条异常不应中断整批修复。
      */
     #repairIdleMessages(messages: ChatMessage[]): ChatMessage[] {
+        if (!Array.isArray(messages)) return []
         for (const m of messages) {
-            m.streaming = false
-            this.#forceEndTraces(m)
+            if (!m || typeof m !== "object") continue
+            try {
+                m.streaming = false
+                this.#forceEndTraces(m)
+            } catch (err) {
+                Logger.error(
+                    "[MessageStore] repairIdleMessages failed for message",
+                    { messageId: (m as ChatMessage).id, err },
+                )
+            }
         }
         return messages
     }
@@ -271,9 +282,11 @@ class MessageStore {
         runState: RunState | undefined,
         liveSnapshot: ChatMessage[],
     ): ChatMessage[] {
+        const safeLoaded = Array.isArray(loaded) ? loaded : []
+        const safeSnapshot = Array.isArray(liveSnapshot) ? liveSnapshot : []
         // eslint-disable-next-line svelte/prefer-svelte-reactivity
-        const byId = new Map(loaded.map((m) => [m.id, m]))
-        for (const live of liveSnapshot) {
+        const byId = new Map(safeLoaded.map((m) => [m.id, m]))
+        for (const live of safeSnapshot) {
             byId.set(live.id, live)
         }
         const merged = Array.from(byId.values()).sort(
@@ -298,14 +311,22 @@ class MessageStore {
         }
 
         for (const m of merged) {
-            if (activeId && m.id === activeId && m.role === "assistant") {
-                // 活跃流：保留 streaming + 恢复 running/pending trace 的 spinner 视觉
-                m.streaming = true
-                this.#reviveRunningTraces(m)
-                continue
+            if (!m || typeof m !== "object") continue
+            try {
+                if (activeId && m.id === activeId && m.role === "assistant") {
+                    // 活跃流：保留 streaming + 恢复 running/pending trace 的 spinner 视觉
+                    m.streaming = true
+                    this.#reviveRunningTraces(m)
+                    continue
+                }
+                m.streaming = false
+                this.#forceEndTraces(m)
+            } catch (err) {
+                Logger.error(
+                    "[MessageStore] restoreRunningMessages failed for message",
+                    { messageId: (m as ChatMessage).id, err },
+                )
             }
-            m.streaming = false
-            this.#forceEndTraces(m)
         }
         return merged
     }
@@ -528,12 +549,14 @@ class MessageStore {
         nodeId: string,
     ): TraceNode | null {
         const msg = this.#findMessage(messageId);
-        if (!msg?.traces) return null;
+        if (!msg || !Array.isArray(msg.traces)) return null;
 
         const search = (nodes: TraceNode[]): TraceNode | null => {
+            if (!Array.isArray(nodes)) return null;
             for (const node of nodes) {
+                if (!node) continue;
                 if (node.id === nodeId) return node;
-                if (hasTraceChildren(node)) {
+                if (hasTraceChildren(node) && Array.isArray(node.children)) {
                     const found = search(node.children);
                     if (found) return found;
                 }
@@ -565,7 +588,13 @@ class MessageStore {
             }
             case "message.delta": {
                 const m = this.#findMessage(event.messageId);
-                if (m) m.content += event.delta;
+                if (m) {
+                    // 防御：content 若因极端场景为 undefined / 非字符串，
+                    // 直接 += 会产成 "undefined..." 污染，需先归一到字符串。
+                    m.content =
+                        (typeof m.content === "string" ? m.content : "") +
+                        event.delta;
+                }
                 break;
             }
             case "message.end": {
@@ -596,20 +625,26 @@ class MessageStore {
             case "trace.start": {
                 const m = this.#findMessage(event.messageId);
                 if (!m) break;
+                if (!Array.isArray(m.traces)) {
+                    m.traces = [];
+                }
 
                 if (event.parentId) {
                     const parent = this.#findTraceNode(event.messageId, event.parentId);
                     if (parent && isTraceAgentNode(parent)) {
+                        if (!Array.isArray(parent.children)) {
+                            parent.children = [];
+                        }
                         parent.children.push(event.node);
                     } else {
                         Logger.warn(
                             "trace.start: parentId not found or not an agent node, mounting to root",
                             { parentId: event.parentId, nodeId: event.node.id },
                         );
-                        (m.traces ??= []).push(event.node);
+                        m.traces.push(event.node);
                     }
                 } else {
-                    (m.traces ??= []).push(event.node);
+                    m.traces.push(event.node);
                 }
                 break;
             }
@@ -666,9 +701,10 @@ class MessageStore {
     }
 
     #forceEndTraces(message: ChatMessage): void {
-        if (!message.traces || message.traces.length === 0) return;
+        if (!Array.isArray(message.traces) || message.traces.length === 0) return;
 
         const endNode = (node: TraceNode) => {
+            if (!node) return;
             if (node.status === "running" || node.status === "pending") {
                 node.status = "success";
                 node.streaming = false;
@@ -676,7 +712,7 @@ class MessageStore {
                     node.finishedAt = Date.now();
                 }
             }
-            if (hasTraceChildren(node)) {
+            if (hasTraceChildren(node) && Array.isArray(node.children)) {
                 node.children.forEach(endNode);
             }
         };
@@ -695,13 +731,14 @@ class MessageStore {
      * 避免把历史已完成节点误标为运行中。
      */
     #reviveRunningTraces(message: ChatMessage): void {
-        if (!message.traces || message.traces.length === 0) return;
+        if (!Array.isArray(message.traces) || message.traces.length === 0) return;
 
         const revive = (node: TraceNode) => {
+            if (!node) return;
             if (node.status === "running" || node.status === "pending") {
                 node.streaming = true;
             }
-            if (hasTraceChildren(node)) {
+            if (hasTraceChildren(node) && Array.isArray(node.children)) {
                 node.children.forEach(revive);
             }
         };

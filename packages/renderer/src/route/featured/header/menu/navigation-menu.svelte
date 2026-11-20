@@ -1,6 +1,6 @@
 <!--╭─────────────────────────────────────────────────────────╮ -->
 <!-- │ [子组件 → header/menu/navigation-menu.svelte]           │ -->
-<!-- │ 职责：主控台 / 后退 / 前进 SPA 导航                       │ -->
+<!-- │ 职责：工作台 / 后退 / 前进 SPA 导航                       │ -->
 <!-- ╰─────────────────────────────────────────────────────────╯ -->
 <script lang="ts">
   import * as Menubar from "$lib/components/ui/menubar";
@@ -25,7 +25,7 @@
   <Menubar.Content align="start" class="select-none z-200 min-w-48">
     <Menubar.Item class={itemHoverClass} onSelect={() => push("/")}>
       <IconHome2 size={20} stroke={1.5} class="mr-2 text-muted-foreground" />
-      主控台
+      工作台
       <MenuShortcut command="navigation.home" />
     </Menubar.Item>
 

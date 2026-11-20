@@ -3,7 +3,6 @@
   import * as Alert from "$lib/components/ui/alert";
   import { Button } from "$lib/components/ui/button";
   import * as Collapsible from "$lib/components/ui/collapsible";
-  import * as Command from "$lib/components/ui/command";
   import {
     DialogDescription,
     DialogFooter,
@@ -12,7 +11,6 @@
   } from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import * as Popover from "$lib/components/ui/popover";
   import { Separator } from "$lib/components/ui/separator";
   import {
     DefInputToken,
@@ -20,7 +18,6 @@
     DefScore,
   } from "$lib/store/config.svelte";
   import type { DialogComponentProps } from "$lib/types/dialog";
-  import { cn } from "$lib/utils";
   import { parseModel } from "$lib/utils/model/feature";
   import {
     CAPABILITY_TAGS,
@@ -38,17 +35,14 @@
   import autoAnimate from "@formkit/auto-animate";
   import {
     IconAlertCircle,
-    IconAlertTriangle,
-    IconCheck,
     IconChevronDown,
     IconFilter,
     IconLoader2,
-    IconSearch,
     IconSparkles,
-    IconX,
   } from "@tabler/icons-svelte";
   import { toast } from "svelte-sonner";
-  import { SvelteMap } from "svelte/reactivity";
+  import ComboboxSearch from "../combobox/ComboboxSearch.svelte";
+  import type { ComboboxItem } from "../combobox/combobox.types";
   import { findPresetByBaseUrl } from "../providers";
   import AbilitySelector from "./AbilitySelector.svelte";
   import { fetchAvailableModels } from "./fetchModels";
@@ -121,14 +115,6 @@
   let filterOpen = $state(true);
   let isDetecting = $state(false);
 
-  // ── 合并输入框：下拉选择 + 自由输入 ──
-  let modelDropdownOpen = $state(false);
-  let triggerWidth = $state(0);
-  let triggerHeight = $state(40);
-
-  /**
-   * 以 endpoint（fetchCtx.baseUrl）反查预设的静态模型清单。
-   */
   const staticModels = $derived.by(() => {
     const preset = findPresetByBaseUrl(fetchCtx?.baseUrl);
     return preset?.models;
@@ -158,23 +144,19 @@
     }
   }
 
-  /** 首次打开下拉框时触发一次加载；失败/空列表都不自动重试。 */
   function tryLoadOnce() {
     if (hasStaticModels || modelsLoadAttempted || isFetchingModels) return;
     modelsLoadAttempted = true;
     void loadModels();
   }
 
-  /** 显式重试：重置 attempted 后重新拉取。 */
   function retryLoadModels() {
     if (isFetchingModels) return;
     modelsLoadAttempted = false;
     void loadModels();
   }
 
-  /** Popover 受控 open 的唯一入口：打开时懒加载一次。 */
-  function handleDropdownOpenChange(next: boolean) {
-    modelDropdownOpen = next;
+  function handleComboboxOpenChange(next: boolean) {
     if (next) tryLoadOnce();
   }
 
@@ -184,16 +166,15 @@
   const modelsLoading = $derived(hasStaticModels ? false : isFetchingModels);
   const modelsFailed = $derived(hasStaticModels ? false : fetchModelsFailed);
 
-  /** 按 group 分组 */
-  const modelGroups = $derived.by(() => {
-    const map = new SvelteMap<string, ModelOption[]>();
-    for (const o of modelOptions) {
-      const g = o.group ?? "";
-      if (!map.has(g)) map.set(g, []);
-      map.get(g)!.push(o);
-    }
-    return [...map.entries()].map(([heading, items]) => ({ heading, items }));
-  });
+  // 转成 ComboboxSearch 所需的通用条目
+  const comboboxItems = $derived<ComboboxItem[]>(
+    modelOptions.map((o) => ({
+      id: o.id,
+      label: getLabel(o),
+      description: o.description,
+      group: o.group ?? "",
+    })),
+  );
 
   function applyPreset(p: Preset | undefined) {
     if (!p) return;
@@ -204,12 +185,16 @@
     filterOpen = true;
   }
 
-  async function handleModelSelect(option: ModelOption) {
+  function handleModelSelect(option: ModelOption) {
     id = option.id;
     let preset: Preset | undefined = option.preset;
     if (!preset) preset = autoDetectPreset(id.trim());
     applyPreset(preset);
-    modelDropdownOpen = false;
+  }
+
+  function handleComboboxSelect(item: ComboboxItem) {
+    const option = modelOptions.find((o) => o.id === item.id);
+    if (option) handleModelSelect(option);
   }
 
   function autoDetectPreset(modelId: string): Preset | undefined {
@@ -326,175 +311,41 @@
 
 <div class="space-y-6 py-4" use:autoAnimate>
   <div class="space-y-4">
-    <!-- 合并后的模型标识输入框：可搜索选择，也可自由输入 -->
+    <!--╭─────────────────────────────────────────────────────╮ -->
+    <!-- │ 合并输入框：搜索下拉 + 自由输入（复用 ComboboxSearch） │ -->
+    <!-- ╰─────────────────────────────────────────────────────╯ -->
     <div class="space-y-2">
       <Label for="dlg-model-id">模型标识 (ID)</Label>
-      <div bind:clientWidth={triggerWidth} bind:clientHeight={triggerHeight}>
-        <Popover.Root
-          open={modelDropdownOpen}
-          onOpenChange={handleDropdownOpenChange}
-        >
-          <Popover.Trigger>
-            {#snippet child({ props })}
-              <button
-                {...props}
-                type="button"
-                class={cn(
-                  "flex h-10 w-full items-center gap-3 rounded-xl border border-input bg-background px-3 text-sm",
-                  "transition-all duration-200 hover:bg-accent/50",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  modelDropdownOpen && "pointer-events-none opacity-0",
-                )}
-              >
-                <IconSearch
-                  size={16}
-                  stroke={1.5}
-                  class="shrink-0 text-muted-foreground"
-                />
-                {#if id}
-                  <span
-                    class="min-w-0 flex-1 truncate text-left font-mono text-foreground"
-                  >
-                    {id}
-                  </span>
-                {:else}
-                  <span class="min-w-0 flex-1 text-left text-muted-foreground">
-                    搜索并选择模型，或直接输入…
-                  </span>
-                {/if}
-                <IconChevronDown
-                  size={16}
-                  stroke={1.5}
-                  class={cn(
-                    "shrink-0 text-muted-foreground transition-transform duration-200",
-                    modelDropdownOpen && "rotate-180",
-                  )}
-                />
-              </button>
-            {/snippet}
-          </Popover.Trigger>
-
-          <Popover.Content
-            class="overflow-hidden rounded-xl border border-border/50 p-0 shadow-xl"
-            align="start"
-            side="bottom"
-            sideOffset={-triggerHeight}
-            style="width: {triggerWidth}px; z-index: 9999;"
+      <ComboboxSearch
+        bind:value={id}
+        items={comboboxItems}
+        selectedValue={id.trim()}
+        placeholder="搜索或输入模型名称…"
+        emptyText="未找到匹配的模型，回车或点对勾可直接使用当前输入"
+        shouldFilter
+        loading={modelsLoading}
+        failed={modelsFailed}
+        loadingText="正在获取可用模型…"
+        failedText="无法获取列表"
+        onRetry={retryLoadModels}
+        onSelect={handleComboboxSelect}
+        onOpenChange={handleComboboxOpenChange}
+      />
+      <!-- 错误区预留空间：防止对话框高度抖动 -->
+      <div class="min-h-5">
+        {#if duplicateIdError}
+          <p
+            id="dlg-model-id-err"
+            class="animate-fade-in text-xs text-destructive"
           >
-            <Command.Root shouldFilter={true}>
-              <div class="relative">
-                <Command.Input
-                  bind:value={id}
-                  placeholder="输入模型名称搜索…"
-                  class="pr-10 font-mono"
-                />
-                {#if id}
-                  <button
-                    type="button"
-                    onclick={() => {
-                      id = "";
-                    }}
-                    aria-label="清空输入"
-                    class={cn(
-                      "absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1",
-                      "text-muted-foreground transition-all duration-200 hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <IconX size={16} stroke={1.5} />
-                  </button>
-                {/if}
-              </div>
-
-              <Command.List class="max-h-72">
-                {#if modelsLoading}
-                  <div
-                    class="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"
-                  >
-                    <IconLoader2 size={16} stroke={1.5} class="animate-spin" />
-                    正在获取可用模型…
-                  </div>
-                {:else if modelsFailed}
-                  <div
-                    class="flex flex-col items-center justify-center gap-2 py-8"
-                  >
-                    <IconAlertTriangle
-                      size={18}
-                      stroke={1.5}
-                      class="text-amber-500"
-                    />
-                    <p class="text-sm text-muted-foreground">
-                      无法获取列表，可手动输入
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      class="h-8 rounded-lg px-3 text-xs"
-                      onclick={retryLoadModels}
-                    >
-                      重试
-                    </Button>
-                  </div>
-                {:else if modelOptions.length === 0 && id.trim() === ""}
-                  <div class="py-6 text-center text-sm text-muted-foreground">
-                    暂无可用模型，请直接输入模型 ID
-                  </div>
-                {:else}
-                  <Command.Empty>未找到匹配的模型</Command.Empty>
-
-                  {#each modelGroups as group (group.heading)}
-                    <Command.Group heading={group.heading || undefined}>
-                      {#each group.items as option (option.id)}
-                        <Command.Item
-                          value={option.id}
-                          keywords={[
-                            getLabel(option),
-                            option.description ?? "",
-                          ]}
-                          onSelect={() => handleModelSelect(option)}
-                        >
-                          <div class="min-w-0 flex-1 space-y-0.5">
-                            <p class="truncate text-sm font-medium">
-                              {getLabel(option)}
-                            </p>
-                            {#if option.description}
-                              <p class="truncate text-xs text-muted-foreground">
-                                {option.description}
-                              </p>
-                            {/if}
-                          </div>
-                          {#if id.trim() === option.id}
-                            <IconCheck
-                              size={16}
-                              stroke={1.5}
-                              class="ml-auto shrink-0 text-primary"
-                            />
-                          {/if}
-                        </Command.Item>
-                      {/each}
-                    </Command.Group>
-                    {#if group !== modelGroups[modelGroups.length - 1]}
-                      <Command.Separator />
-                    {/if}
-                  {/each}
-                {/if}
-              </Command.List>
-            </Command.Root>
-          </Popover.Content>
-        </Popover.Root>
+            {duplicateIdError}
+          </p>
+        {/if}
       </div>
-
-      {#if duplicateIdError}
-        <p
-          id="dlg-model-id-err"
-          class="animate-fade-in text-xs text-destructive"
-        >
-          {duplicateIdError}
-        </p>
-      {/if}
     </div>
   </div>
 
-  <!-- 筛选条件（与原始相同，未改动） -->
+  <!-- 筛选条件（未改动） -->
   <Collapsible.Root
     bind:open={filterOpen}
     class="rounded-2xl border border-border/50 bg-muted/20"

@@ -24,8 +24,15 @@
   let collapsed = $derived(messageStore.collapsedMessages[message.id] === true);
   let deleting = $derived(messageStore.deletingMessages[message.id] === true);
 
-  let hasContent = $derived(message.content.length > 0);
-  let hasTraces = $derived((message.traces?.length ?? 0) > 0);
+  let hasContent = $derived(
+    typeof message.content === "string" && message.content.length > 0,
+  );
+
+  // 使用 Array.isArray 而非仅判 truthy：历史数据里 traces 若被意外序列化为
+  // 非数组对象，后续 `for...of` 会直接抛 TypeError 打断整条渲染。
+  let hasTraces = $derived(
+    Array.isArray(message.traces) && message.traces.length > 0,
+  );
 
   // 是否实际渲染 trace 由全局开关统一控制
   let showingTraces = $derived(hasTraces && messageStore.tracesVisible);
@@ -37,10 +44,17 @@
 
   // 递归检测 trace 树中是否存在仍在运行的节点
   function hasRunningTrace(traces?: ChatMessage["traces"]): boolean {
-    if (!traces || traces.length === 0) return false;
+    if (!Array.isArray(traces) || traces.length === 0) return false;
     for (const node of traces) {
+      if (!node) continue;
       if (node.status === "running" && node.streaming !== false) return true;
-      if (node.kind === "agent" && hasRunningTrace(node.children)) return true;
+      if (
+        node.kind === "agent" &&
+        Array.isArray(node.children) &&
+        hasRunningTrace(node.children)
+      ) {
+        return true;
+      }
     }
     return false;
   }

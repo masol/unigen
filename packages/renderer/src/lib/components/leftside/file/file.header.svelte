@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import { confirmStore } from "$lib/store/ui/confirm.svelte";
+  import { pacStore } from "$lib/store/ui/pac.svelte";
   import {
     IconRefresh,
     IconReload,
@@ -12,6 +14,8 @@
   let { isMaximized = false }: { isMaximized?: boolean } = $props();
 
   let isComposing = $state(false);
+  /** 覆盖"未保存确认弹窗 → save → reCompile"整段期间，避免空窗期重复点击。 */
+  let recompiling = $state(false);
 
   // 本地镜像：输入框即时回显，store 延迟同步（防抖）。
   // 直接 value={fileStore.searchQuery} 在防抖期间会因重渲染把输入写回旧值。
@@ -70,8 +74,36 @@
     fileStore.clearSearch();
   }
 
+  /**
+   * 为 AI 刷新工作指南。
+   *
+   * 若当前文档存在未保存修改，先确认是否保存，避免 reCompile / 树重建期间
+   * 丢失编辑内容。只提供"保存并刷新 / 取消"两态，不做破坏性"放弃并刷新"。
+   */
   async function handleRecompile() {
-    await fileStore.reCompile();
+    if (recompiling || fileStore.isLoading) return;
+    recompiling = true;
+    try {
+      if (pacStore.dirty) {
+        const shouldSave = await confirmStore.request({
+          title: "保存后刷新？",
+          message:
+            "当前指南未保存。选择“继续”将先保存，再让 AI 加载最新工作指南；选择“取消”则不会刷新。",
+          confirmLabel: "继续",
+          variant: "question",
+        });
+        if (!shouldSave) return;
+        if (pacStore.saving) return;
+
+        await pacStore.save();
+        // 保存失败或未完成时中止，避免在"可能写坏文件"的状态下刷新。
+        if (pacStore.dirty) return;
+      }
+
+      await fileStore.reCompile();
+    } finally {
+      recompiling = false;
+    }
   }
 </script>
 
@@ -115,11 +147,11 @@
     size="icon"
     title="为AI加载最新指南"
     aria-label="为AI加载最新指南"
-    disabled={fileStore.isLoading}
+    disabled={fileStore.isLoading || recompiling}
     class="size-7 shrink-0 rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground"
     onclick={handleRecompile}
   >
-    {#if fileStore.isLoading}
+    {#if fileStore.isLoading || recompiling}
       <IconReload class="size-4 animate-spin" stroke={1.5} />
     {:else}
       <IconRefresh class="size-4" stroke={1.5} />
