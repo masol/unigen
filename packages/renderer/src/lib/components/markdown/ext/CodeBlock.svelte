@@ -373,7 +373,7 @@
       <button
         type="button"
         onclick={handleCopy}
-        disabled={copyDisabled}
+        // disabled={copyDisabled}
         aria-label={copyTooltip}
         title={copyTooltip}
         class="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"

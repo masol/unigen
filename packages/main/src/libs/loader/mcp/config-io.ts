@@ -1,37 +1,31 @@
 // packages/main/src/libs/loader/mcp/config-io.ts
-import { globalMCPDir } from '$libs/utils/sys/dir.js';
-import type { McpServerConfig } from '$types/shared/mcp.js';
-import AdmZip from 'adm-zip';
-import Logger from 'electron-log/main.js';
-import { ensureDir } from 'fs-extra';
-import { readFile, writeFile } from 'fs/promises';
-import { dirname, join, posix } from 'path';
-import { parseMcpConfigOrThrow } from './parse.js';
+import { globalMCPDir } from "$libs/utils/sys/dir.js";
+import type { McpServerConfig } from "$types/shared/mcp.js";
+import Logger from "electron-log/main.js";
+import { ensureDir } from "fs-extra";
+import { readFile, writeFile } from "fs/promises";
+import { join, posix } from "path";
+import {
+    extractArchive,
+    listArchiveEntries,
+    safeArchiveRelativeName,
+} from "../archive.js";
+import { parseMcpConfigOrThrow } from "./parse.js";
 
 export interface ImportedMcpConfig {
     servers: McpServerConfig[];
     sourcePath: string;
 }
 
-/**
- * 将 zip 内路径归一化为安全相对路径。
- *
- * zip 条目统一按 POSIX 风格处理；同时拒绝 Windows 反斜杠逃逸与 ../ 逃逸。
- */
-function safeZipRelativeName(name: string): string | null {
-    const normalized = posix
-        .normalize(name.replace(/\\/g, '/'))
-        .replace(/^\/+/, '');
+function stripBom(value: string): string {
+    return value.length > 0 && value.charCodeAt(0) === 0xfeff
+        ? value.slice(1)
+        : value;
+}
 
-    if (!normalized || normalized === '.' || normalized === '..') {
-        return null;
-    }
-
-    if (normalized.startsWith('../') || normalized.includes('/../')) {
-        return null;
-    }
-
-    return normalized;
+function archiveDirName(path: string): string {
+    const idx = path.lastIndexOf("/");
+    return idx >= 0 ? path.slice(0, idx + 1) : "";
 }
 
 /**
@@ -47,44 +41,23 @@ function safeMcpDirectoryName(id: string): string {
     return name;
 }
 
-/**
- * 将 zip 中 mcp.json 所在目录及其资源复制到 targetRoot。
- */
-async function copyZipResources(
-    zip: AdmZip,
-    configEntryName: string,
-    targetRoot: string,
-): Promise<void> {
-    const idx = configEntryName.lastIndexOf('/');
-    const configDir = idx >= 0 ? configEntryName.slice(0, idx + 1) : '';
-
-    for (const entry of zip.getEntries()) {
-        if (entry.isDirectory) continue;
-        if (!entry.entryName.startsWith(configDir)) continue;
-
-        const relative = entry.entryName.slice(configDir.length);
-        const safeRelative = safeZipRelativeName(relative);
-        if (!safeRelative) continue;
-
-        const dest = join(targetRoot, safeRelative);
-        await ensureDir(dirname(dest));
-        await writeFile(dest, entry.getData());
-    }
+function isArchivePath(filePath: string): boolean {
+    return /\.(?:zip|tar|tar\.gz|tgz|tar\.bz2|bz2)$/i.test(filePath);
 }
 
 /**
  * 从本地路径导入 MCP 配置。
  *
- * - JSON：直接解析并返回 servers；
- * - ZIP：必须存在 mcp.json，mcp.json 所在目录视为资源根目录；
- *   将资源复制到 globalMCPDir()/<server.id>。
+ * - JSON/JSONC：直接解析并返回 servers；
+ * - 归档：必须存在 mcp.json，mcp.json 所在目录视为资源根目录；
+ *   将资源解压到 globalMCPDir()/<server.id>。
  */
 export async function importMcpConfigFromPath(
     sourcePath: string,
 ): Promise<ImportedMcpConfig> {
-    if (!sourcePath.toLowerCase().endsWith('.zip')) {
-        const text = await readFile(sourcePath, 'utf8');
-        const servers = parseMcpConfigOrThrow(text);
+    if (!isArchivePath(sourcePath)) {
+        const text = await readFile(sourcePath, "utf8");
+        const servers = parseMcpConfigOrThrow(stripBom(text));
 
         return {
             servers,
@@ -92,38 +65,49 @@ export async function importMcpConfigFromPath(
         };
     }
 
-    const zip = new AdmZip(sourcePath);
-    const configEntries = zip
-        .getEntries()
+    const entries = await listArchiveEntries(sourcePath);
+    const configEntries = entries
         .filter(
             (entry) =>
                 !entry.isDirectory &&
-                posix.basename(entry.entryName).toLowerCase() === 'mcp.json',
+                posix.basename(entry.path).toLowerCase() === "mcp.json",
         )
         .sort(
             (a, b) =>
-                a.entryName.split('/').length -
-                b.entryName.split('/').length,
+                a.path.split("/").length - b.path.split("/").length,
         );
 
     if (configEntries.length === 0) {
-        throw new Error('ZIP 中未找到 mcp.json 配置文件');
+        throw new Error("归档中未找到 mcp.json 配置文件");
     }
 
     if (configEntries.length > 1) {
         Logger.warn(
-            `[Agent] ZIP 中存在多个 mcp.json，将使用层级最浅的一个: ${configEntries[0].entryName}`,
+            `[Agent] 归档中存在多个 mcp.json，将使用层级最浅的一个: ${configEntries[0].path}`,
         );
     }
 
     const configEntry = configEntries[0];
-    const servers = parseMcpConfigOrThrow(zip.readAsText(configEntry));
+    const configPath = safeArchiveRelativeName(configEntry.path);
+    if (!configPath) {
+        throw new Error("mcp.json 路径非法");
+    }
+
+    const servers = parseMcpConfigOrThrow(
+        stripBom((await configEntry.read()).toString("utf8")),
+    );
+    const configDir = archiveDirName(configPath);
     const mcpRoot = globalMCPDir();
 
     for (const server of servers) {
         const targetRoot = join(mcpRoot, safeMcpDirectoryName(server.id));
         await ensureDir(targetRoot);
-        await copyZipResources(zip, configEntry.entryName, targetRoot);
+
+        await extractArchive({
+            archivePath: sourcePath,
+            targetDir: targetRoot,
+            stripPrefix: configDir,
+        });
     }
 
     return {
@@ -140,7 +124,7 @@ export function getMcpExportDefaultBaseName(
 ): string {
     return /^[a-zA-Z0-9._-]+$/.test(server.id)
         ? server.id
-        : 'mcp-config';
+        : "mcp-config";
 }
 
 /**
@@ -152,7 +136,7 @@ export async function exportMcpServerConfigToPath(
     server: McpServerConfig,
     filePath: string,
 ): Promise<string> {
-    const targetPath = filePath.toLowerCase().endsWith('.json')
+    const targetPath = filePath.toLowerCase().endsWith(".json")
         ? filePath
         : `${filePath}.json`;
 
@@ -169,7 +153,7 @@ export async function exportMcpServerConfigToPath(
     await writeFile(
         targetPath,
         JSON.stringify(payload, null, 2),
-        'utf8',
+        "utf8",
     );
 
     return targetPath;

@@ -1,19 +1,18 @@
 // packages/main/src/libs/loader/kb/install.ts
-// packages/main/src/libs/loader/kb/install.ts
 import { openGlobalSearch } from "$libs/searchsrv/index.js";
 import { throwUnprcessable } from "$libs/utils/err.js";
 import { globalKbDir } from "$libs/utils/sys/dir.js";
-import AdmZip from "adm-zip";
 import { ensureDir, move, pathExists, remove } from "fs-extra";
 import { randomUUID } from "node:crypto";
-import { basename, extname, join, posix } from "node:path";
+import { basename, join, posix } from "node:path";
 import { getErrorMessage } from "radashi";
 import {
     entryDirName,
-    extractZipSubtree,
-    findShallowestFileEntry,
+    extractArchive,
+    findShallowestFile,
+    safeArchiveRelativeName,
     safeInstallDirName,
-} from "../zip.js";
+} from "../archive.js";
 import { installKnowledgeBaseFromUrl } from "./remote.js";
 
 export interface InstalledKnowledgeBase {
@@ -21,14 +20,29 @@ export interface InstalledKnowledgeBase {
     targetDir: string;
 }
 
+function stripBom(value: string): string {
+    return value.length > 0 && value.charCodeAt(0) === 0xfeff
+        ? value.slice(1)
+        : value;
+}
+
+function archiveBaseName(filePath: string): string {
+    const fileName = basename(filePath);
+    const stripped = fileName.replace(
+        /\.(?:tar\.bz2|tar\.gz|tgz|tar|zip|bz2)$/i,
+        "",
+    );
+    return stripped || fileName;
+}
+
 /**
  * 安装知识库。
  *
  * - URL：交给 remote.ts 占位实现，当前直接抛错；
- * - 本地文件：按 ZIP 解压到 globalKbDir() 下的一级目录。
+ * - 本地文件：按归档解压到 globalKbDir() 下的一级目录。
  *
- * ZIP 内必须存在 meta.json。若 meta.json 位于某个子目录中，则安装该子目录内容；
- * 若位于根目录，则使用 zip 文件名作为安装目录名。
+ * 归档内必须存在 meta.json。若 meta.json 位于某个子目录中，则安装该子目录内容；
+ * 若位于根目录，则使用归档文件名作为安装目录名。
  *
  * 安装完成后只对该目标目录做单库增量同步，不触发全量扫描。
  */
@@ -44,7 +58,7 @@ export async function installKnowledgeBase(
         return installKnowledgeBaseFromUrl(trimmed);
     }
 
-    const result = await installKnowledgeBaseFromZip(trimmed);
+    const result = await installKnowledgeBaseFromArchive(trimmed);
 
     const db = await openGlobalSearch();
     if (!db.opened) {
@@ -57,18 +71,24 @@ export async function installKnowledgeBase(
     return result;
 }
 
-async function installKnowledgeBaseFromZip(
+async function installKnowledgeBaseFromArchive(
     filePath: string,
 ): Promise<InstalledKnowledgeBase> {
-    const zip = new AdmZip(filePath);
-    const metaEntry = findShallowestFileEntry(zip, "meta.json");
+    const metaEntry = await findShallowestFile(filePath, "meta.json");
 
     if (!metaEntry) {
-        throw new Error("ZIP 中未找到 meta.json");
+        throw new Error("归档中未找到 meta.json");
+    }
+
+    const metaPath = safeArchiveRelativeName(metaEntry.path);
+    if (!metaPath) {
+        throw new Error("meta.json 路径非法");
     }
 
     try {
-        const meta = JSON.parse(zip.readAsText(metaEntry)) as unknown;
+        const meta = JSON.parse(
+            stripBom((await metaEntry.read()).toString("utf8")),
+        ) as unknown;
         if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
             throw new Error("meta.json 必须是 JSON 对象");
         }
@@ -78,10 +98,10 @@ async function installKnowledgeBaseFromZip(
         );
     }
 
-    const rootDir = entryDirName(metaEntry.entryName);
+    const rootDir = entryDirName(metaPath);
     const rootName = rootDir
         ? posix.basename(rootDir.replace(/\/+$/, ""))
-        : basename(filePath, extname(filePath));
+        : archiveBaseName(filePath);
     const dirName = safeInstallDirName(rootName);
 
     const root = globalKbDir();
@@ -97,10 +117,14 @@ async function installKnowledgeBaseFromZip(
     await ensureDir(tempDir);
 
     try {
-        await extractZipSubtree(zip, rootDir, tempDir);
+        await extractArchive({
+            archivePath: filePath,
+            targetDir: tempDir,
+            stripPrefix: rootDir,
+        });
 
         if (!(await pathExists(join(tempDir, "meta.json")))) {
-            throw new Error("ZIP 解压后缺少 meta.json");
+            throw new Error("归档解压后缺少 meta.json");
         }
 
         await move(tempDir, targetDir, { overwrite: false });

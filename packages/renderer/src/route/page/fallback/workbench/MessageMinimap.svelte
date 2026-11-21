@@ -1,6 +1,7 @@
 <!-- 消息导航 Minimap · 显示条件由父级 visible 控制（可滚动即可显示，含"一条长消息"场景）-->
-<!-- role 图标区分 · scrollspy 高亮 · 点击平滑跳转 · pointer-events 分层避免截断下层点击 -->
+<!-- role 图标/高亮条双色区分 · scrollspy 高亮 · 点击平滑跳转 · pointer-events 分层避免截断下层点击 -->
 <script lang="ts">
+  import type { ChatMessage } from "$lib/store/local/chat.types";
   import { messageStore } from "$lib/store/local/msg.svelte";
   import autoAnimate from "@formkit/auto-animate";
   import { IconRobot, IconUser } from "@tabler/icons-svelte";
@@ -23,17 +24,59 @@
 
   let messages = $derived(messageStore.messages);
 
-  // 仅渲染非空（有正文）消息作为导航条目；空的 assistant 占位、被清空的消息不出现在索引中
-  let visibleMessages = $derived(
-    messages.filter((m) => (m.content ?? "").trim().length > 0),
-  );
+  /**
+   * 只要消息在界面中「能够被定位 / 看到」，就应出现在导航里：
+   * - 有正文；
+   * - 正在流式生成（streaming，且 TypingDots 已渲染）；
+   * - 已有 traces（AI 思考 / 工具段，正文尚未产出）。
+   *
+   * 关键修复：原先仅凭 content 非空判定，会导致
+   * 「AI 思考已可见、正文未输出」的短暂窗口里 minimap 无条目。
+   */
+  function isRenderable(m: ChatMessage): boolean {
+    if ((m.content ?? "").trim().length > 0) return true;
+    if (m.streaming === true) return true;
+    if (Array.isArray(m.traces) && m.traces.length > 0) return true;
+    return false;
+  }
+
+  let visibleMessages = $derived(messages.filter(isRenderable));
 
   const PREVIEW_MAX = 60;
 
-  function previewOf(content: string | undefined, role: string): string {
-    const flat = (content ?? "").replace(/\s+/g, " ").trim();
-    if (!flat) return role === "user" ? "（空消息）" : "（AI 回复）";
-    return flat.length > PREVIEW_MAX ? flat.slice(0, PREVIEW_MAX) + "…" : flat;
+  /**
+   * 无正文时的占位文案按状态区分，使 minimise 展开后仍能识别消息进度。
+   */
+  function previewOf(m: ChatMessage): string {
+    const flat = (m.content ?? "").replace(/\s+/g, " ").trim();
+    if (flat) {
+      return flat.length > PREVIEW_MAX
+        ? flat.slice(0, PREVIEW_MAX) + "…"
+        : flat;
+    }
+    if (m.streaming === true) return "…（AI 思考中）";
+    if (Array.isArray(m.traces) && m.traces.length > 0) {
+      return "…（AI 思考记录）";
+    }
+    return m.role === "user" ? "（空消息）" : "（AI 回复）";
+  }
+
+  /** 用户 = primary（蓝），AI = emerald（绿），双击区分 + 形状双保险。 */
+  function iconClass(role: string, active: boolean): string {
+    if (role === "user") {
+      return active ? "text-primary" : "text-primary/60";
+    }
+    return active ? "text-emerald-500" : "text-emerald-500/60";
+  }
+
+  function barClass(role: string, active: boolean, expanded: boolean): string {
+    const w = active ? "w-4" : "w-3";
+    if (role === "user") {
+      if (active) return `${w} bg-primary`;
+      return expanded ? `${w} bg-primary/60` : `${w} bg-primary/50`;
+    }
+    if (active) return `${w} bg-emerald-500`;
+    return expanded ? `${w} bg-emerald-500/60` : `${w} bg-emerald-500/50`;
   }
 
   function handleFocusOut(event: FocusEvent) {
@@ -82,15 +125,16 @@
           <button
             type="button"
             onclick={() => handleClick(msg.id)}
-            aria-label={`跳转到消息：${previewOf(msg.content, msg.role)}`}
+            aria-label={`跳转到消息：${previewOf(msg)}`}
             aria-current={isActive ? "true" : undefined}
             class="flex w-full items-center justify-end gap-2 rounded-lg py-1 pl-1.5 pr-1 transition-colors hover:bg-accent"
           >
             {#if expanded}
               <span
-                class="flex size-5 shrink-0 items-center justify-center {isActive
-                  ? 'text-primary'
-                  : 'text-muted-foreground'}"
+                class="flex size-5 shrink-0 items-center justify-center {iconClass(
+                  msg.role,
+                  isActive,
+                )}"
               >
                 {#if msg.role === "user"}
                   <IconUser size={12} stroke={1.5} />
@@ -103,15 +147,15 @@
                   ? 'font-medium text-foreground'
                   : 'text-muted-foreground'}"
               >
-                {previewOf(msg.content, msg.role)}
+                {previewOf(msg)}
               </span>
             {/if}
             <span
-              class="h-1 shrink-0 rounded-full transition-all duration-200 {isActive
-                ? 'w-4 bg-primary'
-                : expanded
-                  ? 'w-3 bg-muted-foreground/50'
-                  : 'w-3 bg-muted-foreground/40'}"
+              class="h-1 shrink-0 rounded-full transition-all duration-200 {barClass(
+                msg.role,
+                isActive,
+                expanded,
+              )}"
             ></span>
           </button>
         {/each}

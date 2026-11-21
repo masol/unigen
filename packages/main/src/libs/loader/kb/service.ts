@@ -16,7 +16,7 @@ import { copy, ensureDir, move, pathExists, remove } from "fs-extra";
 import { randomUUID } from "node:crypto";
 import { stat, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, join } from "node:path";
-import { safeInstallDirName } from "../zip.js";
+import { safeInstallDirName } from "../archive.js";
 
 const META_FILE = "meta.json";
 

@@ -2,7 +2,7 @@
 //
 // 统一压缩包接口：根据后缀自动选择 zip（adm-zip）或 tar（node-tar）。
 //
-// 支持的格式：.zip / .tar / .tar.gz / .tgz
+// 支持的格式：.zip / .tar / .tar.gz / .tgz / .tar.bz2 / .bz2
 //
 // 安全（与 zip.ts 保持一致）：
 //   - 路径统一按 POSIX 处理；
@@ -13,17 +13,37 @@
 //   - 本文件是**新统一入口**，建议新代码优先使用；
 //   - `zip.ts` 保留为向后兼容 shim（zip 专用 API + re-export 通用工具）。
 
+import unbzip2Stream from "@openpgp/unbzip2-stream";
 import AdmZip from "adm-zip";
 import Logger from "electron-log/main.js";
 import { ensureDir } from "fs-extra";
-import { promises as fs } from "node:fs";
+import {
+    createReadStream,
+    createWriteStream,
+    promises as fs,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, posix } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import * as tar from "tar";
+
+type WebReadableStream = NodeReadableStream<Uint8Array>;
+
+const SUPPORTED_ARCHIVE_HINT =
+    ".zip / .tar / .tar.gz / .tgz / .tar.bz2 / .bz2";
 
 // ─── 路径安全工具 ─────────────────────────────────────────
 
 function normalizeArchiveName(name: string): string {
     return name.replace(/\\/g, "/");
+}
+
+function normalizeArchiveEntryName(name: string): string {
+    return normalizeArchiveName(name)
+        .replace(/^\.\/+/, "")
+        .replace(/^\/+/, "");
 }
 
 function containsControlChar(value: string): boolean {
@@ -88,16 +108,47 @@ export function entryDirName(entryName: string): string {
     return idx >= 0 ? normalized.slice(0, idx + 1) : "";
 }
 
+function stripPathPrefix(
+    relative: string,
+    prefix: string,
+): string | null {
+    const normalizedRelative = normalizeArchiveEntryName(relative);
+    const normalizedPrefix = normalizeArchiveEntryName(prefix).replace(
+        /\/+$/,
+        "",
+    );
+
+    if (!normalizedPrefix || normalizedPrefix === ".") {
+        return normalizedRelative;
+    }
+    if (normalizedRelative === normalizedPrefix) {
+        return null;
+    }
+    if (!normalizedRelative.startsWith(`${normalizedPrefix}/`)) {
+        return null;
+    }
+    return normalizedRelative.slice(normalizedPrefix.length + 1);
+}
+
 // ─── 归档类型识别 ─────────────────────────────────────────
 
-export type ArchiveKind = "zip" | "tar" | "tar.gz" | "tgz" | "unsupported";
+export type ArchiveKind =
+    | "zip"
+    | "tar"
+    | "tar.gz"
+    | "tgz"
+    | "tar.bz2"
+    | "bz2"
+    | "unsupported";
 
 export function detectArchiveKind(filePath: string): ArchiveKind {
     const lower = filePath.toLowerCase();
+    if (lower.endsWith(".tar.bz2")) return "tar.bz2";
     if (lower.endsWith(".zip")) return "zip";
     if (lower.endsWith(".tar.gz")) return "tar.gz";
     if (lower.endsWith(".tgz")) return "tgz";
     if (lower.endsWith(".tar")) return "tar";
+    if (lower.endsWith(".bz2")) return "bz2";
     return "unsupported";
 }
 
@@ -136,7 +187,7 @@ export async function extractArchive(opts: ExtractOptions): Promise<void> {
     if (kind === "unsupported") {
         throw new Error(
             `不支持的归档格式：${opts.archivePath}。` +
-            `目前支持 .zip / .tar / .tar.gz / .tgz。`,
+            `目前支持 ${SUPPORTED_ARCHIVE_HINT}。`,
         );
     }
     await ensureDir(opts.targetDir);
@@ -144,29 +195,40 @@ export async function extractArchive(opts: ExtractOptions): Promise<void> {
         throw new Error(`解压已取消：${opts.archivePath}`);
     }
     if (isZipKind(kind)) return extractZip(opts);
+    if (kind === "bz2") return extractBz2(opts);
+    if (kind === "tar.bz2") {
+        await withDecompressedTarFile(
+            opts.archivePath,
+            opts.signal,
+            (tarPath) => extractTar({ ...opts, archivePath: tarPath }),
+        );
+        return;
+    }
     return extractTar(opts);
 }
 
 function prefixDepth(prefix: string | undefined): number | undefined {
     if (!prefix) return undefined;
-    const normalized = normalizeArchiveName(prefix).replace(/^\/+|\/+$/g, "");
-    if (!normalized) return undefined;
+    const normalized = posix
+        .normalize(normalizeArchiveName(prefix))
+        .replace(/^\/+|\/+$/g, "");
+    if (!normalized || normalized === ".") return undefined;
     const depth = normalized.split("/").filter(Boolean).length;
     return depth > 0 ? depth : undefined;
 }
 
 function stripLeading(p: string, n: number): string | null {
     if (n <= 0) return p;
-    const parts = p.split("/").filter(Boolean);
+    const normalized = posix
+        .normalize(normalizeArchiveName(p))
+        .replace(/^\/+/, "");
+    const parts = normalized.split("/").filter(Boolean);
     if (parts.length <= n) return null;
     return parts.slice(n).join("/");
 }
 
 async function extractZip(opts: ExtractOptions): Promise<void> {
     const zip = new AdmZip(opts.archivePath);
-    const prefix = opts.stripPrefix
-        ? normalizeArchiveName(opts.stripPrefix).replace(/^\/+/, "")
-        : "";
     const stripComponents = opts.stripComponents ?? 0;
 
     let extracted = 0;
@@ -176,13 +238,12 @@ async function extractZip(opts: ExtractOptions): Promise<void> {
         }
         if (entry.isDirectory) continue;
 
-        const entryName = normalizeArchiveName(entry.entryName);
-        let relative = entryName;
+        let relative = stripPathPrefix(
+            entry.entryName,
+            opts.stripPrefix ?? "",
+        );
+        if (relative === null) continue;
 
-        if (prefix) {
-            if (!relative.startsWith(prefix)) continue;
-            relative = relative.slice(prefix.length);
-        }
         if (stripComponents > 0) {
             const stripped = stripLeading(relative, stripComponents);
             if (!stripped) continue;
@@ -217,6 +278,146 @@ async function extractZip(opts: ExtractOptions): Promise<void> {
     }
 }
 
+function bz2EntryName(archivePath: string): string {
+    const base = posix.basename(normalizeArchiveName(archivePath));
+    const stripped = base.replace(/\.bz2$/i, "");
+    return stripped && stripped !== "." && stripped !== ".."
+        ? stripped
+        : "decompressed";
+}
+
+function createBz2Readable(
+    archivePath: string,
+    signal?: AbortSignal,
+): Readable {
+    const source = createReadStream(archivePath);
+
+    let webDecompressed: WebReadableStream | undefined;
+    let decompressed: Readable;
+    try {
+        const webSource = Readable.toWeb(source) as unknown as WebReadableStream;
+        webDecompressed = unbzip2Stream(webSource);
+        decompressed = Readable.fromWeb(webDecompressed);
+    } catch (err) {
+        // 构造阶段抛错：此时还没有句柄交给调用方，必须在此处关闭。
+        // - cancel() 会触发 unbzip2Stream 的 inputReader.abort → 取消 webSource；
+        // - source.destroy() 兜底释放底层 fd（toWeb 是双向绑定，幂等）。
+        webDecompressed?.cancel().catch(() => undefined);
+        source.destroy();
+        throw err;
+    }
+
+    if (signal) {
+        const onAbort = () => {
+            // ⚠️ 用无参 destroy()：传 Error 会 emit 'error'，此刻
+            // decompressed 上还没有任何 'error' 监听器，会 uncaughtException。
+            decompressed.destroy();
+            // 兜底：正常情况下 destroy() 会通过 cancel 链传播到 source，
+            // 但 Node 各版本 fromWeb._destroy 实现有细微差异，双保险无副作用。
+            source.destroy();
+        };
+
+        if (signal.aborted) {
+            onAbort();
+            throw new Error(`解压已取消：${archivePath}`);
+        }
+
+        signal.addEventListener("abort", onAbort, { once: true });
+        const cleanup = () => signal.removeEventListener("abort", onAbort);
+        decompressed.once("close", cleanup);
+        decompressed.once("error", cleanup);
+    }
+
+    return decompressed;
+}
+
+async function decompressBz2ToBuffer(
+    archivePath: string,
+    signal?: AbortSignal,
+): Promise<Buffer> {
+    const readable = createBz2Readable(archivePath, signal);
+    const chunks: Buffer[] = [];
+
+    try {
+        for await (const chunk of readable) {
+            chunks.push(
+                Buffer.isBuffer(chunk)
+                    ? chunk
+                    : Buffer.from(chunk as Uint8Array),
+            );
+        }
+    } finally {
+        readable.destroy();
+    }
+
+    return Buffer.concat(chunks);
+}
+
+async function decompressBz2ToFile(
+    archivePath: string,
+    destPath: string,
+    signal?: AbortSignal,
+): Promise<void> {
+    await ensureDir(dirname(destPath));
+    const readable = createBz2Readable(archivePath, signal);
+    await pipeline(readable, createWriteStream(destPath));
+}
+
+async function withDecompressedTarFile<T>(
+    archivePath: string,
+    signal: AbortSignal | undefined,
+    fn: (tarPath: string) => Promise<T>,
+): Promise<T> {
+    const dir = await fs.mkdtemp(join(tmpdir(), "loader-bz2-"));
+    const tarPath = join(dir, "archive.tar");
+
+    try {
+        await decompressBz2ToFile(archivePath, tarPath, signal);
+        return await fn(tarPath);
+    } finally {
+        await fs.rm(dir, { recursive: true, force: true }).catch(
+            () => undefined,
+        );
+    }
+}
+
+async function extractBz2(opts: ExtractOptions): Promise<void> {
+    let relative = bz2EntryName(opts.archivePath);
+
+    const prefixed = stripPathPrefix(
+        relative,
+        opts.stripPrefix ?? "",
+    );
+    if (prefixed === null) {
+        throw new Error(
+            `归档内没有可解压文件（stripPrefix 可能不正确）：${opts.archivePath}`,
+        );
+    }
+    relative = prefixed;
+
+    const stripComponents = opts.stripComponents ?? 0;
+    if (stripComponents > 0) {
+        const stripped = stripLeading(relative, stripComponents);
+        if (!stripped) {
+            throw new Error(
+                `归档内没有可解压文件（stripComponents 过大）：${opts.archivePath}`,
+            );
+        }
+        relative = stripped;
+    }
+
+    const safeRelative = safeArchiveRelativeName(relative);
+    if (!safeRelative) {
+        throw new Error(`归档条目路径非法：${relative}`);
+    }
+
+    const dest = join(opts.targetDir, safeRelative);
+    await decompressBz2ToFile(opts.archivePath, dest, opts.signal);
+
+    const fileStat = await fs.stat(dest);
+    opts.onEntry?.(safeRelative, fileStat.size);
+}
+
 async function extractTar(opts: ExtractOptions): Promise<void> {
     const strip =
         opts.stripComponents ?? prefixDepth(opts.stripPrefix) ?? 0;
@@ -231,7 +432,10 @@ async function extractTar(opts: ExtractOptions): Promise<void> {
         // ReadEntry，此处做显式断言以通过编译。
         filter: (path, entry) => {
             const readEntry = entry as tar.ReadEntry;
-            if (readEntry.type === "Link" || readEntry.type === "SymbolicLink") {
+            if (
+                readEntry.type === "Link" ||
+                readEntry.type === "SymbolicLink"
+            ) {
                 Logger.warn(`[Archive] 跳过 link 条目：${path}`);
                 return false;
             }
@@ -288,13 +492,21 @@ export async function listArchiveEntries(
     if (kind === "unsupported") {
         throw new Error(
             `不支持的归档格式：${archivePath}。` +
-            `目前支持 .zip / .tar / .tar.gz / .tgz。`,
+            `目前支持 ${SUPPORTED_ARCHIVE_HINT}。`,
         );
     }
     if (opts.signal?.aborted) {
         throw new Error(`列出已取消：${archivePath}`);
     }
     if (isZipKind(kind)) return listZipEntries(archivePath);
+    if (kind === "bz2") return listBz2Entries(archivePath, opts);
+    if (kind === "tar.bz2") {
+        return withDecompressedTarFile(
+            archivePath,
+            opts.signal,
+            (tarPath) => listTarEntries(tarPath),
+        );
+    }
     return listTarEntries(archivePath);
 }
 
@@ -313,6 +525,23 @@ async function listZipEntries(archivePath: string): Promise<ArchiveEntry[]> {
         });
     }
     return entries;
+}
+
+async function listBz2Entries(
+    archivePath: string,
+    opts: { signal?: AbortSignal } = {},
+): Promise<ArchiveEntry[]> {
+    const data = await decompressBz2ToBuffer(archivePath, opts.signal);
+    const path = bz2EntryName(archivePath);
+
+    return [
+        {
+            path,
+            isDirectory: false,
+            size: data.length,
+            read: async () => data,
+        },
+    ];
 }
 
 async function listTarEntries(archivePath: string): Promise<ArchiveEntry[]> {
@@ -342,7 +571,9 @@ async function listTarEntries(archivePath: string): Promise<ArchiveEntry[]> {
             const buffers: Buffer[] = [];
             // 先挂 data 监听再 resume，避免丢数据。
             readEntry.on("data", (chunk: Buffer | Uint8Array) => {
-                buffers.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+                buffers.push(
+                    Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
+                );
             });
             readEntry.resume();
 

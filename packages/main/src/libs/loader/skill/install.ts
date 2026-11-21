@@ -3,16 +3,16 @@ import { openGlobalSearch } from "$libs/searchsrv/index.js";
 import { parseSkillFile } from "$libs/searchsrv/skill-loader.js";
 import { throwUnprcessable } from "$libs/utils/err.js";
 import { globalSkillDir } from "$libs/utils/sys/dir.js";
-import AdmZip from "adm-zip";
 import { ensureDir, move, pathExists, remove } from "fs-extra";
 import { randomUUID } from "node:crypto";
-import { basename, extname, join, posix } from "node:path";
+import { basename, join, posix } from "node:path";
 import {
     entryDirName,
-    extractZipSubtree,
-    findShallowestFileEntry,
+    extractArchive,
+    findShallowestFile,
+    safeArchiveRelativeName,
     safeInstallDirName,
-} from "../zip.js";
+} from "../archive.js";
 import { installSkillFromUrl } from "./remote.js";
 
 export interface InstalledSkill {
@@ -20,14 +20,23 @@ export interface InstalledSkill {
     targetDir: string;
 }
 
+function archiveBaseName(filePath: string): string {
+    const fileName = basename(filePath);
+    const stripped = fileName.replace(
+        /\.(?:tar\.bz2|tar\.gz|tgz|tar|zip|bz2)$/i,
+        "",
+    );
+    return stripped || fileName;
+}
+
 /**
  * 安装 Skill。
  *
  * - URL：交给 remote.ts 占位实现，当前直接抛错；
- * - 本地文件：按 ZIP 解压到 globalSkillDir() 下的一级目录。
+ * - 本地文件：按归档解压到 globalSkillDir() 下的一级目录。
  *
- * ZIP 内必须存在 SKILL.md。若 SKILL.md 位于某个子目录中，则安装该子目录内容；
- * 若位于根目录，则使用 zip 文件名作为安装目录名。
+ * 归档内必须存在 SKILL.md。若 SKILL.md 位于某个子目录中，则安装该子目录内容；
+ * 若位于根目录，则使用归档文件名作为安装目录名。
  *
  * 解压成功后会解析该 skill 并增量写入检索库；只有检索库写入成功才算安装成功，
  * 任一步失败都会回滚已解压目录。
@@ -42,23 +51,27 @@ export async function installSkill(source: string): Promise<InstalledSkill> {
         return installSkillFromUrl(trimmed);
     }
 
-    return installSkillFromZip(trimmed);
+    return installSkillFromArchive(trimmed);
 }
 
-async function installSkillFromZip(
+async function installSkillFromArchive(
     filePath: string,
 ): Promise<InstalledSkill> {
-    const zip = new AdmZip(filePath);
-    const skillEntry = findShallowestFileEntry(zip, "SKILL.md");
+    const skillEntry = await findShallowestFile(filePath, "SKILL.md");
 
     if (!skillEntry) {
-        throw new Error("ZIP 中未找到 SKILL.md");
+        throw new Error("归档中未找到 SKILL.md");
     }
 
-    const rootDir = entryDirName(skillEntry.entryName);
+    const skillPath = safeArchiveRelativeName(skillEntry.path);
+    if (!skillPath) {
+        throw new Error("SKILL.md 路径非法");
+    }
+
+    const rootDir = entryDirName(skillPath);
     const rootName = rootDir
         ? posix.basename(rootDir.replace(/\/+$/, ""))
-        : basename(filePath, extname(filePath));
+        : archiveBaseName(filePath);
     const dirName = safeInstallDirName(rootName);
 
     const root = globalSkillDir();
@@ -74,10 +87,14 @@ async function installSkillFromZip(
     await ensureDir(tempDir);
 
     try {
-        await extractZipSubtree(zip, rootDir, tempDir);
+        await extractArchive({
+            archivePath: filePath,
+            targetDir: tempDir,
+            stripPrefix: rootDir,
+        });
 
         if (!(await pathExists(join(tempDir, "SKILL.md")))) {
-            throw new Error("ZIP 解压后缺少 SKILL.md");
+            throw new Error("归档解压后缺少 SKILL.md");
         }
 
         await move(tempDir, targetDir, { overwrite: false });
