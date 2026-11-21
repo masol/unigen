@@ -25,6 +25,19 @@
     blurActive();
   });
 
+  // const instanceId = crypto.randomUUID();
+  // const mountedAt = performance.now();
+  // onMount(() => {
+  //   console.error("[Workbench] mount", instanceId, mountedAt);
+  //   return () => {
+  //     console.error("[Workbench] cleanup", instanceId);
+  //   };
+  // });
+
+  // onDestroy(() => {
+  //   console.error("[Workbench] destroy", instanceId);
+  // });
+
   /**
    * 发送入口。
    *

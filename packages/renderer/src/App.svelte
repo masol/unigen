@@ -22,7 +22,8 @@
   import { ModeWatcher } from "mode-watcher";
   import pTimeout from "p-timeout";
   import { onDestroy, onMount } from "svelte";
-  import { AnimatePresence, Motion } from "svelte-motion";
+  import { cubicIn, cubicOut } from "svelte/easing";
+  import { fade } from "svelte/transition";
   import { api, safeApi, setupEvt } from "./lib/utils/api";
   import Layout from "./route/layout.svelte";
 
@@ -139,9 +140,6 @@
   onDestroy(() => {
     window.removeEventListener("keydown", handleKeydown, true);
   });
-
-  // 当前应该渲染的视图 key，用于 AnimatePresence 切换
-  const view = $derived(initError ? "error" : ready ? "app" : "loading");
 </script>
 
 <Toaster position="bottom-right" richColors></Toaster>
@@ -151,45 +149,31 @@
   <Confirm></Confirm>
   <!-- 整窗：占满视口，外层不滚动 -->
   <div class="app-shell">
-    <AnimatePresence list={[{ key: view }]}>
-      {#if initError}
-        <Motion
-          let:motion
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-        >
-          <div use:motion class="app-fill">
-            <ErrorScreen error={initError} />
-          </div>
-        </Motion>
-      {:else if ready}
-        <Motion
-          let:motion
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-        >
-          <div use:motion class="app-fill">
-            <Layout />
-          </div>
-        </Motion>
-      {:else}
-        <Motion
-          let:motion
-          initial={{ opacity: 1 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.4, ease: "easeIn" }}
-        >
-          <div use:motion class="app-fill">
-            <LoadingScreen />
-          </div>
-        </Motion>
-      {/if}
-    </AnimatePresence>
+    {#if initError}
+      <div
+        class="app-fill"
+        in:fade={{ duration: 400, easing: cubicOut }}
+        out:fade={{ duration: 400, easing: cubicIn }}
+      >
+        <ErrorScreen error={initError} />
+      </div>
+    {:else if ready}
+      <div
+        class="app-fill"
+        in:fade={{ duration: 500, easing: cubicOut }}
+        out:fade={{ duration: 400, easing: cubicIn }}
+      >
+        <Layout />
+      </div>
+    {:else}
+      <div
+        class="app-fill"
+        in:fade={{ duration: 400, easing: cubicIn }}
+        out:fade={{ duration: 400, easing: cubicIn }}
+      >
+        <LoadingScreen />
+      </div>
+    {/if}
   </div>
 
   <DialogHost />

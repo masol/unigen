@@ -129,12 +129,26 @@ export interface CodeRuntimeEngineStatus {
 
 // ── SecondConfig ────────────────────────────────────────────
 
+/**
+ * IP 国家检测缓存。
+ *
+ * - code 为 ISO 3166-1 alpha-2 国家代码，统一大写；
+ * - code 为空字符串表示尚未成功检测；
+ * - checkedAt 为最近一次成功检测的 Unix 毫秒时间戳，0 表示从未成功检测。
+ */
+export interface IpCountryCache {
+    code: string;
+    checkedAt: number;
+}
+
 // 无需备份与恢复的第二配置。
 // 注意：SecondConfig 由 electron-store 自动持久化。
 // 任何「瞬时状态」「崩溃后应重置」的数据都不应放在这里，请自行在内存中维护。
 export interface SecondConfig {
     recents: RecentProject[],
-    search_inited: boolean
+    search_inited: boolean // 在项目级lancedb成功创建一次之后，被设置为true。
+    /** IP 国家检测缓存；用于决定是否位于中国以及是否跳过 7 天内的重复检测。 */
+    ipCountry: IpCountryCache
     /** 代码运行时配置（用户意图，可备份恢复）。 */
     codeRuntime: CodeRuntimeConfig
 }

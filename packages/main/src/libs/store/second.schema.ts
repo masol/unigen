@@ -43,6 +43,19 @@ export const secondSchema: Schema<SecondConfig> = {
         type: 'boolean',
         default: false,
     },
+    "ipCountry": {
+        type: 'object',
+        additionalProperties: false,
+        required: ['code', 'checkedAt'],
+        default: {
+            code: '',
+            checkedAt: 0,
+        },
+        properties: {
+            code: { type: 'string', default: '' },
+            checkedAt: { type: 'number', default: 0 },
+        },
+    },
     "codeRuntime": {
         type: 'object',
         additionalProperties: false,

@@ -1,86 +1,158 @@
 import Logger from "electron-log/main.js";
+import pTimeout from "p-timeout";
+
+import { secondConfig } from "$libs/store/second.js";
+import type { SecondConfig } from "$types/appconfig.js";
 
 /**
  * 中国区检测。
  *
  * 用途：决定下载服务器、镜像源（uv / npm / pip / node dist）。
- * 保守缺省：**探测失败视为中国**（`inChina = true`），
- * 这符合大多数国内用户的使用习惯（国外用户失败概率极低但代价是走国内镜像，通常也能连通）。
+ *
+ * 策略：
+ * - 使用 Promise.any 并发竞速多个支持返回国家代码的端点；
+ * - 整体最长等待 3 秒，超时或全部失败时保守视为中国；
+ * - 成功检测后把国家代码与检测时间写入 secondConfig；
+ * - 启动时若缓存未超过 7 天，直接使用缓存，不发起网络请求；
+ * - 超时/失败不更新检测时间，下次启动继续检测。
  */
 
 const PROBE_TIMEOUT_MS = 3000;
-const CHINA_ALIASES = new Set(["china", "cn", "中国", "prc"]);
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7天缓存有效期。
+const CHINA_COUNTRY_CODES = new Set(["CN"]);
+const COUNTRY_CODE_RE = /^[A-Za-z]{2}$/;
 
-async function fetchWithTimeout(
+type JsonRecord = Record<string, unknown>;
+
+function formatError(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+function asRecord(value: unknown): JsonRecord | undefined {
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+        ? (value as JsonRecord)
+        : undefined;
+}
+
+function readRecord(
+    record: JsonRecord | undefined,
+    key: string,
+): JsonRecord | undefined {
+    return asRecord(record?.[key]);
+}
+
+function normalizeCountryCode(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined;
+
+    const code = value.trim().toUpperCase();
+    return COUNTRY_CODE_RE.test(code) ? code : undefined;
+}
+
+function requireCountryCode(value: unknown, source: string): string {
+    const code = normalizeCountryCode(value);
+    if (!code) {
+        throw new Error(`${source} 未返回有效国家代码`);
+    }
+    return code;
+}
+
+function isChinaCountryCode(code: string): boolean {
+    return CHINA_COUNTRY_CODES.has(code.trim().toUpperCase());
+}
+
+function isCacheFresh(
+    cache: SecondConfig["ipCountry"],
+    now: number,
+): boolean {
+    if (!normalizeCountryCode(cache.code)) return false;
+
+    const age = now - cache.checkedAt;
+    return Number.isFinite(age) && age >= 0 && age < CACHE_TTL_MS;
+}
+
+async function fetchJson(
     url: string,
-    timeoutMs: number,
-): Promise<Response | null> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-        return await fetch(url, { signal: controller.signal });
-    } catch (error) {
-        Logger.warn(
-            `[IPInfo] 查询失败 ${url}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return null;
-    } finally {
-        clearTimeout(timer);
+    signal: AbortSignal,
+): Promise<unknown> {
+    const response = await fetch(url, {
+        signal,
+        headers: {
+            accept: "application/json",
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error(`${url} HTTP ${response.status}`);
     }
+
+    return response.json();
 }
 
-async function getCountry(): Promise<string | null> {
-    // 主端点：ip.nc.gy/country（返回国家名称文本）
-    const primary = await fetchWithTimeout(
-        "http://ip.nc.gy/country",
-        PROBE_TIMEOUT_MS,
-    );
-    if (primary?.ok) {
-        try {
-            const text = (await primary.text()).trim();
-            if (text) return text;
-        } catch (error) {
-            Logger.warn(
-                `[IPInfo] 主端点响应解析失败：${error instanceof Error ? error.message : String(error)}`,
+/**
+ * 仅保留能返回国家代码的端点。
+ *
+ * 注意：https://ifconfig.me/all.json 的响应不包含国家代码，
+ * 无法用于“只检测国家代码”的目标，因此不纳入竞速列表。
+ */
+const COUNTRY_PROBES: ReadonlyArray<
+    (signal: AbortSignal) => Promise<string>
+> = [
+        async (signal) => {
+            const json = asRecord(
+                await fetchJson("https://ifconfig.co/json", signal),
             );
-        }
-    }
+            return requireCountryCode(json?.country_iso, "ifconfig.co");
+        },
 
-    // 回退：ip-api.com（免费版仅 http）
-    const fallback = await fetchWithTimeout(
-        "http://ip-api.com/json/",
-        PROBE_TIMEOUT_MS,
-    );
-    if (fallback?.ok) {
-        try {
-            const json = (await fallback.json()) as {
-                status?: string;
-                country?: string;
-            };
-            if (json?.status === "success" && typeof json.country === "string" && json.country) {
-                return json.country;
+        async (signal) => {
+            const json = asRecord(
+                await fetchJson("https://ipinfo.io/json", signal),
+            );
+            return requireCountryCode(json?.country, "ipinfo.io");
+        },
+
+        async (signal) => {
+            const json = asRecord(await fetchJson("https://ipwho.is/", signal));
+            if (json?.success === false) {
+                throw new Error("ipwho.is success=false");
             }
-        } catch (error) {
-            Logger.warn(
-                `[IPInfo] 回退端点响应解析失败：${error instanceof Error ? error.message : String(error)}`,
+            return requireCountryCode(json?.country_code, "ipwho.is");
+        },
+
+        async (signal) => {
+            const json = asRecord(
+                await fetchJson("https://ip.nc.gy/json", signal),
             );
-        }
+            const country = readRecord(json, "country");
+            return requireCountryCode(country?.iso_code, "ip.nc.gy");
+        },
+
+        async (signal) => {
+            const json = asRecord(
+                await fetchJson("https://ip9.com.cn/get", signal),
+            );
+            const data = readRecord(json, "data");
+            return requireCountryCode(data?.country_code, "ip9.com.cn");
+        },
+    ];
+
+async function detectCountryCode(): Promise<string> {
+    const controller = new AbortController();
+
+    try {
+        return await pTimeout(
+            Promise.any(
+                COUNTRY_PROBES.map((probe) => probe(controller.signal)),
+            ),
+            {
+                milliseconds: PROBE_TIMEOUT_MS,
+                message: `IP 国家检测超过 ${PROBE_TIMEOUT_MS}ms`,
+            },
+        );
+    } finally {
+        // 成功时中止其余探测请求；超时时中止所有未完成请求。
+        controller.abort();
     }
-
-    return null;
-}
-
-function isChinaName(name: string): boolean {
-    return CHINA_ALIASES.has(name.trim().toLowerCase());
-}
-
-async function detectInChina(): Promise<boolean> {
-    const country = await getCountry();
-    if (!country) {
-        // 探测失败：保守视为中国。
-        return true;
-    }
-    return isChinaName(country);
 }
 
 export class IPInfo {
@@ -103,22 +175,54 @@ export class IPInfo {
 
         this.#initPromise = (async () => {
             try {
-                this.#inChina = await detectInChina();
+                const now = Date.now();
+                const cached = this.readCachedCountry();
+
+                if (cached && isCacheFresh(cached, now)) {
+                    this.#inChina = isChinaCountryCode(cached.code);
+                    return;
+                }
+
+                const code = await detectCountryCode();
+                this.#inChina = isChinaCountryCode(code);
+
+                try {
+                    secondConfig().set("ipCountry", {
+                        code,
+                        checkedAt: Date.now(),
+                    });
+                } catch (error) {
+                    Logger.warn(
+                        `[IPInfo] 写入国家检测缓存失败：${formatError(error)}`,
+                    );
+                }
             } catch (error) {
-                Logger.warn(
-                    `[IPInfo] 初始化失败，退化为 inChina=true：${error instanceof Error ? error.message : String(error)}`,
-                );
+                // 超时或全部端点失败：保守视为中国，且不更新检测时间。
                 this.#inChina = true;
+                Logger.warn(
+                    `[IPInfo] 国家检测失败或超时，暂按中国处理且不更新缓存：${formatError(error)}`,
+                );
             } finally {
                 this.#inited = true;
                 this.#initPromise = null;
             }
         })();
+
         return this.#initPromise;
+    }
+
+    private readCachedCountry(): SecondConfig["ipCountry"] | undefined {
+        try {
+            return secondConfig().get("ipCountry");
+        } catch (error) {
+            Logger.warn(
+                `[IPInfo] 读取国家检测缓存失败：${formatError(error)}`,
+            );
+            return undefined;
+        }
     }
 }
 
-
-const KEY = Symbol.for('unigen.singleton.ip');
+const KEY = Symbol.for("unigen.singleton.ip");
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const ipInfo: IPInfo = ((globalThis as any)[KEY] ??= new IPInfo());
