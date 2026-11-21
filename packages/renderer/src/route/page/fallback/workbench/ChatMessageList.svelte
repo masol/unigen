@@ -427,7 +427,7 @@
         variant="secondary"
         size="icon"
         onclick={jumpToBottom}
-        class="pointer-events-auto size-10 rounded-full border border-border/50 shadow-lg backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-xl active:scale-95"
+        class="pointer-events-auto size-10 rounded-full border border-border/50 opacity-10 shadow-lg backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:opacity-100 hover:shadow-xl focus-visible:opacity-100 active:scale-95 dark:opacity-30 dark:hover:opacity-100 dark:focus-visible:opacity-100"
         aria-label="回到底部"
         title="回到底部"
       >
