@@ -1,71 +1,41 @@
 // evtbus.ts
-import type { AppConfig, RecentProject, WindowEventPayload } from '@app/main/types';
+import type { AppConfig, RecentProject, TaskSnapshot, WindowEventPayload } from "@app/main/types";
 import mitt, { type Emitter } from "mitt";
-
-/**
- * 启动过程阶段。与 main 侧 StartupPhase 保持一致。
- */
-export type StartupPhase =
-    | "starting"
-    | "app-ready"
-    | "search-db"
-    | "search-sync"
-    | "embedding"
-    | "rerank"
-    | "mcp"
-    | "ready"
-    | "failed";
-
-export interface StartupWarning {
-    /** 稳定 id，用于去重 */
-    id: string;
-    level: "info" | "warn" | "error";
-    code: string;
-    message: string;
-    detail?: string;
-    timestamp: number;
-}
-
-export interface StartupProgress {
-    phase: StartupPhase;
-    message: string;
-    /** 0 ~ 100 */
-    progress: number;
-    warnings: StartupWarning[];
-    timestamp: number;
-}
 
 /**
  * 1. 在这里定义你的事件映射类型
  *  key: 事件名（推荐用命名空间，如 "user:login"）
  *  value: 该事件对应的 payload 类型（void 表示无参数）
+ *
+ * 关于任务进度：
+ *   长时任务的进度统一走 "task:update"（payload 为一份 TaskSnapshot，
+ *   通过 `id` 字段区分不同任务）。renderer 侧由 TaskProgressStore 消化，
+ *   组件不直接订阅事件，读 store 即可。
  */
 export type Events = {
     "winstate": WindowEventPayload;
     "cfg:setall": AppConfig;
     "cfg:set": { name: string; value: unknown };
-    "sys:usedark": boolean  // 更改了操作系统的深色/浅色模式。
-    "lang:changed": string  // 更新了语言设置。
-    "task_finished": { success: boolean, reason?: string, seq: number } // 任务结束，启动时间。    
-    "clarify": { uuid: string, question: string, mode?: string, options?: string[] }, // 请求用户澄清,在projectStore处理。
-    "runcommand-end": { suc: boolean, seq: number }
-    "toast": { type: string, msg: string },
-    "recent:projects": RecentProject[]
-    "kv-changed": { key: string, value: unknown }
+    "sys:usedark": boolean; // 更改了操作系统的深色/浅色模式。
+    "lang:changed": string; // 更新了语言设置。
+    "task_finished": { success: boolean; reason?: string; seq: number }; // 任务结束，启动时间。
+    "clarify": { uuid: string; question: string; mode?: string; options?: string[] }; // 请求用户澄清,在projectStore处理。
+    "runcommand-end": { suc: boolean; seq: number };
+    "toast": { type: string; msg: string };
+    "recent:projects": RecentProject[];
+    "kv-changed": { key: string; value: unknown };
     "before-input-evt": {
         key: string;
         ctrlKey: boolean;
         metaKey: boolean;
         shiftKey: boolean;
         altKey: boolean;
-    },
-    "switch-session": { state: "start" | "failed" } // 切换session.
+    };
+    "switch-session": { state: "start" | "failed" }; // 切换session.
 
-    // ── 启动进度 / 警告 ────────────────────────────────────
-    /** 启动进度快照（每阶段更新一次） */
-    "startup:progress": StartupProgress;
-    /** 新增一条启动/运行期警告 */
-    "startup:warning": StartupWarning;
+    // ── 通用任务进度 ─────────────────────────────────────────
+    /** 任意长时任务（启动 / 下载 / 安装 / 同步...）的最新快照 */
+    "task:update": TaskSnapshot;
 };
 
 export type EventNameType = keyof Events;

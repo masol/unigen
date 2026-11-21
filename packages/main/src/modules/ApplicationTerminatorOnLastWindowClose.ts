@@ -9,7 +9,7 @@ class ApplicationTerminatorOnLastWindowClose implements AppModule {
     // 任一窗口关闭后，统计剩余的非 agent 窗口；归零则退出。
     const quitIfNoUserWindows = () => {
       const userWindowsRemaining = BrowserWindow.getAllWindows().filter(
-        (w) => !w.isDestroyed() && !isAgentWindow(w)
+        (w) => !w.isDestroyed() && !isAgentWindow(w) && !(w as unknown as Record<string, unknown>).__isSplashScreen
       );
       if (userWindowsRemaining.length === 0) {
         app.quit();

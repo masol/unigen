@@ -1,5 +1,5 @@
 import { appLife } from '$libs/utils/tapable/applife.js';
-import { getStartupProgress } from './libs/utils/startup-progress.js';
+import { getStartupProgress } from './libs/utils/task-progress.js';
 import { createModuleRunner } from './ModuleRunner.js';
 import { terminateAppOnLastWindowClose } from './modules/ApplicationTerminatorOnLastWindowClose.js';
 import { autoUpdater } from './modules/AutoUpdater.js';
@@ -10,20 +10,24 @@ import { loggerModule } from './modules/LoggerModule.js';
 import { orpcModule } from './modules/OrpcModule.js';
 import { protocalModule, registerSchemes } from './modules/ProtocalModule.js';
 import { disallowMultipleAppInstance } from './modules/SingleInstanceApp.js';
+import { splashScreenModule } from './modules/SplashScreenModule.js';
 import { unigenModule } from './modules/UnigenModule.js';
 import { createWindowManagerModule } from './modules/WindowManager.js';
 import type { AppInitConfig } from './types/AppInitConfig.js';
 
 export async function initApp(initConfig: AppInitConfig) {
-  const progress = getStartupProgress();
+  const startup = getStartupProgress();
 
   try {
-    progress.report("starting", "正在启动应用...", 2);
+    startup.start();
+    startup.report("starting", "正在启动应用...", 2);
     registerSchemes();
 
     const moduleRunner = createModuleRunner()
       .init(disallowMultipleAppInstance())
       .init(loggerModule())
+      // Splash 需要在主窗口创建之前先显示，因此排在 WindowManager 之前。
+      .init(splashScreenModule())
       .init(orpcModule())
       .init(protocalModule())
       .init(hardwareAccelerationMode())
@@ -31,7 +35,7 @@ export async function initApp(initConfig: AppInitConfig) {
       .init(terminateAppOnLastWindowClose())
       .init(autoUpdater())
       // Install DevTools extension if needed
-      // .init(chromeDevToolsExtension({extension: 'VUEJS3_DEVTOOLS'}))
+      // .init(chromeDevToolsExtension({extension: 'VUE3_DEVTOOLS'}))
       // Security
       .init(allowInternalOrigins(
         new Set(initConfig.renderer instanceof URL ? [initConfig.renderer.origin] : []),
@@ -51,9 +55,9 @@ export async function initApp(initConfig: AppInitConfig) {
       .init(unigenModule());
 
     await moduleRunner;
-    progress.report("ready", "初始化完成", 100);
+    startup.complete("初始化完成");
   } catch (error) {
-    progress.fail(
+    startup.fail(
       "初始化失败，请查看日志或重试。",
       error instanceof Error ? error.message : String(error),
     );

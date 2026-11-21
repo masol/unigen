@@ -15,12 +15,9 @@
   import { pluginStore } from "$lib/store/plugin.svelte";
   import { projectStore } from "$lib/store/project.svelte";
   import { recentProjectsStore } from "$lib/store/recent-projects.svelte";
-  import { warningsStore } from "$lib/store/warnings.svelte";
+  import { taskProgressStore } from "$lib/store/task-progress.svelte";
   import { windowStore } from "$lib/store/window.svelte";
-  import evtbus, {
-    type StartupProgress,
-    type StartupWarning,
-  } from "$lib/utils/evtbus";
+  import evtbus from "$lib/utils/evtbus";
   import { highlightThemeCss } from "$lib/utils/highlight";
   import { ModeWatcher } from "mode-watcher";
   import pTimeout from "p-timeout";
@@ -62,55 +59,59 @@
     }
   };
 
-  // ── 警告收集（运行期警告也进入 store） ─────────────────────
-  // 与 LoadingScreen 的订阅并存：LoadingScreen 负责展示，
-  // 本订阅保证 loading 结束后仍能捕获运行期警告。
+  // ── 任务进度：全局唯一的接线点 ─────────────────────────────
+  // 所有长时任务（含 startup）通过 "task:update" 汇入 store，
+  // 组件侧只需读 store，不再各自订阅事件。
   onMount(() => {
-    const onWarning = (w: StartupWarning) => warningsStore.add(w);
-    const onProgress = (p: StartupProgress) => warningsStore.addAll(p.warnings);
-    evtbus.on("startup:warning", onWarning);
-    evtbus.on("startup:progress", onProgress);
-    return () => {
-      evtbus.off("startup:warning", onWarning);
-      evtbus.off("startup:progress", onProgress);
-    };
+    const onTaskUpdate = (
+      snap: Parameters<typeof taskProgressStore.apply>[0],
+    ) => taskProgressStore.apply(snap);
+    evtbus.on("task:update", onTaskUpdate);
+    return () => evtbus.off("task:update", onTaskUpdate);
   });
 
   onMount(async () => {
     try {
-      // 初始化api, api()可用。
       api();
-      // 初始化事件机制，evtbus生效。唯一返回windowsId的机会。
+      // 初始化事件机制。唯一返回 windowsId 的机会。
       const wid = await setupEvt();
       windowStore.init(wid);
-      await configStore.init(); // 先加载配置信息。
 
-      //初始化pluginSystem.
+      // ── 请求主进程显示主窗口（关闭 splash）────────────────
+      // 调用时机：oRPC 端口已就绪之后、其余初始化启动之前。
+      // 此时 LoadingScreen 已经在 DOM 中挂载（onMount 晚于首次渲染）；
+      // 主进程的 reveal 闸门会等 ready-to-show 已触发后再 show()，
+      // 因此不会在首帧前显示窗口 —— 白屏风险由此消除。
+      // 若此调用失败，主进程有 4s fallback + 15s 硬兜底，不会被遗漏。
+      void safeApi()
+        .window.reveal({ reason: "App.svelte:post-setupEvt" })
+        .catch((e) => {
+          console.warn(
+            "[App] reveal call failed (main-side fallback will handle)",
+            e,
+          );
+        });
+
+      // 后续初始化照旧
+      await configStore.init();
       await Promise.all([
         pluginStore.init(),
         i18nStore.init(),
         setupEvtHanle(),
         recentProjectsStore.load(),
       ]);
-
       await projectStore.init();
 
       // 在捕获阶段（第三个参数传 true）监听，这比 hotkeys-js 的绑定更早执行
       window.addEventListener("keydown", handleKeydown, true);
 
-      // 给加载动画一个最小展示时间，避免闪烁
-      // await new Promise((r) => setTimeout(r, 600));
-
       // 等待系统自举完成。
       await pTimeout(safeApi().system.bootstrapped(), {
-        milliseconds: 15000, // 15秒超时
-        fallback: () => {
-          // 超时后不抛异常，直接返回 void (undefined)
-          return undefined as void;
-        },
+        milliseconds: 15000,
+        fallback: () => undefined as void,
       });
 
-      // 系统自举完成，数据等等已经就绪，开始初始化依赖数据的部分。
+      // 系统自举完成，数据就绪，开始初始化依赖数据的部分。
       await Promise.all([messageStore.init()]);
 
       await windowStore.maximize();
@@ -118,9 +119,20 @@
       // 全部就绪，切换到正式界面
       ready = true;
     } catch (e) {
-      // 拦截初始化过程中的任何异常，切换到错误页
       console.error("initialization failed", e);
       initError = e;
+    } finally {
+      // 保险：若早期 reveal 调用因为偶然失败/竞态没生效，这里补一刀
+      // （主进程 reveal 是幂等的，重复调用无副作用）。
+      try {
+        void safeApi()
+          .window.reveal({ reason: "App.svelte:init-finally" })
+          .catch(() => {
+            /* 完全静默：主进程兜底处理 */
+          });
+      } catch (e) {
+        console.warn("[App] finally reveal call failed synchronously", e);
+      }
     }
   });
 

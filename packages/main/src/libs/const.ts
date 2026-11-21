@@ -8,3 +8,4 @@ export const CmdsDirName = 'cmds' as const;
 export const KcDirName = 'kc' as const;
 export const MetaDirname = 'meta' as const;
 export const McpDirName = 'mcp' as const;
+export const STARTUP_TASK_ID = "startup" as const;

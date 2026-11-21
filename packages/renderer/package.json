@@ -80,6 +80,7 @@
     "@tiptap/pm": "^3.32.3",
     "@tiptap/starter-kit": "^3.32.3",
     "@tiptap/suggestion": "^3.32.3",
+    "@xyflow/svelte": "^2.0.2",
     "awilix": "^13.0.5",
     "class-variance-authority": "^0.7.1",
     "dayjs": "^1.11.21",

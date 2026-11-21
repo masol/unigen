@@ -9,7 +9,7 @@
   } from "@tabler/icons-svelte";
 // ── Stores ──
   import { projectStore } from "$lib/store/project.svelte";
-  import { warningsStore } from "$lib/store/warnings.svelte";
+  import { taskProgressStore } from "$lib/store/task-progress.svelte";
 // ── Sub-views ──
   import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { safeApi } from "$lib/utils/api";
@@ -72,10 +72,13 @@
     });
   }
 
+  // 全量任务告警聚合（跨全部 task id）
+  const warningDigest = $derived(taskProgressStore.digest);
+
   // 警告颜色判定
   const warningTone = $derived.by(() => {
-    if (warningsStore.errorCount > 0) return "error";
-    if (warningsStore.warnCount > 0) return "warn";
+    if (warningDigest.errorCount > 0) return "error";
+    if (warningDigest.warnCount > 0) return "warn";
     return "idle";
   });
 </script>
@@ -104,8 +107,8 @@
         <span class="truncate">{displayPath}</span>
       </button>
       <button
-        title={warningsStore.count > 0
-          ? `${warningsStore.count} 条警告`
+        title={warningDigest.total > 0
+          ? `${warningDigest.total} 条警告`
           : "无警告"}
         class="flex items-center gap-1 text-xs transition-all duration-200
                {warningTone === 'error'
@@ -115,7 +118,7 @@
             : 'text-muted-foreground hover:text-foreground'}"
       >
         <IconAlertTriangle class="size-3.5" stroke={1.5} />
-        <span>{warningsStore.count}</span>
+        <span>{warningDigest.total}</span>
       </button>
     </div>
 
@@ -133,7 +136,6 @@
         {/if}
         <span>{projectStore.activity?.statusText}</span>
       </button>
-      <!-- <RunState /> -->
     </div>
 
     <!-- ╭─── / StatusBarProject ───╮ -->

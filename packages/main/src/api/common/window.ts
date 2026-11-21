@@ -107,20 +107,19 @@ const getState = os
         };
     })
 
-
+// ---------- 切换开发者工具 ----------
 const toggleDevtools = os
     .handler(async ({ context }) => {
         const ctx = context as RpcContext;
         const win = BrowserWindow.fromId(ctx.project.wid);
         if (win && win.webContents) {
-            // 切换开发者工具的打开/关闭状态
             win.webContents.toggleDevTools();
         } else {
             throwPrecondition("无法定位窗口对象。")
         }
     });
 
-
+// ---------- 新建窗口 ----------
 const newwin = os
     .input(z.void())
     .output(z.boolean())
@@ -133,6 +132,33 @@ const newwin = os
         return false;
     })
 
+// ---------- 请求显示主窗口（关闭 splash） ----------
+/**
+ * renderer 主动调用：告诉主进程"我准备好了，可以显示窗口了"。
+ *
+ * 与 reveal 相关的所有兜底逻辑都在主进程 WindowService 内：
+ *   - ready-to-show 4s 后 renderer 仍不 reveal → 强制 reveal
+ *   - 15s 硬超时 → 强制 reveal
+ *   - 主窗口 closed → 关闭 splash
+ *
+ * 因此 renderer 侧**只调用一次即可**，不需要无限重试；即使调用失败，
+ * 主进程也有兜底，不会让用户永远停在 splash。
+ *
+ * 参数：
+ *   reason - 可选；写入主进程日志用于诊断（推荐 "App.svelte:onMount" 这种前缀）。
+ * 返回：
+ *   boolean - true = 请求已登记（不代表窗口已显示）；false = 窗口已销毁。
+ */
+const reveal = os
+    .input(z.object({ reason: z.string().optional() }).optional())
+    .output(z.boolean())
+    .handler(({ context, input }): boolean => {
+        const ctx = context as RpcContext;
+        const win = BrowserWindow.fromId(ctx.project.wid);
+        if (!win || win.isDestroyed()) return false;
+        return WindowService.instance.reveal(win, input?.reason ?? "renderer");
+    });
+
 export default {
     max,
     min,
@@ -143,4 +169,5 @@ export default {
     getState,
     toggleDevtools,
     newwin,
+    reveal,
 }

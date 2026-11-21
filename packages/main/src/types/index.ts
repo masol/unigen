@@ -23,5 +23,6 @@ export type { Model, ModelOption, ModelTags, Provider, ProviderProtocol } from '
 export type { Facets, GDagJSON, GuardKind, NodeKindT, NodeStatus, PNode, RegArtifact, RiskLevel, SizeEstimateT, TriState } from './shared/plan/nodes.js'
 export type { ModuleSource, PluginInfo, PluginScope, PluginStatus } from './shared/plugin.js'
 export type { WindowEventPayload, WindowEventType } from './shared/rpcevt.js'
+export type { TaskSnapshot, TaskStatus, TaskWarning } from "./shared/task-progress.js"
 export type * from './shared/template/index.js'
 

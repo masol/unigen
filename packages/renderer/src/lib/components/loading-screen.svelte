@@ -1,49 +1,33 @@
 <!-- src/lib/components/loading-screen.svelte -->
 <script lang="ts">
-  import { warningsStore } from "$lib/store/warnings.svelte";
-  import evtbus, {
-    type StartupProgress,
-    type StartupWarning,
-  } from "$lib/utils/evtbus";
+  import {
+    taskProgressStore,
+    type TaskSnapshot,
+  } from "$lib/store/task-progress.svelte";
   import { IconAlertTriangle, IconInfoCircle } from "@tabler/icons-svelte";
-  import { onMount } from "svelte";
   import { Motion } from "svelte-motion";
 
-  // ── 局部状态：随本组件销毁而回收 ────────────────────────────
-  let progress = $state<StartupProgress>({
+  // ── 启动任务 id ────────────────────────────────────────────
+  const STARTUP_ID = "startup";
+
+  /** 在首帧 store 尚未收到主进程快照前的兜底占位 */
+  const FALLBACK: TaskSnapshot = {
+    id: STARTUP_ID,
+    title: "启动",
     phase: "starting",
     message: "正在启动",
     progress: 0,
+    status: "running",
     warnings: [],
-    timestamp: Date.now(),
-  });
+    startedAt: 0,
+    updatedAt: 0,
+  };
 
-  // 本组件只展示本地 warnings，store 负责跨组件持久化
-  let localWarnings = $state<StartupWarning[]>([]);
-
-  onMount(() => {
-    const onProgress = (payload: StartupProgress) => {
-      progress = payload;
-      localWarnings = payload.warnings;
-      // 同步到全局 store（status bar 用）
-      warningsStore.addAll(payload.warnings);
-    };
-    const onWarning = (payload: StartupWarning) => {
-      if (!localWarnings.some((w) => w.id === payload.id)) {
-        localWarnings = [...localWarnings, payload];
-      }
-      warningsStore.add(payload);
-    };
-
-    evtbus.on("startup:progress", onProgress);
-    evtbus.on("startup:warning", onWarning);
-
-    return () => {
-      evtbus.off("startup:progress", onProgress);
-      evtbus.off("startup:warning", onWarning);
-      // localWarnings / progress 会随组件销毁
-    };
-  });
+  /**
+   * 只读 store 的快照：Svelte 5 会自动追踪 `#tasks[id]` 的 key 级更新，
+   * 无需订阅事件、无需自己 onMount。
+   */
+  const progress = $derived(taskProgressStore.get(STARTUP_ID) ?? FALLBACK);
 
   // 装饰性流动光斑配置
   const orbs = [
@@ -198,8 +182,8 @@
       {progress.progress}%
     </div>
 
-    <!-- 警告列表（本地展示） -->
-    {#if localWarnings.length > 0}
+    <!-- 警告列表：store 中 warnings 已在主进程去重，这里直接遍历 -->
+    {#if progress.warnings.length > 0}
       <Motion
         let:motion
         initial={{ opacity: 0, y: 8 }}
@@ -207,7 +191,7 @@
         transition={{ duration: 0.3, ease: "easeOut" }}
       >
         <div use:motion class="mt-2 w-full space-y-2">
-          {#each localWarnings as w (w.id)}
+          {#each progress.warnings as w (w.id)}
             <div
               class="flex items-start gap-2 rounded-lg border px-3 py-2 text-left
                      {w.level === 'error'
