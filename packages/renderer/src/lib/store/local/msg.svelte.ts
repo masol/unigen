@@ -46,6 +46,20 @@ type RunState = {
     deferred: SeqDeferred;
     activeAssistantId: string | null;
     aborting: boolean;
+    /**
+     * 本次 run 所属 session 的完整消息快照。
+     *
+     * 生命周期（重要）：
+     * - AIResponse 启动时引用 this.messages（若为当前活跃 session，则与全局视图
+     *   同引用，流事件只需写一次即可双写；无需额外同步）；
+     * - 会话切走后，this.messages 被其它 session 的数据替换，但本字段仍保留
+     *   该 session 的数组引用，后台流事件继续向其写入（不再污染 this.messages）；
+     * - 切回（reload）时以本字段作为内存快照与 DB 结果合并，避免 DB 落盘落后
+     *   窗口（流式中途落盘不完整）导致历史消息丢失；
+     * - reload 恢复后重新指向新的 this.messages，生命周期闭环；
+     * - run 结束（finally）后仍保留（不主动清空），供兜底诊断使用。
+     */
+    messages: ChatMessage[] | null;
 };
 
 function createDeferred(): SeqDeferred {
@@ -153,8 +167,6 @@ class MessageStore {
      * 一次 run 的全部内部状态都收敛到 RunState 中：
      * - 按 sessionId 查找：用于会话级锁定、abort、切换会话时恢复 UI 状态；
      * - 按 seq 查找：用于承接主进程 runcommand-end 确认事件。
-     *
-     * 原 #pendingSeqs 已合并进 RunState.deferred，不再单独维护。
      */
     #runsBySession = new Map<string, RunState>();
     #runsBySeq = new Map<number, RunState>();
@@ -192,8 +204,15 @@ class MessageStore {
      *   streaming 状态与 running/pending trace 节点，等待后续流事件续写；
      *   并以「内存快照优先」合并 DB 结果，避免流式内容在 reload 期间被 DB 的中间落盘覆盖。
      *
-     * 原实现在 reload 中无条件整体替换，且没有任何修复或合并逻辑，
-     * 导致运行中会话切回时状态无法正确恢复。
+     * 内存快照来源：`RunState.messages`。
+     * - 活跃时与 this.messages 同引用（流事件写入即生效）；
+     * - 会话切走后 this.messages 被替换，但该字段保留该 session 的引用，
+     *   后台流事件继续向其写入，切回时以它作为 liveSnapshot 恢复。
+     *
+     * 避免 reload 期间活流污染：reload 开始即置 isReloading=true，
+     * `#run` 的事件分发在 `isReloading` 期间一律写入 `state.messages`
+     * （即便 activeSessionId 已切到目标 session），保证 this.messages 始终
+     * 是上一次已完成的快照，等到 loaded 后再原子替换。
      */
     private async reload(): Promise<void> {
         const sid = sessionStore.activeSessionId
@@ -205,15 +224,22 @@ class MessageStore {
         )
         const runState = sid ? this.#runsBySession.get(sid) : undefined
 
-        // 运行中：reload 前先抓取本会话的内存消息快照。
-        // 切换会话场景下 filter 后通常为空（后台 run 不写入 messages）；
-        // 非切换场景（项目重载等）下快照包含正在流式累积的内容，需在合并时优先保留。
-        const liveSnapshot = running
-            ? this.messages.filter((m) => m.sessionId === sid)
-            : []
+        // 内存快照：优先使用 RunState.messages（该 run 所属 session 的完整消息，
+        // 包含后台流式增量）。仅在完全没有 RunState 时才退回 this.messages 过滤，
+        // 覆盖「切回时没有活跃 run，但 this.messages 里残留同 session 数据」的极端场景。
+        let liveSnapshot: ChatMessage[] = []
+        if (running && runState?.messages && runState.messages.length > 0) {
+            liveSnapshot = runState.messages
+        } else if (running) {
+            liveSnapshot = this.messages.filter((m) => m.sessionId === sid)
+        }
 
         this.messages = []
-        log.debug('[MessageStore] reload() called', { sid, running })
+        log.debug('[MessageStore] reload() called', {
+            sid,
+            running,
+            liveSnapshot: liveSnapshot.length,
+        })
         this.isReloading = true
 
         try {
@@ -224,6 +250,11 @@ class MessageStore {
             this.messages = running
                 ? this.#restoreRunningMessages(loaded, runState, liveSnapshot)
                 : this.#repairIdleMessages(loaded)
+            // 重新绑定快照引用：让活跃态的流事件再次自然作用于 this.messages。
+            // 老的 liveSnapshot 数组引用此时不再需要，交由 GC。
+            if (runState) {
+                runState.messages = this.messages
+            }
             this.selectedSkills = [];
             this.selectedTools = [];
             log.info(
@@ -287,7 +318,9 @@ class MessageStore {
         // eslint-disable-next-line svelte/prefer-svelte-reactivity
         const byId = new Map(safeLoaded.map((m) => [m.id, m]))
         for (const live of safeSnapshot) {
-            byId.set(live.id, live)
+            if (live && typeof live === "object" && live.id) {
+                byId.set(live.id, live)
+            }
         }
         const merged = Array.from(byId.values()).sort(
             (a, b) => a.timestamp - b.timestamp,
@@ -367,6 +400,9 @@ class MessageStore {
             await safeApi().project.deleteMessagesAfter({ sid, fromTs: 0 });
             this.messages = [];
             this.collapsedMessages = {};
+            // 同步清空 RunState 中的快照，防止切回时被内存数据还原
+            const state = this.#runsBySession.get(sid);
+            if (state) state.messages = null;
         } catch (err) {
             const errText = err instanceof Error ? err.message : String(err);
             toast.error(`清空会话失败：${errText}`);
@@ -541,14 +577,15 @@ class MessageStore {
 
     // ── Tree traversal helpers ──────────────────────────────────
     /**
-     * 在消息的 trace 树中递归查找指定 id 的节点
-     * 关键：直接在响应式树上操作，不使用 Map 缓存
+     * 在指定 messages 数组的 trace 树中递归查找指定 id 的节点。
+     * 显式传入 messages：活跃流与后台流走同一套遍历逻辑，避免分叉。
      */
-    #findTraceNode(
+    #findTraceNodeIn(
+        messages: ChatMessage[],
         messageId: string,
         nodeId: string,
     ): TraceNode | null {
-        const msg = this.#findMessage(messageId);
+        const msg = this.#findMessageIn(messages, messageId);
         if (!msg || !Array.isArray(msg.traces)) return null;
 
         const search = (nodes: TraceNode[]): TraceNode | null => {
@@ -568,7 +605,30 @@ class MessageStore {
     }
 
     // ── Stream event handling ───────────────────────────────────
+
+    /**
+     * 事件应用到当前活跃视图（this.messages）。
+     * 保留公有 API 兼容 ChatInput / Workbench 等直接调用方。
+     */
     handleStreamEvent(event: ChatStreamEvent, state?: RunState): void {
+        this.#applyEventToMessages(event, this.messages, state);
+    }
+
+    /**
+     * 事件应用到指定 messages 数组（就地修改，不替换引用）。
+     * - 活跃态：`messages === this.messages`（$state 数组），push/attribute 修改触发响应式；
+     * - 后台态：`messages === state.messages`（普通数组引用，来自 $state 的展开或引用），
+     *   无需响应式，但保证切回时数据完整。
+     *
+     * 采用「就地修改」而非「替换引用」的核心原因：
+     * this.messages 被赋值成新数组时，state.messages（引用同一数组）会脱钩；
+     * 就地修改可保证两者始终指向同一数组，reload 时仅需判断引用即可。
+     */
+    #applyEventToMessages(
+        event: ChatStreamEvent,
+        messages: ChatMessage[],
+        state?: RunState,
+    ): void {
         switch (event.type) {
             case "message.start": {
                 const msg: ChatMessage = {
@@ -581,13 +641,15 @@ class MessageStore {
                     agent: event.agent,
                     traces: [],
                 };
-                this.messages = [...this.messages, msg];
-                sessionStore.updMessageCount();
+                // 使用 push 保持数组引用稳定；活跃态由 $state 深度代理触发响应式
+                messages.push(msg);
+                // 显式传 sessionId，避免后台事件累加到当前 active session 计数上
+                sessionStore.updMessageCount(1, event.sessionId);
                 if (state) state.activeAssistantId = event.messageId;
                 break;
             }
             case "message.delta": {
-                const m = this.#findMessage(event.messageId);
+                const m = this.#findMessageIn(messages, event.messageId);
                 if (m) {
                     // 防御：content 若因极端场景为 undefined / 非字符串，
                     // 直接 += 会产成 "undefined..." 污染，需先归一到字符串。
@@ -601,7 +663,7 @@ class MessageStore {
                 if (state && state.activeAssistantId === event.messageId) {
                     state.activeAssistantId = null;
                 }
-                const m = this.#findMessage(event.messageId);
+                const m = this.#findMessageIn(messages, event.messageId);
                 if (!m) break;
                 m.streaming = false;
                 if (event.content != null) {
@@ -614,7 +676,7 @@ class MessageStore {
                 if (state && state.activeAssistantId === event.messageId) {
                     state.activeAssistantId = null;
                 }
-                const m = this.#findMessage(event.messageId);
+                const m = this.#findMessageIn(messages, event.messageId);
                 if (!m) break;
                 m.streaming = false;
                 m.isError = true;
@@ -623,14 +685,18 @@ class MessageStore {
                 break;
             }
             case "trace.start": {
-                const m = this.#findMessage(event.messageId);
+                const m = this.#findMessageIn(messages, event.messageId);
                 if (!m) break;
                 if (!Array.isArray(m.traces)) {
                     m.traces = [];
                 }
 
                 if (event.parentId) {
-                    const parent = this.#findTraceNode(event.messageId, event.parentId);
+                    const parent = this.#findTraceNodeIn(
+                        messages,
+                        event.messageId,
+                        event.parentId,
+                    );
                     if (parent && isTraceAgentNode(parent)) {
                         if (!Array.isArray(parent.children)) {
                             parent.children = [];
@@ -649,14 +715,22 @@ class MessageStore {
                 break;
             }
             case "trace.update": {
-                const node = this.#findTraceNode(event.messageId, event.nodeId);
+                const node = this.#findTraceNodeIn(
+                    messages,
+                    event.messageId,
+                    event.nodeId,
+                );
                 if (node) {
                     Object.assign(node, event.patch);
                 }
                 break;
             }
             case "trace.detail.delta": {
-                const node = this.#findTraceNode(event.messageId, event.nodeId);
+                const node = this.#findTraceNodeIn(
+                    messages,
+                    event.messageId,
+                    event.nodeId,
+                );
                 if (!node) {
                     Logger.warn("trace.detail.delta: node not found", {
                         nodeId: event.nodeId,
@@ -669,7 +743,11 @@ class MessageStore {
                 break;
             }
             case "trace.end": {
-                const node = this.#findTraceNode(event.messageId, event.nodeId);
+                const node = this.#findTraceNodeIn(
+                    messages,
+                    event.messageId,
+                    event.nodeId,
+                );
                 if (!node) break;
 
                 // 应用 trace.end 携带的完整 patch：
@@ -696,8 +774,11 @@ class MessageStore {
         }
     }
 
-    #findMessage(id: string): ChatMessage | undefined {
-        return this.messages.find((m) => m.id === id);
+    #findMessageIn(
+        messages: ChatMessage[],
+        id: string,
+    ): ChatMessage | undefined {
+        return messages.find((m) => m.id === id);
     }
 
     #forceEndTraces(message: ChatMessage): void {
@@ -744,26 +825,6 @@ class MessageStore {
         };
 
         message.traces.forEach(revive);
-    }
-
-    /**
-     * 当会话不在前台时，不把事件写入当前 messages；
-     * 但仍需跟踪该 run 的 activeAssistantId，供切回前台后的收尾使用。
-     */
-    #trackRunEvent(state: RunState, event: ChatStreamEvent): void {
-        switch (event.type) {
-            case "message.start": {
-                state.activeAssistantId = event.messageId;
-                break;
-            }
-            case "message.end":
-            case "message.error": {
-                if (state.activeAssistantId === event.messageId) {
-                    state.activeAssistantId = null;
-                }
-                break;
-            }
-        }
     }
 
     #syncRunStateForActive(): void {
@@ -814,6 +875,10 @@ class MessageStore {
             deferred: createDeferred(),
             activeAssistantId: null,
             aborting: false,
+            // 关键：直接引用 this.messages。活跃态下双方同引用，
+            // 流事件（#applyEventToMessages 就地修改）会同时作用于 this.messages
+            // 和 state.messages，无需任何双写同步。
+            messages: this.messages,
         };
 
         this.#runsBySession.set(sid, runState);
@@ -869,10 +934,19 @@ class MessageStore {
 
             for await (const evt of stream) {
                 if (signal.aborted) break;
-                if (sessionStore.activeSessionId === sessionId) {
+                // 分发规则：
+                // 1) 当前是活跃 session 且不在 reload 同步窗口 → 写 this.messages
+                // 2) 后台（切走）或 reload 同步窗口 → 写 state.messages
+                //    （reload 期间 this.messages 尚未被 loaded 替换，且可能是别的
+                //     session 的数据；此窗口内一律走 state.messages 避免污染，
+                //    reload 时再原子合并）
+                if (
+                    sessionStore.activeSessionId === sessionId &&
+                    !this.isReloading
+                ) {
                     this.handleStreamEvent(evt, state);
-                } else {
-                    this.#trackRunEvent(state, evt);
+                } else if (state.messages) {
+                    this.#applyEventToMessages(evt, state.messages, state);
                 }
             }
         } catch (err) {
@@ -883,7 +957,10 @@ class MessageStore {
                     err instanceof Error ? err.message : String(err);
                 if (sessionStore.activeSessionId === sessionId) {
                     const errorContent = `处理失败：${errText}`;
-                    if (state.activeAssistantId && this.#findMessage(state.activeAssistantId)) {
+                    if (
+                        state.activeAssistantId &&
+                        this.#findMessageIn(this.messages, state.activeAssistantId)
+                    ) {
                         this.handleStreamEvent({
                             type: "message.error",
                             messageId: state.activeAssistantId,
@@ -898,6 +975,20 @@ class MessageStore {
                         });
                     }
                 } else {
+                    // 后台失败：写入 state.messages 快照，切回时用户可看到
+                    if (state.messages) {
+                        const errorContent = `处理失败：${errText}`;
+                        if (
+                            state.activeAssistantId &&
+                            this.#findMessageIn(state.messages, state.activeAssistantId)
+                        ) {
+                            this.#applyEventToMessages({
+                                type: "message.error",
+                                messageId: state.activeAssistantId,
+                                error: errorContent,
+                            }, state.messages, state);
+                        }
+                    }
                     Logger.error("runCommand failed in background session", {
                         sessionId,
                         err,
@@ -918,8 +1009,14 @@ class MessageStore {
 
             await this.#waitForRunEnd(seq, state);
 
-            if (sessionStore.activeSessionId === sessionId && state.activeAssistantId) {
-                const m = this.#findMessage(state.activeAssistantId);
+            // 收尾：对当前不在前台、但 state.activeAssistantId 仍存在的消息
+            // 也要做终止态处理，避免切回时卡在 streaming。
+            if (state.activeAssistantId) {
+                const isActive = sessionStore.activeSessionId === sessionId;
+                const targetMessages = isActive
+                    ? this.messages
+                    : (state.messages ?? []);
+                const m = this.#findMessageIn(targetMessages, state.activeAssistantId);
                 if (m) {
                     m.streaming = false;
                     if (signal.aborted && m.content.length === 0) {

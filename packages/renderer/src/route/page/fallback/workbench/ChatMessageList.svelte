@@ -24,9 +24,6 @@
   let measuredActiveId = $state<string | undefined>(undefined);
 
   // ── 比例兜底 activeId（DOM 测量不可用时使用）────────────
-  // 用 scrollTop / totalHeight / viewportHeight 的比例映射到消息索引；
-  // 只有在"明确到底"、"比例可用"、"初始未知"三种场景；
-  // 由于 DOM 测量为主，本兜底只在 DOM 不可用（如极端 DOM 异常）时启用。
   let fallbackActiveId = $derived.by(() => {
     const msgs = messageStore.messages;
     if (msgs.length === 0) return undefined;
@@ -53,16 +50,10 @@
     return msgs[0]?.id;
   });
 
-  // ── 最终 activeId：DOM 测量优先，比例兜底 ─────────────
   let activeId = $derived(
     (measuredActiveId ?? fallbackActiveId) as string | undefined,
   );
 
-  // ── DOM 测量：找出"上边缘最靠下但仍在视口内"的消息 ─────
-  // 理由：SvelteVirtualChat 的 startIndex/endIndex 反映的是"渲染范围"，
-  // 在消息总数 ≤ 可见+overscan 时会恒等于 [0, total-1]，不携带滚动信息。
-  // 因此改为直接读取 DOM（每条消息都渲染了 data-message-id），最为可靠；
-  // 若仍有消化不良，仍由 fallbackActiveId（比例）兜底。
   function measureActiveId() {
     const wrapper = wrapperEl;
     if (!wrapper) return;
@@ -79,9 +70,8 @@
     let bestTop = -Infinity;
     for (const node of nodes) {
       const r = node.getBoundingClientRect();
-      if (r.bottom <= viewRect.top) continue; // 完全在视口上方
-      if (r.top >= viewRect.bottom) continue; // 完全在视口下方
-      // 与视口有交集；取 top 最靠下（即"最下方可见消息"）
+      if (r.bottom <= viewRect.top) continue;
+      if (r.top >= viewRect.bottom) continue;
       if (r.top > bestTop) {
         bestTop = r.top;
         bestId = node.dataset.messageId;
@@ -91,7 +81,6 @@
     if (bestId) measuredActiveId = bestId;
   }
 
-  // ── 双通道刷新：onDebugInfo（精细滚动）+ 120ms 轮询（流式高度增量）─
   $effect(() => {
     if (!chat) return;
 
@@ -112,7 +101,6 @@
       } catch {
         // 静默退化到纯 DOM 测量
       }
-      // 不论 getDebugInfo 是否可用，都尽量做一次 DOM 测量
       measureActiveId();
     };
 
@@ -121,7 +109,6 @@
     return () => clearInterval(id);
   });
 
-  // ── 消息列表变化（新增/删除/内容更新）时，等 DOM 落定后再测一次 ──
   let msgSig = $derived.by(() => {
     const m = messageStore.messages;
     const last = m[m.length - 1];
@@ -132,12 +119,10 @@
     tick().then(measureActiveId);
   });
 
-  // ── 距底距离（用于回底按钮显现）─────────────────────────
   let distanceFromBottom = $derived(
     Math.max(0, totalHeight - scrollTop - viewportHeight),
   );
 
-  // ── 用户发送新消息时强制回到底部 ──────────────────────
   $effect(() => {
     const len = messageStore.messages.length;
     const last = messageStore.messages.at(-1);
@@ -148,12 +133,10 @@
     prevCount = len;
   });
 
-  // ── "回到底部"按钮：底部居中 · 距底 > 200px 且非 following ──
   let showJumpButton = $derived(
     messageStore.messages.length > 0 && !following && distanceFromBottom > 200,
   );
 
-  // ── Minimap 显示条件：只要内容可滚动即显示（含"一条长消息"场景）──
   let showMinimap = $derived.by(() => {
     const hasNonEmpty = messageStore.messages.some(
       (m) => (m.content ?? "").trim().length > 0,
@@ -163,8 +146,21 @@
     return totalHeight > viewportHeight * 1.05;
   });
 
+  /**
+   * 跳转到指定消息。
+   *
+   * 修复要点：流式输出期间，SvelteVirtualChat 持续测量高度、重排布局；
+   * smooth 滚动极易被 follow-bottom 或重新定位打断，表现为「跳一点点就停」。
+   * 因此：
+   * - 使用 `smooth: false`（instant 定位）避免动画被吞；
+   * - 主动置 `following = false`，即使落点距底 ≤ 48px 也不被后续流式 update 拉回；
+   * - 通过`estimatedMessageHeight` 提升缓存外的消息高度估计精度（见模板），
+   *   避免因历史长消息按 120px 低估导致目标 offset 严重偏小。
+   */
   function scrollToMessage(id: string) {
-    chat?.scrollToMessage(id, { smooth: true });
+    if (!chat) return;
+    following = false;
+    chat.scrollToMessage(id, { smooth: false });
   }
 
   function jumpToBottom() {
@@ -191,13 +187,12 @@
       bind:this={chat}
       messages={messageStore.messages}
       getMessageId={(msg) => msg.id}
-      estimatedMessageHeight={120}
+      estimatedMessageHeight={280}
       followBottomThresholdPx={24}
       containerClass="h-full"
       viewportClass="h-full chat-scroll"
       onFollowBottomChange={(v) => (following = v)}
       onDebugInfo={(info) => {
-        // 精细滚动路径：数值相同则 $state 自动去重，不引发重渲染。
         scrollTop = info.scrollTop;
         viewportHeight = info.viewportHeight;
         totalHeight = info.totalHeight;
@@ -206,21 +201,14 @@
     >
       {#snippet renderMessage(message, _index)}
         <div class="px-4 py-3 sm:px-6 lg:px-8" data-message-id={message.id}>
-          <!--
-            单条消息级渲染兜底：
-            即便某条消息内容/traces 结构异常，也只损坏这一条，其它消息与
-            输入框、header 全都保持可用。reset 后仅该条消息重新挂载。
-          -->
           <svelte:boundary>
             {#if message.role === "user"}
-              <!-- 用户：右对齐 + 宽度交给 w-fit max-w-2xl 控制（恢复原始行为） -->
               <div class="flex justify-end pl-10 sm:pl-20 md:pl-32">
                 <div class="w-fit max-w-2xl">
                   <UserMessage {message} />
                 </div>
               </div>
             {:else}
-              <!-- AI：填满可用宽度 + 右侧小留白 -->
               <div class="pr-6 sm:pr-10 lg:pr-16">
                 <AssistantMessage {message} />
               </div>
@@ -251,10 +239,8 @@
     </SvelteVirtualChat>
   {/if}
 
-  <!-- 消息导航 Minimap（右侧垂直居中 · 面板自管展开） -->
   <MessageMinimap visible={showMinimap} {activeId} onSelect={scrollToMessage} />
 
-  <!-- 回到底部按钮 · 底部居中圆形 · z-30 保证在任意面板之上 -->
   {#if showJumpButton}
     <div
       class="pointer-events-none absolute bottom-6 left-1/2 z-30 -translate-x-1/2 animate-slide-up"
@@ -274,7 +260,6 @@
 </div>
 
 <style>
-  /* 跨浏览器 scrollbar 样式 · 由 SvelteVirtualChat 的 viewport 使用 */
   :global(.chat-scroll) {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
