@@ -1,24 +1,17 @@
+// 中国区检测（低频、缓存型配置）。
+//
+// 说明：
+// - 该模块只导出一个检查函数，不再提供可变的全局 ipInfo 单例；
+// - 检测结果扁平化写入 stableConfig.isChina；
+// - 不保存国家代码，仅保留 isChina 与最近成功检测时间戳；
+// - 为避免递归依赖，stableConfig 不反向依赖本模块，由 UnigenModule 在启动期调用。
+
 import Logger from "electron-log/main.js";
 import pTimeout from "p-timeout";
-
-import { secondConfig } from "$libs/store/second.js";
-import type { SecondConfig } from "$types/appconfig.js";
-
-/**
- * 中国区检测。
- *
- * 用途：决定下载服务器、镜像源（uv / npm / pip / node dist）。
- *
- * 策略：
- * - 使用 Promise.any 并发竞速多个支持返回国家代码的端点；
- * - 整体最长等待 3 秒，超时或全部失败时保守视为中国；
- * - 成功检测后把国家代码与检测时间写入 secondConfig；
- * - 启动时若缓存未超过 7 天，直接使用缓存，不发起网络请求；
- * - 超时/失败不更新检测时间，下次启动继续检测。
- */
+import { stableConfig } from "./stable.js";
 
 const PROBE_TIMEOUT_MS = 3000;
-const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7天缓存有效期。
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天缓存有效期。
 const CHINA_COUNTRY_CODES = new Set(["CN"]);
 const COUNTRY_CODE_RE = /^[A-Za-z]{2}$/;
 
@@ -58,16 +51,6 @@ function requireCountryCode(value: unknown, source: string): string {
 
 function isChinaCountryCode(code: string): boolean {
     return CHINA_COUNTRY_CODES.has(code.trim().toUpperCase());
-}
-
-function isCacheFresh(
-    cache: SecondConfig["ipCountry"],
-    now: number,
-): boolean {
-    if (!normalizeCountryCode(cache.code)) return false;
-
-    const age = now - cache.checkedAt;
-    return Number.isFinite(age) && age >= 0 && age < CACHE_TTL_MS;
 }
 
 async function fetchJson(
@@ -155,74 +138,61 @@ async function detectCountryCode(): Promise<string> {
     }
 }
 
-export class IPInfo {
-    #inChina = true;
-    #inited = false;
-    #initPromise: Promise<void> | null = null;
+let inFlight: Promise<boolean> | null = null;
 
-    get inChina(): boolean {
-        return this.#inChina;
-    }
+/**
+ * 检查并更新 stableConfig.isChina。
+ *
+ * - 命中 7 天缓存时直接返回缓存值；
+ * - 检测成功时写入 isChina 与 isChinaCheckedAt；
+ * - 检测失败/超时时保守视为中国，但不更新 isChinaCheckedAt，以便下次启动重试。
+ */
+export function checkAndUpdateIsChina(): Promise<boolean> {
+    if (inFlight) return inFlight;
 
-    get inited(): boolean {
-        return this.#inited;
-    }
+    const promise = (async (): Promise<boolean> => {
+        const store = stableConfig();
+        const now = Date.now();
+        const checkedAt = store.get("isChinaCheckedAt");
+        const cachedIsChina = store.get("isChina");
 
-    /** 幂等初始化；重复调用复用同一 promise。 */
-    init(): Promise<void> {
-        if (this.#inited) return Promise.resolve();
-        if (this.#initPromise) return this.#initPromise;
-
-        this.#initPromise = (async () => {
-            try {
-                const now = Date.now();
-                const cached = this.readCachedCountry();
-
-                if (cached && isCacheFresh(cached, now)) {
-                    this.#inChina = isChinaCountryCode(cached.code);
-                    return;
-                }
-
-                const code = await detectCountryCode();
-                this.#inChina = isChinaCountryCode(code);
-
-                try {
-                    secondConfig().set("ipCountry", {
-                        code,
-                        checkedAt: Date.now(),
-                    });
-                } catch (error) {
-                    Logger.warn(
-                        `[IPInfo] 写入国家检测缓存失败：${formatError(error)}`,
-                    );
-                }
-            } catch (error) {
-                // 超时或全部端点失败：保守视为中国，且不更新检测时间。
-                this.#inChina = true;
-                Logger.warn(
-                    `[IPInfo] 国家检测失败或超时，暂按中国处理且不更新缓存：${formatError(error)}`,
-                );
-            } finally {
-                this.#inited = true;
-                this.#initPromise = null;
-            }
-        })();
-
-        return this.#initPromise;
-    }
-
-    private readCachedCountry(): SecondConfig["ipCountry"] | undefined {
-        try {
-            return secondConfig().get("ipCountry");
-        } catch (error) {
-            Logger.warn(
-                `[IPInfo] 读取国家检测缓存失败：${formatError(error)}`,
-            );
-            return undefined;
+        if (checkedAt > 0 && now >= checkedAt && now - checkedAt < CACHE_TTL_MS) {
+            return cachedIsChina;
         }
-    }
-}
 
-const KEY = Symbol.for("unigen.singleton.ip");
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const ipInfo: IPInfo = ((globalThis as any)[KEY] ??= new IPInfo());
+        try {
+            const code = await detectCountryCode();
+            const isChina = isChinaCountryCode(code);
+
+            try {
+                store.set("isChina", isChina);
+                store.set("isChinaCheckedAt", Date.now());
+            } catch (error) {
+                Logger.warn(
+                    `[IPInfo] 写入区域检测缓存失败：${formatError(error)}`,
+                );
+            }
+
+            return isChina;
+        } catch (error) {
+            // 超时或全部端点失败：保守视为中国，且不更新检测时间。
+            try {
+                store.set("isChina", true);
+            } catch (persistError) {
+                Logger.warn(
+                    `[IPInfo] 写入保守区域状态失败：${formatError(persistError)}`,
+                );
+            }
+
+            Logger.warn(
+                `[IPInfo] 国家检测失败或超时，暂按中国处理且不更新缓存：${formatError(error)}`,
+            );
+            return true;
+        }
+    })();
+
+    inFlight = promise.finally(() => {
+        inFlight = null;
+    });
+    return inFlight;
+}

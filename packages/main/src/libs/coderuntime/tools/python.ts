@@ -14,7 +14,7 @@
 //   - `--no-project` 避免把 cwd 下的 `pyproject.toml` 当项目（可能触发
 //     非预期的 `uv sync`）。
 
-import { secondConfig } from "$libs/store/second.js";
+import { stableConfig } from "$libs/store/stable.js";
 import type { ToolDefinition } from "$libs/tooldb/type.js";
 import Logger from "electron-log/main.js";
 import { execa } from "execa";
@@ -269,7 +269,7 @@ export const pythonRunTool: ToolDefinition<PythonRunInput, PythonRunOutput> = {
     inputSchema,
     outputSchema,
     execute: async (input) => {
-        const cfg = secondConfig().get("codeRuntime");
+        const cfg = stableConfig().get("codeRuntime");
         if (!cfg?.enabled || !cfg.engines?.python?.enabled) {
             throw new Error(
                 "Python 代码运行时未启用，请先在设置中开启后再试。",

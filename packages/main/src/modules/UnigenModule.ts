@@ -9,14 +9,14 @@ import {
     openGlobalSearch,
 } from '$libs/searchsrv/index.js';
 import { configService } from '$libs/store/index.js';
-import { secondConfig } from '$libs/store/second.js';
+import { checkAndUpdateIsChina } from '$libs/store/ip.js';
+import { stableConfig } from '$libs/store/stable.js';
 import { initGlobalToolDB } from '$libs/tooldb/bootstrap.js';
 import { globalToolDB } from '$libs/tooldb/index.js';
 import { syncToolsToSearchDB } from '$libs/tooldb/search-sync.js';
 import { puppeteerInst } from '$libs/utils/puppeteer/index.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
 import { themeFile } from '$libs/utils/sys/dir.js';
-import { ipInfo } from '$libs/utils/sys/ip.js';
 import { getStartupProgress } from '$libs/utils/task-progress.js';
 import { telemetryService } from '$libs/utils/telemetry/telemetry.service.js';
 import { nativeTheme } from 'electron';
@@ -25,7 +25,7 @@ import type { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../types/ModuleContext.js';
 
 async function initSearch(): Promise<void> {
-    if (secondConfig().get("search_inited")) {
+    if (stableConfig().get("search_inited")) {
         return
     }
     const db = getGlobalSearchDB();
@@ -35,7 +35,7 @@ async function initSearch(): Promise<void> {
         syncToolsToSearchDB(),
         // 调用tool的注册，把tool加入到检索中心去。
     ])
-    secondConfig().set("search_inited", true);
+    stableConfig().set("search_inited", true);
 }
 
 /** 从任意失败对象中提取人类可读的细节 */
@@ -105,7 +105,7 @@ class UnigenModule implements AppModule {
 
         // 网络区域探测（中国区决定镜像源）：
         // 不阻塞启动主路径，但作为基础组件之一加入 Promise.all；
-        // 内部超时 3s，探测失败时保守视为中国（inChina = true）。
+        // 内部超时 3s，探测失败时保守视为中国（isChina = true）。
         progress.report(
             "search-db",
             "正在初始化检索数据库（首次启动需加载向量模型，请稍候）...",
@@ -117,7 +117,7 @@ class UnigenModule implements AppModule {
             puppeteerInst.init(),
             openGlobalSearch(),
             tooldbPromise,
-            ipInfo.init(),
+            checkAndUpdateIsChina(),
         ]);
         configService().oTel = telemetryService;
         progress.report("search-db", "检索数据库已就绪", 30);

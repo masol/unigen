@@ -88,6 +88,7 @@ class FileStore {
     #openError = $state<string | null>(null);
     #revealNodeId = $state<string | null>(null);
     #revealPathChain = $state<string[]>([]);
+    #renamingNodeId = $state<string | null>(null);
 
     get tree() { return this.#tree; }
     get isLoading() { return this.#isLoading; }
@@ -98,6 +99,7 @@ class FileStore {
     get openingFileId() { return this.#openingFileId; }
     get openError() { return this.#openError; }
     get revealNodeId() { return this.#revealNodeId; }
+    get renamingNodeId() { return this.#renamingNodeId; }
 
     /** 当前打开文件的错误数（来自 pacStore，单向依赖）。 */
     get errorCount() { return pacStore.errorCount; }
@@ -109,9 +111,12 @@ class FileStore {
     get openedDocument(): FileDocument | null {
         const doc = pacStore.doc;
         if (!doc) return null;
+        // PacFrontMatter 没有字符串索引签名，而 PacFileDocument.meta 定义为
+        // Record<string, unknown>；此处属同一 YAML 友好载荷，语义一致，
+        // 通过窄化 cast 维持原投影契约。
         return {
             path: doc.path,
-            meta: doc.meta,
+            meta: doc.meta as unknown as FileDocument["meta"],
             content: doc.content,
             updatedAt: doc.updatedAt,
         };
@@ -146,6 +151,20 @@ class FileStore {
         if (this.#revealNodeId === null && this.#revealPathChain.length === 0) return;
         this.#revealNodeId = null;
         this.#revealPathChain = [];
+    }
+
+    startRenaming(nodeId: string): void {
+        this.#renamingNodeId = nodeId;
+    }
+
+    stopRenaming(nodeId: string): void {
+        if (this.#renamingNodeId === nodeId) {
+            this.#renamingNodeId = null;
+        }
+    }
+
+    clearRenaming(): void {
+        this.#renamingNodeId = null;
     }
 
     #reveal(nodeId: string, parentPath: string): void {
@@ -336,6 +355,13 @@ class FileStore {
             if (this.#openedFileId === node.id) {
                 this.#openedFileId = result.newPath;
                 this.#activeFileId = result.newPath;
+            }
+
+            // 改名成功后，由这里清理编辑态；
+            // 不放在 reload() 里，避免 reload 的 await 期间 UI 被提前切换、
+            // 触发 Rename.Root 在保存中途被销毁的竞态。
+            if (this.#renamingNodeId === node.id) {
+                this.#renamingNodeId = null;
             }
 
             log.info(`[FileStore] renamed ${oldPath} → ${result.newPath}`);

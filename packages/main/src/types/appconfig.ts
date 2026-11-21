@@ -54,12 +54,12 @@ export interface AppConfig {
 // 与主进程 Electron 内置 Node 隔离，避免污染宿主环境。
 //
 // - 每个引擎拥有独立的 download/extract/verify 生命周期；
-// - 用户配置（用户意图、可备份恢复）持久化在 SecondConfig；
+// - 用户配置（用户意图、可备份恢复）持久化在 StableConfig；
 // - 运行时状态（installing / ready / failed / lastError）为**瞬时**数据，
 //   由 `CodeRuntimeManager` 在内存中维护；重启后由「磁盘存在性」自我修复。
 // - 未来扩展语言时，仅需：
 //     1. 扩展 `CodeRuntimeEngineId`；
-//     2. 在 secondSchema 中补充对应键；
+//     2. 在 stableSchema 中补充对应键；
 //     3. 实现 `engines/<id>.ts`；
 //     4. 在 `tools/` 中提供工具定义。
 
@@ -118,7 +118,7 @@ export interface CodeRuntimeConfig {
     engines: Record<CodeRuntimeEngineId, CodeRuntimeEngineConfig>;
 }
 
-// ── 运行时状态（仅内存类型，不进入 SecondConfig） ─────────────
+// ── 运行时状态（仅内存类型，不进入持久化 store） ─────────────
 
 export interface CodeRuntimeEngineStatus {
     state: CodeRuntimeEngineState;
@@ -127,28 +127,40 @@ export interface CodeRuntimeEngineStatus {
     lastCheckAt?: number;
 }
 
+// ── StableConfig ────────────────────────────────────────────
+
+/**
+ * 低频变化、无需频繁修改的持久化配置/缓存。
+ *
+ * 注意：这里的数据变化缓慢，读写频率远低于 secondConfig；
+ * 任何「高频 UI 状态」「瞬时状态」「崩溃后应重置」的数据都不应放在这里。
+ */
+export interface StableConfig {
+    /**
+     * 当前是否中国区。
+     * 扁平化保存，调用方可直接 `stableConfig().get("isChina")`。
+     * 默认 true，检测失败时也保守视为中国。
+     */
+    isChina: boolean;
+    /**
+     * 最近一次成功检测 isChina 的 Unix 毫秒时间戳。
+     * 0 表示从未成功检测；用于实现 7 天缓存，不保存国家代码。
+     */
+    isChinaCheckedAt: number;
+    /** 在项目级 lancedb 成功创建一次之后，被设置为 true。 */
+    search_inited: boolean;
+    /** 代码运行时配置（用户意图，可备份恢复）。 */
+    codeRuntime: CodeRuntimeConfig;
+}
+
 // ── SecondConfig ────────────────────────────────────────────
 
 /**
- * IP 国家检测缓存。
+ * 高频、面向快速 UI 的持久化状态。
  *
- * - code 为 ISO 3166-1 alpha-2 国家代码，统一大写；
- * - code 为空字符串表示尚未成功检测；
- * - checkedAt 为最近一次成功检测的 Unix 毫秒时间戳，0 表示从未成功检测。
+ * 由 electron-store 自动持久化，仅保存最近项目等高频数据；
+ * 低频配置/缓存请使用 StableConfig。
  */
-export interface IpCountryCache {
-    code: string;
-    checkedAt: number;
-}
-
-// 无需备份与恢复的第二配置。
-// 注意：SecondConfig 由 electron-store 自动持久化。
-// 任何「瞬时状态」「崩溃后应重置」的数据都不应放在这里，请自行在内存中维护。
 export interface SecondConfig {
-    recents: RecentProject[],
-    search_inited: boolean // 在项目级lancedb成功创建一次之后，被设置为true。
-    /** IP 国家检测缓存；用于决定是否位于中国以及是否跳过 7 天内的重复检测。 */
-    ipCountry: IpCountryCache
-    /** 代码运行时配置（用户意图，可备份恢复）。 */
-    codeRuntime: CodeRuntimeConfig
+    recents: RecentProject[];
 }

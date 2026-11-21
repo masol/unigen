@@ -11,8 +11,8 @@
 //
 // 所有下载地址 / 版本 / 镜像均来自 `../registry.ts`，本文件不解硬编码地址。
 
+import { stableConfig } from "$libs/store/stable.js";
 import { codeRuntimePythonInterpretersDir } from "$libs/utils/sys/dir.js";
-import { ipInfo } from "$libs/utils/sys/ip.js";
 import Logger from "electron-log/main.js";
 import { execa } from "execa";
 import {
@@ -44,7 +44,7 @@ function resolveUvAsset(
 export function buildUvEnv(): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = { ...process.env };
     env.UV_PYTHON_INSTALL_DIR = codeRuntimePythonInterpretersDir();
-    if (ipInfo.inChina) {
+    if (stableConfig().get("isChina")) {
         env.UV_DEFAULT_INDEX = RUNTIME_REGISTRY.python.index.china;
     }
     return env;
@@ -75,7 +75,7 @@ export const pythonRuntime: EngineRuntimeHandler = {
         if (!asset) return undefined;
         const base = pickMirror(
             RUNTIME_REGISTRY.uv.releaseBase,
-            ipInfo.inChina,
+            stableConfig().get("isChina"),
         );
         const filename = `uv-${asset.target}.${asset.archive}`;
         return `${base}/${RUNTIME_REGISTRY.uv.version}/${filename}`;

@@ -7,13 +7,12 @@
     进而出现"一列宽"的问题。
 -->
 <script lang="ts">
-  import PromptDialog from "$lib/components/dialog/Prompt.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as Chat from "$lib/components/ui/chat";
+  import * as Rename from "$lib/components/ui/rename";
   import { configStore } from "$lib/store/config.svelte";
   import type { ChatMessage } from "$lib/store/local/chat.types";
   import { messageStore } from "$lib/store/local/msg.svelte";
-  import { dialogStore } from "$lib/store/ui/dialog.svelte";
   import autoAnimate from "@formkit/auto-animate";
   import {
     IconCheck,
@@ -26,16 +25,20 @@
     IconTrash,
     IconUser,
   } from "@tabler/icons-svelte";
+  import { toast } from "svelte-sonner";
   import { confirmDeleteMessage, confirmRerun } from "../confirm.svelte";
   import MessageAttachments from "./MessageAttachments.svelte";
   import MessageHeader from "./MessageHeader.svelte";
 
+  const editInputId = $props.id();
   let { message }: { message: ChatMessage } = $props();
 
   let copied = $state(false);
 
   // 长内容折叠：默认 6 行，展开后显示全部。
   let contentExpanded = $state(false);
+
+  let isEditing = $state(false);
 
   let collapsed = $derived(messageStore.collapsedMessages[message.id] === true);
   let deleting = $derived(messageStore.deletingMessages[message.id] === true);
@@ -64,23 +67,52 @@
     messageStore.toggleMessage(message.id);
   }
 
-  async function editMessage() {
-    const newMessage = await dialogStore.safeShow(
-      PromptDialog,
-      {
-        title: `编辑并重新执行`,
-        label: "新的历史消息",
-        placeholder: "请输入消息内容，如需更改附件，请删除并重新发送",
-        initialValue: message.content,
-        required: true,
-      },
-      { size: "xl6" },
-    );
+  function startEditing() {
+    if (messageStore.isLoading || deleting) return;
+    if (collapsed) messageStore.toggleMessage(message.id);
+    isEditing = true;
+  }
 
-    if (typeof newMessage !== "string" || !newMessage.trim()) return;
-    if (newMessage === message.content) return;
+  function validateMessage(value: string): boolean {
+    return value.trim().length > 0;
+  }
 
-    await messageStore.resendFrom(message.id, newMessage);
+  function handleMessageInvalid(): void {
+    toast.error("消息内容不能为空");
+  }
+
+  async function saveInlineEdit(value: string): Promise<boolean> {
+    if (messageStore.isLoading || deleting) {
+      toast.error("正在处理中，请稍后再试");
+      return false;
+    }
+
+    const content = value.trim();
+    if (!content) {
+      toast.error("消息内容不能为空");
+      return false;
+    }
+
+    if (content === message.content) {
+      // 内容未变化：不做无用的重跑，用清晰的反馈让用户知道发生了什么；
+      // 想原地重跑请使用"重新运行"按钮。
+      toast.info("内容未修改");
+      isEditing = false;
+      return true;
+    }
+
+    try {
+      await messageStore.resendFrom(message.id, content);
+      isEditing = false;
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "保存失败，请稍后重试");
+      return false;
+    }
+  }
+
+  function cancelInlineEdit(): void {
+    isEditing = false;
   }
 
   async function resendFromHere() {
@@ -95,6 +127,37 @@
     await messageStore.deleteMessage(message.id);
   }
 </script>
+
+{#snippet inlineSaveButton({ save }: { save: () => void })}
+  <Button
+    type="button"
+    size="sm"
+    class="h-7 rounded-lg px-2 text-xs"
+    onclick={save}
+    disabled={messageStore.isLoading || deleting}
+  >
+    {#if messageStore.isLoading}
+      <IconLoader2 size={12} stroke={1.5} class="animate-spin" />
+      保存中…
+    {:else}
+      <IconCheck size={12} stroke={1.5} />
+      保存并重新执行
+    {/if}
+  </Button>
+{/snippet}
+
+{#snippet inlineCancelButton({ cancel }: { cancel: () => void })}
+  <Button
+    type="button"
+    variant="outline"
+    size="sm"
+    class="h-7 rounded-lg px-2 text-xs"
+    onclick={cancel}
+    disabled={messageStore.isLoading || deleting}
+  >
+    取消
+  </Button>
+{/snippet}
 
 <div class="group/msg flex min-w-0 flex-col gap-1.5" use:autoAnimate>
   <MessageHeader role="user">
@@ -137,6 +200,7 @@
         variant="ghost"
         size="icon"
         onclick={toggleCollapse}
+        disabled={isEditing}
         class="group size-6 rounded-lg text-muted-foreground opacity-0 transition-all duration-200 hover:bg-accent hover:text-foreground active:scale-90 active:bg-accent/80 group-hover/msg:opacity-100"
         aria-label={collapsed ? "展开消息" : "折叠消息"}
         title={collapsed ? "展开消息" : "折叠消息"}
@@ -160,8 +224,8 @@
       <Button
         variant="ghost"
         size="icon"
-        onclick={editMessage}
-        disabled={messageStore.isLoading || deleting}
+        onclick={startEditing}
+        disabled={messageStore.isLoading || deleting || isEditing}
         class="group size-6 rounded-lg text-muted-foreground opacity-0 transition-all duration-200 hover:bg-accent hover:text-foreground active:scale-90 active:bg-accent/80 group-hover/msg:opacity-100"
         aria-label="修改消息"
         title="修改消息"
@@ -178,7 +242,7 @@
         variant="ghost"
         size="icon"
         onclick={resendFromHere}
-        disabled={messageStore.isLoading || deleting}
+        disabled={messageStore.isLoading || deleting || isEditing}
         class="group size-6 rounded-lg text-muted-foreground opacity-0 transition-all duration-200 hover:bg-accent hover:text-foreground active:scale-90 active:bg-accent/80 group-hover/msg:opacity-100"
         aria-label="重新运行"
         title="重新运行"
@@ -195,7 +259,7 @@
         variant="ghost"
         size="icon"
         onclick={deleteMessage}
-        disabled={messageStore.isLoading || deleting}
+        disabled={messageStore.isLoading || deleting || isEditing}
         class="group size-6 rounded-lg text-muted-foreground transition-all duration-200 hover:bg-destructive/10 hover:text-destructive active:scale-90 active:bg-destructive/20 {deleting
           ? 'opacity-100'
           : 'opacity-0 group-hover/msg:opacity-100'}"
@@ -215,7 +279,40 @@
     {/snippet}
   </MessageHeader>
 
-  {#if !collapsed}
+  {#if isEditing}
+    <div
+      class="min-w-0 rounded-2xl border border-primary/15 bg-primary/8 p-3 text-foreground"
+      style:font-size="{fontSize}px"
+      style:line-height={lineHeight}
+    >
+      <label class="sr-only" for={editInputId}>编辑消息</label>
+      <Rename.Provider>
+        <Rename.Root
+          id={editInputId}
+          this="div"
+          inputTag="textarea"
+          mode="edit"
+          value={message.content}
+          class="min-w-0 w-full"
+          inputClass="min-h-28 w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          validate={validateMessage}
+          onInvalid={handleMessageInvalid}
+          onSave={saveInlineEdit}
+          onCancel={cancelInlineEdit}
+        />
+
+        <div class="mt-2 flex items-center justify-between gap-2">
+          <span class="text-[11px] text-muted-foreground">
+            Ctrl/⌘ + Enter 保存 · Esc 取消
+          </span>
+          <div class="flex shrink-0 items-center gap-1.5">
+            <Rename.Cancel child={inlineCancelButton} />
+            <Rename.Save child={inlineSaveButton} />
+          </div>
+        </div>
+      </Rename.Provider>
+    </div>
+  {:else if !collapsed}
     <div
       class="min-w-0 rounded-2xl border border-primary/15 bg-primary/8 p-3 text-foreground wrap-break-word"
       style:font-size="{fontSize}px"

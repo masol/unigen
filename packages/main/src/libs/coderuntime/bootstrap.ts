@@ -11,10 +11,9 @@
 //
 // 注意：
 //   - 注册工具依赖 globalToolDB 已 init 完成；
-//   - 引擎状态会写入 secondConfig.current.codeRuntimeState.engines，
-//     renderer 侧可直接读取来渲染"哪些运行时已启用/就绪"。
+//   - 引擎运行状态由 codeRuntimeManager 在内存中维护，不写入持久化配置。
 
-import { secondConfig } from "$libs/store/second.js";
+import { stableConfig } from "$libs/store/stable.js";
 import { globalToolDB } from "$libs/tooldb/globaltooldb.js";
 import { getStartupProgress } from "$libs/utils/task-progress.js";
 import type { CodeRuntimeEngineId } from "$types/appconfig.js";
@@ -30,7 +29,7 @@ const TOOL_BY_ENGINE: Record<CodeRuntimeEngineId, typeof pythonRunTool | typeof 
 };
 
 export async function bootstrapCodeRuntime(): Promise<void> {
-    const cfg = secondConfig().get("codeRuntime");
+    const cfg = stableConfig().get("codeRuntime");
     if (!cfg?.enabled) {
         Logger.log("[CodeRuntime] 总开关未启用，跳过初始化。");
         return;

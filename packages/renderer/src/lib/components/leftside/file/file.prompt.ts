@@ -1,7 +1,6 @@
 import PromptDialog from "$lib/components/dialog/Prompt.svelte";
 import { dialogStore } from "$lib/store/ui/dialog.svelte";
 import { fileStore } from "./file.store.svelte";
-import type { FileNode } from "./file.types";
 
 const ILLEGAL_CHARS = '\\/:*?"<>|';
 const MAX_NAME_LENGTH = 100;
@@ -17,19 +16,22 @@ function hasIllegalChar(value: string): boolean {
 }
 
 /** 返回错误消息，空串表示通过。 */
-function validateName(
+export function validatePacName(
     value: string,
     parentPath: string,
     excludeId: string | null,
 ): string {
-    if (value === "." || value === "..") return "名称不能为 . 或 ..";
-    if (hasIllegalChar(value)) {
+    const name = value.trim();
+
+    if (!name) return "名称不能为空";
+    if (name === "." || name === "..") return "名称不能为 . 或 ..";
+    if (hasIllegalChar(name)) {
         return '名称不能包含 \\ / : * ? " < > | 等字符';
     }
-    if (value.length > MAX_NAME_LENGTH) {
+    if (name.length > MAX_NAME_LENGTH) {
         return `名称不能超过 ${MAX_NAME_LENGTH} 个字符`;
     }
-    if (fileStore.hasSiblingWithName(parentPath, value, excludeId)) {
+    if (fileStore.hasSiblingWithName(parentPath, name, excludeId)) {
         return "同目录下已存在同名项";
     }
     return "";
@@ -49,30 +51,7 @@ export async function promptCreateName(
         confirmText: "创建",
         required: true,
         validator: (value: string) =>
-            validateName(value, parentPath, null) || false,
-    });
-
-    if (typeof result !== "string") return null;
-    const trimmed = result.trim();
-    return trimmed.length > 0 ? trimmed : null;
-}
-
-/** 弹出重命名对话框；返回 null 表示取消或未修改。 */
-export async function promptRename(
-    node: FileNode,
-    parentPath: string,
-): Promise<string | null> {
-    const isFile = node.type === "file";
-    const result = await dialogStore.safeShow(PromptDialog, {
-        title: isFile ? "重命名文件" : "重命名文件夹",
-        label: isFile ? "文件名称" : "文件夹名称",
-        initialValue: node.name,
-        confirmText: "重命名",
-        required: true,
-        validator: (value: string) => {
-            if (value === node.name) return "名称未更改";
-            return validateName(value, parentPath, node.id) || false;
-        },
+            validatePacName(value, parentPath, null) || false,
     });
 
     if (typeof result !== "string") return null;

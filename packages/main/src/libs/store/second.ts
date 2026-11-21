@@ -1,4 +1,6 @@
-// 第二存储持久化池，无需备份/恢复的放在这里。
+// 高频、面向快速 UI 的持久化状态池。
+// 这里只保存最近项目等变化频繁、无需备份/恢复的 LRU 数据；
+// 低频变化、无需用户频繁修改的配置/缓存请放入 stableConfig。
 
 import { getCurrentProject } from '$libs/utils/api/index.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
@@ -93,7 +95,7 @@ class ConfigService {
 
     /**
      * 通用获取配置项方法
-     * 传入的 key 必须是 AppConfig 的键，返回值会自动推导为该键对应的类型
+     * 传入的 key 必须是 SecondConfig 的键，返回值会自动推导为该键对应的类型
      */
     get<K extends keyof SecondConfig>(key: K): Readonly<SecondConfig[K]> {
         return this.store.get(key);
@@ -101,7 +103,7 @@ class ConfigService {
 
     /**
      * 通用设置配置项方法
-     * 传入的 key 必须是 AppConfig 的键，value 的类型会被严格约束为该键对应的类型
+     * 传入的 key 必须是 SecondConfig 的键，value 的类型会被严格约束为该键对应的类型
      * 不进行内部异常捕获，若 schema 校验失败，异常将直接向上抛出由外部处理
      */
     set<K extends keyof SecondConfig>(key: K, value: Exclude<SecondConfig[K], undefined>): void {

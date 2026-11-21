@@ -3,13 +3,13 @@
 // 代码运行时管理器：应用级单例。
 //
 // 职责：
-//   - 读取 secondConfig 中 codeRuntime 配置；
+//   - 读取 StableConfig 中 codeRuntime 配置；
 //   - 按需下载 / 校验 / 解压 / 后处理 / 验证；
 //   - 对外暴露 assertReady 给工具、ensureEngine 给 bootstrap；
 //   - 维护**内存**状态机（不持久化）；进程重启后由磁盘存在性自我修复。
 //
 // 关键行为：
-//   - 用户配置持久化在 SecondConfig；运行时状态纯内存，避免崩溃后残留 installing；
+//   - 用户配置持久化在 StableConfig；运行时状态纯内存，避免崩溃后残留 installing；
 //   - ensureEngine 串行；同一引擎并发调用共享进行中 Promise；
 //   - 解压统一走 `archive.ts#extractArchive`（zip / tar 自动识别）；
 //   - 下载缓存保存于 `runtime/code/_downloads/<engineId>/`，
@@ -19,7 +19,7 @@
 
 import { extractArchive } from "$libs/loader/archive.js";
 import { download } from "$libs/loader/downloader.js";
-import { secondConfig } from "$libs/store/second.js";
+import { stableConfig } from "$libs/store/stable.js";
 import {
     codeRuntimeDir,
     codeRuntimeDownloadDir,
@@ -244,7 +244,7 @@ export class CodeRuntimeManager {
         engineId: CodeRuntimeEngineId,
         reporter?: EngineProgressReporter,
     ): Promise<CodeRuntimeEngineStatus> {
-        const cfg = secondConfig().get("codeRuntime");
+        const cfg = stableConfig().get("codeRuntime");
         if (!cfg?.enabled) {
             const notReady: CodeRuntimeEngineStatus = { state: "not_ready" };
             this.#setState(engineId, notReady);

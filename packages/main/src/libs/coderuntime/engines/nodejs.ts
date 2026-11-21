@@ -7,7 +7,7 @@
 //
 // 所有下载地址 / 版本 / 镜像均来自 `../registry.ts`。
 
-import { ipInfo } from "$libs/utils/sys/ip.js";
+import { stableConfig } from "$libs/store/stable.js";
 import { execa } from "execa";
 import { pickMirror, RUNTIME_REGISTRY } from "../registry.js";
 import type { EngineRuntimeHandler } from "../types.js";
@@ -42,7 +42,7 @@ export const nodeRuntime: EngineRuntimeHandler = {
         if (!key) return undefined;
         const base = pickMirror(
             RUNTIME_REGISTRY.nodejs.distBase,
-            ipInfo.inChina,
+            stableConfig().get("isChina"),
         );
         const ext = platform === "win32" ? "zip" : "tar.gz";
         return `${base}/v${NODE_VERSION}/node-v${NODE_VERSION}-${key}.${ext}`;

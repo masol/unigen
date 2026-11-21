@@ -8,9 +8,8 @@
 //   - 允许 package-lock.json 正常持久化；
 //   - 便于 AI 二次运行时复用 node_modules / lockfile。
 
-import { secondConfig } from "$libs/store/second.js";
+import { stableConfig } from "$libs/store/stable.js";
 import type { ToolDefinition } from "$libs/tooldb/type.js";
-import { ipInfo } from "$libs/utils/sys/ip.js";
 import { execa } from "execa";
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
@@ -103,7 +102,10 @@ function resolveNpmPath(rootDir: string): string {
 
 function resolveNpmRegistry(explicit: string | undefined): string {
     if (explicit) return explicit;
-    return pickMirror(RUNTIME_REGISTRY.npm.registry, ipInfo.inChina);
+    return pickMirror(
+        RUNTIME_REGISTRY.npm.registry,
+        stableConfig().get("isChina"),
+    );
 }
 
 async function pathExists(p: string): Promise<boolean> {
@@ -204,7 +206,7 @@ export const nodeRunTool: ToolDefinition<NodeRunInput, NodeRunOutput> = {
     inputSchema,
     outputSchema,
     execute: async (input) => {
-        const cfg = secondConfig().get("codeRuntime");
+        const cfg = stableConfig().get("codeRuntime");
         if (!cfg?.enabled || !cfg.engines?.nodejs?.enabled) {
             throw new Error(
                 "Node.js 代码运行时未启用，请先在设置中开启后再试。",
