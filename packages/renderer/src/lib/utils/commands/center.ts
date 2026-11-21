@@ -1,3 +1,4 @@
+// packages/renderer/src/lib/utils/commands/center.ts
 // command/center.ts
 
 import { builtins } from "./buildin";
@@ -21,6 +22,8 @@ class CommandItem {
     category: string;
     description: string;
     handler: CommandHandler;
+    devOnly: boolean;
+    local: boolean;
 
     constructor(options: CommandDescriptor) {
         this.id = options.id;
@@ -28,6 +31,8 @@ class CommandItem {
         this.category = options.category ?? '';
         this.description = options.description ?? '';
         this.handler = options.handler;
+        this.devOnly = options.devOnly === true;
+        this.local = options.local === true;
     }
 
     toDescriptor(): Omit<CommandDescriptor, 'handler'> {
@@ -36,6 +41,8 @@ class CommandItem {
             label: this.label,
             category: this.category,
             description: this.description,
+            devOnly: this.devOnly,
+            local: this.local,
         };
     }
 }
@@ -48,8 +55,6 @@ class CommandCenter {
     }
 
     private registerBuiltinCommands(): void {
-
-
         this.registerBatch(builtins);
     }
 

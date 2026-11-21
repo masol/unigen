@@ -111,7 +111,9 @@
   import type {
     MarkdownMessage,
     MarkdownRenderers,
+    MarkdownStreamingState,
   } from "$lib/components/markdown/type";
+  import { MARKDOWN_STREAMING_KEY } from "$lib/components/markdown/type";
   import { configStore } from "$lib/store/config.svelte";
   import type { MarkdownFontFamily } from "@app/main/types";
   import SvelteMarkdown, {
@@ -122,6 +124,7 @@
     KatexRenderer,
     markedKatex,
   } from "@humanspeak/svelte-markdown/extensions/katex";
+  import { setContext } from "svelte";
   import Link from "./ext/Link.svelte";
   import Media from "./ext/Media.svelte";
   import Thinking from "./ext/Thinking.svelte";
@@ -137,6 +140,15 @@
     streaming?: boolean;
     renderers?: MarkdownRenderers;
   } = $props();
+
+  // ── 流式状态注入 ─────────────────────────────────────────
+  // 通过 Svelte Context 把 streaming 强制注入给所有 ext 渲染器（尤其是 CodeBlock）。
+  // 用 $state 包裹保证下游（getContext 后）在 streaming 变更时响应更新。
+  const streamingState: MarkdownStreamingState = $state({ streaming: false });
+  setContext(MARKDOWN_STREAMING_KEY, streamingState);
+  $effect(() => {
+    streamingState.streaming = streaming;
+  });
 
   let error = $derived(isError ?? message.isError ?? false);
   let proseClass = $derived(error ? errorProse : normalProse);

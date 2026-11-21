@@ -1,13 +1,14 @@
+<!-- packages/renderer/src/route/page/settings/Keybindings.svelte -->
 <script lang="ts">
-  import { configStore } from "$lib/store/config.svelte";
-  import { commandCenter } from "$lib/utils/commands/center";
-// ← 全局 configStore，含 .keybinding (KeybindConfig 实例，内部已 $state)
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
   import * as Tabs from "$lib/components/ui/tabs";
+  import { configStore } from "$lib/store/config.svelte";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
+  import { commandCenter } from "$lib/utils/commands/center";
+  import { eventToCombo, formatCombo } from "$lib/utils/commands/keycode";
   import type { CommandDescriptor } from "$lib/utils/commands/type";
   import evtbus from "$lib/utils/evtbus";
   import autoAnimate from "@formkit/auto-animate";
@@ -24,6 +25,7 @@
     IconX,
   } from "@tabler/icons-svelte";
   import { onMount } from "svelte";
+  import { toast } from "svelte-sonner";
 
   // ── Types ──────────────────────────────────────────────────
   type CommandInfo = Omit<CommandDescriptor, "handler">;
@@ -33,22 +35,25 @@
     typeof navigator !== "undefined" &&
     /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 
-  // ── Initialize Commands (one-shot, non-reactive) ──────────
-  // commandCenter 不是响应式的，仅在组件初始化时读取一次。
-  const allCommands: CommandInfo[] = commandCenter.getAllDescriptors();
+  // ── Initialize Commands ────────────────────────────────────
+  // devOnly 命令仅在 showDevUI 开启时可见。
+  // local 命令在此页保留（用于配置其热键），仅在命令面板中隐藏。
+  let allCommands = $derived<CommandInfo[]>(
+    commandCenter
+      .getAllDescriptors()
+      .filter((c) => configStore.showDevUI || !c.devOnly),
+  );
 
-  const categories: string[] = (() => {
+  let categories = $derived.by(() => {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const cats = new Set<string>();
     for (const cmd of allCommands) {
       if (cmd.category) cats.add(cmd.category);
     }
     return ["全部", ...Array.from(cats).sort()];
-  })();
+  });
 
   // ── Reactive Bridge to KeybindConfig ──────────────────────
-  // KeybindConfig.keybindings 内部已用 $state 声明，可直接 $derived 读取，
-  // 任何对 configStore.keybinding 的增删（含外部 onKeybindingUpdate）都会自动刷新 UI。
   let bindings = $derived(configStore.keybinding.keybindings ?? {});
 
   // ── Reactive UI State ─────────────────────────────────────
@@ -111,30 +116,8 @@
   });
 
   // ── Key Helpers ───────────────────────────────────────────
-  function normalizeKey(key: string): string {
-    const map: Record<string, string> = {
-      ArrowUp: "up",
-      ArrowDown: "down",
-      ArrowLeft: "left",
-      ArrowRight: "right",
-      Enter: "return",
-      " ": "space",
-      Backspace: "backspace",
-      Delete: "delete",
-      Tab: "tab",
-      Home: "home",
-      End: "end",
-      PageUp: "pageup",
-      PageDown: "pagedown",
-      "+": "plus",
-      Insert: "insert",
-      CapsLock: "capslock",
-    };
-    return map[key] ?? key.toLowerCase();
-  }
-
-  function formatKeyForDisplay(key: string): string {
-    if (isMac) {
+  function formatKeyForDisplay(key: string, mac = isMac): string {
+    if (mac) {
       const m: Record<string, string> = {
         ctrl: "⌃",
         command: "⌘",
@@ -144,6 +127,7 @@
         backspace: "⌫",
         delete: "⌦",
         escape: "Esc",
+        esc: "Esc",
         tab: "⇥",
         space: "␣",
         up: "↑",
@@ -157,13 +141,14 @@
     }
     const m: Record<string, string> = {
       ctrl: "Ctrl",
-      command: "Cmd",
+      command: "Win",
       alt: "Alt",
       shift: "Shift",
       return: "Enter",
       backspace: "⌫",
       delete: "Del",
       escape: "Esc",
+      esc: "Esc",
       tab: "Tab",
       space: "Space",
       up: "↑",
@@ -177,14 +162,14 @@
   }
 
   function parseComboForDisplay(combo: string): string[] {
-    return combo.split("+").map(formatKeyForDisplay);
+    return combo.split("+").map((k) => formatKeyForDisplay(k));
   }
 
   function getCommandLabel(cmdId: string): string {
     return allCommands.find((c) => c.id === cmdId)?.label ?? cmdId;
   }
 
-  // ── Binding Actions (全部委托给 configStore.keybinding) ───
+  // ── Binding Actions ───────────────────────────────────────
   function addBinding(cmdId: string, combo: string) {
     configStore.keybinding.addBinding(cmdId, combo);
   }
@@ -209,11 +194,14 @@
     recordingCommandId = cmdId;
     pendingCombo = null;
     conflictCommandId = null;
+    // 屏蔽全局热键响应，避免录制时误触已有命令。
+    configStore.keybinding.beginRecording();
     if (typeof document !== "undefined")
       (document.activeElement as HTMLElement)?.blur?.();
   }
 
   function stopRecording() {
+    configStore.keybinding.endRecording();
     recordingCommandId = null;
     pendingCombo = null;
     conflictCommandId = null;
@@ -232,35 +220,27 @@
     event.preventDefault();
     event.stopPropagation();
 
-    if (["Control", "Shift", "Alt", "Meta"].includes(event.key)) return;
-
+    // 单独的 Esc → 取消录制（Esc 不作为可绑定键，用于保留"退出"语义）
     if (
       event.key === "Escape" &&
       !event.ctrlKey &&
+      !event.metaKey &&
       !event.shiftKey &&
-      !event.altKey &&
-      !event.metaKey
+      !event.altKey
     ) {
       stopRecording();
       return;
     }
 
-    const parts: string[] = [];
-    if (event.ctrlKey) parts.push("ctrl");
-    if (event.metaKey) parts.push("command");
-    if (event.shiftKey) parts.push("shift");
-    if (event.altKey) parts.push("alt");
-
-    const key = normalizeKey(event.key);
-    parts.push(key);
-    const combo = parts.join("+");
+    // 组合串（仅修饰键时返回空串）
+    const combo = eventToCombo(event);
+    if (!combo) return;
 
     const hasModifier =
       event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
     const isFKey = /^f\d+$/i.test(event.key);
-    if (!hasModifier && !isFKey) return;
 
-    // 通过 configStore 查找冲突命令
+    // 冲突检测
     const existingCmdId = configStore.keybinding.findCommandByHotkey(combo);
     if (existingCmdId && existingCmdId !== recordingCommandId) {
       conflictCommandId = existingCmdId;
@@ -272,11 +252,27 @@
       return;
     }
 
+    // 单键 + 全局命令：hotkeys-js 的默认 filter 只拦截 input/textarea，
+    // 对 contenteditable（如 Tiptap 编辑器）不生效，单键可能误触发。
+    // 这里给一次非阻塞提示，仍允许绑定（尊重用户选择）。
+    const isSingleKey = !hasModifier && !isFKey;
+    const isLocalCommand =
+      commandCenter.get(recordingCommandId)?.local === true;
+    if (isSingleKey && !isLocalCommand) {
+      toast.warning(
+        `「${getCommandLabel(recordingCommandId)}」为全局命令，单键 ${formatCombo(combo)} 可能在富文本编辑器中误触发。`,
+        { duration: 5000 },
+      );
+    }
+
     addBinding(recordingCommandId, combo);
     stopRecording();
   }
 
   onMount(() => {
+    // Electron 主进程 before-input-event 转发的补充捕获路径。
+    // 用于捕获 Electron 自身可能拦截的键盘事件（如 Ctrl+W / Ctrl+R 等），
+    // 使这些组合键在录制时仍能被识别。
     const handler = (evt: {
       key: string;
       ctrlKey: boolean;
@@ -284,12 +280,12 @@
       shiftKey: boolean;
       altKey: boolean;
     }) => {
-      console.error("enter handleKeydown")
+      // 与 DOM KeyboardEvent 结构相关的补充：eventToCombo 只依赖 key 与修饰键。
       handleKeydown({
         ...evt,
         preventDefault: () => {},
         stopPropagation: () => {},
-        code: "KeyW",
+        code: "",
         bubbles: true,
         cancelable: true,
         composed: true,
@@ -301,7 +297,16 @@
     evtbus.on("before-input-evt", handler);
     return () => {
       evtbus.off("before-input-evt", handler);
+      // 组件卸载时若仍处于录制状态，释放 hotkeys-js 屏蔽。
+      configStore.keybinding.endRecording();
     };
+  });
+
+  // 命令列表可能因 showDevUI 切换而重算；若当前分类已不可见，回落到"全部"
+  $effect(() => {
+    if (activeCategory !== "全部" && !categories.includes(activeCategory)) {
+      activeCategory = "全部";
+    }
   });
 </script>
 
@@ -364,10 +369,6 @@
 
 <div class="w-full h-full overflow-auto bg-background">
   <div class="p-8 lg:p-12 space-y-8">
-    <!--╭─────────────────────────────────────────────────────╮ -->
-    <!-- │ [可抽取子组件 → HotkeyManagerHeader.svelte]          │ -->
-    <!-- │ 职责：页面标题、搜索栏与全局清空按钮                   │ -->
-    <!-- ╰─────────────────────────────────────────────────────╯ -->
     <header class="space-y-6">
       <div class="flex items-start justify-between gap-6 flex-wrap">
         <div class="flex items-center gap-4">
@@ -421,12 +422,7 @@
         {/if}
       </div>
     </header>
-    <!-- ╭─── / HotkeyManagerHeader ───╮ -->
 
-    <!--╭─────────────────────────────────────────────────────╮ -->
-    <!-- │ [可抽取子组件 → HotkeyStatsRow.svelte]               │ -->
-    <!-- │ 职责：显示绑定统计概览的四张指标卡片                   │ -->
-    <!-- ╰─────────────────────────────────────────────────────╯ -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-6">
       {@render statCard(
         IconCommand,
@@ -457,12 +453,7 @@
         stats.conflicts > 0 ? "text-destructive" : "text-muted-foreground",
       )}
     </div>
-    <!-- ╭─── / HotkeyStatsRow ───╮ -->
 
-    <!--╭─────────────────────────────────────────────────────╮ -->
-    <!-- │ [可抽取子组件 → HotkeyCommandList.svelte]            │ -->
-    <!-- │ 职责：分类标签页与命令行列表，含快捷键绑定/录制操作    │ -->
-    <!-- ╰─────────────────────────────────────────────────────╯ -->
     <div
       class="rounded-2xl border border-border/50 bg-card shadow-sm transition-all duration-200"
     >
@@ -498,7 +489,6 @@
           {:else}
             {#each Object.entries(groupedCommands) as [category, commands] (category)}
               <section class="space-y-3 animate-fade-in">
-                <!-- Category Header -->
                 <div class="flex items-center gap-2 px-1">
                   <IconFolder
                     size={16}
@@ -518,16 +508,11 @@
                   </Badge>
                 </div>
 
-                <!-- Command Rows -->
                 <div
                   class="rounded-xl border border-border/50 divide-y divide-border/30 overflow-hidden"
                   use:autoAnimate
                 >
                   {#each commands as command (command.id)}
-                    <!--╭─────────────────────────────────────────────────────╮ -->
-                    <!-- │ [可抽取子组件 → HotkeyCommandRow.svelte]             │ -->
-                    <!-- │ 职责：单条命令行，含标签、描述、快捷键展示与录制      │ -->
-                    <!-- ╰─────────────────────────────────────────────────────╯ -->
                     <div
                       class={[
                         "flex items-center justify-between px-4 py-3.5 transition-all duration-200 gap-4",
@@ -536,11 +521,26 @@
                           : "hover:bg-muted/40",
                       ]}
                     >
-                      <!-- Left: Command Info -->
                       <div class="flex-1 min-w-0 space-y-0.5">
-                        <p class="text-sm font-medium text-foreground">
-                          {command.label}
-                        </p>
+                        <div class="flex items-center gap-2">
+                          <p class="text-sm font-medium text-foreground">
+                            {command.label}
+                          </p>
+                          {#if command.local}
+                            <Badge
+                              variant="outline"
+                              class="rounded-md text-[10px] h-4 px-1"
+                              >局部</Badge
+                            >
+                          {/if}
+                          {#if command.devOnly}
+                            <Badge
+                              variant="outline"
+                              class="rounded-md text-[10px] h-4 px-1"
+                              >开发者</Badge
+                            >
+                          {/if}
+                        </div>
                         {#if command.description}
                           <p class="text-xs text-muted-foreground truncate">
                             {command.description}
@@ -548,10 +548,8 @@
                         {/if}
                       </div>
 
-                      <!-- Right: Hotkey Badges & Actions -->
                       <div class="flex items-center gap-3 shrink-0">
                         {#if recordingCommandId === command.id}
-                          <!-- Recording indicator (inline) -->
                           <div class="flex items-center gap-2 animate-fade-in">
                             <div
                               class="flex items-center gap-2 rounded-xl border border-primary/20
@@ -566,7 +564,6 @@
                             </div>
                           </div>
                         {:else}
-                          <!-- Normal: Hotkey badges -->
                           {#if bindings[command.id]?.length}
                             <div
                               class="flex items-center gap-2 flex-wrap"
@@ -619,7 +616,6 @@
                         {/if}
                       </div>
                     </div>
-                    <!-- ╭─── / HotkeyCommandRow ───╮ -->
                   {/each}
                 </div>
               </section>
@@ -628,7 +624,6 @@
         </div>
       {/if}
     </div>
-    <!-- ╭─── / HotkeyCommandList ───╮ -->
   </div>
   <!-- ════════ Recording Floating Bar ════════ -->
   {#if recordingCommandId}
@@ -638,10 +633,6 @@
     >
       {#if conflictCommandId && pendingCombo}
         {@const conflictKeys = parseComboForDisplay(pendingCombo)}
-        <!--╭─────────────────────────────────────────────────────╮ -->
-        <!-- │ [可抽取子组件 → HotkeyConflictBar.svelte]            │ -->
-        <!-- │ 职责：快捷键冲突时的底部浮层，含覆盖/取消操作         │ -->
-        <!-- ╰─────────────────────────────────────────────────────╯ -->
         <div
           class="rounded-2xl border border-destructive/20 bg-card/95 backdrop-blur-xl
                  shadow-xl pointer-events-auto animate-fade-in max-w-xl w-full"
@@ -694,9 +685,7 @@
             </div>
           </div>
         </div>
-        <!-- ╭─── / HotkeyConflictBar ───╮ -->
       {:else}
-        <!-- Recording status toast -->
         <div
           class="rounded-2xl border border-primary/20 bg-card/95 backdrop-blur-xl
                  shadow-xl px-6 py-3 pointer-events-auto
@@ -710,7 +699,7 @@
           </p>
           <Separator orientation="vertical" class="h-5" />
           <p class="text-xs text-muted-foreground whitespace-nowrap">
-            按下组合键 ·
+            按下组合键 · 支持单键（如 Enter）·
             <kbd
               class="inline-flex items-center rounded-lg border border-border/50
                      bg-muted px-1.5 py-0.5 text-[10px] font-mono font-semibold
@@ -725,16 +714,3 @@
     </div>
   {/if}
 </div>
-
-<!--
-  ══════════════════════════════════════════════════════════════
-  需要的组件：Button, Input, Badge, Separator, Tabs
-
-  建议抽取的子组件：
-  → HotkeyManagerHeader.svelte — 页面标题、搜索栏与全局清空按钮
-  → HotkeyStatsRow.svelte — 显示绑定统计概览的四张指标卡片
-  → HotkeyCommandList.svelte — 分类标签页与命令行列表，含快捷键绑定/录制操作
-  → HotkeyCommandRow.svelte — 单条命令行，含标签、描述、快捷键展示与录制状态
-  → HotkeyConflictBar.svelte — 快捷键冲突时的底部浮层，含覆盖/取消操作
-  ══════════════════════════════════════════════════════════════
--->

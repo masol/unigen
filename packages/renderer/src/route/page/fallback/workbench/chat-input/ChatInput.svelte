@@ -1,6 +1,8 @@
 <!-- packages/renderer/src/route/page/fallback/workbench/chat-input/ChatInput.svelte -->
+<!-- packages/renderer/src/route/page/fallback/workbench/chat-input/ChatInput.svelte -->
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import { configStore } from "$lib/store/config.svelte";
   import {
     commandsStore,
     filterCommands,
@@ -8,6 +10,7 @@
   } from "$lib/store/local/commands.store.svelte";
   import { messageStore } from "$lib/store/local/msg.svelte";
   import { safeApi } from "$lib/utils/api";
+  import { eventToCombo, formatCombo } from "$lib/utils/commands/keycode";
   import {
     IconLoader2,
     IconPlayerStopFilled,
@@ -23,12 +26,18 @@
 
   let {
     value = $bindable(""),
-    placeholder = "Enter 换行，Ctrl+Enter 发送",
+    placeholder,
     onSend = (_files: string[]) => {},
     onCommand = () => {},
     onRecord = () => {},
   }: {
     value?: string;
+    /**
+     * 自定义占位符文案。未传时由 `chat.send` 的热键自动生成：
+     * - 无绑定：`Enter 换行（未配置发送热键）`
+     * - 单键 `return`：`Enter 发送，Shift+Enter 换行`
+     * - 其他 combo：`Enter 换行，<格式化后的 combo> 发送`
+     */
     placeholder?: string;
     /**
      * 发送时回传已选附件完整路径。
@@ -66,9 +75,30 @@
   let slashTitle = $derived(!hasCommands ? "当前项目类型未提供命令" : "命令");
   let canSend = $derived(value.trim().length > 0 && !disabled);
 
-  let effectivePlaceholder = $derived(
-    reloading ? "正在同步会话…" : deleting ? "正在删除消息…" : placeholder,
-  );
+  /**
+   * 占位符派生：优先遵循调用方传入的 placeholder；
+   * 否则根据 `chat.send` 热键自动生成。
+   *
+   * 因为读取 `configStore.keybinding.getHotkeyForCommand` 会访问其 $state，
+   * 此 $derived 会随快捷键变更自动刷新。
+   */
+  let effectivePlaceholder = $derived.by(() => {
+    if (reloading) return "正在同步会话…";
+    if (deleting) return "正在删除消息…";
+    if (placeholder) return placeholder;
+
+    const hotkeyStr = configStore.keybinding.getHotkeyForCommand("chat.send");
+    if (!hotkeyStr) return "Enter 换行（未配置发送热键）";
+
+    const firstCombo = hotkeyStr.split(",")[0]?.trim();
+    if (!firstCombo) return "Enter 换行（未配置发送热键）";
+
+    // 单键 Enter：约定为"Enter 发送 + Shift+Enter 换行"（Shift+Enter 会走浏览器默认换行）
+    if (firstCombo === "return") {
+      return "Enter 发送，Shift+Enter 换行";
+    }
+    return `Enter 换行，${formatCombo(firstCombo)} 发送`;
+  });
 
   async function openFilePicker() {
     if (disabled) return;
@@ -148,7 +178,6 @@
     await messageStore.abort();
   }
 
-  // 显式 refocus 策略（保持原逻辑）
   $effect(() => {
     if (sending || !shouldRefocusAfterSend) return;
     shouldRefocusAfterSend = false;
@@ -210,13 +239,27 @@
     });
   }
 
+  /**
+   * 判断当前键事件是否命中指定命令的快捷键。
+   * - 录制中：直接跳过，避免用户在设置页改动时被聊天热键干扰；
+   * - 通过 `findCommandByHotkey` 反查，保证与配置中心一致。
+   */
+  function isComboForCmd(event: KeyboardEvent, cmdId: string): boolean {
+    if (configStore.keybinding.isRecording) return false;
+    const combo = eventToCombo(event);
+    if (!combo) return false;
+    return configStore.keybinding.findCommandByHotkey(combo) === cmdId;
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     if (disabled) {
       event.preventDefault();
       return;
     }
+    // IME 组合中按 Enter 视为输入结束，不触发送
     if (isComposing && event.key === "Enter") return;
 
+    // 命令菜单交互优先
     if (showCommands) {
       if (filtered.length > 0) {
         if (event.key === "ArrowDown") {
@@ -244,11 +287,14 @@
       }
     }
 
-    // Enter 换行，Ctrl+Enter 发送
-    if (event.key === "Enter" && event.ctrlKey) {
+    // local 热键：发送消息（由 configStore.keybinding 决定，默认 ctrl+return）。
+    // 绑定单键 return 时，Shift+Enter 的 combo 为 shift+return，不命中，走浏览器默认换行。
+    if (isComboForCmd(event, "chat.send")) {
       event.preventDefault();
       send();
+      return;
     }
+    // 其余按键保持浏览器默认（Enter 换行）
   }
 </script>
 

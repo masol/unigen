@@ -1,3 +1,4 @@
+// packages/renderer/src/lib/utils/commands/config.svelte.ts
 import type { AppConfig } from "@app/main/types";
 import Logger from "electron-log/renderer";
 import hotkeys from "hotkeys-js";
@@ -6,6 +7,11 @@ import { toast } from "svelte-sonner";
 import { api } from "../api";
 import { commandCenter } from "./center";
 
+// 记录 hotkeys-js 的默认 filter（输入框/可编辑区域内默认不触发）。
+// beginRecording() 期间将 filter 替换为空操作以屏蔽所有全局热键，
+// endRecording() 恢复。
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const DEFAULT_HOTKEYS_FILTER: any = (hotkeys as any).filter;
 
 export class KeybindConfig {
     #saveBindingsDebounced = debounce(
@@ -18,14 +24,16 @@ export class KeybindConfig {
     #keybindings: Record<string, string[]> = $state({});
     get keybindings() { return this.#keybindings }
 
+    // 录制状态：true 期间 hotkeys-js 停止响应，且局部热键应自行跳过。
+    #recording = $state(false);
+    get isRecording() { return this.#recording }
 
     onKeybindingUpdate(binding: AppConfig['keybindings']) {
         this.#keybindings = binding;
         this.resetAllBindings();
     }
 
-
-    // 重置全部热键到当前keybindings.
+    // 重置全部热键到当前 keybindings。
     private resetAllBindings() {
         hotkeys.unbind();
         for (const [cmdId, combos] of Object.entries(this.#keybindings)) {
@@ -40,9 +48,35 @@ export class KeybindConfig {
         this.#saveBindingsDebounced();
     }
 
+    /**
+     * 进入录制模式。
+     * 1. 屏蔽 hotkeys-js（通过 filter 短路），避免用户按下待绑定组合键时误触已有命令；
+     * 2. 通过 isRecording 让局部热键宿主（ChatInput / CommandPaletteBar 等）自行跳过。
+     */
+    beginRecording() {
+        if (this.#recording) return;
+        this.#recording = true;
+        if (typeof window === 'undefined') return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (hotkeys as any).filter = () => false;
+    }
+
+    /**
+     * 退出录制模式，恢复 hotkeys-js 响应。
+     */
+    endRecording() {
+        if (!this.#recording) return;
+        this.#recording = false;
+        if (typeof window === 'undefined') return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (hotkeys as any).filter = DEFAULT_HOTKEYS_FILTER ?? (() => true);
+    }
 
     private registerHotkey(cmdId: string, combo: string) {
         if (typeof window === "undefined") return;
+        // 局部热键由宿主组件自行处理，不注册到 hotkeys-js。
+        const cmd = commandCenter.get(cmdId);
+        if (cmd?.local) return;
         try {
             hotkeys(combo, { scope: "all" }, (e: KeyboardEvent) => {
                 e.preventDefault();
@@ -69,17 +103,15 @@ export class KeybindConfig {
                 key: 'keybindings',
                 value: this.#keybindings
             })
-            // Logger.info(`[ConfigStore] theme set to "${value}"`)
         } catch (err) {
             const saveRrror = err instanceof Error ? err.message : String(err)
-            Logger.error('[ConfigStore] setTheme() failed', err)
+            Logger.error('[ConfigStore] saveBindings() failed', err)
             toast.error(saveRrror);
         }
     }
 
     trigger(combo: string) {
         void (combo)
-        // hotkeys.trigger(combo);
     }
 
     addBinding(cmdId: string, combo: string) {
@@ -121,5 +153,4 @@ export class KeybindConfig {
         this.unregisterHotkey(combo);
         this.#saveBindingsDebounced();
     }
-
 }

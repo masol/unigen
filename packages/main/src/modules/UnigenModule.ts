@@ -1,4 +1,5 @@
 import { intereg } from '$libs/blueprint/index.js';
+import { bootstrapCodeRuntime } from '$libs/coderuntime/index.js';
 import { mcpRoute } from '$libs/mcp/index.js';
 import { bootMcpTools } from '$libs/mcp/sync.js';
 import {
@@ -15,6 +16,7 @@ import { syncToolsToSearchDB } from '$libs/tooldb/search-sync.js';
 import { puppeteerInst } from '$libs/utils/puppeteer/index.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
 import { themeFile } from '$libs/utils/sys/dir.js';
+import { ipInfo } from '$libs/utils/sys/ip.js';
 import { getStartupProgress } from '$libs/utils/task-progress.js';
 import { telemetryService } from '$libs/utils/telemetry/telemetry.service.js';
 import { nativeTheme } from 'electron';
@@ -101,8 +103,9 @@ class UnigenModule implements AppModule {
             })
         })
 
-        // 不再自动判断所处位置，而是暴露选项，让用户选择。根据选项值来决定更新服务器，下载服务器等信息。
-        // ipInfo.init().catch(e => Logger.error(`[IPINFO] 获取国家代码出错：${getErrorMessage(e)}`))
+        // 网络区域探测（中国区决定镜像源）：
+        // 不阻塞启动主路径，但作为基础组件之一加入 Promise.all；
+        // 内部超时 3s，探测失败时保守视为中国（inChina = true）。
         progress.report(
             "search-db",
             "正在初始化检索数据库（首次启动需加载向量模型，请稍候）...",
@@ -113,7 +116,8 @@ class UnigenModule implements AppModule {
             telemetryService.initialize(configService().get("telemetry")),
             puppeteerInst.init(),
             openGlobalSearch(),
-            tooldbPromise
+            tooldbPromise,
+            ipInfo.init(),
         ]);
         configService().oTel = telemetryService;
         progress.report("search-db", "检索数据库已就绪", 30);
@@ -140,6 +144,13 @@ class UnigenModule implements AppModule {
             configService().get("mcpServers") ?? [],
         );
         progress.report("mcp", "MCP 服务器已就绪", 85);
+
+        // 代码运行时初始化：依赖 globalToolDB.init() 完成（以便后续 register）；
+        // 与 MCP 不并行是为了避免同时修改工具表引发边界问题；
+        // 默认未启用（codeRuntime.enabled = false），此时直接返回、不做任何下载。
+        progress.report("code-runtime", "正在初始化代码运行时...", 88);
+        await bootstrapCodeRuntime();
+        progress.report("code-runtime", "代码运行时初始化完成", 95);
     }
 }
 

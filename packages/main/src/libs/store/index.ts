@@ -1,3 +1,4 @@
+// packages/main/src/libs/store/index.ts
 // electron/store/configStore.ts
 import { mcpRoute } from '$libs/mcp/route.js';
 import { bootMcpTools } from '$libs/mcp/sync.js';
@@ -14,6 +15,31 @@ import Store from 'electron-store';
 import { join } from 'path';
 import { isEqual } from 'radashi';
 import { configSchema } from './schema.js';
+
+/**
+ * 首次运行时应用的默认快捷键方案。
+ *
+ * 设计原则：
+ * - 只包含在 showDevUI=false 时仍然有意义的命令；
+ *   Developer / devOnly 命令（右侧栏、下侧栏、DAG、蓝图、日志、刷新等）
+ *   **不** 绑定任何热键，避免对普通用户产生干扰。
+ * - 使用 `ctrl+` 前缀的通用组合，与 hotkeys-js 命名兼容（`return`/`plus` 等）。
+ * - 是否写入仅在 `keybindings` 为 undefined 时发生（见 ensureDefaultKeybindings）；
+ *   用户后续清空或自定义，不会在重启时被重置。
+ */
+const DEFAULT_KEYBINDINGS: Record<string, string[]> = {
+    // 顶部命令面板（CommandPaletteBar 内部消费，local 命令）
+    'header.commandPalette': ['ctrl+p', 'ctrl+shift+p'],
+    // 聊天发送（ChatInput 内部消费，local 命令）
+    'chat.send': ['ctrl+return'],
+    // 主题循环切换
+    'appearance.toggleDarkMode': ['ctrl+shift+l'],
+    // 回到工作台
+    'navigation.home': ['ctrl+d'],
+    // 项目操作
+    'project.open': ['ctrl+shift+o'],
+    'project.create': ['ctrl+shift+n'],
+};
 
 /**
  * 动态默认值：依赖运行时环境（如 userData 路径），
@@ -54,8 +80,9 @@ class ConfigService {
         }
 
         // 初始化后检查一次动态默认值：为空则补上并落盘。
-        // 之后读取时 store 中自然已有值，读路径无需再拦截。
         this.ensureDynamicDefaults();
+        // 初始化后检查一次快捷键默认值：为空则补上并落盘。
+        this.ensureDefaultKeybindings();
     }
 
     /**
@@ -73,11 +100,26 @@ class ConfigService {
     }
 
     /**
+     * 若 `keybindings` 尚未存在（undefined / null），写入一套默认方案。
+     *
+     * 注意：
+     * - 依赖 `configSchema` 中 `keybindings` **不设置 `default`**，
+     *   否则 store 初始化时会被 `{}` 填充，导致该方法永远不会生效。
+     * - 用户显式清空（写入 `{}`）后不会再次被重置。
+     */
+    private ensureDefaultKeybindings(): void {
+        const current = this.store.get('keybindings');
+        if (current === undefined || current === null) {
+            this.store.set('keybindings', DEFAULT_KEYBINDINGS);
+        }
+    }
+
+    /**
      * 获取整个配置对象
      * 内部会自动融合 schema 中定义的所有最新默认值
      */
     getAll(): Readonly<AppConfig> {
-        return this.store.store; // structuredClone(this.store.store);
+        return this.store.store;
     }
 
     /**
@@ -182,7 +224,6 @@ class ConfigService {
         this.store.set(key, value);
 
         if (key === "embed_model") {
-            // 此处 key: "embed_model"，value: Exclude<AppConfig["embed_model"], undefined>
             if (this.store.store.embed_model !== value) {
                 evtbus.emit("embed-changed", { old: embed_old, new: value as string });
             }
@@ -191,7 +232,6 @@ class ConfigService {
                 evtbus.emit("rerank-changed", { old: rerank_old, new: value as string });
             }
         } else if (key === "mcpServers") {
-            // 此处 value 被收窄为 AppConfig["mcpServers"]
             const servers = value as AppConfig["mcpServers"];
             if (!isEqual(servers, mcp_old)) {
                 bootMcpTools(mcpRoute, globalToolDB, servers);

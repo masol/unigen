@@ -159,7 +159,7 @@ const HARD_TIMEOUT_MS = 30_000;
 class SplashScreenModule implements AppModule {
     async enable({ app }: ModuleContext): Promise<void> {
         await app.whenReady();
-        Logger.debug("[Splash] enable() start");
+        // Logger.debug("[Splash] enable() start");
 
         const splash = new BrowserWindow({
             width: SPLASH_W,
@@ -202,7 +202,7 @@ class SplashScreenModule implements AppModule {
             return;
         }
         splash.show();
-        Logger.debug("[Splash] shown");
+        // Logger.debug("[Splash] shown");
 
         // 注册到单例：主窗口通过 closeSplash() 主动关闭；
         // registerSplash 内部也会做一次"主窗口已可见"的时序兜底。
@@ -210,10 +210,12 @@ class SplashScreenModule implements AppModule {
 
         // 终极防线（正常不应被触发；日志里出现 warn 说明主窗口 show 未走通）
         setTimeout(() => {
-            Logger.warn(
-                `[Splash] hard timeout (${HARD_TIMEOUT_MS}ms) — main window never showed; force-close`,
-            );
-            closeSplash("hard-timeout");
+            if (!splash.isDestroyed()) {
+                Logger.warn(
+                    `[Splash] hard timeout (${HARD_TIMEOUT_MS}ms) — main window never showed; force-close`,
+                );
+                closeSplash("hard-timeout");
+            }
         }, HARD_TIMEOUT_MS);
     }
 }

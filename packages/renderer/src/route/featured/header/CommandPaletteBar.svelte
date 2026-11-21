@@ -1,8 +1,10 @@
+<!-- packages/renderer/src/route/featured/header/CommandPaletteBar.svelte -->
 <!-- CommandPaletteBar.svelte -->
 <script lang="ts">
   import { configStore } from "$lib/store/config.svelte";
   import { projectStore } from "$lib/store/project.svelte";
   import { commandCenter } from "$lib/utils/commands/center";
+  import { eventToCombo } from "$lib/utils/commands/keycode";
   import { PinyinFuseSearch } from "$lib/utils/fuse";
   import { location, push } from "@keenmate/svelte-spa-router";
   import {
@@ -15,9 +17,8 @@
     IconHome2,
     IconSearch,
   } from "@tabler/icons-svelte";
-  import hotkeys from "hotkeys-js";
   import { debounce } from "radashi";
-  import { onDestroy, onMount, tick } from "svelte";
+  import { onMount, tick } from "svelte";
   import { quintOut } from "svelte/easing";
   import { fade, scale } from "svelte/transition";
 
@@ -47,8 +48,27 @@
   }
 
   // ---------- 命令搜索 ----------
+  // 过滤规则：
+  // - local 命令（如 chat.send / header.commandPalette）：handler 为空占位，
+  //   点击无实际效果，故不显示；
+  // - showDevUI 关闭时，devOnly 命令一并隐藏（命令本身与热键不受影响）。
   const allCommands = $derived(
-    commandCenter.getAllDescriptors() as CommandEntry[],
+    commandCenter
+      .getAllDescriptors()
+      .filter((c) => {
+        if (c.local) return false;
+        if (!configStore.showDevUI && c.devOnly) return false;
+        return true;
+      })
+      .map(
+        (c) =>
+          ({
+            id: c.id,
+            label: c.label,
+            category: c.category ?? "",
+            description: c.description ?? "",
+          }) as CommandEntry,
+      ),
   );
 
   const fuseSearch = $derived.by(() => {
@@ -155,19 +175,41 @@
     });
   }
 
-  function handleWindowKeydown(e: KeyboardEvent) {
+  async function handleWindowKeydown(e: KeyboardEvent) {
+    // 命令面板开关热键（local 命令，走 configStore 读取绑定）。
+    // 无论面板开或关都响应，以支持"再按一次关闭"。
+    if (!configStore.keybinding.isRecording) {
+      const combo = eventToCombo(e);
+      if (
+        combo &&
+        configStore.keybinding.findCommandByHotkey(combo) ===
+          "header.commandPalette"
+      ) {
+        e.preventDefault();
+        if (isOpen) close();
+        else await open();
+        return;
+      }
+    }
+
     if (!isOpen) return;
 
     if (e.key === "Escape") {
       e.preventDefault();
       close();
-    } else if (e.key === "ArrowDown") {
+      return;
+    }
+    if (e.key === "ArrowDown") {
       e.preventDefault();
       moveSelection(1);
-    } else if (e.key === "ArrowUp") {
+      return;
+    }
+    if (e.key === "ArrowUp") {
       e.preventDefault();
       moveSelection(-1);
-    } else if (e.key === "Enter") {
+      return;
+    }
+    if (e.key === "Enter") {
       if (
         document.activeElement === inputEl ||
         !document.activeElement ||
@@ -209,35 +251,14 @@
 
   // ---------- 生命周期 ----------
   onMount(() => {
-    // 初始化导航状态
     updateNavState();
-
-    // 监听历史变化（包括 push、replace、前进、后退）
     navigation.addEventListener("currententrychange", updateNavState);
-
-    // 快捷键
-    hotkeys("ctrl+p, ctrl+shift+p", (e) => {
-      e.preventDefault();
-      if (isOpen) {
-        close();
-      } else {
-        open();
-      }
-    });
-
     return () => {
       navigation.removeEventListener("currententrychange", updateNavState);
-      hotkeys.unbind("ctrl+p");
-      hotkeys.unbind("ctrl+shift+p");
     };
-  });
-
-  onDestroy(() => {
-    // 已在 onMount 中清理
   });
 </script>
 
-<!-- 模板与原来完全一致，但 now uses canGoBack / canGoForward directly -->
 <svelte:window onkeydown={handleWindowKeydown} />
 
 <div
@@ -270,7 +291,7 @@
     <IconArrowRight size={14} stroke={1.5} />
   </button>
 
-  <!-- 中间命令面板触发条（不变） -->
+  <!-- 中间命令面板触发条 -->
   <div class="relative flex-1">
     <button
       type="button"
@@ -449,7 +470,7 @@
     {/if}
   </div>
 
-  <!-- 回到工作台按钮（不变） -->
+  <!-- 回到工作台按钮 -->
   <button
     type="button"
     id="headerbar-goHome"

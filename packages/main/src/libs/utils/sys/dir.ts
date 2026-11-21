@@ -14,15 +14,6 @@ export function embedingPath(): string {
     return join(dataPath, "models", "embeding");
 }
 
-// export function capFile(fname?: string | string[]): string {
-//     const dataPath = app.getPath("userData");
-//     if (fname && fname.length > 0) {
-//         const parts = Array.isArray(fname) ? fname : [fname];
-//         return join(dataPath, "cap", ...parts);
-//     }
-//     return join(dataPath, "cap");
-// }
-
 /**
  * monaco编辑器的主题存放路径。
  * @param fname 
@@ -35,14 +26,6 @@ export function themeFile(fname?: string): string {
     }
     return join(dataPath, "theme");
 }
-
-// export function dataFile(fname?: string): string {
-//     const dataPath = app.getPath("userData");
-//     if (fname && fname.length > 0) {
-//         return join(dataPath, "theme", fname);
-//     }
-//     return join(dataPath, "theme");
-// }
 
 /**
  * 全局lance数据存放目录。
@@ -66,16 +49,40 @@ export function globalSkillDir(...sub: string[]): string {
     return join(app.getPath("userData"), SkillsDirName, ...sub);
 }
 
-
 export function globalKbDir(...sub: string[]): string {
     return join(app.getPath("userData"), KcDirName, ...sub);
 }
-
 
 export function globalMCPDir(...sub: string[]): string {
     return join(app.getPath("userData"), McpDirName, ...sub);
 }
 
+/**
+ * 代码运行时根目录：`<userData>/runtime/code`。
+ * 各引擎解压到 `runtime/code/<engine>/`；下载缓存与断点文件存放在
+ * `runtime/code/_downloads/<engine>/`（`_` 前缀用于与真实运行时目录区分）。
+ */
+export function codeRuntimeDir(...parts: string[]): string {
+    return join(app.getPath("userData"), "runtime", "code", ...parts);
+}
+
+/** 代码运行时下载缓存 / 续传文件目录。 */
+export function codeRuntimeDownloadDir(...parts: string[]): string {
+    return codeRuntimeDir("_downloads", ...parts);
+}
+
+/** uv 可执行文件所在的运行时目录（下载 / 解压目标）。 */
+export function codeRuntimeUvDir(...parts: string[]): string {
+    return codeRuntimeDir("python", "uv", ...parts);
+}
+
+/**
+ * uv 托管的 Python 解释器安装目录。
+ * 通过 `UV_PYTHON_INSTALL_DIR` 环境变量暴露给 uv，避免污染用户 home。
+ */
+export function codeRuntimePythonInterpretersDir(...parts: string[]): string {
+    return codeRuntimeDir("python", "interpreters", ...parts);
+}
 
 export function getBuildinPath(name: string, ...sub: string[]): string {
     let basePath: string | undefined
