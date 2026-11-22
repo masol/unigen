@@ -59,6 +59,75 @@ interface InvokeFailureOutput {
 
 type InvokeExecuteOutput = InvokeSuccessOutput | InvokeFailureOutput;
 
+/**
+ * MCP 执行结果的错误判定。
+ *
+ * 依据：
+ * - 规范路径：`isError === true` → 明确失败；
+ * - 兜底路径（重要）：部分 MCP server 忘记设置 `isError`，但把错误以
+ *   `content: [{type:"text", text:"Error: ..."}]` 返回。若不识别，模型
+ *   会把错误当成功，永远看不到恢复提示。
+ *
+ * 保守策略：
+ * - 只对**首个非空 text block** 的**首词**判定；
+ * - 首词必须属于明确的错误关键字（error / failed / exception / …）；
+ * - 不会误判 `Errors: 0`、`failed: false`、`All tests passed` 这类正常结果。
+ */
+function detectMcpError(result: unknown): { isError: boolean; text: string } {
+    if (result === null || typeof result !== "object") {
+        return { isError: false, text: "" };
+    }
+
+    const obj = result as { isError?: unknown; content?: unknown };
+
+    if (obj.isError === true) {
+        return { isError: true, text: extractMcpErrorText(result) };
+    }
+
+    const content = obj.content;
+    if (!Array.isArray(content)) {
+        return { isError: false, text: "" };
+    }
+
+    const texts: string[] = [];
+    for (const c of content) {
+        if (c && typeof c === "object" && "text" in c) {
+            const t = String((c as { text: unknown }).text ?? "");
+            if (t) texts.push(t);
+        }
+    }
+    if (texts.length === 0) {
+        return { isError: false, text: "" };
+    }
+
+    const head = texts[0]!.trimStart().slice(0, 200);
+    const headWordRe =
+        /^(?:error|failed|fail|failure|exception|fatal|traceback|enoent|eacces|eperm|econnrefused|etimedout)\b/i;
+    if (!headWordRe.test(head)) {
+        return { isError: false, text: "" };
+    }
+    return { isError: true, text: texts.join("\n") };
+}
+
+function extractMcpErrorText(result: unknown): string {
+    if (result === null || typeof result !== "object") return "";
+
+    const content = (result as { content?: unknown }).content;
+    if (Array.isArray(content)) {
+        return content
+            .map((c) => {
+                if (c && typeof c === "object" && "text" in c) {
+                    return String((c as { text: unknown }).text ?? "");
+                }
+                return "";
+            })
+            .filter(Boolean)
+            .join("\n");
+    }
+    if (typeof content === "string") return content;
+    return "";
+}
+
 export const invokeToolDef: ToolDefinition<InvokeInput, InvokeExecuteOutput> = {
     name: invokeToolName,
     description:
@@ -125,25 +194,25 @@ export const invokeToolDef: ToolDefinition<InvokeInput, InvokeExecuteOutput> = {
         try {
             const result = await callRealTool(meta, validation.value);
 
-            // MCP 工具在执行失败时返回 { content: [...], isError: true }，
-            // 而不是抛异常。必须显式识别并映射为 ok: false，
-            // 否则模型会把错误当作成功，永远看不到 content 中的恢复提示。
-            if (
-                meta.source === "mcp" &&
-                result !== null &&
-                typeof result === "object" &&
-                (result as { isError?: unknown }).isError === true
-            ) {
-                return {
-                    ok: false,
-                    tool: { id: meta.id, name: meta.name },
-                    error:
-                        extractMcpErrorText(result) ||
-                        "MCP 工具返回 isError: true",
-                    hint:
-                        "MCP 工具报告执行失败。请阅读 error 中的提示，" +
-                        "修正参数或调整策略后重试；不要用相同参数重复提交。",
-                };
+            // MCP 工具在多条路径下报告失败：
+            //   1. 规范路径： { isError: true, content: [...] }
+            //   2. 兜底路径： { content: [{type:"text", text:"Error: ..."}] } 但忘设 isError
+            // 任何一种都必须映射为 ok: false，否则模型会把错误当成功，
+            // 永远看不到 content 中的恢复提示。
+            if (meta.source === "mcp") {
+                const outcome = detectMcpError(result);
+                if (outcome.isError) {
+                    return {
+                        ok: false,
+                        tool: { id: meta.id, name: meta.name },
+                        error:
+                            outcome.text ||
+                            "MCP 工具返回疑似错误结果（首条 content 以错误关键字开头）。",
+                        hint:
+                            "MCP 工具报告执行失败。请阅读 error 中的提示，" +
+                            "修正参数或调整策略后重试；不要用相同参数重复提交。",
+                    };
+                }
             }
 
             return {
@@ -229,24 +298,5 @@ export const invokeToolDef: ToolDefinition<InvokeInput, InvokeExecuteOutput> = {
         };
     },
 };
-
-function extractMcpErrorText(result: unknown): string {
-    if (result === null || typeof result !== "object") return "";
-
-    const content = (result as { content?: unknown }).content;
-    if (Array.isArray(content)) {
-        return content
-            .map((c) => {
-                if (c && typeof c === "object" && "text" in c) {
-                    return String((c as { text: unknown }).text ?? "");
-                }
-                return "";
-            })
-            .filter(Boolean)
-            .join("\n");
-    }
-    if (typeof content === "string") return content;
-    return "";
-}
 
 export const invokeTool = buildAiTool(invokeToolDef);

@@ -1,4 +1,5 @@
 // src/lib/store/ui/longTask.svelte.ts
+import { taskProgressStore } from '$lib/store/task-progress.svelte';
 import log from 'electron-log/renderer';
 import { SvelteMap } from 'svelte/reactivity';
 
@@ -11,19 +12,22 @@ type CountFn = () => number;
  *  - 各模块（代码环境安装、自有环境初始化等）注册一个只读计数函数；
  *  - UI（活动栏入口、设置子项）只查询汇总，不耦合具体模块；
  *  - 数据源移除后自动消失，避免僵尸计数。
+ *
+ * 约定：所有注册的 `getCount` 函数**必须是**响应式函数（读取 `$state` /
+ * `SvelteMap` 等），否则 total 不会随其值变化自动重算。
  */
 class LongTaskStore {
-    #sources = $state<SvelteMap<string, CountFn>>(new SvelteMap())
+    #sources = $state<SvelteMap<string, CountFn>>(new SvelteMap());
 
     /** 所有注册任务源之和 */
     readonly total = $derived.by(() => {
         let sum = 0;
         for (const fn of this.#sources.values()) {
-            const v = fn()
-            if (Number.isFinite(v) && v > 0) sum += Math.trunc(v)
+            const v = fn();
+            if (Number.isFinite(v) && v > 0) sum += Math.trunc(v);
         }
-        return sum
-    })
+        return sum;
+    });
 
     /**
      * 注册一个任务源；返回取消函数。
@@ -31,10 +35,35 @@ class LongTaskStore {
      */
     register(key: string, getCount: CountFn): () => void {
         if (this.#sources.has(key)) {
-            log.warn(`[LongTaskStore] register() overwritten: key=${key}`)
+            log.warn(`[LongTaskStore] register() overwritten: key=${key}`);
         }
-        this.#sources.set(key, getCount)
-        return () => { this.#sources.delete(key) }
+        this.#sources.set(key, getCount);
+        return () => {
+            this.#sources.delete(key);
+        };
+    }
+
+    /**
+     * 便捷注册：以 `taskProgressStore` 中任务 id 前缀汇总。
+     *
+     * 适用于主进程通过 `task:update` 广播进度、且所有任务共享同一 id 前缀
+     * 的场景（例如 `code-runtime:python` / `code-runtime:nodejs`）。
+     *
+     * 只统计 `pending` / `running`，因此任务完成后角标会自动消失。
+     */
+    registerTaskPrefix(key: string, prefix: string): () => void {
+        return this.register(key, () => {
+            const all = taskProgressStore.all;
+            let count = 0;
+            for (const task of all) {
+                if (!task.id.startsWith(prefix)) continue;
+                if (task.status !== 'pending' && task.status !== 'running') {
+                    continue;
+                }
+                count++;
+            }
+            return count;
+        });
     }
 
     /**
@@ -42,14 +71,14 @@ class LongTaskStore {
      * 在派生 / 模板中调用时，内部响应式会被追踪。
      */
     countFor(key: string): number {
-        const fn = this.#sources.get(key)
-        if (!fn) return 0
-        const v = fn()
-        return Number.isFinite(v) && v > 0 ? Math.trunc(v) : 0
+        const fn = this.#sources.get(key);
+        if (!fn) return 0;
+        const v = fn();
+        return Number.isFinite(v) && v > 0 ? Math.trunc(v) : 0;
     }
 
     has(key: string): boolean {
-        return this.#sources.has(key)
+        return this.#sources.has(key);
     }
 }
 

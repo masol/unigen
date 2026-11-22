@@ -13,7 +13,7 @@ import pMap from 'p-map';
 import { basename, dirname, extname, join, posix } from 'path';
 import { getErrorMessage } from 'radashi';
 import { fileURLToPath } from 'url';
-import { throwUnprcessable } from './err.js';
+import { throwUnprocessable } from './err.js';
 
 /** 收集到的单个文件 */
 interface CollectedFile {
@@ -135,7 +135,7 @@ class KnowledgeCenter {
             const raw: string = await readFile(filePath, 'utf-8');
             return JSON.parse(raw) as T;
         } catch (error) {
-            throwUnprcessable(
+            throwUnprocessable(
                 `[KnowledgeCenter] JSON 解析失败: ${filePath}\n${getErrorMessage(error)}`,
             );
         }
@@ -285,7 +285,7 @@ class KnowledgeCenter {
             const raw: string = await readFile(file.fullPath, 'utf-8');
             return JSON.parse(raw) as T;
         } catch (error) {
-            throwUnprcessable(
+            throwUnprocessable(
                 `[KnowledgeCenter] JSON 解析失败: ${file.fullPath}\n${(error instanceof Error ? error.message : String(error))}`,
             );
         }

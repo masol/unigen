@@ -6,7 +6,7 @@
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { globalToolDB } from '$libs/tooldb/index.js';
 import { ProjectDbKeys } from '$libs/utils/db/dbkeys.js';
-import { throwUnprcessable } from '$libs/utils/err.js';
+import { throwUnprocessable } from '$libs/utils/err.js';
 import type { IRunnerContext } from '$types/blueprint/context.js';
 import type { GDagJSON } from '$types/index.js';
 import Logger from 'electron-log/main.js';
@@ -175,13 +175,13 @@ export function createPlanContext(ctx: IRunnerContext): PlanContext {
         if (args.cap) {
             const msg = `[plan] --cap=new|UUID,但是输入了${args.cap}`;
             Logger.error(msg);
-            throwUnprcessable(msg);
+            throwUnprocessable(msg);
         }
         const entry = prjdb.get<string>(ProjectDbKeys.entry_capa);
         if (!entry) {
             const msg = `[plan] 当前系统未指定入口Capa,请使用--cap=new|UUID来指定规划入口。`;
             Logger.error(msg);
-            throwUnprcessable(msg);
+            throwUnprocessable(msg);
         }
         rootCapid = entry;
     }

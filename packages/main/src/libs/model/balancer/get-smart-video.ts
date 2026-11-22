@@ -1,4 +1,4 @@
-import { throwNotfound, throwUnprcessable } from '$libs/utils/err.js';
+import { throwNotfound, throwUnprocessable } from '$libs/utils/err.js';
 import { IRunnerContext } from '$types/blueprint/context.js';
 import { ModelTags } from '$types/shared/model.js';
 import type {
@@ -73,7 +73,7 @@ function buildVideoProxy(
 
             for (let i = 0; i < models.length; i++) {
                 if (ctx?.isAborted) {
-                    throwUnprcessable('Aborted by context,AbortError');
+                    throwUnprocessable('Aborted by context,AbortError');
                 }
                 const { c, model } = models[i];
 

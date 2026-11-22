@@ -1,6 +1,6 @@
 import type { ModelOption } from "$types/shared/model.js";
 import Logger from "electron-log/main.js";
-import { throwUnprcessable } from "../utils/err.js";
+import { throwUnprocessable } from "../utils/err.js";
 
 
 export async function listModels(baseURL: string, apiKey: string): Promise<ModelOption[]> {
@@ -24,7 +24,7 @@ export async function listModels(baseURL: string, apiKey: string): Promise<Model
         response = await fetch(url, { headers });
     } catch (error) {
         Logger.debug("fetch 请求失败（可能是网络或CORS问题）", error);
-        throwUnprcessable(`网络请求失败: ${error instanceof Error ? error.message : String(error)}`);
+        throwUnprocessable(`网络请求失败: ${error instanceof Error ? error.message : String(error)}`);
         return []; // 仅为通过TypeScript检查，throw后不会执行
     }
 
@@ -33,7 +33,7 @@ export async function listModels(baseURL: string, apiKey: string): Promise<Model
         // 尝试读取响应文本，以便记录服务器返回的实际错误信息（可能是HTML）
         const errorText = await response.text().catch(() => '无法读取响应体');
         Logger.debug(`获取模型列表失败: ${response.status} ${response.statusText}`, errorText.substring(0, 500));
-        throwUnprcessable(`获取模型列表失败 (HTTP ${response.status}): ${response.statusText}`);
+        throwUnprocessable(`获取模型列表失败 (HTTP ${response.status}): ${response.statusText}`);
     }
 
     // 4. 安全地解析JSON
@@ -44,7 +44,7 @@ export async function listModels(baseURL: string, apiKey: string): Promise<Model
         data = JSON.parse(text);
     } catch (error) {
         Logger.debug("响应体不是有效的JSON", error);
-        throwUnprcessable(`响应数据格式错误，无法解析为JSON`);
+        throwUnprocessable(`响应数据格式错误，无法解析为JSON`);
     }
 
     // Logger.debug("listModels result:", data);
@@ -52,7 +52,7 @@ export async function listModels(baseURL: string, apiKey: string): Promise<Model
     // 5. 防御性检查 data.data 是否存在且为数组
     if (!data || !Array.isArray(data.data)) {
         Logger.debug("返回的JSON格式不符合预期（缺少data数组）", data);
-        throwUnprcessable(`获取模型列表失败: 返回数据格式不符合预期`);
+        throwUnprocessable(`获取模型列表失败: 返回数据格式不符合预期`);
     }
 
     return data.data.map((model: Record<string, string>) => {

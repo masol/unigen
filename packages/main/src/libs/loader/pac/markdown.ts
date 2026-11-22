@@ -1,4 +1,4 @@
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import matter from "@11ty/gray-matter";
 
 function stripBom(value: string): string {
@@ -21,35 +21,35 @@ export function toJsonObject(value: unknown): Record<string, unknown> {
     }
 
     if (!isPlainObject(value)) {
-        throwUnprcessable("front-matter 必须是 JSON 对象");
+        throwUnprocessable("front-matter 必须是 JSON 对象");
     }
 
     let jsonText: string;
     try {
         jsonText = JSON.stringify(value, (_key, item) => {
             if (item === undefined) {
-                throwUnprcessable("front-matter 不支持 undefined");
+                throwUnprocessable("front-matter 不支持 undefined");
             }
             if (
                 typeof item === "function" ||
                 typeof item === "symbol" ||
                 typeof item === "bigint"
             ) {
-                throwUnprcessable("front-matter 必须是可 JSON 序列化的对象");
+                throwUnprocessable("front-matter 必须是可 JSON 序列化的对象");
             }
             if (typeof item === "number" && !Number.isFinite(item)) {
-                throwUnprcessable("front-matter 不支持 NaN / Infinity");
+                throwUnprocessable("front-matter 不支持 NaN / Infinity");
             }
             return item;
         });
     } catch (err) {
         if (err instanceof Error) throw err;
-        throwUnprcessable("front-matter 不是合法 JSON");
+        throwUnprocessable("front-matter 不是合法 JSON");
     }
 
     const parsed = JSON.parse(jsonText) as unknown;
     if (!isPlainObject(parsed)) {
-        throwUnprcessable("front-matter 必须是 JSON 对象");
+        throwUnprocessable("front-matter 必须是 JSON 对象");
     }
 
     return parsed;
@@ -71,7 +71,7 @@ export function stringifyPacMarkdown(
     content: string,
 ): string {
     if (typeof content !== "string") {
-        throwUnprcessable("content 必须是字符串");
+        throwUnprocessable("content 必须是字符串");
     }
     return matter.stringify(content, toJsonObject(meta));
 }

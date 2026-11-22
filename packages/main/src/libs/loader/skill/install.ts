@@ -1,7 +1,7 @@
 // packages/main/src/libs/loader/skill/install.ts
 import { openGlobalSearch } from "$libs/searchsrv/index.js";
 import { parseSkillFile } from "$libs/searchsrv/skill-loader.js";
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import { globalSkillDir } from "$libs/utils/sys/dir.js";
 import { ensureDir, move, pathExists, remove } from "fs-extra";
 import { randomUUID } from "node:crypto";
@@ -109,14 +109,14 @@ async function installSkillFromArchive(
             root,
         );
         if (!scanned) {
-            throwUnprcessable(
+            throwUnprocessable(
                 "安装的 Skill 无效（缺少 name/description 或正文）",
             );
         }
 
         const db = await openGlobalSearch();
         if (!db.opened) {
-            throwUnprcessable("全局检索库未就绪，无法注册 Skill");
+            throwUnprocessable("全局检索库未就绪，无法注册 Skill");
         }
 
         await db.skill.addSkill({

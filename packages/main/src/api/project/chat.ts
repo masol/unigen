@@ -1,7 +1,7 @@
 
 import { PrjDB } from "$libs/project/controllers/drizzle/index.js";
 import { ProjectDbKeys } from "$libs/utils/db/dbkeys.js";
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import { chatMessageSchema, chatSessionSchema, listMessagesParamsSchema, listSessionsParamsSchema, newChatMessageSchema } from "$types/shared/api/chat.js";
 import { os } from "@orpc/server";
 import { z } from 'zod';
@@ -31,7 +31,7 @@ const listSessions = os
             active = prjdb.createSession()
             const sess = prjdb.getSession(active);
             if (!sess) {
-                throwUnprcessable("无法创建session")
+                throwUnprocessable("无法创建session")
             }
             sesses.push(sess);
         }
@@ -64,7 +64,7 @@ const createSession = os
         const active = prjdb.createSession()
         const sess = prjdb.getSession(active);
         if (!sess) {
-            throwUnprcessable("无法创建session")
+            throwUnprocessable("无法创建session")
         }
         prjdb.set(ProjectDbKeys.sessionId, active);
         return sess;

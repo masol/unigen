@@ -1,5 +1,5 @@
 // path-ops.ts
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import { randomUUID } from "node:crypto";
 import type { Stats } from "node:fs";
 import fs from "node:fs/promises";
@@ -41,7 +41,7 @@ async function lstatOrNull(abs: string): Promise<Stats | null> {
 export async function assertDirectory(abs: string): Promise<void> {
     const stat = await fs.stat(abs);
     if (!stat.isDirectory()) {
-        throwUnprcessable("目标不是文件夹");
+        throwUnprocessable("目标不是文件夹");
     }
 }
 
@@ -79,7 +79,7 @@ export async function ensurePacRoot(
     }
 
     if (!stat.isDirectory()) {
-        throwUnprcessable("PAC 根目录不是文件夹");
+        throwUnprocessable("PAC 根目录不是文件夹");
     }
 
     const rootReal = await fs.realpath(rootAbs);
@@ -94,25 +94,25 @@ async function assertDirInside(abs: string, rootReal: string): Promise<void> {
         try {
             real = await fs.realpath(abs);
         } catch {
-            throwUnprcessable("路径包含无效符号链接");
+            throwUnprocessable("路径包含无效符号链接");
         }
         if (!isInside(rootReal, real)) {
-            throwUnprcessable("路径越界");
+            throwUnprocessable("路径越界");
         }
         const target = await fs.stat(abs);
         if (!target.isDirectory()) {
-            throwUnprcessable("路径中存在同名文件，无法创建目录");
+            throwUnprocessable("路径中存在同名文件，无法创建目录");
         }
         return;
     }
 
     if (!stat.isDirectory()) {
-        throwUnprcessable("路径中存在同名文件，无法创建目录");
+        throwUnprocessable("路径中存在同名文件，无法创建目录");
     }
 
     const real = await fs.realpath(abs);
     if (!isInside(rootReal, real)) {
-        throwUnprcessable("路径越界");
+        throwUnprocessable("路径越界");
     }
 }
 
@@ -157,7 +157,7 @@ export async function ensurePacDirectory(
 
             const real = await fs.realpath(abs);
             if (!isInside(rootReal, real)) {
-                throwUnprcessable("路径越界");
+                throwUnprocessable("路径越界");
             }
         }
     }
@@ -184,7 +184,7 @@ export async function resolvePacPath(
     const abs = rel ? path.join(rootAbs, ...rel.split("/")) : rootAbs;
 
     if (!isInside(rootAbs, abs)) {
-        throwUnprcessable("路径越界");
+        throwUnprocessable("路径越界");
     }
 
     let rootReal: string;
@@ -192,14 +192,14 @@ export async function resolvePacPath(
         rootReal = await fs.realpath(rootAbs);
     } catch {
         if (opts.mustExist) {
-            throwUnprcessable(`路径不存在: ${toApiPath(rel)}`);
+            throwUnprocessable(`路径不存在: ${toApiPath(rel)}`);
         }
-        throwUnprcessable("PAC 根目录不存在");
+        throwUnprocessable("PAC 根目录不存在");
     }
 
     const rootStat = await fs.stat(rootAbs);
     if (!rootStat.isDirectory()) {
-        throwUnprcessable("PAC 根目录不是文件夹");
+        throwUnprocessable("PAC 根目录不是文件夹");
     }
 
     if (opts.mustExist) {
@@ -207,10 +207,10 @@ export async function resolvePacPath(
         try {
             real = await fs.realpath(abs);
         } catch {
-            throwUnprcessable(`路径不存在: ${toApiPath(rel)}`);
+            throwUnprocessable(`路径不存在: ${toApiPath(rel)}`);
         }
         if (!isInside(rootReal, real)) {
-            throwUnprcessable("路径越界");
+            throwUnprocessable("路径越界");
         }
     } else {
         const parentAbs = path.dirname(abs);
@@ -218,10 +218,10 @@ export async function resolvePacPath(
         try {
             parentReal = await fs.realpath(parentAbs);
         } catch {
-            throwUnprcessable(`父目录不存在: ${toApiPath(dirnameRel(rel))}`);
+            throwUnprocessable(`父目录不存在: ${toApiPath(dirnameRel(rel))}`);
         }
         if (!isInside(rootReal, parentReal)) {
-            throwUnprcessable("路径越界");
+            throwUnprocessable("路径越界");
         }
     }
 

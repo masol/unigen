@@ -1,6 +1,6 @@
 // packages/main/src/libs/loader/skill/uninstall.ts
 import { openGlobalSearch } from "$libs/searchsrv/index.js";
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import { globalSkillDir } from "$libs/utils/sys/dir.js";
 import { remove } from "fs-extra";
 import { isAbsolute, relative, resolve, sep } from "node:path";
@@ -15,17 +15,17 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 export async function uninstallSkill(id: string): Promise<void> {
     const trimmed = id.trim();
     if (!trimmed) {
-        throwUnprcessable("Skill id 不能为空");
+        throwUnprocessable("Skill id 不能为空");
     }
 
     const db = await openGlobalSearch();
     if (!db.opened) {
-        throwUnprcessable("全局检索库未就绪，无法删除 Skill");
+        throwUnprocessable("全局检索库未就绪，无法删除 Skill");
     }
 
     const row = await db.skill.getById(trimmed);
     if (!row) {
-        throwUnprcessable(`Skill 不存在: ${trimmed}`);
+        throwUnprocessable(`Skill 不存在: ${trimmed}`);
     }
 
     const root = resolve(globalSkillDir());
@@ -38,7 +38,7 @@ export async function uninstallSkill(id: string): Promise<void> {
         rel.startsWith(`..${sep}`) ||
         isAbsolute(rel)
     ) {
-        throwUnprcessable(
+        throwUnprocessable(
             `不允许删除非用户安装目录的 Skill: ${row.path}`,
         );
     }

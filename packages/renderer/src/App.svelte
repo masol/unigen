@@ -16,8 +16,8 @@
   import { projectStore } from "$lib/store/project.svelte";
   import { recentProjectsStore } from "$lib/store/recent-projects.svelte";
   import { taskProgressStore } from "$lib/store/task-progress.svelte";
+  import { longTaskStore } from "$lib/store/ui/longTask.svelte";
   import { windowStore } from "$lib/store/window.svelte";
-  import evtbus from "$lib/utils/evtbus";
   import { highlightThemeCss } from "$lib/utils/highlight";
   import { ModeWatcher } from "mode-watcher";
   import pTimeout from "p-timeout";
@@ -60,23 +60,18 @@
     }
   };
 
-  // ── 任务进度：全局唯一的接线点 ─────────────────────────────
-  // 所有长时任务（含 startup）通过 "task:update" 汇入 store，
-  // 组件侧只需读 store，不再各自订阅事件。
-  onMount(() => {
-    const onTaskUpdate = (
-      snap: Parameters<typeof taskProgressStore.apply>[0],
-    ) => taskProgressStore.apply(snap);
-    evtbus.on("task:update", onTaskUpdate);
-    return () => evtbus.off("task:update", onTaskUpdate);
-  });
-
   onMount(async () => {
     try {
       api();
       // 初始化事件机制。唯一返回 windowsId 的机会。
       const wid = await setupEvt();
       windowStore.init(wid);
+      taskProgressStore.init();
+
+      // 幂等注册：code-runtime 的角标数据源（按 task:update id 前缀汇总）。
+      if (!longTaskStore.has("code-runtime")) {
+        longTaskStore.registerTaskPrefix("code-runtime", "code-runtime:");
+      }
 
       // ── 请求主进程显示主窗口（关闭 splash）────────────────
       // 调用时机：oRPC 端口已就绪之后、其余初始化启动之前。

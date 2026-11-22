@@ -4,7 +4,7 @@
  * ============================================================================
  */
 import { getSmartModel } from "$libs/model/index.js";
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import { PNode } from "$types/index.js";
 import { DagDesignResult } from "$types/shared/plan/nodes.js";
 import { generateText } from "ai";
@@ -333,7 +333,7 @@ function checkLayerBoundary(
 export async function logicalExpand(pctx: PlanContext): Promise<void> {
     const gdag = pctx.gdag;
     if (!gdag.rootId || !gdag.getGraph(gdag.rootId))
-        throwUnprcessable(`[expand] 根层不存在，designTop 未完成`, true);
+        throwUnprocessable(`[expand] 根层不存在，designTop 未完成`, true);
 
     for (const { node } of gdag.scan(NodeStatusValue.expanding))
         gdag.updateNode(node.id, { status: 'pending' });
@@ -354,7 +354,7 @@ export async function logicalExpand(pctx: PlanContext): Promise<void> {
 
     const leftovers = [...gdag.scan('pending'), ...gdag.scan(NodeStatusValue.conflict)];
     if (leftovers.length > 0)
-        throwUnprcessable(`[expand] 遍历结束仍有未落定节点：` +
+        throwUnprocessable(`[expand] 遍历结束仍有未落定节点：` +
             leftovers.map(l => `「${l.node.name}」(${l.node.status})`).join("、"), true);
 
     pctx.persist();

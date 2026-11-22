@@ -1,12 +1,12 @@
 import { prism, PrismOpts } from "$libs/model/llm/prism/prism.js";
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 
 
 export async function runCmd(ctx: IRunnerContext): Promise<void> {
     const body = ctx.cmd.body;
     if (!body) {
-        throwUnprcessable("请求prism，但是未提供任何问题。")
+        throwUnprocessable("请求prism，但是未提供任何问题。")
     }
     ctx.notify("裸调用中", "获取初始草稿中...");
     const opts: PrismOpts = {};

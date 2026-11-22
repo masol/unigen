@@ -1,5 +1,5 @@
 // packages/main/src/libs/model/factory/provider.ts
-import { throwPrecondition, throwUnprcessable } from '$libs/utils/err.js';
+import { throwPrecondition, throwUnprocessable } from '$libs/utils/err.js';
 import type { Provider } from '$types/index.js';
 import { ProviderProtocol } from '$types/shared/model.js';
 import { createAlibaba } from '@ai-sdk/alibaba';
@@ -130,7 +130,7 @@ function createProviderByProtocol(
             })
         case 'comfy':
             // comfy协议应该在createXXXModel处被拦截，未正确拦截才会进入这里。
-            throwUnprcessable("comfy协议配置错误。");
+            throwUnprocessable("comfy协议配置错误。");
             break;
         case 'openai-compatible':
         case 'seedance':

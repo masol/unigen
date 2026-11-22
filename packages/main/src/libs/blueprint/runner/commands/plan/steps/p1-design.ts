@@ -3,7 +3,7 @@
  * 【P-Pass1 · designTop:顶层人类工作流拆解】
  * ============================================================================
  */
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import Logger from "electron-log/main.js";
 import { StepNames } from "../config.js";
 import { PlanContext } from "../context.js";
@@ -22,7 +22,7 @@ export async function designTop(pctx: PlanContext): Promise<void> {
     }
 
     const body = (pctx.ctx.cmd.body ?? '').trim();
-    if (!body) throwUnprcessable("[plan]:未提供任何要求。", true);
+    if (!body) throwUnprocessable("[plan]:未提供任何要求。", true);
 
     pctx.setUser(body);
 

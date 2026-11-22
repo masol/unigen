@@ -1,5 +1,5 @@
 // nodes.ts
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import type { PacNode } from "$types/shared/api/pac.js";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -35,7 +35,7 @@ export async function createPacFile(
 
     const destAbs = path.join(parent.abs, safeName);
     if (!isInside(parent.rootAbs, destAbs)) {
-        throwUnprcessable("路径越界");
+        throwUnprocessable("路径越界");
     }
 
     const rel = joinRel(parent.rel, safeName);
@@ -45,7 +45,7 @@ export async function createPacFile(
         await fs.writeFile(destAbs, raw, { encoding: "utf8", flag: "wx" });
     } catch (err) {
         if (isErrnoException(err) && err.code === "EEXIST") {
-            throwUnprcessable("同目录下已存在同名项");
+            throwUnprocessable("同目录下已存在同名项");
         }
         throw err;
     }
@@ -76,7 +76,7 @@ export async function createPacFolder(
 
     const destAbs = path.join(parent.abs, safeName);
     if (!isInside(parent.rootAbs, destAbs)) {
-        throwUnprcessable("路径越界");
+        throwUnprocessable("路径越界");
     }
 
     const rel = joinRel(parent.rel, safeName);
@@ -85,7 +85,7 @@ export async function createPacFolder(
         await fs.mkdir(destAbs);
     } catch (err) {
         if (isErrnoException(err) && err.code === "EEXIST") {
-            throwUnprcessable("同目录下已存在同名项");
+            throwUnprocessable("同目录下已存在同名项");
         }
         throw err;
     }
@@ -111,7 +111,7 @@ export async function renamePacNode(
     const source = await resolvePacPath(root, apiPath, { mustExist: true });
 
     if (!source.rel) {
-        throwUnprcessable("不能重命名 PAC 根目录");
+        throwUnprocessable("不能重命名 PAC 根目录");
     }
 
     const sourceStat = await fs.lstat(source.abs);
@@ -142,7 +142,7 @@ export async function renamePacNode(
         .catch(() => false);
 
     if (destExists) {
-        throwUnprcessable("同目录下已存在同名项");
+        throwUnprocessable("同目录下已存在同名项");
     }
 
     await fs.rename(source.abs, dest.abs);
@@ -160,7 +160,7 @@ export async function deletePacNode(
     const target = await resolvePacPath(root, apiPath, { mustExist: true });
 
     if (!target.rel) {
-        throwUnprcessable("不能删除 PAC 根目录");
+        throwUnprocessable("不能删除 PAC 根目录");
     }
 
     const stat = await fs.lstat(target.abs);

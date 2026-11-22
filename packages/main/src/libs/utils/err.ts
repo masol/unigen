@@ -55,7 +55,7 @@ export function throwPrecondition(message: string, blogger = false): never {
 }
 
 
-export function throwUnprcessable(message: string, blogger = false): never {
+export function throwUnprocessable(message: string, blogger = false): never {
     if (blogger) {
         Logger.error(message);
     }

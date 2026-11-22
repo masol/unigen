@@ -5,23 +5,22 @@
 // 职责边界（本次重构后）：
 //   - **零私有状态**：所有引擎状态（含历史安装进度）持久化在 StableConfig，
 //     由 `#readStatus / #writeStatus` 统一读写；
-//   - **只保留瞬时调度状态**：`#chains` / `#inflight` 是"每进程"的
-//     串行化 / 去重缓存，不参与持久化（进程退出即丢失，符合语义）；
+//   - **只保留瞬时调度状态**：`#chains` / `#inflight` / `#registeredTools`
+//     是"每进程"的缓存，不参与持久化（进程退出即丢失，符合语义）；
 //   - **引擎实例化**：按 `engines/index.js` 的 `ENGINE_CLASSES` 在构造
 //     函数里 `new`，不依赖模块级单例；
 //   - `init()` 承担启动编排；依赖 `StableConfig` 与 `GlobalToolDB`；
-//   - `ensureEngine / assertReady` 对工具层保持原接口形态；
-//   - **下载前测速**：manager 主动 `probeUrls + sortByLatency` 排序候选源，
-//     再交给 downloader（downloader 内部不再做探测）；
+//   - **工具注册/注销内部闭环**：`ensureEngine` 成功后自动注册；
+//     `disableEngine` 负责注销；`#registerEngineTool` 永不暴露到外部；
+//   - **下载前测速**：manager 主动 `probeUrls + sortByLatency` 排序候选源；
 //   - **下载后 SHA256 校验**：`archiveSha256` 配置优先；用户未自定义
-//     `archiveUrl` 时，回落到引擎给出的默认哈希（例如 Node 归档的
-//     SHASUMS256）；自定义 URL 且未给 hash 时跳过校验；
+//     `archiveUrl` 时，回落到引擎给出的默认哈希；
 //   - 每次状态跃迁点直接调用 `report / complete / fail`
 //     （`$libs/utils/task-progress.js`），`id = "code-runtime:" + engineId`。
 //
 // 状态持久化规则：
 //   - 进入 / 离开 `installing`、`ready`、`failed`、`interrupted` 时**强制写**；
-//   - 内部阶段推进按 `PROGRESS_PERSIST_INTERVAL_MS` 节流，避免每次 percent 都刷盘；
+//   - 内部阶段推进按 `PROGRESS_PERSIST_INTERVAL_MS` 节流；
 //   - 重启时 `installing` 会被收敛为 `interrupted`。
 
 import { extractArchive } from "$libs/loader/archive.js";
@@ -30,6 +29,7 @@ import { sha256FileHex } from "$libs/loader/hash.js";
 import { probeUrls, sortByLatency } from "$libs/loader/probe.js";
 import { stableConfig } from "$libs/store/stable.js";
 import { globalToolDB } from "$libs/tooldb/globaltooldb.js";
+import { builtinId } from "$libs/tooldb/naming.js";
 import type { ToolDefinition } from "$libs/tooldb/type.js";
 import {
     codeRuntimeDir,
@@ -56,19 +56,15 @@ import type { EngineRuntimeHandler, ReadyRuntime } from "./types.js";
 /** Windows MAX_PATH 260；预留 buffer，超过则预警。 */
 const WINDOWS_MAX_SAFE_PATH = 200;
 
-/**
- * 内部进度持久化节流间隔。
- *
- * 下载进度是高频事件（可能出现 100 次/秒）；全部落盘会让 store 处于
- * 高频 fsync 状态。这个阈值保证「即使不是每次进度都持久化，崩溃发生后
- * 也能看到最新一帧的粗粒度进度」。
- *
- * 注意：这只影响**持久化**；`report(...)` 广播不受此限制。
- */
+/** 内部进度持久化节流间隔。 */
 const PROGRESS_PERSIST_INTERVAL_MS = 3_000;
 
 /** 下载前对候选源并发测速的超时（每源）。 */
 const DOWNLOAD_PROBE_TIMEOUT_MS = 8_000;
+
+type RegisterToolFn = (
+    def: ToolDefinition<unknown, unknown>,
+) => Promise<unknown>;
 
 async function pathExists(target: string): Promise<boolean> {
     try {
@@ -129,19 +125,32 @@ function taskIdOf(engineId: CodeRuntimeEngineId): string {
 
 export interface CodeRuntimeInitOptions {
     /** 工具注册回调；缺省 `globalToolDB.register`。 */
-    registerTool?: (def: ToolDefinition<unknown, unknown>) => Promise<unknown>;
+    registerTool?: RegisterToolFn;
+}
+
+export interface EnsureEngineOptions {
+    /**
+     * 本次 ensure 的工具注册回调。
+     *
+     * 缺省使用 `globalToolDB.register`；`init()` 显式传入以支持未来测试注入。
+     * 外部调用（如 API 层 `setRuntimeEnabled`）通常无需传入。
+     */
+    registerTool?: RegisterToolFn;
 }
 
 /**
  * 引擎状态与 init 并发保护。
  *
- * `#chains`   ：单引擎串行队列（用于 ensureEngine 串行化）
- * `#inflight` ：ensure 复用（同一引擎进行中调用直接排队）
+ * `#chains`         ：单引擎串行队列（用于 ensureEngine 串行化）；
+ * `#inflight`       ：ensure 复用（同一引擎进行中调用直接排队）；
+ * `#registeredTools`：已注册工具名（engineId → tool.name），
+ *                     与 `#chains` 一样是进程级缓存，不做持久化。
  */
 export class CodeRuntimeManager {
     #engines: Map<CodeRuntimeEngineId, EngineRuntimeHandler>;
     #chains = new Map<CodeRuntimeEngineId, Promise<unknown>>();
     #inflight = new Map<CodeRuntimeEngineId, Promise<CodeRuntimeEngineStatus>>();
+    #registeredTools = new Map<CodeRuntimeEngineId, string>();
     #lastProgressPersist = new Map<
         CodeRuntimeEngineId,
         { percent: number; time: number }
@@ -344,10 +353,90 @@ export class CodeRuntimeManager {
         );
     }
 
+    // ---------- 工具注册 / 注销（内部闭环） ----------
+
+    /**
+     * **内部方法**：注册引擎工具。
+     *
+     * 由 `#ensureEngineNow` 在安装成功 / 已就绪路径自动调用，外部不应直接使用。
+     * 内部检查 `#registeredTools` 与 config 启用状态，避免：
+     *   - 重复注册；
+     *   - 安装过程中用户已停用引擎导致的误注册。
+     */
+    async #registerEngineTool(
+        engineId: CodeRuntimeEngineId,
+        registerTool?: RegisterToolFn,
+    ): Promise<void> {
+        if (this.#registeredTools.has(engineId)) return;
+
+        const cfg = stableConfig().get("codeRuntime");
+        if (!cfg?.enabled || !cfg.engines?.[engineId]?.enabled) {
+            Logger.log(
+                `[CodeRuntime] ${engineId} 安装完成但用户已停用，跳过工具注册。`,
+            );
+            return;
+        }
+
+        const tool = await this.#loadEngineTool(engineId);
+        const register =
+            registerTool ??
+            ((def: ToolDefinition<unknown, unknown>) =>
+                globalToolDB.register(def));
+
+        try {
+            await register(tool);
+            this.#registeredTools.set(engineId, tool.name);
+            Logger.log(
+                `[CodeRuntime] 工具 ${tool.name} 已注册（engine=${engineId}）。`,
+            );
+        } catch (error) {
+            Logger.error(
+                `[CodeRuntime] 注册工具 ${tool.name} 失败：${error instanceof Error ? error.message : String(error)
+                }`,
+            );
+            throw error;
+        }
+    }
+
+    /**
+     * 停用引擎：从工具表中注销对应工具。
+     *
+     * 由 API 层在用户切换 `enabled = false` 时调用。运行时目录保留（不删除），
+     * 再次启用时 `ensureEngine` 会通过 `assertReady` 直接复用。
+     *
+     * 幂等：未注册时是 no-op。
+     *
+     * `globalToolDB.unregister` 兼容 id 或 name；`#registry.get()` 的 name
+     * 索引行为取决于具体实现，先按 name 试，未命中再按 builtinId 重试
+     * （两个调用都是幂等的，代价可忽略）。
+     */
+    async disableEngine(engineId: CodeRuntimeEngineId): Promise<void> {
+        const name = this.#registeredTools.get(engineId);
+        if (!name) return;
+
+        this.#registeredTools.delete(engineId);
+
+        try {
+            const removed = await globalToolDB.unregister(name);
+            if (!removed) {
+                await globalToolDB.unregister(builtinId(name));
+            }
+            Logger.log(
+                `[CodeRuntime] 工具 ${name} 已注销（engine=${engineId}）。`,
+            );
+        } catch (error) {
+            Logger.warn(
+                `[CodeRuntime] 注销工具 ${name} 失败：${error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+    }
+
     // ---------- 安装入口 ----------
 
     async ensureEngine(
         engineId: CodeRuntimeEngineId,
+        options?: EnsureEngineOptions,
     ): Promise<CodeRuntimeEngineStatus> {
         if (!isKnownEngine(engineId)) {
             throw new Error(`未知的代码运行时引擎：${engineId}`);
@@ -356,7 +445,7 @@ export class CodeRuntimeManager {
         if (existing) return existing;
 
         const promise = this.#enqueue(engineId, () =>
-            this.#ensureEngineNow(engineId),
+            this.#ensureEngineNow(engineId, options?.registerTool),
         ).finally(() => {
             this.#inflight.delete(engineId);
         });
@@ -416,6 +505,7 @@ export class CodeRuntimeManager {
 
     async #ensureEngineNow(
         engineId: CodeRuntimeEngineId,
+        registerTool?: RegisterToolFn,
     ): Promise<CodeRuntimeEngineStatus> {
         const cfg = stableConfig().get("codeRuntime");
         if (!cfg?.enabled) {
@@ -429,6 +519,9 @@ export class CodeRuntimeManager {
 
         try {
             await this.assertReady(engineId);
+            // 已就绪：确保工具已注册（覆盖进程重启后工具表被清空、但磁盘
+            // 可执行文件仍在的自愈路径），然后直接返回。
+            await this.#registerEngineTool(engineId, registerTool);
             return this.#readStatus(engineId);
         } catch {
             // 继续安装
@@ -492,7 +585,7 @@ export class CodeRuntimeManager {
                 );
             }
 
-            // 2. 下载前测速（**与下载解耦**）
+            // 2. 下载前测速
             this.#persistProgress(
                 engineId,
                 "downloading",
@@ -507,7 +600,6 @@ export class CodeRuntimeManager {
                 8,
             );
 
-            // 单源：跳过测速；多源：并发探测，按 RTT 排序（不可达挪最后）
             const sortedUrls = archiveUrls.length > 1
                 ? sortByLatency(
                     await probeUrls(archiveUrls, {
@@ -515,11 +607,7 @@ export class CodeRuntimeManager {
                     }),
                 )
                     .map((r) => r.url)
-                    .filter((u) => {
-                        // 当所有源都不可达时，probe 返回的全是 Infinity，
-                        // 但此时仍要尝试下载（可能是 Range/HEAD 被拒而普通 GET 可用）
-                        return Boolean(u);
-                    })
+                    .filter((u) => Boolean(u))
                 : archiveUrls;
 
             // 3. 下载（多源 failover）
@@ -567,9 +655,6 @@ export class CodeRuntimeManager {
             }
 
             // 4. SHA256 校验
-            //    优先级：用户显式 archiveSha256 > 内置源默认哈希 > 跳过
-            //    （用户用 archiveUrl 指向非内置源但没给 hash，就不做校验，
-            //     避免镜像内容与官方不一致时误判）
             const expectedSha =
                 engineCfg.archiveSha256?.toLowerCase() ??
                 (!engineCfg.archiveUrl
@@ -664,6 +749,10 @@ export class CodeRuntimeManager {
                 lastError: undefined,
             };
             this.#writeStatus(engineId, doneStatus);
+
+            // 8. 自动注册工具（内部闭环；用户若已在安装过程中停用则跳过）
+            await this.#registerEngineTool(engineId, registerTool);
+
             complete(taskId, `${engineId} 运行时已就绪。`);
             return doneStatus;
         } catch (error) {
@@ -689,7 +778,7 @@ export class CodeRuntimeManager {
             return;
         }
 
-        const registerTool =
+        const registerTool: RegisterToolFn =
             opts.registerTool ??
             ((def: ToolDefinition<unknown, unknown>) =>
                 globalToolDB.register(def));
@@ -709,12 +798,8 @@ export class CodeRuntimeManager {
         let failureCount = 0;
         for (const id of enabledIds) {
             try {
-                await this.ensureEngine(id);
-                const tool = await this.#loadEngineTool(id);
-                await registerTool(tool);
-                Logger.log(
-                    `[CodeRuntime] 工具 ${tool.name} 已注册（engine=${id}）。`,
-                );
+                // 工具注册在 ensureEngine 内部自动完成。
+                await this.ensureEngine(id, { registerTool });
             } catch (error) {
                 failureCount += 1;
                 const message =

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { BrowserWindow, type WebContents } from 'electron';
 import { EventEmitter } from 'events';
-import { throwUnprcessable } from '../err.js';
+import { throwUnprocessable } from '../err.js';
 import type {
     EvaluateFn,
     GotoOptions,
@@ -325,7 +325,7 @@ export class AgentPage extends EventEmitter {
         );
 
         if (!result) {
-            throwUnprcessable(
+            throwUnprocessable(
                 'Readability 提取失败（页面内容不足或结构不符合文章特征）。' +
                 '可降级使用 content() 获取完整 HTML。'
             );

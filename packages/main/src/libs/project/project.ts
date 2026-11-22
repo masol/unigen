@@ -5,7 +5,7 @@ import type { ICapaFunctor } from "$libs/blueprint/capability/type.js";
 import { AgentDirName, CmdsDirName, KcDirName, MetaDirname, SkillsDirName } from "$libs/const.js";
 import { configService } from "$libs/store/index.js";
 import { secondConfig } from "$libs/store/second.js";
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import { knowledgeCenter } from "$libs/utils/kc.js";
 import { notify } from "$libs/utils/rpcevt.js";
 import type { ProjectActivityData } from "$types/index.js";
@@ -148,7 +148,7 @@ export class ProjectContainer implements IProjectContext {
     #resolveAndSanitizePath(inputPath: string): string {
         const trimmed = inputPath?.trim();
         if (!trimmed) {
-            throwUnprcessable("任务路径不能为空。");
+            throwUnprocessable("任务路径不能为空。");
         }
         const absolute = isAbsolute(trimmed) ? trimmed : resolve(configService().get("task_dir"), trimmed);
         return filenamifyPath(absolute);
@@ -162,7 +162,7 @@ export class ProjectContainer implements IProjectContext {
         const formattedErrors = z.prettifyError(result.error);
         const msg = `任务UI文件${file}加载失败，详情查看日志。`
         Logger.error(msg, formattedErrors);
-        throwUnprcessable(msg)
+        throwUnprocessable(msg)
     }
 
     async loadUI(): Promise<ProjectActivityData> {
@@ -190,7 +190,7 @@ export class ProjectContainer implements IProjectContext {
             const prjdata = await this.loadUI();
             const type = await fs.readFile(this.getPath([MetaDirname, "type.txt"]), "utf-8");
             if (!type) {
-                throwUnprcessable(`任务类型文件${this.getPath([MetaDirname, "type.txt"])}不存在或为空。`)
+                throwUnprocessable(`任务类型文件${this.getPath([MetaDirname, "type.txt"])}不存在或为空。`)
             }
             this.#type = type;
 
@@ -240,7 +240,7 @@ export class ProjectContainer implements IProjectContext {
             // this.#plugin = await pluginManager.load(type, this)
             const typePath = await knowledgeCenter.getFile(type, "type.json");
             if (!typePath) {
-                throwUnprcessable(`请求的类型${type}未提供UI界面定义。`)
+                throwUnprocessable(`请求的类型${type}未提供UI界面定义。`)
             }
             const typejson = await fsExtra.readJSON(typePath);
             const prjdata = this.validatePrjData(typePath, typejson);

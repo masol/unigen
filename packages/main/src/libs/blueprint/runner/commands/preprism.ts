@@ -1,12 +1,12 @@
 import { preprism, PreprismOpts } from "$libs/model/llm/preprism/index.js";
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 
 
 export async function runCmd(ctx: IRunnerContext): Promise<void> {
     const body = ctx.cmd.body;
     if (!body) {
-        throwUnprcessable("请求preprism，但是未提供任何问题。")
+        throwUnprocessable("请求preprism，但是未提供任何问题。")
     }
     ctx.notify("准备中", "开始Preprism");
     const opts: PreprismOpts = {};

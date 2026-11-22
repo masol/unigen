@@ -1,4 +1,4 @@
-import { errString, throwUnprcessable } from "$libs/utils/err.js";
+import { errString, throwUnprocessable } from "$libs/utils/err.js";
 import { themeFile } from "$libs/utils/sys/dir.js";
 import { GetThemeType } from "$types/shared/api/theme.js";
 import Logger from "electron-log/main.js";
@@ -21,10 +21,10 @@ export async function setTheme(content: string): Promise<string> {
             Logger.info(`设置浅色主题,保存到文件${fileName}`)
             return 'light';
         } else {
-            throwUnprcessable("无效的主题文件,未包含type:dark|light.")
+            throwUnprocessable("无效的主题文件,未包含type:dark|light.")
         }
     } catch (e) {
-        throwUnprcessable(`设置编辑主题失败:${errString(e)}`)
+        throwUnprocessable(`设置编辑主题失败:${errString(e)}`)
     }
 }
 
@@ -61,6 +61,6 @@ export async function getTheme(): Promise<GetThemeType> {
         )
         return { dark, light }
     } catch (e) {
-        throwUnprcessable(`设置编辑主题失败:${errString(e)}`)
+        throwUnprocessable(`设置编辑主题失败:${errString(e)}`)
     }
 }

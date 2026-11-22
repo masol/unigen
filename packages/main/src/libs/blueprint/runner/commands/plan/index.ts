@@ -8,7 +8,7 @@
  *   P3: codeGen（占位）
  *   flatten: 展平为单层可执行 DAG
  */
-import { throwUnprcessable } from '$libs/utils/err.js';
+import { throwUnprocessable } from '$libs/utils/err.js';
 import type { IRunnerContext } from '$types/blueprint/context.js';
 import { MAX_ITERATIONS } from './config.js';
 import { ConflictSignal, createPlanContext } from './context.js';
@@ -38,5 +38,5 @@ export async function runCmd(ctx: IRunnerContext): Promise<void> {
             throw e;
         }
     }
-    throwUnprcessable(`[plan] 规划未收敛:达到轮次上限 ${MAX_ITERATIONS}`, true);
+    throwUnprocessable(`[plan] 规划未收敛:达到轮次上限 ${MAX_ITERATIONS}`, true);
 }

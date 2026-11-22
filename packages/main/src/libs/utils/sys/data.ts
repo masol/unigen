@@ -5,7 +5,7 @@ import { pathExists } from 'fs-extra';
 import { readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { throwUnprcessable } from '../err.js';
+import { throwUnprocessable } from '../err.js';
 import { knowledgeCenter } from '../kc.js';
 
 const DataDirName = 'data';
@@ -70,7 +70,7 @@ class DataCenter {
     public async ensurePrompt(...args: string[]): Promise<string> {
         const prompt = await this.readPrompt(...args);
         if (!prompt) {
-            throwUnprcessable(`未找到系统提示文件: ${args.join('/')}.md`);
+            throwUnprocessable(`未找到系统提示文件: ${args.join('/')}.md`);
         }
         return prompt;
     }

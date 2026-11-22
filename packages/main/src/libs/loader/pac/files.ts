@@ -1,5 +1,5 @@
 // files.ts
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import type { PacFileDocument } from "$types/shared/api/pac.js";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -40,7 +40,7 @@ export async function readPacFile(
     const rel = normalizeRelPath(apiPath, false);
 
     if (!rel.endsWith(MD_EXT)) {
-        throwUnprcessable("只能读取 .md 文件");
+        throwUnprocessable("只能读取 .md 文件");
     }
 
     const rootAbs = resolveRootAbs(root);
@@ -71,7 +71,7 @@ export async function readPacFile(
     }
 
     if (!isInside(rootReal, real)) {
-        throwUnprcessable("路径越界");
+        throwUnprocessable("路径越界");
     }
 
     const stat = await fs.stat(abs);
@@ -97,12 +97,12 @@ export async function savePacFile(
     content: string,
 ): Promise<PacFileDocument> {
     if (typeof content !== "string") {
-        throwUnprcessable("content 必须是字符串");
+        throwUnprocessable("content 必须是字符串");
     }
 
     const rel = normalizeRelPath(apiPath, true);
     if (!rel) {
-        throwUnprcessable("不能写入 PAC 根目录");
+        throwUnprocessable("不能写入 PAC 根目录");
     }
 
     assertMarkdownFileName(rel);
@@ -115,15 +115,15 @@ export async function savePacFile(
 
     if (existing) {
         if (existing.isSymbolicLink()) {
-            throwUnprcessable("不允许写入符号链接文件");
+            throwUnprocessable("不允许写入符号链接文件");
         }
         if (!existing.isFile()) {
-            throwUnprcessable("目标不是文件");
+            throwUnprocessable("目标不是文件");
         }
 
         const real = await fs.realpath(resolved.abs);
         if (!isInside(resolved.rootReal, real)) {
-            throwUnprcessable("路径越界");
+            throwUnprocessable("路径越界");
         }
     }
 

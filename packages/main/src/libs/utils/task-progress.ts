@@ -25,7 +25,6 @@ import type {
     TaskStatus,
     TaskWarning,
 } from "$types/shared/task-progress.js";
-import { getCurrentProject } from "./api/index.js";
 import { broadcast } from "./rpcevt.js";
 
 export type { TaskSnapshot, TaskStatus, TaskWarning };
@@ -38,7 +37,7 @@ export type { TaskSnapshot, TaskStatus, TaskWarning };
 export function publishTask(snap: TaskSnapshot): void {
     broadcast({
         name: "task:update",
-        srcId: getCurrentProject()?.wid ?? -1,
+        srcId: -1, //getCurrentProject()?.wid ?? -1,
         payload: snap,
     });
 }

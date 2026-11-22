@@ -3,13 +3,13 @@
  * 【P-Pass4 · flatten:多层 DAG 展平为单层可执行大 DAG】
  * ============================================================================
  */
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import Logger from "electron-log/main.js";
 import { PlanContext } from "../context.js";
 
 export async function flatten(pctx: PlanContext): Promise<string> {
     const gdag = pctx.gdag;
-    if (!gdag.rootId) throwUnprcessable(`[flatten] 根层不存在`, true);
+    if (!gdag.rootId) throwUnprocessable(`[flatten] 根层不存在`, true);
 
     const flatId = gdag.flatten();
     pctx.persist();

@@ -1,7 +1,7 @@
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { configService } from '$libs/store/index.js';
 import { ProjectDbKeys } from '$libs/utils/db/dbkeys.js';
-import { throwCancel, throwUnprcessable } from '$libs/utils/err.js';
+import { throwCancel, throwUnprocessable } from '$libs/utils/err.js';
 import { knowledgeCenter } from '$libs/utils/kc.js';
 import { WindowService } from '$libs/utils/window.js';
 import { IRunnerContext } from '$types/blueprint/context.js';
@@ -51,7 +51,7 @@ export async function runCmd(ctx: IRunnerContext): Promise<void> {
 }
 
 async function runExport(ctx: IRunnerContext, targetPath: string): Promise<void> {
-    if (!targetPath) throwUnprcessable('targetPath is required');
+    if (!targetPath) throwUnprocessable('targetPath is required');
 
     const flags = parseFlags(ctx.cmd);
     const prjdb = PrjDB.ensure(ctx.prj);
@@ -99,7 +99,7 @@ async function runExport(ctx: IRunnerContext, targetPath: string): Promise<void>
                 ...errors,
             ].join('\n'),
         );
-        throwUnprcessable(`Export failed for ${errors.length} item(s).`);
+        throwUnprocessable(`Export failed for ${errors.length} item(s).`);
     }
 
     const written = results.filter(Boolean).length;

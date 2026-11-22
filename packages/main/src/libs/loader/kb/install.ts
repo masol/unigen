@@ -1,6 +1,6 @@
 // packages/main/src/libs/loader/kb/install.ts
 import { openGlobalSearch } from "$libs/searchsrv/index.js";
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import { globalKbDir } from "$libs/utils/sys/dir.js";
 import { ensureDir, move, pathExists, remove } from "fs-extra";
 import { randomUUID } from "node:crypto";
@@ -62,7 +62,7 @@ export async function installKnowledgeBase(
 
     const db = await openGlobalSearch();
     if (!db.opened) {
-        throwUnprcessable("[Kb] 全局检索库未就绪。");
+        throwUnprocessable("[Kb] 全局检索库未就绪。");
     }
 
     // 单库增量：只读刚安装的目录，不扫描 res/data 全量。
@@ -93,7 +93,7 @@ async function installKnowledgeBaseFromArchive(
             throw new Error("meta.json 必须是 JSON 对象");
         }
     } catch (error) {
-        throwUnprcessable(
+        throwUnprocessable(
             `meta.json 解析失败: ${getErrorMessage(error)}`,
         );
     }

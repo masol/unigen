@@ -38,6 +38,26 @@ const codeRuntimeEngineStatusSchema = {
     },
 };
 
+/**
+ * npm registry 测速缓存。
+ *
+ * 故意**不设 default**：语义上"没有缓存" ≠ "空缓存"，用 `get()` 返回
+ * `undefined` 表达最直观；同时避免 electron-store 在首次初始化时写入
+ * 一个无意义的占位对象。
+ *
+ * `checkedAt === 0` 由应用层作为"已手动失效"的哨兵值使用（见 nodejs.ts），
+ * schema 上仍是合法 number。
+ */
+const npmRegistryCacheSchema = {
+    type: 'object' as const,
+    additionalProperties: false,
+    properties: {
+        url: { type: 'string' as const },
+        checkedAt: { type: 'number' as const },
+        isChina: { type: 'boolean' as const },
+    },
+};
+
 export const stableSchema: Schema<StableConfig> = {
     isChina: {
         type: 'boolean',
@@ -100,4 +120,5 @@ export const stableSchema: Schema<StableConfig> = {
             updatedAt: { type: 'number', default: 0 },
         },
     },
+    npmRegistryCache: npmRegistryCacheSchema,
 };

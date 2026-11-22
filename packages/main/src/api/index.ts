@@ -6,7 +6,7 @@ import window from './common/window.js';
 import { alsMiddleware } from "./als.js";
 import agent from './common/agent.js';
 import config from './common/cfg.js';
-import rapi from './common/rapi.js';
+import code from './common/code.js';
 import system from './common/sys.js';
 import project from './project/index.js';
 import { RpcContext } from "./type.js";
@@ -23,7 +23,7 @@ const appRouter = os
         system,
         project,
         agent,
-        rapi
+        code,
     });
 
 export type AppRouter = typeof appRouter;

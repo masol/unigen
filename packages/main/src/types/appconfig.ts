@@ -2,6 +2,7 @@ import type { RecentProject } from "./shared/api/recents.js";
 import type {
     CodeRuntimeConfig,
     CodeRuntimeStatus,
+    NpmRegistryCache,
 } from "./shared/env/code-runtime.js";
 import type { McpServerConfig } from "./shared/mcp.js";
 import type { Provider } from "./shared/model.js";
@@ -14,7 +15,8 @@ export type {
     CodeRuntimeEngineId,
     CodeRuntimeEngineState,
     CodeRuntimeEngineStatus,
-    CodeRuntimeStatus
+    CodeRuntimeStatus,
+    NpmRegistryCache
 } from "./shared/env/code-runtime.js";
 
 /**
@@ -73,7 +75,9 @@ export interface AppConfig {
  * 代码运行时部分包含：
  *   - `codeRuntime`       ：用户意图（启用 / 版本 / 归档 / 镜像）；
  *   - `codeRuntimeStatus` ：持久化的安装状态（含历史遗留进度）；
- *                          由 `CodeRuntimeManager` 维护；**进程重启后用于恢复**。
+ *                          由 `CodeRuntimeManager` 维护；**进程重启后用于恢复**；
+ *   - `npmRegistryCache`  ：中国区 npm registry 测速结果的持久化缓存
+ *                          （7 天 TTL，见 `nodejs.ts` / `NpmRegistryCache`）。
  */
 export interface StableConfig {
     /**
@@ -99,6 +103,16 @@ export interface StableConfig {
      * 不做 `installing` 残留收敛会导致 UI 卡在"安装中"。
      */
     codeRuntimeStatus: CodeRuntimeStatus;
+    /**
+     * 中国区 npm registry 测速缓存。
+     *
+     * - 首次使用 / 缓存失效（TTL / 区域变化 / 手动失效）时触达测速；
+     * - 成功结果写入此字段并复用 7 天；
+     * - install 失败时由 `nodejs.ts` 置 `checkedAt = 0` 强制下次重测。
+     *
+     * 仅中国区使用；非中国区固定走官方源，不读取 / 不写入此字段。
+     */
+    npmRegistryCache?: NpmRegistryCache;
 }
 
 // ── SecondConfig ────────────────────────────────────────────

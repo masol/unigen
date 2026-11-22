@@ -1,4 +1,4 @@
-import { throwCancel, throwNotfound, throwNotimplement, throwPrecondition, throwUnprcessable } from "$libs/utils/err.js";
+import { throwCancel, throwNotfound, throwNotimplement, throwPrecondition, throwUnprocessable } from "$libs/utils/err.js";
 import { delay } from "$libs/utils/promise.js";
 import { toArraySafe, toStringSafe } from "$libs/utils/str.js";
 import { randomUUID } from "node:crypto";
@@ -20,7 +20,7 @@ export const FIXED_PACKAGES = {
         throwPrecondition,
         throwNotfound,
         throwNotimplement,
-        throwUnprcessable,
+        throwUnprocessable,
         throwCancel,
     },
     delay,

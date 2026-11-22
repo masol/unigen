@@ -104,3 +104,26 @@ export interface CodeRuntimeStatus {
     /** 状态最近一次整体更新时间（毫秒时间戳）。 */
     updatedAt: number;
 }
+
+/**
+ * npm registry 测速缓存。
+ *
+ * 目的：中国区首次使用 npm 时按需测速一次并**持久化 7 天**，
+ * 期间直接复用缓存值，避免每次启动 / 每次 install 都重新测速
+ * （当前版本的"进程内 30 分钟"缓存会被冷启动反复击穿）。
+ *
+ * 失效条件（任一）：
+ *   - `checkedAt === 0`：被手动失效（如 install 失败，见 nodejs.ts）；
+ *   - `Date.now() - checkedAt >= 7d`：超过 TTL；
+ *   - `cache.isChina !== stableConfig.isChina`：区域发生变化。
+ *
+ * 仅在中国区使用；非中国区固定走官方源，不读取此缓存。
+ */
+export interface NpmRegistryCache {
+    /** 选中的 registry URL。 */
+    url: string;
+    /** 选中时间戳（ms）；0 表示已失效。 */
+    checkedAt: number;
+    /** 选中时的 isChina 状态，用于区域变化时自动失效。 */
+    isChina: boolean;
+}

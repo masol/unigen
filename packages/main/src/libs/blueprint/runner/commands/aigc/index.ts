@@ -1,5 +1,5 @@
 // agic.ts
-import { throwNotimplement, throwUnprcessable } from '$libs/utils/err.js';
+import { throwNotimplement, throwUnprocessable } from '$libs/utils/err.js';
 import type { IRunnerContext } from '$types/blueprint/context.js';
 import { imageAIGC } from './image.js';
 import { textAIGC } from './text.js';
@@ -8,7 +8,7 @@ import { videoAIGC } from './video.js';
 export async function runCmd(ctx: IRunnerContext): Promise<void> {
     const body = ctx.cmd.body?.trim();
     if (!body) {
-        throwUnprcessable("请求 agic 但未提供任何内容。用法: /agic [--type text|image|video|tts|asr|bgm|mt] <prompt>");
+        throwUnprocessable("请求 agic 但未提供任何内容。用法: /agic [--type text|image|video|tts|asr|bgm|mt] <prompt>");
     }
 
     const args = ctx.cmd.args ?? {};
@@ -19,7 +19,7 @@ export async function runCmd(ctx: IRunnerContext): Promise<void> {
     // 指定生成类型 (若未提供则默认自动推理或仅文本)
     if (args['type']) {
         if (!allowed.includes(args['type'])) {
-            throwUnprcessable(`不支持的生成类型: ${args['type']}，可选: ${allowed.join(', ')}`);
+            throwUnprocessable(`不支持的生成类型: ${args['type']}，可选: ${allowed.join(', ')}`);
         }
     }
 

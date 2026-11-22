@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { RpcContext } from '../type.js';
 // import { configService } from '$libs/store/index.js';
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
-import { throwUnprcessable, UNIGEN_ERROR_DEFS } from '$libs/utils/err.js';
+import { throwUnprocessable, UNIGEN_ERROR_DEFS } from '$libs/utils/err.js';
 import { GetListResponseSchema, QueryParamsSchema } from '$types/shared/api/list.js';
 import { projectActivityDataSchema } from '$types/shared/template/project.js';
 import { COMMON_ORPC_ERROR_DEFS } from "@orpc/client";
@@ -62,7 +62,7 @@ const loadUI = os
         if (prj && prj.wid >= 0) {
             return await prj.loadUI();
         }
-        throwUnprcessable("无法定位任务对象。")
+        throwUnprocessable("无法定位任务对象。")
     })
 
 const create = os

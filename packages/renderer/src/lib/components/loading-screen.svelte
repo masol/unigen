@@ -16,7 +16,7 @@
     title: "启动",
     phase: "starting",
     message: "正在启动",
-    progress: 0,
+    progress: 15,
     status: "running",
     warnings: [],
     startedAt: 0,

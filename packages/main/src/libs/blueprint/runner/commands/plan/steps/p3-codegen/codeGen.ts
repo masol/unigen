@@ -36,7 +36,7 @@ const CODEGEN_INSTRUCTIONS = `你是数据处理代码生成器。
 - z —— zod
 - delay(ms) —— 异步休眠
 - util —— { randomUUID, pMap, toStrSafe, toStrArraySafe, ...radashi（isString/isArray/isObject/group/... 全部导出） }
-- err —— { throwPrecondition, throwNotfound, throwNotimplement, throwUnprcessable, throwCancel }，均 (msg:string)=>never
+- err —— { throwPrecondition, throwNotfound, throwNotimplement, throwUnprocessable, throwCancel }，均 (msg:string)=>never
 - glossary —— { getIO(cap), save(key, value), set(key, value, opt?), get(key) }
 - llm —— { generate({instructions, prompt, messages?})→Promise<{text}>, Output.object({schema}), safefmt(nl, output)→Promise<{success, value?}> }
 - ctx —— { warn, error, debug, log }

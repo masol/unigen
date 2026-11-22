@@ -57,6 +57,30 @@ interface ToolSyncRow {
     };
 }
 
+interface BuiltinSyncRow {
+    id: string;
+    name: string;
+    description: string;
+    metadata: {
+        llmName: string;
+        source: "builtin";
+        serverId?: string;
+    };
+}
+
+/**
+ * ToolMeta 中与泛型无关的标量字段子集。
+ *
+ * 用于跨泛型边界（ToolMeta<TInput, TOutput> → 检索表同步）时避免逆变冲突：
+ * ToolMeta 的 `execute` 参数位置是逆变的，`ToolMeta<TInput, TOutput>` 不能
+ * 直接赋给 `ToolMeta<unknown, unknown>`。而 id / name / description / llmName /
+ * serverId 都是标量，不受 TInput/TOutput 影响，用 Pick 取出后类型完全兼容。
+ */
+type BuiltinMetaScalars = Pick<
+    ToolMeta,
+    "id" | "name" | "description" | "llmName" | "serverId"
+>;
+
 function parseRowMetadata(raw: unknown): Record<string, unknown> {
     if (typeof raw === "string" && raw) {
         try {
@@ -82,17 +106,39 @@ async function normalizeToolSchema(
     return (await normalizeToJsonSchema(raw)) ?? undefined;
 }
 
+function builtinMetaToRow(meta: BuiltinMetaScalars): BuiltinSyncRow {
+    return {
+        id: meta.id,
+        name: meta.name,
+        description: meta.description,
+        metadata: {
+            llmName: meta.llmName,
+            source: "builtin",
+            ...(meta.serverId ? { serverId: meta.serverId } : {}),
+        },
+    };
+}
+
 /**
  * 全局工具库（应用级单例）。
  *
  * 职责边界：
  *   - builtin / meta 工具：常驻内存（ToolRegistry），由本模块全权管理；
- *   - MCP 工具：**不在内存**。本模块只被动接收 mcp-sync 写入的元数据
- *     （replaceMcpServerTools / removeMcpServerTools），查询时通过
+ *   - MCP 工具：不在内存。本模块被动接收 mcp-sync 写入的元数据
+ *     （replaceMcpServerTools / removeMcpServerTools），查询时基于
  *     LanceDB 持久化元数据 + mcpRoute 惰性包装器动态解析。
  *
- * tooldb 不持有 MCP 配置、不连接、不管理 MCP 生命周期；
- * 只在真正调用时通过包装器触发 mcpRoute.callTool。
+ * tooldb 不持有 MCP 配置、不连接、不管理 MCP 生命周期；调用时通过
+ * 包装器触发 mcpRoute.callTool。
+ *
+ * 检索表同步：
+ *   - searchTools 走 searchsrv 的 tool 表（持久化 + hybrid 检索），
+ *     而 register 原本只写内存 registry → 运行期注册的工具搜不到；
+ *   - 现在 register / unregister / init 会在数据库已打开时**自动**把
+ *     builtin 工具增量同步到检索表（单条 upsert / delete），
+ *     从而不再依赖外部 `syncToolsToSearchDB()` 的调用时序；
+ *   - initialize 未 open 时跳过；外部 `syncToolsToSearchDB()` 保留为
+ *     全量 diff 兜底（清理陈旧行）。
  *
  * 查询入口统一为 `searchTools`：
  *   - query 非空：searchsrv hybrid 检索（相关度排序）；
@@ -127,10 +173,14 @@ export class GlobalToolDB {
     // ---------- 初始化 ----------
 
     /**
-     * 初始化：加载 builtins → 兜底注册元工具。
+     * 初始化：加载 builtins → 兜底注册元工具 → 同步到检索表（若已 open）。
      *
      * 本方法**不处理 MCP**：MCP 配置、连接、发现均由外部（mcp-sync）
      * 通过 `replaceMcpServerTools` / `removeMcpServerTools` 被动写入。
+     *
+     * 关于同步：若 `getGlobalSearchDB().opened === true`，会把全部 builtin
+     * 一次性 upsert 至 tool 表；否则跳过，由外部 `syncToolsToSearchDB()`
+     * 在数据库打开后补一次。
      */
     async init(options: InitOptions = {}): Promise<void> {
         return this.#enqueue(async () => {
@@ -146,6 +196,8 @@ export class GlobalToolDB {
                 `[ToolDB] 全局工具库已就绪，共 ${this.#registry.size} 个常驻工具。`,
             );
             this.#readyResolve();
+
+            await this.#syncAllBuiltinsToDbIfOpened();
         });
     }
 
@@ -182,26 +234,40 @@ export class GlobalToolDB {
     // ---------- 注册面 ----------
 
     /**
-     * 注册任意函数为工具（纯内存，source = "builtin"）。
-     * 同名重复注册等价于覆盖旧实现。
+     * 注册任意函数为工具（source = "builtin"）。
+     *
+     * 落内存后，若检索库已打开，**单条幂等 upsert 至 tool 表**，
+     * 从而使 search_tools / searchTools 立即可见。meta 工具跳过同步
+     * （它们不属于检索面，且不与其他工具共享检索语料）。
+     *
+     * 同名重复注册等价于覆盖旧实现；旧行在检索表里会被新行覆盖。
      */
     async register<TInput, TOutput>(
         def: ToolDefinition<TInput, TOutput>,
     ): Promise<ToolMeta<TInput, TOutput>> {
         return this.#enqueue(async () => {
-            return this.#registerCodeTool(def);
+            const meta = this.#registerCodeTool(def);
+            // 用 Pick 出的标量字段构造 row，避开 ToolMeta 逆变导致的
+            // `ToolMeta<TInput, TOutput> → ToolMeta<unknown, unknown>` 类型错误。
+            await this.#syncBuiltinToDbIfOpened(builtinMetaToRow(meta));
+            return meta;
         });
     }
 
     /**
      * 注销一个 builtin 工具。
      * MCP 工具由 server 生命周期管理，不受此方法影响。
+     * 检索表同步删除（若已打开）。
      */
     async unregister(nameOrId: string): Promise<boolean> {
         return this.#enqueue(async () => {
             const meta = this.#registry.get(nameOrId);
             if (!meta || meta.source === "mcp") return false;
-            return this.#registry.remove(meta.id);
+            const removed = this.#registry.remove(meta.id);
+            if (removed) {
+                await this.#deleteFromDbIfOpened(meta.id);
+            }
+            return removed;
         });
     }
 
@@ -232,7 +298,6 @@ export class GlobalToolDB {
 
     /**
      * 移除 serverId 下的全部 MCP 工具元数据。
-     *
      * 调用方：mcp-sync 在配置删除 / 禁用后调用。
      */
     async removeMcpServerTools(serverId: string): Promise<void> {
@@ -241,7 +306,6 @@ export class GlobalToolDB {
 
     /**
      * 列出所有在持久化中**已登记 MCP 工具**的 serverId（去重）。
-     *
      * 供 mcp-sync 启动期判断"哪些 server 需要 discover"。
      * 不触发 MCP 连接；只读 LanceDB 的 tool 表。
      */
@@ -251,7 +315,6 @@ export class GlobalToolDB {
 
     /**
      * 列出持久化中每个 MCP server 的配置指纹。
-     *
      * 返回值：serverId -> configFingerprint。
      * 旧数据可能缺少指纹，此时值为空字符串，调用方应视为“需要 discover”。
      */
@@ -399,6 +462,69 @@ export class GlobalToolDB {
             // 直接存 def.execute 并在 invoke_tool 路径下裸调用会丢失 this。
             execute: (input: unknown) => def.execute(input as TInput),
         }) as ToolMeta<TInput, TOutput>;
+    }
+
+    // ---------- 内部：builtin 工具与检索表的同步 ----------
+
+    /**
+     * 单条 builtin upsert（幂等）。检索库未打开则跳过。
+     *
+     * meta 工具不同步：它们由框架直接挂载，不属于检索面。
+     */
+    async #syncBuiltinToDbIfOpened(row: BuiltinSyncRow): Promise<void> {
+        if (isMetaToolId(row.id)) return;
+
+        const db = getGlobalSearchDB();
+        if (!db.opened) return;
+
+        try {
+            await db.tool.upsertTools([row]);
+        } catch (error) {
+            Logger.warn(
+                `[ToolDB] 同步工具 ${row.id} 到检索表失败：${error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+    }
+
+    async #deleteFromDbIfOpened(id: string): Promise<void> {
+        const db = getGlobalSearchDB();
+        if (!db.opened) return;
+        try {
+            await db.tool.deleteTools([id]);
+        } catch (error) {
+            Logger.warn(
+                `[ToolDB] 从检索表删除工具 ${id} 失败：${error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+    }
+
+    /**
+     * init 结束时一次性把全部 builtin（跳过 meta）upsert 至检索表。
+     * 检索库未打开则跳过，由外部 `syncToolsToSearchDB()` 在打开后补齐。
+     */
+    async #syncAllBuiltinsToDbIfOpened(): Promise<void> {
+        const db = getGlobalSearchDB();
+        if (!db.opened) return;
+
+        const rows = this.#registry
+            .list("builtin")
+            .filter((meta) => !isMetaToolId(meta.id))
+            .map(builtinMetaToRow);
+        if (rows.length === 0) return;
+
+        try {
+            await db.tool.upsertTools(rows);
+            Logger.debug(
+                `[ToolDB] init 已同步 ${rows.length} 个 builtin 工具到检索表。`,
+            );
+        } catch (error) {
+            Logger.warn(
+                `[ToolDB] init 同步 builtin 工具到检索表失败：${error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
     }
 
     // ---------- 查询面 ----------

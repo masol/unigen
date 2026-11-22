@@ -5,7 +5,7 @@
  */
 import { getSmartModel } from "$libs/model/index.js";
 import { extractErrmsg, safefmt } from "$libs/model/llm/outline.js";
-import { throwUnprcessable } from "$libs/utils/err.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import type { PNode } from "$types/index.js";
 import {
     Artifact, DagDesignResult, DagNode, Io,
@@ -676,7 +676,7 @@ export async function designDag(
         if (result) return result;
     }
 
-    throwUnprcessable(`工作流拆解失败：所有粒度级别（${maxLevels}→1）均未收敛`);
+    throwUnprocessable(`工作流拆解失败：所有粒度级别（${maxLevels}→1）均未收敛`);
 }
 
 // ─── 登记 ──────────────────────────────────────────────────────────────────
