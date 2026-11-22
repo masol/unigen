@@ -372,9 +372,7 @@ export const nodeRunTool: ToolDefinition<NodeRunInput, NodeRunOutput> = {
         "顺利完成，脚本自身以非零退出码结束仍为 success=true；exit_code 才是脚本的语义结果。" +
         "exit_code 非零时先读 stderr，再针对性修改代码或 dependencies 后重试。" +
         "\n\n【环境保证】" +
-        "npm cache / global prefix 限制在应用数据目录，不污染系统环境；" +
-        "中国区首次使用 npm 时会自动测速一次并缓存 7 天（install 失败会触发下次重测），" +
-        "官方源不参与中国区测速。",
+        "npm cache / global prefix 限制在应用数据目录，不污染系统环境；",
     inputSchema,
     outputSchema,
     execute: async (input) => {
