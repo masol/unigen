@@ -1,5 +1,6 @@
+import { STARTUP_TASK_ID } from '$libs/const.js';
 import { appLife } from '$libs/utils/tapable/applife.js';
-import { getStartupProgress } from './libs/utils/task-progress.js';
+import { complete, fail, report } from './libs/utils/task-progress.js';
 import { createModuleRunner } from './ModuleRunner.js';
 import { terminateAppOnLastWindowClose } from './modules/ApplicationTerminatorOnLastWindowClose.js';
 import { autoUpdater } from './modules/AutoUpdater.js';
@@ -16,12 +17,10 @@ import { createWindowManagerModule } from './modules/WindowManager.js';
 import type { AppInitConfig } from './types/AppInitConfig.js';
 
 export async function initApp(initConfig: AppInitConfig) {
-  const startup = getStartupProgress();
-
   try {
-    startup.start();
-    startup.report("starting", "正在启动应用...", 2);
     registerSchemes();
+    // 首次报告即视为"启动开始"；不再有单独的 start 语义。
+    report(STARTUP_TASK_ID, "starting", "正在启动应用...", 2);
 
     const moduleRunner = createModuleRunner()
       .init(disallowMultipleAppInstance())
@@ -55,9 +54,10 @@ export async function initApp(initConfig: AppInitConfig) {
       .init(unigenModule());
 
     await moduleRunner;
-    startup.complete("初始化完成");
+    complete(STARTUP_TASK_ID, "初始化完成");
   } catch (error) {
-    startup.fail(
+    fail(
+      STARTUP_TASK_ID,
       "初始化失败，请查看日志或重试。",
       error instanceof Error ? error.message : String(error),
     );

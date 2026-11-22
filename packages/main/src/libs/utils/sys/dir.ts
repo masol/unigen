@@ -84,6 +84,14 @@ export function codeRuntimePythonInterpretersDir(...parts: string[]): string {
     return codeRuntimeDir("python", "interpreters", ...parts);
 }
 
+/**
+ * uv 缓存目录（`UV_CACHE_DIR`）。
+ * 限制在应用数据目录下，避免写入 `~/.cache/uv`。
+ */
+export function codeRuntimeUvCacheDir(...parts: string[]): string {
+    return codeRuntimeDir("python", "cache", ...parts);
+}
+
 export function getBuildinPath(name: string, ...sub: string[]): string {
     let basePath: string | undefined
     switch (name) {

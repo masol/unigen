@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { push } from "@keenmate/svelte-spa-router";
-  import { IconServerOff } from "@tabler/icons-svelte";
+  import { IconAlertTriangle, IconServerOff } from "@tabler/icons-svelte";
   import { onMount } from "svelte";
   import { cubicInOut } from "svelte/easing";
   import { fade } from "svelte/transition";
@@ -20,8 +20,19 @@
     <h1 class="text-xl font-semibold tracking-tight text-foreground">
       自有环境
     </h1>
+
     <p class="text-sm text-muted-foreground">
-      管理本机或通过 SSH 连接的推理基础环境，例如 llama.cpp。
+      管理本机或通过 SSH 连接的训练及推理环境(llama,unsloth)。
+      <span
+        class="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5
+                   text-[11px] font-semibold tracking-wide
+                   text-amber-600 dark:text-amber-400
+                   ring-1 ring-inset ring-amber-500/30
+                   shadow-[0_0_0_3px_rgba(245,158,11,0.08)]"
+      >
+        <IconAlertTriangle size={12} stroke={2.25} />
+        当前民用级设备支持微调（LoRA/QLoRA）；特定条件下，可完成小模型全参微调或实验性预训练，但不具备生产级预训练能力。
+      </span>
     </p>
   </header>
 

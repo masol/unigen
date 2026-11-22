@@ -187,7 +187,7 @@
         {
           id: "environments",
           label: "自有环境",
-          description: "基于自有设备的AI运行环境",
+          description: "基于自有设备的AI环境",
           icon: IconServer2,
           path: "environments",
           // 由 environments store 模块底部注册（参见 LongTaskStore.register）

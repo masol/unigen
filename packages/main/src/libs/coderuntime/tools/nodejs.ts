@@ -2,21 +2,23 @@
 //
 // Node.js 运行工具。
 //
-// 依赖安装与执行串行完成；国内 registry 从注册表自动注入。
-// 目标 cwd 若无 package.json，会写入一个最小占位以确保 npm 行为正常：
-//   - 避免 `npm install` 因缺 package.json 发出的 warning；
-//   - 允许 package-lock.json 正常持久化；
-//   - 便于 AI 二次运行时复用 node_modules / lockfile。
+// 依赖安装与执行串行完成；国内 registry 从 `engines/nodejs.reg.js`
+// 的中国镜像列表中**测速**选最快（进程级缓存，默认 TTL 30 分钟）；
+// 国内用户测速时排除 npm 官方源（符合"国内必须启用镜像"要求）。
+//
+// 目标 cwd 若无 package.json，会写入一个最小占位以确保 npm 行为正常。
 
+import { probeUrls, sortByLatency } from "$libs/loader/probe.js";
 import { stableConfig } from "$libs/store/stable.js";
 import type { ToolDefinition } from "$libs/tooldb/type.js";
+import Logger from "electron-log/main.js";
 import { execa } from "execa";
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { z } from "zod";
+import { NPM_REGISTRY_MIRRORS } from "../engines/nodejs.reg.js";
 import { codeRuntimeManager } from "../manager.js";
-import { pickMirror, RUNTIME_REGISTRY } from "../registry.js";
 import {
     formatCommand,
     limitOutput,
@@ -25,6 +27,13 @@ import {
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** npm registry 测速超时（每源）。 */
+const NPM_PROBE_TIMEOUT_MS = 4_000;
+/** 选出的 npm registry 的缓存时长。 */
+const NPM_REGISTRY_TTL_MS = 30 * 60 * 1000;
+
+let cachedNpmRegistry: { url: string; at: number } | null = null;
 
 const inputSchema = z
     .object({
@@ -100,12 +109,50 @@ function resolveNpmPath(rootDir: string): string {
         : join(rootDir, "bin", "npm");
 }
 
-function resolveNpmRegistry(explicit: string | undefined): string {
+/**
+ * 解析实际使用的 npm registry。
+ *
+ * - 用户显式配置优先；
+ * - 非中国区：直接官方；
+ * - 中国区：对中国镜像测速，选最快并缓存（进程级）；
+ *   排除官方源参与测速。
+ */
+async function resolveNpmRegistryAsync(
+    explicit: string | undefined,
+): Promise<string> {
     if (explicit) return explicit;
-    return pickMirror(
-        RUNTIME_REGISTRY.npm.registry,
-        stableConfig().get("isChina"),
-    );
+
+    const inChina = stableConfig().get("isChina");
+    if (!inChina) {
+        return NPM_REGISTRY_MIRRORS.official;
+    }
+
+    if (
+        cachedNpmRegistry &&
+        Date.now() - cachedNpmRegistry.at < NPM_REGISTRY_TTL_MS
+    ) {
+        return cachedNpmRegistry.url;
+    }
+
+    const mirrors = NPM_REGISTRY_MIRRORS.china;
+    try {
+        const results = await probeUrls(mirrors, {
+            timeoutMs: NPM_PROBE_TIMEOUT_MS,
+            method: "HEAD",
+        });
+        const sorted = sortByLatency(results);
+        const best = sorted.find((r) => r.reachable)?.url ?? mirrors[0]!;
+        cachedNpmRegistry = { url: best, at: Date.now() };
+        Logger.log(
+            `[CodeRuntime:nodejs] npm registry 测速结果 → ${best}（共 ${mirrors.length} 个候选）`,
+        );
+        return best;
+    } catch (err) {
+        Logger.warn(
+            `[CodeRuntime:nodejs] npm registry 测速失败：${err instanceof Error ? err.message : String(err)}；使用首个镜像。`,
+        );
+        return mirrors[0]!;
+    }
 }
 
 async function pathExists(p: string): Promise<boolean> {
@@ -117,12 +164,6 @@ async function pathExists(p: string): Promise<boolean> {
     }
 }
 
-/**
- * 目标 cwd 没有 `package.json` 时写入最小占位。
- *
- * 不写 `"type": "module"`，保持 Node 默认 CommonJS 行为；
- * 用户脚本可用 `.mjs` / `.cjs` 显式声明模块类型。
- */
 async function ensurePackageJson(cwd: string): Promise<void> {
     const pkgPath = join(cwd, "package.json");
     if (await pathExists(pkgPath)) return;
@@ -148,11 +189,27 @@ async function installDependencies(
     registryOverride: string | undefined,
 ): Promise<void> {
     const npmPath = resolveNpmPath(runtime.rootDir);
-    const registry = resolveNpmRegistry(registryOverride);
-    const env: NodeJS.ProcessEnv = { ...process.env };
-    env.NPM_CONFIG_REGISTRY = registry;
-    // npm 生态习惯用全小写形式，双写以兼容不同命令行路径。
-    env.npm_config_registry = registry;
+    const registry = await resolveNpmRegistryAsync(registryOverride);
+
+    // 本地隔离：npm 的 cache 与 global prefix 全部指向应用数据目录，
+    // 避免污染 `~/.npm` 与 `~/.npm-global`。
+    const localPrefix = join(runtime.rootDir, "npm-global");
+    const localCache = join(runtime.rootDir, "npm-cache");
+    await fs.mkdir(localPrefix, { recursive: true });
+    await fs.mkdir(localCache, { recursive: true });
+
+    const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        NPM_CONFIG_REGISTRY: registry,
+        npm_config_registry: registry,
+        NPM_CONFIG_PREFIX: localPrefix,
+        npm_config_prefix: localPrefix,
+        NPM_CONFIG_CACHE: localCache,
+        npm_config_cache: localCache,
+        NPM_CONFIG_UPDATE_NOTIFIER: "false",
+        npm_config_update_notifier: "false",
+    };
+
     const timeout = input.timeout_ms ?? DEFAULT_TIMEOUT_MS;
 
     if (input.package_json) {
@@ -174,8 +231,6 @@ async function installDependencies(
     }
 
     if (input.dependencies.length > 0) {
-        // 保证 cwd 至少有 package.json，否则 npm 会发 warning，
-        // 且 package-lock.json 会失去根锚点。
         await ensurePackageJson(cwd);
         await execa(
             npmPath,
@@ -200,9 +255,11 @@ async function installDependencies(
 export const nodeRunTool: ToolDefinition<NodeRunInput, NodeRunOutput> = {
     name: "run_node",
     description:
-        "在隔离的 Node.js 运行时中执行代码。安装 npm 依赖与执行脚本在同一工具调用中串行完成，" +
-        "避免并行工具调用导致的依赖竞态。script_path 与 code 二选一；相对路径基于当前任务目录解析。" +
-        "执行目录若无 package.json 会自动创建最小占位。",
+        "在隔离的 Node.js 运行时中执行代码（跨平台：Windows / macOS / Linux；x64 / arm64 均支持）。" +
+        "安装 npm 依赖与执行脚本在同一工具调用中串行完成，避免并行工具调用导致的依赖竞态。" +
+        "script_path 与 code 二选一；相对路径基于当前任务目录解析。" +
+        "执行目录若无 package.json 会自动创建最小占位；npm registry 在中国区通过测速自动选择最快镜像" +
+        "（官方源不参与中国区测速）；npm cache / prefix 均限制在应用数据目录。",
     inputSchema,
     outputSchema,
     execute: async (input) => {

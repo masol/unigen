@@ -17,6 +17,27 @@ const codeRuntimeEngineSchema = {
     },
 };
 
+const codeRuntimeEngineStatusSchema = {
+    type: 'object' as const,
+    additionalProperties: false,
+    required: ['state'],
+    default: { state: 'not_ready' },
+    properties: {
+        state: {
+            type: 'string' as const,
+            enum: ['not_ready', 'installing', 'ready', 'failed', 'interrupted'],
+            default: 'not_ready',
+        },
+        installedRoot: { type: 'string' as const },
+        lastError: { type: 'string' as const },
+        lastCheckAt: { type: 'number' as const },
+        phase: { type: 'string' as const },
+        message: { type: 'string' as const },
+        progress: { type: 'number' as const },
+        verifiedVersion: { type: 'string' as const },
+    },
+};
+
 export const stableSchema: Schema<StableConfig> = {
     isChina: {
         type: 'boolean',
@@ -56,6 +77,27 @@ export const stableSchema: Schema<StableConfig> = {
                     nodejs: codeRuntimeEngineSchema,
                 },
             },
+        },
+    },
+    codeRuntimeStatus: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['engines', 'updatedAt'],
+        default: {
+            engines: {},
+            updatedAt: 0,
+        },
+        properties: {
+            engines: {
+                type: 'object',
+                additionalProperties: false,
+                default: {},
+                properties: {
+                    python: codeRuntimeEngineStatusSchema,
+                    nodejs: codeRuntimeEngineStatusSchema,
+                },
+            },
+            updatedAt: { type: 'number', default: 0 },
         },
     },
 };

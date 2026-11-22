@@ -6,13 +6,15 @@
 //   3. `uv run --active --no-project <script> <args>`（执行脚本）。
 //
 // 关键设计：
+//   - `buildUvEnv()` 统一构造 env，包含本地隔离三要素（UV_INSTALL_DIR /
+//     UV_PYTHON_INSTALL_DIR / UV_CACHE_DIR）与镜像（中国区附加
+//     UV_PYTHON_INSTALL_MIRROR / UV_DEFAULT_INDEX / UV_INDEX_URL）；
+//   - 所有命令通过 execa `env` 逐次注入，不修改 process.env；
 //   - 环境、安装、执行都通过 uv，**不直接调用 python.exe**——
 //     避免绕过 uv 的环境解析逻辑；
-//   - venv 目录使用标准的 `.venv`，与 `uv run` 默认行为一致，也与
-//     用户生态习惯对齐；
+//   - venv 目录使用标准的 `.venv`，与 `uv run` 默认行为一致；
 //   - `--active` + `VIRTUAL_ENV` 明确告知 uv 使用哪个 venv；
-//   - `--no-project` 避免把 cwd 下的 `pyproject.toml` 当项目（可能触发
-//     非预期的 `uv sync`）。
+//   - `--no-project` 避免把 cwd 下的 `pyproject.toml` 当项目。
 
 import { stableConfig } from "$libs/store/stable.js";
 import type { ToolDefinition } from "$libs/tooldb/type.js";
@@ -166,7 +168,10 @@ async function installDependencies(
     registryOverride: string | undefined,
 ): Promise<void> {
     const env = buildUvEnv();
-    if (registryOverride) env.UV_DEFAULT_INDEX = registryOverride;
+    if (registryOverride) {
+        env.UV_DEFAULT_INDEX = registryOverride;
+        env.UV_INDEX_URL = registryOverride;
+    }
 
     const timeout = input.timeout_ms ?? DEFAULT_TIMEOUT_MS;
 
@@ -228,11 +233,9 @@ async function runScriptWithUv(
         ...buildUvEnv(),
         ...(extraEnv ?? {}),
         PYTHONIOENCODING: "utf-8",
-        // `--active` 依赖 VIRTUAL_ENV，显式设置避免 uv 回落到项目环境。
         VIRTUAL_ENV: venvDir,
     };
 
-    // 所有执行统一通过 uv run，避免绕过 uv 直接调用裸 python。
     const uvArgs = [
         "run",
         "--active",
@@ -262,10 +265,12 @@ async function runScriptWithUv(
 export const pythonRunTool: ToolDefinition<PythonRunInput, PythonRunOutput> = {
     name: "run_python",
     description:
-        "在隔离的 Python 运行时（uv + venv）中执行代码。创建虚拟环境、安装依赖、执行脚本" +
-        "在同一工具调用中串行完成，避免并行工具调用导致的依赖竞态。" +
+        "在隔离的 Python 运行时（uv + venv）中执行代码（跨平台：Windows / macOS / Linux；x64 / arm64 均支持）。" +
+        "创建虚拟环境、安装依赖、执行脚本在同一工具调用中串行完成，避免并行工具调用导致的依赖竞态。" +
         "script_path 与 code 二选一；相对路径基于当前任务目录解析。" +
-        "环境与执行全部通过 uv，脚本运行目录下会创建/复用 `.venv`。",
+        "所有产物（uv 二进制 / Python 解释器 / 缓存 / venv）限制在应用数据目录与任务目录内，" +
+        "不写入用户主目录、不修改系统环境；中国区自动使用官方镜像下载 uv 与 Python 解释器，" +
+        "并默认使用国内 PyPI 镜像安装包。",
     inputSchema,
     outputSchema,
     execute: async (input) => {
@@ -281,7 +286,6 @@ export const pythonRunTool: ToolDefinition<PythonRunInput, PythonRunOutput> = {
             cfg.engines.python.version ?? DEFAULT_PYTHON_VERSION;
         const timeoutMs = input.timeout_ms ?? DEFAULT_TIMEOUT_MS;
 
-        // 准备脚本
         let scriptPath: string;
         let tempScript = false;
         if (input.script_path) {
@@ -297,7 +301,6 @@ export const pythonRunTool: ToolDefinition<PythonRunInput, PythonRunOutput> = {
             tempScript = true;
         }
 
-        // 决定 cwd（决定 venv 位置）
         const cwd = input.cwd
             ? isAbsolute(input.cwd)
                 ? input.cwd

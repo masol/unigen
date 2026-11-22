@@ -1,7 +1,21 @@
 import type { RecentProject } from "./shared/api/recents.js";
+import type {
+    CodeRuntimeConfig,
+    CodeRuntimeStatus,
+} from "./shared/env/code-runtime.js";
 import type { McpServerConfig } from "./shared/mcp.js";
 import type { Provider } from "./shared/model.js";
 
+// 兼容旧 import：这里重新导出共享类型。
+// 新增代码请优先从 `./shared/env/code-runtime.js` 导入。
+export type {
+    CodeRuntimeConfig,
+    CodeRuntimeEngineConfig,
+    CodeRuntimeEngineId,
+    CodeRuntimeEngineState,
+    CodeRuntimeEngineStatus,
+    CodeRuntimeStatus
+} from "./shared/env/code-runtime.js";
 
 /**
  * Markdown 正文可用字体族集合。
@@ -48,92 +62,18 @@ export interface AppConfig {
     markdownAutoCollapseCode: number;
 }
 
-// ── 代码运行时 ─────────────────────────────────────────────
-//
-// 设计目标：让 AI 在隔离、可控的独立运行时中执行代码（执行 / 编译 / 依赖安装），
-// 与主进程 Electron 内置 Node 隔离，避免污染宿主环境。
-//
-// - 每个引擎拥有独立的 download/extract/verify 生命周期；
-// - 用户配置（用户意图、可备份恢复）持久化在 StableConfig；
-// - 运行时状态（installing / ready / failed / lastError）为**瞬时**数据，
-//   由 `CodeRuntimeManager` 在内存中维护；重启后由「磁盘存在性」自我修复。
-// - 未来扩展语言时，仅需：
-//     1. 扩展 `CodeRuntimeEngineId`；
-//     2. 在 stableSchema 中补充对应键；
-//     3. 实现 `engines/<id>.ts`；
-//     4. 在 `tools/` 中提供工具定义。
-
-/**
- * 代码运行时引擎标识。
- */
-export type CodeRuntimeEngineId = "python" | "nodejs";
-
-/**
- * 引擎在磁盘上的状态机。
- * **仅内存**，不做持久化（避免崩溃后残留 installing 状态）。
- */
-export type CodeRuntimeEngineState =
-    | "not_ready"
-    | "installing"
-    | "ready"
-    | "failed";
-
-/** 单个运行时的用户配置（可备份恢复）。 */
-export interface CodeRuntimeEngineConfig {
-    /** 是否启用该引擎；关闭时不会下载/更新，也不会注册对应工具。 */
-    enabled: boolean;
-    /** 期望版本号，仅展示用途；实际以 archiveUrl 指向的归档为准。 */
-    version?: string;
-    /**
-     * 自定义下载归档的 URL。
-     * 缺省时由引擎实现按平台给出默认值（中国区会自动切换国内镜像）。
-     *
-     * 支持 `.zip` / `.tar` / `.tar.gz` / `.tgz`；由 `loader/archive.ts` 自动分发。
-     */
-    archiveUrl?: string;
-    /** 归档 SHA256（hex）。提供后下载完成后会校验，缺失则跳过校验。 */
-    archiveSha256?: string;
-    /**
-     * 归档解压后需要剥离的路径前缀，例如 "node-v20.17.0-win-x64/"。
-     * 留空表示 root 目录即运行时根目录。末尾斜杠可选，内部会做规范化处理。
-     *
-     * zip 侧按字符串前缀严格剥离；tar 侧换算为层级数（`strip` 参数）。
-     * 因此请传入**起始**段（例如 `node-v20.17.0-win-x64/`），不要传中间段。
-     */
-    extractStripPrefix?: string;
-    /**
-     * 入口可执行文件相对于运行时根的路径，例如 "python.exe"。
-     * 留空时由引擎实现给出平台默认值。
-     */
-    executableRelativePath?: string;
-    /** pip / npm 额外源配置；留空使用官方默认（中国区自动注入国内镜像）。 */
-    registry?: string;
-}
-
-/** 代码执行运行时总配置。 */
-export interface CodeRuntimeConfig {
-    /** 总开关；关闭时所有引擎均不生效。默认关闭。 */
-    enabled: boolean;
-    /** 按引擎分项配置。 */
-    engines: Record<CodeRuntimeEngineId, CodeRuntimeEngineConfig>;
-}
-
-// ── 运行时状态（仅内存类型，不进入持久化 store） ─────────────
-
-export interface CodeRuntimeEngineStatus {
-    state: CodeRuntimeEngineState;
-    installedRoot?: string;
-    lastError?: string;
-    lastCheckAt?: number;
-}
-
 // ── StableConfig ────────────────────────────────────────────
 
 /**
  * 低频变化、无需频繁修改的持久化配置/缓存。
  *
  * 注意：这里的数据变化缓慢，读写频率远低于 secondConfig；
- * 任何「高频 UI 状态」「瞬时状态」「崩溃后应重置」的数据都不应放在这里。
+ * 任何「高频 UI 状态」「瞬时状态」都不应放在这里。
+ *
+ * 代码运行时部分包含：
+ *   - `codeRuntime`       ：用户意图（启用 / 版本 / 归档 / 镜像）；
+ *   - `codeRuntimeStatus` ：持久化的安装状态（含历史遗留进度）；
+ *                          由 `CodeRuntimeManager` 维护；**进程重启后用于恢复**。
  */
 export interface StableConfig {
     /**
@@ -151,6 +91,14 @@ export interface StableConfig {
     search_inited: boolean;
     /** 代码运行时配置（用户意图，可备份恢复）。 */
     codeRuntime: CodeRuntimeConfig;
+    /**
+     * 代码运行时状态（持久化）。
+     *
+     * 存在的意义：崩溃 / 断电 / 强杀进程后，下次启动仍能看到"上次安装到哪一步、
+     * 失败原因是什么"，并让 `init` 决定是否重装；
+     * 不做 `installing` 残留收敛会导致 UI 卡在"安装中"。
+     */
+    codeRuntimeStatus: CodeRuntimeStatus;
 }
 
 // ── SecondConfig ────────────────────────────────────────────

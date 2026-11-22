@@ -1,230 +1,134 @@
-import { STARTUP_TASK_ID } from "$libs/const.js";
+// packages/main/src/libs/utils/task-progress.ts
+//
+// 任务进度汇报子系统。
+//
+// 设计目标：
+//   - 只暴露 4 个顶层函数：`publishTask` / `report` / `complete` / `fail`；
+//   - **幂等**：每次调用都是一份自洽、完整、可重发的快照；
+//   - **无状态**：不缓存任何任务、不维护 warnings 列表、不提供查询；
+//   - **无业务 ID**：不认识 STARTUP_TASK_ID 之类的常量；id 由调用方定义；
+//   - **客户端负责状态**：去重 / 累积 warnings / 记录 startedAt / 终态留存
+//     全部在 renderer 完成；本模块只做"把快照扔过去"这一件事。
+//
+// 与客户端对齐的关键约定：
+//   - `warnings` 是**增量**——每次调用只携带"本次新增"的警告；客户端
+//     按 `warning.id` 去重累积。同一个 warning.id 重复广播是安全的（幂等）。
+//   - `startedAt` / `updatedAt` 均填当前时间；真正的"任务开始时间"由
+//     客户端首次收到某 id 时自行记录。
+//   - `title` 缺省为 `id`；客户端如需人类可读标题，按 id 建立映射即可。
+//
+// 权威状态的查询走各子系统的专有接口（如 `codeRuntimeManager.getState`），
+// `task:update` 事件只承担"变化通知"的角色。
+
 import type {
     TaskSnapshot,
     TaskStatus,
     TaskWarning,
 } from "$types/shared/task-progress.js";
+import { getCurrentProject } from "./api/index.js";
 import { broadcast } from "./rpcevt.js";
 
 export type { TaskSnapshot, TaskStatus, TaskWarning };
 
-/** 固定 id：应用启动过程。保留常量供调用方引用，避免魔法字符串。 */
-
-const GLOBAL_KEY = Symbol.for("unigen.singleton.taskProgress");
-
-class TaskProgressService {
-    #tasks = new Map<string, TaskSnapshot>();
-
-    /**
-     * 注册 / 重置一个任务。若 id 已存在则覆盖（用于重跑场景）。
-     */
-    start(
-        id: string,
-        title: string,
-        opts?: {
-            initialPhase?: string;
-            message?: string;
-            progress?: number;
-        },
-    ): TaskSnapshot {
-        const now = Date.now();
-        const snap: TaskSnapshot = {
-            id,
-            title,
-            phase: opts?.initialPhase ?? "starting",
-            message: opts?.message ?? "准备中...",
-            progress: clamp(opts?.progress ?? 0),
-            status: "running",
-            warnings: [],
-            startedAt: now,
-            updatedAt: now,
-        };
-        this.#tasks.set(id, snap);
-        this.#publish(snap);
-        return snap;
-    }
-
-    /**
-     * 报告进度。若 id 尚未注册会自动创建（宽松容错），
-     * 已处于 completed / failed / cancelled 的任务不再接受更新。
-     */
-    report(id: string, phase: string, message: string, progress: number): void {
-        const snap = this.#tasks.get(id);
-        if (!snap) {
-            this.start(id, id, { initialPhase: phase, message, progress });
-            return;
-        }
-        if (!isRunning(snap.status)) return;
-        const next: TaskSnapshot = {
-            ...snap,
-            phase,
-            message,
-            progress: clamp(progress),
-            updatedAt: Date.now(),
-        };
-        this.#tasks.set(id, next);
-        this.#publish(next);
-    }
-
-    /**
-     * 追加一条警告。按 warning.id 去重；同 id 多次调用不会重复广播。
-     */
-    warn(
-        id: string,
-        warning: Omit<TaskWarning, "timestamp"> & { timestamp?: number },
-    ): void {
-        let snap = this.#tasks.get(id);
-        if (!snap) {
-            snap = this.start(id, id);
-        }
-        if (snap.warnings.some((w) => w.id === warning.id)) return;
-        const full: TaskWarning = {
-            ...warning,
-            timestamp: warning.timestamp ?? Date.now(),
-        };
-        const next: TaskSnapshot = {
-            ...snap,
-            warnings: [...snap.warnings, full],
-            updatedAt: Date.now(),
-        };
-        this.#tasks.set(id, next);
-        this.#publish(next);
-    }
-
-    /** 标记成功完成 */
-    complete(id: string, message = "完成"): void {
-        const snap = this.#tasks.get(id);
-        if (!snap) return;
-        const now = Date.now();
-        const next: TaskSnapshot = {
-            ...snap,
-            status: "completed",
-            phase: "completed",
-            message,
-            progress: 100,
-            updatedAt: now,
-            finishedAt: now,
-        };
-        this.#tasks.set(id, next);
-        this.#publish(next);
-    }
-
-    /** 标记失败。会附带一条 error 级警告。 */
-    fail(id: string, message: string, detail?: string): void {
-        const snap = this.#tasks.get(id);
-        if (!snap) {
-            this.start(id, id, { initialPhase: "failed", message, progress: 0 });
-            return this.fail(id, message, detail);
-        }
-        this.warn(id, {
-            id: `${id}.failed`,
-            level: "error",
-            code: `${id}.failed`,
-            message,
-            detail,
-        });
-        const fresh = this.#tasks.get(id)!;
-        const now = Date.now();
-        const next: TaskSnapshot = {
-            ...fresh,
-            status: "failed",
-            phase: "failed",
-            message,
-            updatedAt: now,
-            finishedAt: now,
-        };
-        this.#tasks.set(id, next);
-        this.#publish(next);
-    }
-
-    /** 标记取消 */
-    cancel(id: string, message = "已取消"): void {
-        const snap = this.#tasks.get(id);
-        if (!snap) return;
-        const now = Date.now();
-        const next: TaskSnapshot = {
-            ...snap,
-            status: "cancelled",
-            phase: "cancelled",
-            message,
-            updatedAt: now,
-            finishedAt: now,
-        };
-        this.#tasks.set(id, next);
-        this.#publish(next);
-    }
-
-    /**
-     * 从活动列表中移除。不广播；renderer 侧若已存储该任务不会被通知删除，
-     * 适合任务生命周期完全由 renderer 侧自己 guard 的场景（此处暂不广播，
-     * 以免暴露一个仅在极少数场景下才用得上的事件分支）。
-     */
-    remove(id: string): void {
-        this.#tasks.delete(id);
-    }
-
-    get(id: string): TaskSnapshot | undefined {
-        return this.#tasks.get(id);
-    }
-
-    all(): TaskSnapshot[] {
-        return Array.from(this.#tasks.values());
-    }
-
-    #publish(snap: TaskSnapshot): void {
-        broadcast({
-            name: "task:update",
-            srcId: -1,
-            payload: snap,
-        });
-    }
+/**
+ * 唯一出口：把一份任务快照广播给客户端。
+ *
+ * 幂等且无状态；本地不做任何缓存。
+ */
+export function publishTask(snap: TaskSnapshot): void {
+    broadcast({
+        name: "task:update",
+        srcId: getCurrentProject()?.wid ?? -1,
+        payload: snap,
+    });
 }
 
 function clamp(n: number): number {
+    if (!Number.isFinite(n)) return 0;
     return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-function isRunning(status: TaskStatus): boolean {
-    return status === "running" || status === "pending";
-}
-
-export function getTaskProgress(): TaskProgressService {
-    const g = globalThis as unknown as Record<
-        symbol,
-        TaskProgressService | undefined
-    >;
-    return (g[GLOBAL_KEY] ??= new TaskProgressService());
+function snapshot(
+    id: string,
+    phase: string,
+    message: string,
+    progress: number,
+    status: TaskStatus,
+    warnings: TaskWarning[],
+    finishedAt?: number,
+): TaskSnapshot {
+    const now = Date.now();
+    const snap: TaskSnapshot = {
+        id,
+        title: id,
+        phase,
+        message,
+        progress: clamp(progress),
+        status,
+        warnings,
+        startedAt: now,
+        updatedAt: now,
+    };
+    if (finishedAt !== undefined) snap.finishedAt = finishedAt;
+    return snap;
 }
 
 /**
- * 启动任务（id = "startup"）的便捷适配器。
+ * 上报任务处于执行中。
  *
- * 保留旧 API 的调用形态，便于业务代码在改造期间平滑迁移；
- * 内部实际写入通用任务进度服务。
+ * @param id        任务标识（由调用方定义），客户端据此路由到子系统的查询接口
+ * @param phase     当前阶段标识（自由字符串，仅用于 icon / i18n）
+ * @param message   人类可读的通知
+ * @param progress  0 ~ 100（仅作视觉参考，客户端可自行平滑）
+ * @param warnings  本次新增的警告（**增量**；客户端按 id 去重累积）
  */
-export interface StartupProgressAdapter {
-    start(): void;
-    report(phase: string, message: string, progress: number): void;
-    warn(warning: Omit<TaskWarning, "timestamp"> & { timestamp?: number }): void;
-    fail(message: string, detail?: string): void;
-    complete(message?: string): void;
-    get(): TaskSnapshot | undefined;
+export function report(
+    id: string,
+    phase: string,
+    message: string,
+    progress: number,
+    warnings: TaskWarning[] = [],
+): void {
+    publishTask(snapshot(id, phase, message, progress, "running", warnings));
 }
 
-export function getStartupProgress(): StartupProgressAdapter {
-    const svc = getTaskProgress();
-    return {
-        start: () =>
-            svc.start(STARTUP_TASK_ID, "启动", {
-                initialPhase: "starting",
-                message: "正在启动...",
-                progress: 0,
-            }),
-        report: (phase, message, progress) =>
-            svc.report(STARTUP_TASK_ID, phase, message, progress),
-        warn: (warning) => svc.warn(STARTUP_TASK_ID, warning),
-        fail: (message, detail) => svc.fail(STARTUP_TASK_ID, message, detail),
-        complete: (message) => svc.complete(STARTUP_TASK_ID, message),
-        get: () => svc.get(STARTUP_TASK_ID),
+/**
+ * 上报任务已完成。
+ */
+export function complete(
+    id: string,
+    message = "完成",
+    warnings: TaskWarning[] = [],
+): void {
+    publishTask(
+        snapshot(
+            id,
+            "completed",
+            message,
+            100,
+            "completed",
+            warnings,
+            Date.now(),
+        ),
+    );
+}
+
+/**
+ * 上报任务已失败。
+ *
+ * 失败信息自动附带一条 error 级警告；客户端沿用"按 id 累积 warnings"的规则。
+ */
+export function fail(id: string, message: string, detail?: string): void {
+    const now = Date.now();
+    const warning: TaskWarning = {
+        id: `${id}.failed`,
+        level: "error",
+        code: `${id}.failed`,
+        message,
+        detail,
+        timestamp: now,
     };
+    publishTask(
+        snapshot(id, "failed", message, 0, "failed", [warning], now),
+    );
 }
