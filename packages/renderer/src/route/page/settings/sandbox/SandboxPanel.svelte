@@ -5,10 +5,10 @@
 <div class="mx-auto flex h-full w-full max-w-4xl flex-col gap-6 p-6 md:p-8">
   <header class="space-y-1">
     <h1 class="text-xl font-semibold tracking-tight text-foreground">
-      云端沙盒
+      云端设备
     </h1>
     <p class="text-sm text-muted-foreground">
-      让 AI 在云端执行代码，不接触本机文件与网络。
+      让 AI 管理您的云端设备 (沙盒是一种即用即抛的云端设备)。
     </p>
   </header>
 

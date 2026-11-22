@@ -13,10 +13,10 @@
 <div class="mx-auto flex h-full w-full max-w-4xl flex-col gap-6 p-6 md:p-8">
   <header class="space-y-1">
     <h1 class="text-xl font-semibold tracking-tight text-foreground">
-      代码执行
+      编程环境
     </h1>
     <p class="text-sm text-muted-foreground">
-      AI 运行代码的环境。启用后安装与下载在后台进行，进度显示在下列卡片中。
+      管理AI 在本机编程的环境。让AI可以自行编写并执行代码。
     </p>
   </header>
 
