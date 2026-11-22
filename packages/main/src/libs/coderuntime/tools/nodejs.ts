@@ -23,6 +23,13 @@
 //   - agent 仍可自行写 package.json；后续调用只需把同样的依赖列表再次作为
 //     `dependencies` 传入（npm 幂等，不会膨胀）。
 //
+// npm 入口解析：
+//   - 主路径见 `NodeRuntime`（`bin/npm` 由解压阶段恢复；Windows 使用 `npm.cmd`）；
+//   - **兜底**：`bin/npm` 缺失时可直接 execa `<node> npm-cli.js`，与官方
+//     sh shim 语义完全等价；
+//   - 两处解析统一走 `resolveNpmCommand()`（由 `engines/nodejs.js` 导出），
+//     避免引擎层与工具层各写一遍导致行为漂移。
+//
 // 注册表选择语义：
 //   - 用户显式 `registry` 优先；
 //   - 非中国区：固定官方；
@@ -42,8 +49,13 @@ import { execa } from "execa";
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import {
+    resolveNpmCommand,
+    type NpmCommand,
+} from "../engines/nodejs.js";
 import { NPM_REGISTRY_MIRRORS } from "../engines/nodejs.reg.js";
 import { codeRuntimeManager } from "../manager.js";
+import type { ReadyRuntime } from "../types.js";
 import {
     formatCommand,
     limitOutput,
@@ -165,10 +177,8 @@ const outputSchema = z.object({
 export type NodeRunInput = z.infer<typeof inputSchema>;
 export type NodeRunOutput = z.infer<typeof outputSchema>;
 
-function resolveNpmPath(rootDir: string): string {
-    return process.platform === "win32"
-        ? join(rootDir, "npm.cmd")
-        : join(rootDir, "bin", "npm");
+async function pathExists(p: string): Promise<boolean> {
+    return fs.access(p).then(() => true, () => false);
 }
 
 /**
@@ -239,15 +249,6 @@ async function resolveNpmRegistryAsync(
     }
 }
 
-async function pathExists(p: string): Promise<boolean> {
-    try {
-        await fs.access(p);
-        return true;
-    } catch {
-        return false;
-    }
-}
-
 async function ensurePackageJson(cwd: string): Promise<void> {
     const pkgPath = join(cwd, "package.json");
     if (await pathExists(pkgPath)) return;
@@ -273,10 +274,12 @@ async function ensurePackageJson(cwd: string): Promise<void> {
  * - 否则：`ensurePackageJson(cwd)` → `npm install --no-audit --no-fund <deps...>`。
  *   **注意**：不加 `--no-save`，让 npm 把依赖写入 cwd 的 package.json 的
  *   dependencies 字段（反映"加入 package"的语义）；npm 幂等，不膨胀。
+ * - npm 入口经 `resolveNpmCommand()` 统一解析：优先 `bin/npm`（由解压阶段
+ *   恢复或 `applyPostExtract` 兜底），缺失时回退到直连 `npm-cli.js`。
  * - 失败时主动失效 npm registry 缓存，以便下次 install 重新测速。
  */
 async function installDependencies(
-    runtime: { executablePath: string; rootDir: string },
+    runtime: ReadyRuntime,
     dependencies: string[],
     cwd: string,
     registryOverride: string | undefined,
@@ -284,7 +287,18 @@ async function installDependencies(
 ): Promise<void> {
     if (dependencies.length === 0) return;
 
-    const npmPath = resolveNpmPath(runtime.rootDir);
+    const npm: NpmCommand | null = await resolveNpmCommand(
+        runtime.rootDir,
+        runtime.executablePath,
+    );
+    if (!npm) {
+        throw new Error(
+            `未找到 npm 入口：node 运行时目录（${runtime.rootDir}）中未见 ` +
+            `bin/npm、npm.cmd 或 lib/node_modules/npm/bin/npm-cli.js。` +
+            `请确认 Node.js 归档完整，或在设置中重新安装代码运行时。`,
+        );
+    }
+
     const registry = await resolveNpmRegistryAsync(registryOverride);
 
     // 本地隔离：npm 的 cache 与 global prefix 全部指向应用数据目录，
@@ -309,8 +323,14 @@ async function installDependencies(
     await ensurePackageJson(cwd);
     try {
         await execa(
-            npmPath,
-            ["install", "--no-audit", "--no-fund", ...dependencies],
+            npm.command,
+            [
+                ...npm.argsPrefix,
+                "install",
+                "--no-audit",
+                "--no-fund",
+                ...dependencies,
+            ],
             {
                 cwd,
                 env,

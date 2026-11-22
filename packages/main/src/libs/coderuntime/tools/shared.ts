@@ -2,6 +2,7 @@
 //
 // 各语言运行工具共享的路径/输出辅助。
 
+import { getRunnerContextWithNull } from "$libs/project/controllers/runner.js";
 import { getCurrentProject } from "$libs/utils/api/index.js";
 import { throwUnprocessable } from "$libs/utils/err.js";
 import Logger from "electron-log/main.js";
@@ -123,8 +124,9 @@ export interface RunContext {
  * 无项目时仅创建（幂等）降级目录，不抛错；调用方按需检查 `isProject`。
  */
 export async function prepareRunContext(action: string): Promise<RunContext> {
-    const prj = getCurrentProject();
-    const projectRoot = (prj as { path?: unknown } | null | undefined)?.path;
+    const ctx = getRunnerContextWithNull();
+    const projectRoot = ctx?.prj?.path;
+    console.log("projectRoot=", projectRoot)
     if (typeof projectRoot === "string" && projectRoot) {
         return { cwd: projectRoot, isProject: true };
     }

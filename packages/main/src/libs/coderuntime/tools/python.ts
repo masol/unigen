@@ -311,7 +311,7 @@ export const pythonRunTool: ToolDefinition<PythonRunInput, PythonRunOutput> = {
         "exit_code 非零时先读 stderr，再针对性修改代码或 dependencies 后重试。" +
         "\n\n【环境保证】" +
         "所有产物（uv 二进制 / Python 解释器 / 缓存 / .venv）限制在应用数据目录与项目目录内，" +
-        "不污染系统环境；中国区通过镜像加速。",
+        "不污染系统环境；",
     inputSchema,
     outputSchema,
     execute: async (input) => {

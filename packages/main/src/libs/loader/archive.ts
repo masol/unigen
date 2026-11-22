@@ -7,11 +7,21 @@
 // 安全（与 zip.ts 保持一致）：
 //   - 路径统一按 POSIX 处理；
 //   - 拒绝路径穿越、绝对路径、Windows 盘符与控制字符；
-//   - tar 侧拒绝硬链接 / 符号链接（运行时归档不应包含链接）；
+//   - tar 侧默认跳过硬链接 / 符号链接；
+//   - 通过 `allowSymlinks: true` 可显式放行 `SymbolicLink` 条目（供需要
+//     官方符号链接的运行时使用，例如 Node.js Unix tar.gz 的 `bin/npm`）。
+//     硬链接 **始终被拒绝**：本仓内所有官方归档都不含硬链接，放开没有收益、
+//     却会把 target 的解析语义带给调用方；
+//   - 放行符号链接时，本文件会独立做一层 "从 strip 后位置解析 target 是否
+//     逃逸" 的防御校验，与 node-tar `preservePaths=false` 的防护互补，
+//     任一侧判定逃逸即拒绝该条目。
 //
 // 兼容方案：
 //   - 本文件是**新统一入口**，建议新代码优先使用；
 //   - `zip.ts` 保留为向后兼容 shim（zip 专用 API + re-export 通用工具）。
+//
+// 注：zip 侧的符号链接需要解析 `extra field 0x000d`，AdmZip 不支持该
+// 语义；`allowSymlinks` 对 zip 归档无影响（符号链接条目会被忽略）。
 
 import unbzip2Stream from "@openpgp/unbzip2-stream";
 import AdmZip from "adm-zip";
@@ -175,7 +185,17 @@ export interface ExtractOptions {
      * zip / tar 双方都支持。
      */
     stripComponents?: number;
-    /** 每个成功解压的条目回调 */
+    /**
+     * 是否允许解压 tar 归档中的**符号链接**。
+     *
+     * - 默认 false（保持通用安全策略：跳过链接）；
+     * - true 时 `SymbolicLink` 条目被放行，由 node-tar 正确创建链接；
+     *   本实现额外做一层 "从 strip 后位置解析 target 是否逃逸" 的防御。
+     * - **硬链接始终被拒绝**，不受本参数影响。
+     * - zip 归档不受本参数影响（AdmZip 不解析符号链接）。
+     */
+    allowSymlinks?: boolean;
+    /** 每个成功解压的条目回调（符号链接不触发，避免误导） */
     onEntry?: (relativePath: string, bytes: number) => void;
     /** 取消信号（仅 zip 实现会中途检查；tar 通过 node-tar 内部实现） */
     signal?: AbortSignal;
@@ -418,9 +438,49 @@ async function extractBz2(opts: ExtractOptions): Promise<void> {
     opts.onEntry?.(safeRelative, fileStat.size);
 }
 
+/**
+ * 计算符号链接 target 是否逃逸出解压根目录。
+ *
+ * 语义：给定 **strip 后**的符号链接条目路径（entryPath），符号链接
+ * target（linkpath）按 POSIX 规则相对于链接所在**目录**解析；解析结果
+ * 必须以归档根为基准的**相对路径**表达，不含逃逸段（`..` / 绝对路径）。
+ *
+ * 返回 null 表示安全（resolved 相对路径）；否则返回原因字符串。
+ *
+ * 设计取舍：与 node-tar 自带防护独立实现，任一侧判定逃逸即拒绝。
+ * 这样的好处是：
+ *   - 不依赖 node-tar 内部实现细节（不同版本行为可能有差异）；
+ *   - 逃逸判定逻辑在本文件内可读、可测。
+ */
+function checkSymlinkTarget(
+    entryPath: string,
+    linkpath: string,
+): string | null {
+    if (!linkpath) return "linkpath 为空";
+    if (linkpath.startsWith("/")) return "linkpath 为绝对路径";
+    if (/^[a-zA-Z]:/.test(linkpath)) return "linkpath 含盘符";
+    if (containsControlChar(linkpath)) return "linkpath 含控制字符";
+
+    const linkDir = posix.dirname(
+        posix.normalize(normalizeArchiveName(entryPath)),
+    );
+    const resolved = posix.normalize(posix.join(linkDir, linkpath));
+
+    if (
+        resolved === "." ||
+        resolved === ".." ||
+        resolved.startsWith("../") ||
+        resolved.startsWith("/")
+    ) {
+        return `target 逃逸（解析为 ${resolved}）`;
+    }
+    return null;
+}
+
 async function extractTar(opts: ExtractOptions): Promise<void> {
     const strip =
         opts.stripComponents ?? prefixDepth(opts.stripPrefix) ?? 0;
+    const allowSymlinks = opts.allowSymlinks === true;
 
     let fileCount = 0;
     await tar.x({
@@ -432,23 +492,69 @@ async function extractTar(opts: ExtractOptions): Promise<void> {
         // ReadEntry，此处做显式断言以通过编译。
         filter: (path, entry) => {
             const readEntry = entry as tar.ReadEntry;
-            if (
-                readEntry.type === "Link" ||
-                readEntry.type === "SymbolicLink"
-            ) {
-                Logger.warn(`[Archive] 跳过 link 条目：${path}`);
+
+            // 硬链接：本仓内所有官方归档均不使用；保持拒绝使攻击面最小化。
+            // （硬链接 target 相对于归档根，语义与符号链接不同，安全校验
+            // 也更复杂；没有真实用例之前不为它引入复杂度。）
+            if (readEntry.type === "Link") {
+                Logger.warn(`[Archive] 跳过 hard link 条目：${path}`);
                 return false;
             }
+
+            if (readEntry.type === "SymbolicLink") {
+                if (!allowSymlinks) {
+                    Logger.warn(`[Archive] 跳过 symbol link 条目：${path}`);
+                    return false;
+                }
+
+                const linkpath = readEntry.linkpath;
+                if (typeof linkpath !== "string") {
+                    Logger.warn(
+                        `[Archive] 跳过缺少 linkpath 的 symbol link：${path}`,
+                    );
+                    return false;
+                }
+
+                // `filter` 在 strip 之前调用；为了按"最终落点"判断逃逸，
+                // 这里显式执行一次 strip。strip 深度不足时 node-tar 会在
+                // 后续 CHECKPATH 阶段 skip 该条目，本层可放行。
+                const stripped = stripLeading(
+                    normalizeArchiveName(path),
+                    strip,
+                );
+                if (stripped) {
+                    const reason = checkSymlinkTarget(stripped, linkpath);
+                    if (reason) {
+                        Logger.warn(
+                            `[Archive] 跳过 symbol link：${path} -> ${linkpath}（${reason}）`,
+                        );
+                        return false;
+                    }
+                }
+            }
+
             return true;
         },
         onwarn: (code, message) => {
             Logger.warn(`[Archive] tar ${code}: ${message}`);
         },
         onReadEntry: (entry) => {
-            // 同 filter 的类型收窄理由。
             const readEntry = entry as tar.ReadEntry;
             if (readEntry.type === "Directory") return;
+
+            const isHardLink = readEntry.type === "Link";
+            const isSymLink = readEntry.type === "SymbolicLink";
+
+            // 与 filter 保持一致：被跳过的链接不应计入 fileCount。
+            // onReadEntry 与 filter 的调用顺序在 node-tar 版本间可能不同，
+            // 这里显式再判断一次以避免把"被跳过的条目"计入。
+            if (isHardLink) return;
+            if (isSymLink && !allowSymlinks) return;
+
             fileCount += 1;
+
+            // 链接条目不算"解压文件"，跳过 onEntry 回调，避免误导调用方。
+            if (isSymLink) return;
 
             if (!opts.onEntry) return;
 

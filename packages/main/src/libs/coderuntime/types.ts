@@ -68,6 +68,23 @@ export interface EngineRuntimeHandler {
     ): string | undefined;
 
     /**
+     * 可选：是否为该平台启用 tar 归档中的**符号链接**解压。
+     *
+     * 默认 false（保持通用安全策略：跳过链接）。引擎明确知道官方归档
+     * 依赖符号链接时（例如 Node.js Unix tar.gz 的 `bin/npm`、`bin/npx`、
+     * `bin/corepack`），可返回 true；此时的校验由通用解压器内部完成：
+     *   - 允许 `SymbolicLink` 条目，附加逃逸校验（与 node-tar 防护互补）；
+     *   - **硬链接仍然拒绝**，不因本参数放宽。
+     *
+     * 提醒：Windows 创建符号链接需要特权 / 开发者模式；不该在此返回
+     * true 除非调用方明确需要且接受潜在权限弹窗。
+     */
+    getExtractAllowSymlinks?(
+        platform: NodeJS.Platform,
+        arch: NodeJS.Architecture,
+    ): boolean;
+
+    /**
      * 可选：返回给定归档的期望 SHA256（hex 小写）。
      *
      * 只有当调用方未显式提供 `archiveUrl`（走内置源）时，manager 才会

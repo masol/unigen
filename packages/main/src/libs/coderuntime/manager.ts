@@ -15,6 +15,8 @@
 //   - **下载前测速**：manager 主动 `probeUrls + sortByLatency` 排序候选源；
 //   - **下载后 SHA256 校验**：`archiveSha256` 配置优先；用户未自定义
 //     `archiveUrl` 时，回落到引擎给出的默认哈希；
+//   - **解压允许引擎定制**：`getExtractAllowSymlinks?.()` 控制 tar 归档
+//     中符号链接的放行策略（默认 false，通用安全策略）；
 //   - 每次状态跃迁点直接调用 `report / complete / fail`
 //     （`$libs/utils/task-progress.js`），`id = "code-runtime:" + engineId`。
 //
@@ -681,6 +683,11 @@ export class CodeRuntimeManager {
             }
 
             // 5. 解压
+            //
+            // allowSymlinks 由引擎决定（Node.js Unix 需要；Windows zip
+            // 内置真实 npm.cmd，无需）。默认 false 保持通用安全策略。
+            // 通用解压器内部对符号链接有逃逸校验，与 node-tar 内置防护
+            // 互补；了解这一点是理解"为何敢放开"的关键背景。
             this.#persistProgress(
                 engineId,
                 "extracting",
@@ -690,10 +697,16 @@ export class CodeRuntimeManager {
             );
             report(taskId, "extracting", `正在解压 ${engineId} 运行时...`, 60);
             await clearDir(rootDir);
+            const allowSymlinks =
+                handler.getExtractAllowSymlinks?.(
+                    process.platform,
+                    process.arch,
+                ) ?? false;
             await extractArchive({
                 archivePath: savePath,
                 targetDir: rootDir,
                 stripPrefix,
+                allowSymlinks,
             });
 
             // 6. 后处理
