@@ -11,15 +11,16 @@ import { AsyncParallelHook } from './hookable.js';
  * 应用级生命周期管理。
  *
  * 提供两套 hook 接口：
- * - `beforeQuit`：保留 AsyncParallelHook 风格（tap/tapPromise 接口兼容 tapable，
+ * - `beforeQuit` / `onEmbedSwitch`：AsyncParallelHook 风格（tap/tapPromise 兼容 tapable，
  *   注册方可使用返回的 unregister 函数做动态注销）。
- * - `hooks`：原生 Hookable 实例，保留给需要 hookable 全功能的高级用法。
+ * - `hooks`：原生 Hookable 实例（**当前无内部使用**，保留以兼容潜在的高级调用方；
+ *   若 grep 确认无引用可直接删除）。
  */
 class AppLife {
     /**
-     * 兼容 tapable 的并行 hook。
-     * 注册方可使用 `appLife.beforeQuit.tapPromise('name', fn)` 或 `appLife.beforeQuit.tap(...)`，
-     * 同时也可以使用 `appLife.beforeQuit.untap('name')` 或 `appLife.beforeQuit.untapAll()`。
+     * 退出前清理钩子：所有回调并行执行，全部完成才算结束。
+     * 注册方使用 `appLife.beforeQuit.tapPromise('name', fn)`，
+     * 或 `tap(...)` 注册同步清理；通过返回的 unregister / `untap('name')` 注销。
      */
     public beforeQuit = new AsyncParallelHook();
     public onEmbedSwitch = new AsyncParallelHook<[EmbedSwitchPayload]>();
@@ -32,29 +33,38 @@ class AppLife {
     public bootstrapped: TrackableDeferred<void> = new TrackableDeferred<void>();
 
     private isCleanedUp = false;
-    private static readonly BEFORE_QUIT = 'beforeQuit' as const;
+    /** 与 isCleanedUp 分离：避免清理进行中再次触发 before-quit 导致 hook 重复执行 */
+    private isCleaningUp = false;
 
     public init(app: App, timeoutMs: number = 30000): void {
         app.on('before-quit', async (e) => {
             if (this.isCleanedUp) return;
+
+            if (this.isCleaningUp) {
+                // 清理正在进行中：直接阻止二次进入，但保留退出阻断，直到清理完成或超时。
+                e.preventDefault();
+                return;
+            }
+
+            this.isCleaningUp = true;
             e.preventDefault();
 
             try {
                 const startTs = Date.now();
-                // 通过 AsyncParallelHook 触发所有注册的回调
                 await pTimeout(
                     this.beforeQuit.promise(),
                     { milliseconds: timeoutMs, message: '退出清理超时' }
                 );
-                Logger.error(`[AppLife] 所有任务按时完成。耗时: ${Date.now() - startTs}ms`);
+                Logger.info(`[AppLife] 所有退出清理任务已完成。耗时: ${Date.now() - startTs}ms`);
             } catch (err: any) {
-                if (err.name === 'TimeoutError') {
-                    Logger.error(`[AppLife] 退出清理超时`);
+                if (err?.name === 'TimeoutError') {
+                    Logger.error(`[AppLife] 退出清理超时 (${timeoutMs}ms)`);
                 } else {
-                    Logger.error(`[AppLife] 退出钩子错误:`, err);
+                    Logger.error(`[AppLife] 退出钩子执行出错:`, err);
                 }
             } finally {
                 this.isCleanedUp = true;
+                this.isCleaningUp = false;
                 app.quit();
             }
         });

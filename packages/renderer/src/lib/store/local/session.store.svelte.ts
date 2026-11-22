@@ -176,7 +176,7 @@ class SessionStore {
 
     private async onSessionChange(newId: string): Promise<void> {
         this.#activeSessionId = newId;
-        await hooks.callHook("session:changed");
+        await hooks.callHookParallel("session:changed");
         // log.debug("session:changed hook over")
     }
 

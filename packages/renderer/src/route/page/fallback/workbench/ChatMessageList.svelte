@@ -250,7 +250,8 @@
 
   function jumpToBottom() {
     following = true;
-    chat?.scrollToBottom({ smooth: true });
+    const smooth = !messageStore.isLoading;
+    chat?.scrollToBottom({ smooth });
   }
 
   /**

@@ -213,25 +213,23 @@ class MessageStore {
      * `#run` 的事件分发在 `isReloading` 期间一律写入 `state.messages`
      * （即便 activeSessionId 已切到目标 session），保证 this.messages 始终
      * 是上一次已完成的快照，等到 loaded 后再原子替换。
+     *
+     * 运行判定：以「内存 RunState 是否存在」为唯一权威依据。
+     * sessionStore.isRunning 只用于列表视觉，不参与本判定——它在
+     * AIResponse/finally 之间存在极短窗口，但在本流程下不影响（无论窗口期
+     * 采哪个分支都不会漏数据），也更不易写出易误判的分支。
      */
     private async reload(): Promise<void> {
         const sid = sessionStore.activeSessionId
-        // 运行判定以「内存 RunState 存在」为权威依据，sessionStore 的 running 标记
-        // 仅为辅助：AIResponse 中先 set map 再 setRunning(true)，finally 中先 delete
-        // map 再 setRunning(false)，两处均存在极短窗口，仅看 sessionStore 可能误判。
-        const running = Boolean(
-            sid && (sessionStore.isRunning(sid) || this.#runsBySession.has(sid)),
-        )
         const runState = sid ? this.#runsBySession.get(sid) : undefined
+        const running = runState !== undefined
 
-        // 内存快照：优先使用 RunState.messages（该 run 所属 session 的完整消息，
-        // 包含后台流式增量）。仅在完全没有 RunState 时才退回 this.messages 过滤，
-        // 覆盖「切回时没有活跃 run，但 this.messages 里残留同 session 数据」的极端场景。
+        // 内存快照：只信任 RunState.messages —— 它是该 session 在本次 run 中的
+        // 完整消息集合。this.messages 在下方的 `this.messages = []` 后已清空，
+        // 从它过滤没有意义。
         let liveSnapshot: ChatMessage[] = []
-        if (running && runState?.messages && runState.messages.length > 0) {
+        if (runState?.messages && runState.messages.length > 0) {
             liveSnapshot = runState.messages
-        } else if (running) {
-            liveSnapshot = this.messages.filter((m) => m.sessionId === sid)
         }
 
         this.messages = []

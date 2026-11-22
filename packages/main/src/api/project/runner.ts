@@ -1,4 +1,3 @@
-
 import { PrjRunner } from '$libs/project/controllers/runner.js';
 import { userClarifyTool } from '$libs/tooldb/tools/clarify.js';
 import type { ChatStreamEvent } from '$types/index.js';
@@ -17,6 +16,33 @@ const waitFinish = os
         const ctx = context as RpcContext;
         const runner = PrjRunner.ensure(ctx.project);
         await runner.waitFinish();
+    });
+
+/**
+ * 查询当前项目是否有正在执行中的命令。
+ * 用于「关闭/切换项目」前的状态检查；渲染端在 beforeClose hook 内调用。
+ */
+const hasRunning = os
+    .input(z.void())
+    .output(z.boolean())
+    .handler(async ({ context }) => {
+        const ctx = context as RpcContext;
+        const runner = PrjRunner.ensure(ctx.project);
+        return runner.hasRunning();
+    });
+
+/**
+ * 强制终止所有执行中的命令并等待其释放资源。
+ * @param timeoutMs 可选超时（毫秒），默认由 PrjRunner 决定。
+ * @returns true：全部结束；false：超时仍未结束。
+ */
+const forceQuit = os
+    .input(z.object({ timeoutMs: z.number().optional() }).optional())
+    .output(z.boolean())
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        const runner = PrjRunner.ensure(ctx.project);
+        return await runner.forceQuit(input?.timeoutMs);
     });
 
 
@@ -194,5 +220,7 @@ const runCommand = os
 export default {
     waitFinish,
     runCommand,
-    clarify
+    clarify,
+    hasRunning,
+    forceQuit,
 }

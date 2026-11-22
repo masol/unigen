@@ -126,11 +126,12 @@ const info = os
     });
 
 const close = os
+    .output(z.boolean())
     .handler(async ({ context }) => {
         const ctx = context as RpcContext;
-        return ctx.project.close();
+        await ctx.project.close();
+        return true;
     });
-
 
 // 下面是kv store操作函数。
 const get = os
