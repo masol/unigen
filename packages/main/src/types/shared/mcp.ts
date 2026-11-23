@@ -71,25 +71,52 @@ export const mcpPromptInfoSchema = z.object({
     description: z.string().optional(),
 });
 
-export const mcpConnectionTestResultSchema = z.object({
-    ok: z.boolean(),
-    latencyMs: z.number(),
+/**
+ * MCP server 在握手阶段自报的身份信息。
+ *
+ * 客户端在写入结果前会做一次规整：
+ * - name 为空时依次回退到 version、传输协议名（保证非空）；
+ * - version 为空时回退为 "unknown"。
+ */
+export const mcpServerInfoSchema = z.object({
+    name: z.string().min(1),
+    version: z.string().min(1),
+    title: z.string().optional(),
+});
+
+export const mcpConnectionTestSuccessSchema = z.object({
+    ok: z.literal(true),
+    latencyMs: z.number().nonnegative(),
+    serverInfo: mcpServerInfoSchema,
     protocolVersion: z.string().optional(),
-    serverInfo: z
-        .object({
-            name: z.string(),
-            version: z.string(),
-        })
-        .optional(),
     tools: z.array(mcpToolInfoSchema),
     resources: z.array(mcpResourceInfoSchema).optional(),
     prompts: z.array(mcpPromptInfoSchema).optional(),
-    error: z.string().optional(),
 });
+
+export const mcpConnectionTestFailureSchema = z.object({
+    ok: z.literal(false),
+    latencyMs: z.number().nonnegative(),
+    tools: z.array(mcpToolInfoSchema),
+    error: z.string().min(1),
+});
+
+export const mcpConnectionTestResultSchema = z.discriminatedUnion('ok', [
+    mcpConnectionTestSuccessSchema,
+    mcpConnectionTestFailureSchema,
+]);
+
+export type McpServerInfo = z.infer<typeof mcpServerInfoSchema>;
+export type McpConnectionTestSuccess = z.infer<
+    typeof mcpConnectionTestSuccessSchema
+>;
+export type McpConnectionTestFailure = z.infer<
+    typeof mcpConnectionTestFailureSchema
+>;
+export type McpConnectionTestResult = z.infer<
+    typeof mcpConnectionTestResultSchema
+>;
 
 export type McpToolInfo = z.infer<typeof mcpToolInfoSchema>;
 export type McpResourceInfo = z.infer<typeof mcpResourceInfoSchema>;
 export type McpPromptInfo = z.infer<typeof mcpPromptInfoSchema>;
-export type McpConnectionTestResult = z.infer<
-    typeof mcpConnectionTestResultSchema
->;

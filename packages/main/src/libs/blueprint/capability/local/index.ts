@@ -196,7 +196,11 @@ export class PACFunctor implements ICapaFunctor {
             ctx.debug(`[PAC] 运行结果(${this.type}):`, result);
         } catch (e) {
             const msg = `[PAC] 运行失败(${this.type}): ${getErrorMessage(e)}`;
-            Logger.error(msg, e);
+            // Logger.error(msg, e);
+            ctx.prj.notify("toast", {
+                type: "error",
+                msg: msg,
+            });
             ctx.error(msg);
         }
     }

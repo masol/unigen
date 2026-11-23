@@ -6,6 +6,11 @@ export {
     type InitOptions
 } from "./globaltooldb.js";
 export {
+    McpToolCatalog,
+    type McpServerSummary,
+    type McpToolCatalogHost
+} from "./mcp-catalog.js";
+export {
     builtinId,
     makeId,
     mcpId,

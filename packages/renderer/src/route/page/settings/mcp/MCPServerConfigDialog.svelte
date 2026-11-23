@@ -11,11 +11,11 @@
     [0] 连接 —— 传输协议、URL/命令、鉴权、请求头
     [1] 测试 —— 从 Step 0 前进进入时自动测试；成功后方可继续
                 从 Step 2 回退进入时保留历史测试结果，不自动重测
-    [2] 确认 —— 名称（可修改）、服务 ID、启用开关（均为持久化字段）
+    [2] 确认 —— 名称（可修改）、服务 ID（只读）、启用开关（均为持久化字段）
 
   持久化字段（与 McpServerConfig 对齐）：
-    id        —— 本地唯一标识
-    name      —— 名称；优先取测试返回的 serverInfo.name，缺省回退为 "未命名"
+    id        —— 本地唯一标识；新建时由服务器握手返回的 name 派生，编辑时不可修改
+    name      —— 名称；默认值为 `无名称[${id}]`，可修改
     enabled   —— 是否启用
     transport —— 连接参数
 -->
@@ -51,13 +51,14 @@
     buildAuthHeaders,
     parseAuthFromHeaders,
   } from "./McpAuthField.svelte";
+  import { testMcpConnection } from "./mcpConnection";
   import type { HeaderPair } from "./McpHeaderEditor.svelte";
   import McpHeaderEditor, {
     pairsToRecord,
     recordToPairs,
   } from "./McpHeaderEditor.svelte";
+  import { mcpStore } from "./mcpstore.svelte";
   import McpTestResult from "./McpTestResult.svelte";
-  import { testMcpConnection } from "./mcpConnection";
 
   type Props = {
     server?: Partial<McpServerConfig>;
@@ -170,6 +171,42 @@
     return `mcp${hash}`;
   }
 
+  /**
+   * 将服务器握手返回的 name 转换为合法 id。
+   * 合法格式：^[a-z][a-z0-9_-]{0,15}$
+   * 若无法生成合法 id，回退到基于连接参数的 deriveId()。
+   */
+  function deriveIdFromServerName(serverName: string): string {
+    let slug = serverName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, ""); // 去除首尾连字符
+
+    if (!slug) {
+      return deriveId();
+    }
+
+    // 如果首字符不是字母，添加前缀 mcp-
+    if (!/^[a-z]/.test(slug)) {
+      slug = "mcp-" + slug;
+    }
+
+    // 截断到 16 字符
+    if (slug.length > 16) {
+      slug = slug.slice(0, 16);
+    }
+
+    // 截断后可能以连字符结尾，需要去除
+    slug = slug.replace(/-+$/, "");
+
+    // 校验最终格式，若不合法则回退
+    if (!/^[a-z][a-z0-9_-]{0,15}$/.test(slug)) {
+      return deriveId();
+    }
+
+    return slug;
+  }
+
   function connectionSnapshot(): string {
     return JSON.stringify({
       transportType,
@@ -209,6 +246,11 @@
     id.trim().length > 0 &&
       name.trim().length > 0 &&
       /^[a-z][a-z0-9_-]{0,15}$/.test(id.trim()),
+  );
+
+  const idConflict = $derived(
+    id.trim().length > 0 &&
+      mcpStore.servers.some((s) => s.id === id.trim() && s.id !== server?.id),
   );
 
   function buildTransport(): McpTransport {
@@ -299,10 +341,16 @@
 
     if (currentStep === 1) {
       if (!testPassed || testing) return;
-      if (!id.trim()) id = deriveId();
-      if (!name.trim()) {
-        name = testResult?.serverInfo?.name?.trim() || "未命名";
+
+      if (!isEditMode) {
+        const serverInfoName = testResult?.ok ? testResult.serverInfo.name : "";
+        id = deriveIdFromServerName(serverInfoName);
       }
+
+      if (!name.trim()) {
+        name = `无名称[${id}]`;
+      }
+
       currentStep = 2;
     }
   }
@@ -323,6 +371,10 @@
   // ── 提交 ──
   async function handleSubmit() {
     if (!isFinalValid || isSubmitting) return;
+    if (idConflict) {
+      errorMessage = "已存在相同 ID 的 MCP 服务，无法保存";
+      return;
+    }
 
     isSubmitting = true;
     errorMessage = "";
@@ -399,8 +451,7 @@
             class="mt-0.5 shrink-0 text-destructive"
           />
           <p>
-            stdio 会在本机启动进程。请确认命令来源可信；建议使用 HTTP /
-            SSE。
+            stdio 会在本机启动进程。请确认命令来源可信；建议使用 HTTP / SSE。
           </p>
         </div>
 
@@ -470,27 +521,27 @@
           placeholder="MCP 服务"
           class="rounded-xl"
         />
-        {#if testResult?.serverInfo?.name}
-          <p class="text-xs text-muted-foreground">
-            已从服务器信息自动填充，可直接修改
-          </p>
-        {/if}
+        <p class="text-xs text-muted-foreground">
+          默认名称为服务标识名，可直接修改(只为用户服务，应用不会使用)
+        </p>
       </div>
 
       <div class="space-y-2">
-        <Label for="mcp-id">服务 ID</Label>
-        <Input
-          id="mcp-id"
-          bind:value={id}
-          placeholder="mcp0a1b2c3d"
-          class="rounded-xl font-mono"
-        />
+        <Label>服务标识</Label>
+        <div
+          class="rounded-xl border border-border/50 bg-muted/30 px-3 py-2 font-mono text-sm text-foreground"
+        >
+          {id}
+        </div>
         <p class="text-xs text-muted-foreground">
-          本地唯一标识，须匹配
-          <code class="rounded bg-muted px-1 py-0.5 font-mono"
-            >^[a-z][a-z0-9_-]&#123;0,15&#125;$</code
-          >
+          MCP服务定义的服务标识名，不可修改
         </p>
+        {#if idConflict}
+          <div class="flex items-center gap-1.5 text-xs text-destructive">
+            <IconAlertCircle size={12} stroke={1.5} />
+            <span>已存在相同 服务标识 的 MCP 服务，无法重复添加</span>
+          </div>
+        {/if}
       </div>
 
       <div
@@ -551,7 +602,10 @@
       <IconChevronRight size={16} stroke={1.5} />
     </Button>
   {:else}
-    <Button onclick={handleSubmit} disabled={!isFinalValid || isSubmitting}>
+    <Button
+      onclick={handleSubmit}
+      disabled={!isFinalValid || isSubmitting || idConflict}
+    >
       {#if isSubmitting}
         <IconLoader2 class="size-4 animate-spin" />
         保存中

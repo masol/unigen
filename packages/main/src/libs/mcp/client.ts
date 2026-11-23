@@ -3,12 +3,14 @@ import { createMCPClient } from "@ai-sdk/mcp";
 // stdio 传输的子路径导出名请以本地 @ai-sdk/mcp 实际导出为准。
 import type {
     McpConnectionTestResult,
+    McpServerInfo,
     McpTestServerConfig,
     McpToolInfo,
 } from "$types/shared/mcp.js";
-import { Experimental_StdioMCPTransport as StdioMCPTransport } from "@ai-sdk/mcp/mcp-stdio";
+import { StdioMCPTransport } from "@ai-sdk/mcp/mcp-stdio";
 import type { Tool } from "ai";
 import Logger from "electron-log/main.js";
+import { performance } from "node:perf_hooks";
 import { isFunction } from "radashi";
 import type { McpServerConfig } from "./type.js";
 
@@ -91,42 +93,111 @@ export function resolveMcpToolDescription(t: Tool): string {
     return "";
 }
 
+/** 读取字符串字段：非字符串 / 全空白一律视为“未提供”。 */
+function readOptionalString(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
+ * 同步读取握手阶段上报的 server 身份信息。
+ *
+ * `@ai-sdk/mcp` v2 在 `createMCPClient()` resolve 之前已完成 initialize /
+ * server/discover，因此 `client.serverInfo` 可直接读取。但服务端返回的结构
+ * 不受控，这里做一次运行时校验 + 回退：
+ *
+ * - name：服务端自报名称 → 服务端自报版本号 → 传输协议名（http / sse / stdio）
+ * - version：服务端自报版本号 → "unknown"
+ *
+ * 拿不到 serverInfo（老版本 SDK、非标准服务端）时返回 undefined，
+ * 调用方必须视作连接失败。
+ */
+function resolveServerInfo(
+    client: McpClient,
+    transportType: string,
+): McpServerInfo | undefined {
+    const raw = (client as { serverInfo?: unknown }).serverInfo;
+    if (!raw || typeof raw !== "object") return undefined;
+
+    const info = raw as Record<string, unknown>;
+    const version = readOptionalString(info.version);
+    const title = readOptionalString(info.title);
+    const name = readOptionalString(info.name) ?? version ?? transportType;
+
+    return {
+        name,
+        version: version ?? "unknown",
+        ...(title ? { title } : {}),
+    };
+}
+
+/** 读取 initialize 结果里的协议版本号，读不到就返回 undefined。 */
+function resolveProtocolVersion(client: McpClient): string | undefined {
+    const init = (
+        client as { initializeResult?: { protocolVersion?: unknown } }
+    ).initializeResult;
+    return readOptionalString(init?.protocolVersion);
+}
+
 /**
  * 测试 MCP server 连接。
  *
- * - 该函数只创建临时连接、读取工具列表并立即关闭；
+ * - 只创建临时连接、读取 serverInfo / 工具列表并立即关闭；
  * - 不经过 McpConnectionPool，不会写入 / 修改任何 server 配置或连接池状态；
  * - 接受 id / name 可缺失的配置，便于客户端在“保存前”测试。
+ *
+ * 契约：
+ * - 连接成功且能拿到 serverInfo → `ok: true`，`serverInfo` 必填；
+ * - 连接失败或拿不到 serverInfo   → `ok: false`，`error` 必填。
  */
 export async function testMcpServerConnection(
     cfg: McpTestServerConfig,
 ): Promise<McpConnectionTestResult> {
-    const startedAt = Date.now();
-    const serverId = cfg.id || cfg.name || "<mcp-test>";
+    const startedAt = performance.now();
+    const serverId =
+        readOptionalString(cfg.id) ??
+        readOptionalString(cfg.name) ??
+        "<mcp-test>";
     let client: McpClient | undefined;
 
     try {
-        const connection = await connectMcpServer({ ...cfg, id: serverId });
+        const connection: McpConnection = await connectMcpServer({
+            ...cfg,
+            id: serverId,
+        });
         client = connection.client;
 
+        const serverInfo = resolveServerInfo(client, cfg.transport.type);
+        if (!serverInfo) {
+            throw new Error(
+                `MCP server 未上报握手信息（serverInfo）: ${serverId}`,
+            );
+        }
+
         const tools: McpToolInfo[] = Object.entries(connection.tools).map(
-            ([name, tool]) => ({
-                name,
-                description: resolveMcpToolDescription(tool) || undefined,
-            }),
+            ([name, tool]) => {
+                const description = resolveMcpToolDescription(tool);
+                return description ? { name, description } : { name };
+            },
         );
+
+        const protocolVersion = resolveProtocolVersion(client);
 
         return {
             ok: true,
-            latencyMs: Date.now() - startedAt,
+            latencyMs: Math.round(performance.now() - startedAt),
+            serverInfo,
             tools,
+            ...(protocolVersion ? { protocolVersion } : {}),
         };
     } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
         return {
             ok: false,
-            latencyMs: Date.now() - startedAt,
+            latencyMs: Math.round(performance.now() - startedAt),
             tools: [],
-            error: e instanceof Error ? e.message : String(e),
+            error: message || "MCP 连接测试失败",
         };
     } finally {
         if (client) {

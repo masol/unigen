@@ -54,7 +54,7 @@ export async function compilePacAgent(
     } catch (e) {
         const detail = e instanceof Error ? e.message : String(e);
         Logger.warn(`[PAC] 编译入口失败，降级为直通 agent: ${detail}`);
-        prj.notify("toast", {
+        prj?.notify("toast", {
             type: "warning",
             msg: "Agent 编译失败，已降级为直通模式",
         });

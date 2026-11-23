@@ -9,7 +9,7 @@ import type { IRunnerContext } from "$types/blueprint/context.js";
 import type { ModelUsage } from "$types/shared/chat.js";
 import { isStepCount, ToolLoopAgent, type ModelMessage } from "ai";
 import Logger from "electron-log/main.js";
-import { isPlainObject } from "radashi";
+import { getErrorMessage, isPlainObject } from "radashi";
 import { resolveEffectiveSettings, resolveModelOptions } from "../settings.js";
 import { buildUserPrompt, renderSystemPrompt } from "../template.js";
 import { nextSeq } from "../traceid.js";
@@ -339,10 +339,14 @@ export async function executeAgent(
                 usage = r.usage;
                 streamSuccess = true;
             } catch (streamErr) {
+                const errMsg = `[PAC][step=${stepPath}] 流式执行失败，回退到到非流式继续执行:${getErrorMessage(streamErr)}`;
                 Logger.warn(
-                    `[PAC][step=${stepPath}] 流式执行失败，fallback 到非流式:`,
-                    streamErr,
+                    errMsg
                 );
+                ctx.prj.notify("toast", {
+                    type: "warning",
+                    msg: truncate(errMsg, 99),
+                });
             }
 
             if (!streamSuccess) {
