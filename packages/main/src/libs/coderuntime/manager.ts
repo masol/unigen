@@ -6,7 +6,7 @@
 //   - **零私有状态**：所有引擎状态（含历史安装进度）持久化在 StableConfig，
 //     由 `#readStatus / #writeStatus` 统一读写；
 //   - **只保留瞬时调度状态**：`#chains` / `#inflight` / `#registeredTools`
-//     是"每进程"的缓存，不参与持久化（进程退出即丢失，符合语义）；
+//     是“每进程”的缓存，不参与持久化（进程退出即丢失，符合语义）；
 //   - **引擎实例化**：按 `engines/index.js` 的 `ENGINE_CLASSES` 在构造
 //     函数里 `new`，不依赖模块级单例；
 //   - `init()` 承担启动编排；依赖 `StableConfig` 与 `GlobalToolDB`；
@@ -15,7 +15,7 @@
 //   - **下载前测速**：manager 主动 `probeUrls + sortByLatency` 排序候选源；
 //   - **下载后 SHA256 校验**：`archiveSha256` 配置优先；用户未自定义
 //     `archiveUrl` 时，回落到引擎给出的默认哈希；校验失败会删除坏归档，
-//     避免 `skipExisting` 导致"永远校验失败"的死循环；
+//     避免 `skipExisting` 导致“永远校验失败”的死循环；
 //   - **解压允许引擎定制**：`getExtractAllowSymlinks?.()` 控制 tar 归档
 //     中符号链接的放行策略（默认 false，通用安全策略）；
 //   - 每次状态跃迁点直接调用 `report / complete / fail`
@@ -29,6 +29,12 @@
 //   - 进入 / 离开 `installing`、`ready`、`failed`、`interrupted` 时**强制写**；
 //   - 内部阶段推进按 `PROGRESS_PERSIST_INTERVAL_MS` 节流；
 //   - 重启时 `installing` 会被收敛为 `interrupted`。
+//
+// 调用模式说明：
+//   - `init()` 允许被调用方以 fire-and-forget 方式调度（如启动流程中不
+//     阻塞主路径）。因此本类所有可能向外的失败点都必须在内部收敛，不能
+//     让 `init()` 成为 rejection 源；客户端通过订阅独立 taskId
+//     `code-runtime:<engineId>` 获知进度。
 
 import { extractArchive } from "$libs/loader/archive.js";
 import { download, type DownloadSource } from "$libs/loader/downloader.js";
@@ -234,14 +240,14 @@ export class CodeRuntimeManager {
 
     #readStatus(engineId: CodeRuntimeEngineId): CodeRuntimeEngineStatus {
         const all = stableConfig().get("codeRuntimeStatus");
-        return all.engines?.[engineId] ?? { state: "not_ready" };
+        return all?.engines?.[engineId] ?? { state: "not_ready" };
     }
 
     #readAllStatus(): CodeRuntimeStatus {
         const all = stableConfig().get("codeRuntimeStatus");
         return {
-            engines: { ...(all.engines ?? {}) },
-            updatedAt: all.updatedAt ?? 0,
+            engines: { ...(all?.engines ?? {}) },
+            updatedAt: all?.updatedAt ?? 0,
         };
     }
 
@@ -365,7 +371,7 @@ export class CodeRuntimeManager {
         engineId: CodeRuntimeEngineId,
     ): CodeRuntimeEngineStatus | undefined {
         const all = stableConfig().get("codeRuntimeStatus");
-        const s = all.engines?.[engineId];
+        const s = all?.engines?.[engineId];
         return s ? { ...s } : undefined;
     }
 
@@ -743,7 +749,7 @@ export class CodeRuntimeManager {
 
             // 下载目录必须存在。
             //
-            // ipull 在 `skipExisting` 检查 / 创建目标文件时会对目标路径
+            // 下载器在 `skipExisting` 检查 / 打开目标文件时会对目标路径
             // 做 `stat` / `open`；父目录不存在会抛 ENOENT，而 downloader
             // 会把它归类为“源失败”，导致一个本地文件系统问题被误报成
             // 所有下载源失败（Python 的 uv 只有一个国内源时会直接整体失败）。
@@ -959,48 +965,66 @@ export class CodeRuntimeManager {
 
     // ---------- 启动编排 ----------
 
+    /**
+     * 启动编排。
+     *
+     * **调用方可 fire-and-forget 调度**（如启动流程中不阻塞主路径）：
+     * 因此即使内部完全失败也不向外抛错，只记录日志。所有对外可见的
+     * 失败信息通过 `report / fail`（taskId = `code-runtime:<engineId>`）
+     * 与 `getState()`（StableConfig 快照）广播。
+     */
     async init(opts: CodeRuntimeInitOptions = {}): Promise<void> {
-        const cfg = stableConfig().get("codeRuntime");
-        if (!cfg?.enabled) {
-            Logger.log("[CodeRuntime] 总开关未启用，跳过初始化。");
-            return;
-        }
-
-        const registerTool: RegisterToolFn =
-            opts.registerTool ??
-            ((def: ToolDefinition<unknown, unknown>) =>
-                globalToolDB.register(def));
-
-        this.#normalizeStaleStates();
-
-        const enabledIds = KNOWN_ENGINE_IDS.filter(
-            (id) => isKnownEngine(id) && cfg.engines?.[id]?.enabled,
-        );
-        if (enabledIds.length === 0) {
-            Logger.log(
-                "[CodeRuntime] 总开关已启用，但没有启用具体引擎；跳过安装与工具注册。",
-            );
-            return;
-        }
-
-        let failureCount = 0;
-        for (const id of enabledIds) {
-            try {
-                // 工具注册在 ensureEngine 内部自动完成。
-                await this.ensureEngine(id, { registerTool });
-            } catch (error) {
-                failureCount += 1;
-                Logger.error(
-                    `[CodeRuntime] ${id} 初始化失败，相关工具本次未注册：${errorMessage(error)}`,
-                );
+        try {
+            const cfg = stableConfig().get("codeRuntime");
+            if (!cfg?.enabled) {
+                Logger.log("[CodeRuntime] 总开关未启用，跳过初始化。");
+                return;
             }
-        }
 
-        Logger.log(
-            failureCount === 0
-                ? "[CodeRuntime] 初始化完成。"
-                : `[CodeRuntime] 初始化完成，${failureCount} 个引擎失败（详见各引擎日志）。`,
-        );
+            const registerTool: RegisterToolFn =
+                opts.registerTool ??
+                ((def: ToolDefinition<unknown, unknown>) =>
+                    globalToolDB.register(def));
+
+            this.#normalizeStaleStates();
+
+            const enabledIds = KNOWN_ENGINE_IDS.filter(
+                (id) => isKnownEngine(id) && cfg.engines?.[id]?.enabled,
+            );
+            if (enabledIds.length === 0) {
+                Logger.log(
+                    "[CodeRuntime] 总开关已启用，但没有启用具体引擎；跳过安装与工具注册。",
+                );
+                return;
+            }
+
+            let failureCount = 0;
+            for (const id of enabledIds) {
+                try {
+                    // 工具注册在 ensureEngine 内部自动完成。
+                    await this.ensureEngine(id, { registerTool });
+                } catch (error) {
+                    failureCount += 1;
+                    Logger.error(
+                        `[CodeRuntime] ${id} 初始化失败，相关工具本次未注册：${errorMessage(error)}`,
+                    );
+                }
+            }
+
+            Logger.log(
+                failureCount === 0
+                    ? "[CodeRuntime] 初始化完成。"
+                    : `[CodeRuntime] 初始化完成，${failureCount} 个引擎失败（详见各引擎日志）。`,
+            );
+        } catch (error) {
+            // 兜底：本方法以 fire-and-forget 被启动流程调度，未向外抛错。
+            // 正常路径下所有可能失败点都已在内部 try/catch 处理；这里只
+            // 处理配置读取异常、未来新增代码遗漏等边缘情况，防止产生
+            // unhandled rejection 拖垮主进程。
+            Logger.error(
+                `[CodeRuntime] 初始化编排失败（已兜底，不影响启动）：${errorMessage(error)}`,
+            );
+        }
     }
 
     async #loadEngineTool(

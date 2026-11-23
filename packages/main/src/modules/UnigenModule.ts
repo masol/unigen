@@ -21,6 +21,7 @@ import { themeFile } from '$libs/utils/sys/dir.js';
 import { report, type TaskWarning } from '$libs/utils/task-progress.js';
 import { telemetryService } from '$libs/utils/telemetry/telemetry.service.js';
 import { nativeTheme } from 'electron';
+import Logger from 'electron-log/main.js';
 import { ensureDir } from 'fs-extra';
 import type { AppModule } from '../AppModule.js';
 import { ModuleContext } from '../types/ModuleContext.js';
@@ -160,16 +161,32 @@ class UnigenModule implements AppModule {
         report(STARTUP_TASK_ID, "mcp", "MCP 服务器已就绪", 85);
 
         // 代码运行时初始化：
-        //   - CodeRuntimeManager 内部现在通过 `report("code-runtime:<engine>", …)`
-        //     直接广播自己的阶段快照，不再需要外部的 reporter 对象注入；
-        //   - 因此这里只等它跑完，不参与其内部的进度广播。
-        //   - 默认未启用（codeRuntime.enabled = false），此时直接返回、不做任何下载。
-        //   - 状态持久化：安装进度 / 失败原因写入 StableConfig（由 manager 负责），
-        //     进程崩溃后由 manager 内部收敛；客户端如需权威状态请查
-        //     `codeRuntimeManager.getState(engineId)`。
-        report(STARTUP_TASK_ID, "code-runtime", "正在初始化代码运行时...", 88);
-        await codeRuntimeManager.init();
-        report(STARTUP_TASK_ID, "code-runtime", "代码运行时初始化完成", 95);
+        //   - CodeRuntimeManager 内部通过 `report("code-runtime:<engine>", …)`
+        //     直接广播自己的阶段快照；客户端订阅对应 taskId 即可获知进度；
+        //   - **不阻塞启动**：运行时安装可能触发大归档下载（几十 MB 到
+        //     上百 MB），下载时长不可控；code-runtime 的 tools 也不是启动
+        //     必须依赖。因此这里 fire-and-forget，只负责"给一个启动执行
+        //     时机"，不等待其完成；
+        //   - 默认未启用（codeRuntime.enabled = false），未启用时内部直接
+        //     返回、不做任何下载；
+        //   - 状态持久化：安装进度 / 失败原因写入 StableConfig（由 manager
+        //     负责），进程崩溃后由 manager 内部收敛；客户端如需权威状态
+        //     请查 `codeRuntimeManager.getState(engineId)`；
+        //   - 调用链安全：manager.init 内部已有完整 try/catch 兜底；此处
+        //     再挂 `.catch(...)` 作为最后一层防线，防止任何异常逃逸为
+        //     unhandled rejection 拖垮主进程。
+        report(
+            STARTUP_TASK_ID,
+            "code-runtime",
+            "正在调度代码运行时初始化（后台）...",
+            88,
+        );
+        void codeRuntimeManager.init().catch((error) => {
+            Logger.error(
+                `[UnigenModule] code-runtime 初始化调度失败：${error instanceof Error ? error.message : String(error)}`,
+            );
+        });
+        report(STARTUP_TASK_ID, "code-runtime", "代码运行时初始化已调度", 95);
     }
 }
 

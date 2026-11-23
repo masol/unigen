@@ -7,12 +7,11 @@
 //   - **基于 Node.js 内置 fetch + 流式写盘**：全程无第三方下载引擎，
 //     所有资源在 try/finally 中显式关闭，所有回调都 try/catch 包裹，
 //     所有 Promise 都在自己的 async 链上 await —— **不存在孤儿
-//     Promise**。
-//     这一原则的由来：此前用 ipull 作为默认后端，其内部 `Promise.all`
-//     并发 fetch 的一路失败不会取消其他在飞请求，这些 rejected Promise
-//     成为了无法捕获的 unhandled rejection，在 Node 15+ 默认
-//     `--unhandled-rejections=throw` 下会直接带崩主进程。因此默认后端
-//     已改为自研 fetch 实现，行为可审计、可预测。
+//     Promise**。不引入第三方并发下载器（并发 fetch 中一路失败不会
+//     取消其他在飞请求，这些 rejected Promise 会成为无法捕获的
+//     unhandled rejection，在 Node 15+ 默认
+//     `--unhandled-rejections=throw` 下会直接带崩主进程）。默认后端
+//     保持为自研 fetch 实现，行为可审计、可预测。
 //   - **速度诉求交给 aria2**：`backend: "aria2"` 或 `"auto"` 时，如果
 //     aria2c 可用，跨源并行分块下载，失败自动回退 fetch。
 //   - **下载 / 测速分离**：本模块不做主动选源测速；调用方若需要可先
@@ -78,7 +77,7 @@ const PROGRESS_THROTTLE_MS = 200;
 /** 429/503 无 Retry-After 时的最大退避（毫秒）。 */
 const RETRY_MAX_DELAY_MS = 10_000;
 
-export type DownloadBackend = "auto" | "fetch" | "aria2" | "ipull";
+export type DownloadBackend = "auto" | "fetch" | "aria2";
 
 export interface DownloadProgressSnapshot {
     /** 已传输字节 */
@@ -137,7 +136,6 @@ export interface DownloadOptions {
     /**
      * 后端选择。
      *   - `fetch`（默认）：Node.js 内置 fetch；行为最稳定；
-     *   - `ipull`：**已废弃**，等同 `fetch`。仅为兼容历史配置保留；
      *   - `auto`：检测到 aria2c 时优先 aria2，失败时自动回退 fetch；
      *   - `aria2`：强制使用 aria2，不可用时抛错（调用方自行处理）。
      */
@@ -165,11 +163,8 @@ export interface DownloadOptions {
     /**
      * aria2 后端失败后是否回退到 fetch 后端重试。
      * 默认 true；设为 false 时 aria2 失败直接抛错。
-     *
-     * 参数名保留历史名称 `fallbackToIpullOnAria2Error`，语义已变为
-     * “回退到默认（fetch）后端”。
      */
-    fallbackToIpullOnAria2Error?: boolean;
+    fallbackToFetchOnAria2Error?: boolean;
 }
 
 export interface DownloadResult {
@@ -1085,7 +1080,6 @@ async function fetchDownload(opts: DownloadOptions): Promise<DownloadResult> {
  *
  * 语义：
  *   - 默认后端为 **fetch**（Node.js 内置，稳定性优先）；
- *   - 传 `backend: "ipull"` 视为 `"fetch"`（向后兼容）；
  *   - 指定 `backend: "auto"` 或 `"aria2"` 时才会探测 aria2c；
  *     `auto` 在 aria2 失败时自动回退 fetch；
  *   - `isGithub + isChina` 时自动注入 github 代理，并把代理放在原始源之前；
@@ -1108,10 +1102,12 @@ export async function download(opts: DownloadOptions): Promise<DownloadResult> {
         rejectHtml,
     };
 
+    // 运行时归一化：外部（如 JS 调用 / 旧持久化数据）可能传入历史 / 非法值，
+    // 统一退化为 fetch。
     const backend: "auto" | "fetch" | "aria2" =
-        opts.backend === "ipull" || opts.backend === undefined
-            ? "fetch"
-            : opts.backend;
+        opts.backend === "auto" || opts.backend === "aria2"
+            ? opts.backend
+            : "fetch";
 
     Logger.debug(
         `[Downloader] download 开始：sources=${effectiveSources.length} ` +
@@ -1124,7 +1120,7 @@ export async function download(opts: DownloadOptions): Promise<DownloadResult> {
             : null;
 
     if (backend === "aria2" && !aria2) {
-        if ((opts.fallbackToIpullOnAria2Error ?? true) === false) {
+        if ((opts.fallbackToFetchOnAria2Error ?? true) === false) {
             throw new Error("download: 指定 aria2 后端但 aria2c 不可用。");
         }
         Logger.warn("[Downloader] aria2 不可用，回退到 fetch。");
@@ -1135,7 +1131,7 @@ export async function download(opts: DownloadOptions): Promise<DownloadResult> {
         try {
             return await aria2Download(effectiveOpts);
         } catch (err) {
-            if ((opts.fallbackToIpullOnAria2Error ?? true) === false) throw err;
+            if ((opts.fallbackToFetchOnAria2Error ?? true) === false) throw err;
             Logger.warn(
                 `[Downloader] aria2 失败，回退到 fetch：${errorMessage(err)}`,
             );
