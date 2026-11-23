@@ -26,7 +26,6 @@ export interface CodeRuntimeInfo {
     name: string;
     kind: CodeRuntimeKind;
     tagline: string;
-    capability: string;
     icon?: string;
     approximateDownloadMB?: number;
     /** 就绪后点击"测试一下"运行的代码片段 */

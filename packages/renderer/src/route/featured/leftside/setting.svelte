@@ -186,8 +186,8 @@
         },
         {
           id: "environments",
-          label: "自有环境",
-          description: "基于自有设备的AI环境",
+          label: "自有算力",
+          description: "自有设备做模型推理训练",
           icon: IconServer2,
           path: "environments",
           // 由 environments store 模块底部注册（参见 LongTaskStore.register）
@@ -208,8 +208,8 @@
         },
         {
           id: "code-runtime",
-          label: "编程环境",
-          description: "管理AI的本地编程环境",
+          label: "本机工具",
+          description: "安装AI可调用的本机工具",
           icon: IconTerminal2,
           path: "code-runtime",
           // 由 code-runtime store 模块底部注册
@@ -232,8 +232,8 @@
         },
         {
           id: "sandbox",
-          label: "云端设备",
-          description: "让AI管理您的云端设备",
+          label: "云端主机",
+          description: "AI自主维护SSH云主机",
           icon: IconCloud,
           path: "sandbox",
           keywords: ["sandbox", "cloud", "云", "云端", "隔离", "远程", "code"],

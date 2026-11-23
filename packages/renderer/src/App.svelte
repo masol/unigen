@@ -58,6 +58,8 @@
     if ((ctrlDown && event.shiftKey && key === "i") || key === "f12") {
       event.preventDefault();
     }
+
+    if (event.key === "Tab") document.body.classList.add("kb-nav");
   };
 
   onMount(async () => {
@@ -100,6 +102,9 @@
 
       // 在捕获阶段（第三个参数传 true）监听，这比 hotkeys-js 的绑定更早执行
       window.addEventListener("keydown", handleKeydown, true);
+      document.addEventListener("pointerdown", () => {
+        document.body.classList.remove("kb-nav");
+      });
 
       // 等待系统自举完成。
       await pTimeout(safeApi().system.bootstrapped(), {

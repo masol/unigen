@@ -7,6 +7,15 @@
 //   - `sortByLatency` 把可达源按 RTT 升序排；不可达源保留原始顺序
 //     并挪到最后（作为最后尝试的 fallback）；
 //   - 调用方若需要可进一步按需过滤。
+//
+// 说明：
+//   - 探测默认不设置 UA，避免普通镜像（TUNA / USTC 等）对浏览器 UA
+//     启用防盗链并返回 403；
+//   - 仅 GitHub 官方 / GitHub 代理 URL 会自动附加浏览器 UA，避免部分
+//     GitHub 代理把默认 UA 当爬虫，返回 HTTP 200 + 2KB HTML 拦截页；
+//   - 探测响应若为 text/html 会被视为失败，避免把“假成功”排到前面。
+
+import { buildUserAgentHeaders } from "./user-agent.js";
 
 export interface ProbeOptions {
     /** 单个 URL 的探测超时（毫秒），默认 8000。 */
@@ -59,7 +68,10 @@ export async function probeOne(
     const timer = setTimeout(() => ac.abort(), timeoutMs);
     const start = Date.now();
     try {
-        const headers: Record<string, string> = { ...(opts.headers ?? {}) };
+        const headers: Record<string, string> = {
+            ...buildUserAgentHeaders(url),
+            ...(opts.headers ?? {}),
+        };
         if (method === "GET_RANGE" && !headers.Range && !headers.range) {
             headers.Range = "bytes=0-0";
         }
@@ -72,6 +84,12 @@ export async function probeOne(
         if (!res.ok && res.status !== 206) {
             throw new Error(`HTTP ${res.status}`);
         }
+
+        const contentType = res.headers.get("content-type") ?? "";
+        if (contentType.toLowerCase().includes("text/html")) {
+            throw new Error("返回 HTML 页面而非文件（代理被限流或 UA 被识别）");
+        }
+
         if (method === "GET_RANGE" && res.body) {
             const reader = res.body.getReader();
             await reader.read();

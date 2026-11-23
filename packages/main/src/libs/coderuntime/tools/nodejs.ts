@@ -9,12 +9,12 @@
 // cwd 语义：
 //   - **默认恒定为项目根目录**；agent 不传 cwd，所有相对路径（script_path、
 //     脚本内的相对引用等）均基于项目根解析。
-//   - **例外**：当项目未打开且调用方只传 `code`、无 `script_path`、无
-//     `dependencies` 时（典型场景是 `testRuntime` 验证运行时本身），
-//     cwd 降级为 `<os.tmpdir()>/unigen`；任何触及项目文件 / 依赖的调用
-//     会以不可处理异常拒绝，避免产物落到 cwd 造成副作用。
+//   - **例外**：当项目未打开且调用方只传 code、无 script_path、无
+//     dependencies 时（典型场景是 `testRuntime` 验证运行时本身），直接以
+//     `node -e <code>` 执行：不写临时文件、不访问 `os.tmpdir`。任何触及
+//     项目文件 / 依赖的调用会以不可处理异常拒绝。
 //   - `.npm cache / prefix` 限制在 runtime 目录，`node_modules` 与
-//     package.json 位于 cwd（即项目根或降级目录）。
+//     package.json 位于 cwd（即项目根）。
 //
 // 依赖语义：
 //   - `dependencies` 是**唯一入口**；请求安装时 npm 会把它们写入 cwd
@@ -115,13 +115,17 @@ const inputSchema = z
             .optional()
             .describe(
                 "内联 Node.js 代码；与 script_path 二选一。" +
-                "会写入 cwd 的临时文件（隐藏前缀 .unigen_run_*.js）执行；" +
+                "写入 cwd 的临时文件（隐藏前缀 .unigen_run_*.js）执行，" +
                 "代码中的相对路径一律相对 cwd 解析，执行结束后临时文件自动删除。",
             ),
         args: z
             .array(z.string())
             .default([])
-            .describe("传给脚本的命令行参数数组。"),
+            .describe(
+                "传给脚本的命令行参数数组。" +
+                "无项目内联模式（`node -e`）下参数落到 `process.argv[1:]`，" +
+                "与文件模式（`process.argv[2:]`）语义不同。",
+            ),
         dependencies: z
             .array(z.string())
             .default([])
@@ -131,7 +135,7 @@ const inputSchema = z
                 "这是触发依赖安装的唯一入口；若 cwd 已有 package.json，" +
                 "npm 会把这里的每个包追加进去（幂等，不膨胀）。" +
                 "传空数组表示本次跳过安装（依赖视为已就绪）。" +
-                "**无项目时不允许非空**（.venv / package.json 需要有项目根可写）。",
+                "**无项目时不允许非空**（package.json 需要有项目根可写）。",
             ),
         timeout_ms: z
             .number()
@@ -345,6 +349,57 @@ async function installDependencies(
     }
 }
 
+/**
+ * 无项目内联执行路径。
+ *
+ * 使用 `node -e <code>` 直接执行：
+ *   - **不**写临时文件；**不**访问 `os.tmpdir`；
+ *   - cwd 使用 `process.cwd()`（必然存在，且我们不主动读写）；
+ *   - `args` 通过 `node -e` 语义透传（落到 `process.argv[1:]`，与文件模式
+ *     `process.argv[2:]` 不同，已在字段描述中声明）。
+ *
+ * 任何需要在文件系统上落地的操作（`script_path` / `dependencies`）由
+ * 调用方在进入此函数之前已拒绝。
+ */
+async function runInlineNode(
+    nodeExe: string,
+    code: string,
+    args: string[],
+    extraEnv: Record<string, string> | undefined,
+    timeoutMs: number,
+): Promise<{
+    exitCode: number;
+    stdout: string;
+    stderr: string;
+    timedOut: boolean;
+    durationMs: number;
+    command: string;
+}> {
+    const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        ...(extraEnv ?? {}),
+    };
+
+    const nodeArgs = ["-e", code, ...args];
+
+    const start = Date.now();
+    const result = await execa(nodeExe, nodeArgs, {
+        cwd: process.cwd(),
+        env,
+        timeout: timeoutMs,
+        reject: false,
+        windowsHide: true,
+    });
+    return {
+        exitCode: typeof result.exitCode === "number" ? result.exitCode : -1,
+        stdout: result.stdout ?? "",
+        stderr: result.stderr ?? "",
+        timedOut: result.timedOut === true,
+        durationMs: Date.now() - start,
+        command: formatCommand(nodeExe, nodeArgs),
+    };
+}
+
 export const nodeRunTool: ToolDefinition<NodeRunInput, NodeRunOutput> = {
     name: "run_node",
     description:
@@ -383,19 +438,56 @@ export const nodeRunTool: ToolDefinition<NodeRunInput, NodeRunOutput> = {
             );
         }
 
-        const project = await prepareRunContext("运行 Node.js 代码");
-        if (requiresProjectContext(input) && !project.isProject) {
-            throw new Error(
-                "当前未打开项目，无法运行项目内脚本或安装依赖。" +
-                "请先打开项目；若只想验证运行时本身，请仅传入 code 并省略 dependencies。",
-            );
-        }
-        const cwd = project.cwd;
+        const project = prepareRunContext("运行 Node.js 代码");
 
+        // ── 无项目：仅允许纯内联 code（无 script_path / 无 dependencies） ──
+        //
+        // 直接 `node -e <code>`：
+        //   - 不写临时文件；不访问 os.tmpdir；
+        //   - cwd 使用 process.cwd()（必然存在，且我们不主动读写）；
+        //   - args 通过 `node -e` 语义透传（process.argv[1:]）。
+        if (!project.isProject) {
+            if (requiresProjectContext(input)) {
+                throw new Error(
+                    "当前未打开项目，无法运行项目内脚本或安装依赖。" +
+                    "请先打开项目；若只想验证运行时本身，请仅传入 code 并省略 dependencies。",
+                );
+            }
+
+            const code = input.code;
+            if (!code) {
+                // zod `.refine(xor)` 保证此刻 code 非空；此处为不变量兜底。
+                throw new Error("内部状态异常：inline 模式缺少 code。");
+            }
+
+            const runtime = await codeRuntimeManager.assertReady("nodejs");
+            const timeoutMs = input.timeout_ms ?? DEFAULT_TIMEOUT_MS;
+
+            const result = await runInlineNode(
+                runtime.executablePath,
+                code,
+                input.args,
+                input.env,
+                timeoutMs,
+            );
+
+            return {
+                success: true,
+                exit_code: result.exitCode,
+                stdout: limitOutput(result.stdout),
+                stderr: limitOutput(result.stderr),
+                duration_ms: result.durationMs,
+                command: result.command,
+                timed_out: result.timedOut,
+            };
+        }
+
+        // ── 有项目：保留原有流程（临时文件 / 依赖） ──
+        const cwd = project.cwd;
         const runtime = await codeRuntimeManager.assertReady("nodejs");
         const timeoutMs = input.timeout_ms ?? DEFAULT_TIMEOUT_MS;
 
-        // 临时内联脚本落 cwd（项目根或降级 tmp），与 script_path 模式语义一致。
+        // 临时内联脚本落 cwd（项目根），与 script_path 模式语义一致。
         // 用隐藏前缀降低 VCS 噪声；执行结束后删除。
         let scriptPath: string;
         let tempScript = false;

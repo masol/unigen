@@ -9,10 +9,11 @@
 // cwd 语义：
 //   - **默认恒定为项目根目录**；agent 不传 cwd，所有相对路径（script_path、
 //     脚本内的相对引用等）均基于项目根解析。
-//   - **例外**：当项目未打开且调用方只传 `code`、无 `script_path`、无
-//     `dependencies` 时（典型场景是 `testRuntime` 验证运行时本身），
-//     cwd 降级为 `<os.tmpdir()>/unigen`；.venv 也会在该降级目录下创建。
-//     任何触及项目文件 / 依赖安装的调用会以不可处理异常拒绝。
+//   - **例外**：当项目未打开且调用方只传 code、无 script_path、无
+//     dependencies 时（典型场景是 `testRuntime` 验证运行时本身），直接以
+//     `uv run --no-project python -c <code>` 执行：不创建 venv、不写临时
+//     文件、不访问 `os.tmpdir`。任何触及项目文件 / 依赖安装的调用会以
+//     不可处理异常拒绝。
 //   - `.venv` 位于 cwd；若已存在则复用（跨调用复用依赖，不用重复安装）。
 //
 // 依赖语义：
@@ -77,7 +78,7 @@ const inputSchema = z
             .optional()
             .describe(
                 "内联 Python 代码；与 script_path 二选一。" +
-                "会写入 cwd 的临时文件（隐藏前缀 .unigen_run_*.py）执行；" +
+                "写入 cwd 的临时文件（隐藏前缀 .unigen_run_*.py）执行，" +
                 "代码中的相对路径一律相对 cwd 解析，执行结束后临时文件自动删除。",
             ),
         args: z
@@ -92,8 +93,7 @@ const inputSchema = z
                 "例如 'requests' 或 'numpy>=1.26'）。" +
                 "安装到 cwd 的 .venv，**venv 是依赖的持久化记录**" +
                 "（`uv pip freeze` 可查），下次调用会复用已有 venv。" +
-                "这是触发依赖安装的唯一入口；传空数组表示跳过安装。" +
-                "**无项目时不允许非空**（.venv 需要有项目根可写）。",
+                "这是触发依赖安装的唯一入口；传空数组表示跳过安装。"
             ),
         timeout_ms: z
             .number()
@@ -138,7 +138,8 @@ const outputSchema = z.object({
         .string()
         .optional()
         .describe(
-            "本次使用的 venv 目录；基础设施失败且尚未创建 venv 时可能为空。",
+            "本次使用的 venv 目录；基础设施失败且尚未创建 venv 时可能为空。" +
+            "无项目内联模式不会创建 venv，此字段为空。",
         ),
 });
 
@@ -238,6 +239,62 @@ interface RunScriptResult {
     command: string;
 }
 
+/**
+ * 无项目内联执行路径。
+ *
+ * 使用 `uv run --no-project python -c <code>` 直接执行：
+ *   - **不**创建 venv；**不**写临时文件；**不**访问 `os.tmpdir`；
+ *   - cwd 使用 `process.cwd()`（必然存在，且我们不主动读写）；
+ *   - `args` 通过 `python -c` 语义透传（落到 `sys.argv[1:]`）；
+ *   - 环境隔离仍走 `buildUvEnv()`，保证 uv 的 cache / 解释器目录不污染
+ *     用户 home；中国区镜像依旧生效。
+ *
+ * 任何需要在文件系统上落地的操作（`script_path` / `dependencies`）由
+ * 调用方在进入此函数之前已拒绝；本函数假设输入已通过此项检查。
+ */
+async function runInlineWithUv(
+    uvExe: string,
+    pythonVersion: string,
+    code: string,
+    args: string[],
+    extraEnv: Record<string, string> | undefined,
+    timeoutMs: number,
+): Promise<RunScriptResult> {
+    const env: NodeJS.ProcessEnv = {
+        ...buildUvEnv(),
+        ...(extraEnv ?? {}),
+        PYTHONIOENCODING: "utf-8",
+    };
+
+    const uvArgs = [
+        "run",
+        "--no-project",
+        "--python", pythonVersion,
+        "--python-preference", "managed",
+        "python",
+        "-c",
+        code,
+        ...args,
+    ];
+
+    const start = Date.now();
+    const result = await execa(uvExe, uvArgs, {
+        cwd: process.cwd(),
+        env,
+        timeout: timeoutMs,
+        reject: false,
+        windowsHide: true,
+    });
+    return {
+        exitCode: typeof result.exitCode === "number" ? result.exitCode : -1,
+        stdout: result.stdout ?? "",
+        stderr: result.stderr ?? "",
+        timedOut: result.timedOut === true,
+        durationMs: Date.now() - start,
+        command: formatCommand(uvExe, uvArgs),
+    };
+}
+
 async function runScriptWithUv(
     uvExe: string,
     venvDir: string,
@@ -322,21 +379,64 @@ export const pythonRunTool: ToolDefinition<PythonRunInput, PythonRunOutput> = {
             );
         }
 
-        const project = await prepareRunContext("运行 Python 代码");
-        if (requiresProjectContext(input) && !project.isProject) {
-            throw new Error(
-                "当前未打开项目，无法运行项目内脚本或安装依赖。" +
-                "请先打开项目；若只想验证运行时本身，请仅传入 code 并省略 dependencies。",
-            );
-        }
-        const cwd = project.cwd;
+        const project = prepareRunContext("运行 Python 代码");
 
+        // ── 无项目：仅允许纯内联 code（无 script_path / 无 dependencies） ──
+        //
+        // 直接 `uv run --no-project python -c <code>`：
+        //   - 不创建 venv；不写临时文件；不访问 os.tmpdir；
+        //   - cwd 使用 process.cwd()（必然存在，且我们不主动读写）；
+        //   - args 通过 `python -c` 语义透传（sys.argv[1:]）。
+        //
+        // 任何需要文件系统的请求（script_path / dependencies）在此处被拒绝，
+        // 避免 `.venv` / 临时脚本落到不可控 cwd 造成副作用。
+        if (!project.isProject) {
+            if (requiresProjectContext(input)) {
+                throw new Error(
+                    "当前未打开项目，无法运行项目内脚本或安装依赖。" +
+                    "请先打开项目；若只想验证运行时本身，请仅传入 code 并省略 dependencies。",
+                );
+            }
+
+            const code = input.code;
+            if (!code) {
+                // zod `.refine(xor)` 保证此刻 code 非空；此处为不变量兜底。
+                throw new Error("内部状态异常：inline 模式缺少 code。");
+            }
+
+            const runtime = await codeRuntimeManager.assertReady("python");
+            const pythonVersion =
+                cfg.engines.python.version ?? DEFAULT_PYTHON_VERSION;
+            const timeoutMs = input.timeout_ms ?? DEFAULT_TIMEOUT_MS;
+
+            const runResult = await runInlineWithUv(
+                runtime.executablePath,
+                pythonVersion,
+                code,
+                input.args,
+                input.env,
+                timeoutMs,
+            );
+
+            return {
+                success: true,
+                exit_code: runResult.exitCode,
+                stdout: limitOutput(runResult.stdout),
+                stderr: limitOutput(runResult.stderr),
+                duration_ms: runResult.durationMs,
+                command: runResult.command,
+                timed_out: runResult.timedOut,
+            };
+        }
+
+        // ── 有项目：保留原有流程（临时文件 / venv / 依赖） ──
+        const cwd = project.cwd;
         const runtime = await codeRuntimeManager.assertReady("python");
         const pythonVersion =
             cfg.engines.python.version ?? DEFAULT_PYTHON_VERSION;
         const timeoutMs = input.timeout_ms ?? DEFAULT_TIMEOUT_MS;
 
-        // 临时内联脚本落 cwd（项目根或降级 tmp），与 script_path 模式语义统一。
+        // 临时内联脚本落 cwd（项目根），与 script_path 模式语义统一。
         let scriptPath: string;
         let tempScript = false;
         if (input.script_path) {

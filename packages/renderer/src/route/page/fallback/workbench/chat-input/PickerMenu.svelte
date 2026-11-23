@@ -17,18 +17,22 @@
     selectedItems = $bindable([] as SelectedItem[]),
     builtinItems = [],
     onClose = () => {},
+    onChange = () => {},
     emptyLabel = "没有匹配的项，试试调整筛选词",
     searchPlaceholder,
   }: {
     kind: "tools" | "skills";
     /**
      * 已选项（$bindable，双向同步）。
-     * 保存完整展示信息，已选区直接渲染，无需在菜单打开时二次请求补全。
+     * 只保存 id + name：id 供服务端使用，name 供已选区展示。
+     * description 等仅搜索结果列表需要的字段不进入已选项，避免项目级持久化冗余。
      */
     selectedItems?: SelectedItem[];
     /** 仅 tools 使用：固定在顶部的内建工具 */
     builtinItems?: PickerItem[];
     onClose?: () => void;
+    /** 已选项变化后触发，用于父层异步持久化；参数为最小投影后的最新已选项。 */
+    onChange?: (items: SelectedItem[]) => void;
     emptyLabel?: string;
     searchPlaceholder?: string;
   } = $props();
@@ -106,27 +110,31 @@
   );
 
   /**
-   * 将检索/内建项转换为已选存储结构，统一 name/description 字段，
-   * 保证已选区在任何时候都能直接渲染。
+   * 将检索/内建项转换为已选存储结构。
+   * 仅保留 id + name：id 是服务端唯一需要的信息，name 用于已选区展示；
+   * description 等仅搜索结果列表需要的字段不进入已选项。
    */
   function toSelected(item: PickerItem): SelectedItem {
     return {
       id: item.id,
       name: item.name ?? item.title ?? item.label ?? item.id,
-      description: item.description ?? item.desc,
     };
   }
 
   function toggle(item: PickerItem): void {
+    let next: SelectedItem[];
     if (selectedSet.has(item.id)) {
-      selectedItems = selectedItems.filter((x) => x.id !== item.id);
+      next = selectedItems.filter((x) => x.id !== item.id);
     } else {
-      selectedItems = [...selectedItems, toSelected(item)];
+      next = [...selectedItems, toSelected(item)];
     }
+    selectedItems = next;
+    onChange(next);
   }
 
   function clearSelection(): void {
     selectedItems = [];
+    onChange([]);
   }
 
   async function runSearch(q: string, offset: number): Promise<void> {

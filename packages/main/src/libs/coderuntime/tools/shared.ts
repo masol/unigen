@@ -6,9 +6,7 @@ import { getRunnerContextWithNull } from "$libs/project/controllers/runner.js";
 import { getCurrentProject } from "$libs/utils/api/index.js";
 import { throwUnprocessable } from "$libs/utils/err.js";
 import Logger from "electron-log/main.js";
-import { promises as fs } from "node:fs";
-import { tmpdir } from "node:os";
-import { isAbsolute, join, resolve as resolvePath } from "node:path";
+import { isAbsolute, resolve as resolvePath } from "node:path";
 
 /**
  * 解析用户提供的路径为绝对路径。
@@ -96,48 +94,55 @@ export function getRequiredProjectRoot(action: string): string {
 }
 
 /**
- * 一次工具执行的运行上下文。
+ * 一次工具执行的运行上下文（判别联合）。
  *
- * 通过 `prepareRunContext` 获取，目的是把"是否依赖项目"的判断统一收口：
- * - `isProject === true`  ：cwd 为项目根；可自由使用项目内路径、写 package.json、
- *                           创建 `.venv` 等；
- * - `isProject === false` ：cwd 为 `<os.tmpdir()>/unigen`。**仅**允许纯内联
- *                           code 执行（无 `script_path`、无 `dependencies`）；
- *                           任何涉及项目文件 / 依赖安装的调用方必须显式拒绝。
+ * 通过 `prepareRunContext` 获取，目的是把"是否需要项目"的判断统一收口：
+ * - `isProject === true`  ：cwd 为项目根；可自由使用项目内路径、写依赖
+ *                            声明文件、创建 `.venv` / `node_modules` 等；
+ * - `isProject === false` ：**只允许纯内联 code 执行**（无 `script_path`、
+ *                            无 `dependencies`）；此时**不提供任何 cwd**，
+ *                            调用方必须使用 `-c` / `-e` 直接执行内联代码，
+ *                            避免任何文件系统副作用（也避免写 os.tmpdir）。
+ *
+ * 任何需要在文件系统上落地的操作（解析相对路径、写临时文件、创建虚拟
+ * 环境、安装依赖）**必须**在 `isProject === false` 时直接抛不可处理异常，
+ * 由调用方转换为面向用户 / 模型的清晰错误。
  */
-export interface RunContext {
-    /** 执行用的 cwd（项目根或 os.tmpdir 降级目录）。 */
+export interface ProjectRunContext {
     cwd: string;
-    /** 是否拥有项目上下文。 */
-    isProject: boolean;
+    isProject: true;
 }
+
+export interface NoProjectRunContext {
+    isProject: false;
+}
+
+export type RunContext = ProjectRunContext | NoProjectRunContext;
 
 /**
  * 构造运行上下文。
  *
  * 设计意图：
- *   - Agent（`run_node` / `run_python`，工具描述里已声明"项目必开"）走
- *     `isProject === true` 路径，语义与改造前完全一致；
- *   - `testRuntime` 等"只验证运行时本身能跑 code"的场景在**无项目**时
- *     也能运行（cwd 落到 `<os.tmpdir()>/unigen`），避免强迫用户先开项目。
+ *   - 有项目：Agent（`run_node` / `run_python`）走常规项目内执行路径，
+ *     语义与改造前完全一致；
+ *   - 无项目：`testRuntime` 等"只验证运行时本身能跑内联 code"的场景也能
+ *     运行，且**不**创建任何临时目录 / 临时文件 —— 调用方通过 `-c` /
+ *     `-e` 直接执行内联代码，cwd 交由 execa 使用主进程 cwd（必然存在，
+ *     且我们不主动读写）。
  *
- * 无项目时仅创建（幂等）降级目录，不抛错；调用方按需检查 `isProject`。
+ * 任何需要文件系统的操作由调用方在 `isProject === false` 时显式拒绝。
  */
-export async function prepareRunContext(action: string): Promise<RunContext> {
+export function prepareRunContext(action: string): RunContext {
     const ctx = getRunnerContextWithNull();
     const projectRoot = ctx?.prj?.path;
-    console.log("projectRoot=", projectRoot)
     if (typeof projectRoot === "string" && projectRoot) {
         return { cwd: projectRoot, isProject: true };
     }
 
-    const fallback = join(tmpdir(), "unigen");
-    await fs.mkdir(fallback, { recursive: true });
-    Logger.warn(
-        `[CodeRuntime] 未打开项目，${action} 将使用临时目录 ${fallback}。` +
-        `涉及 script_path / dependencies 的调用会被拒绝。`,
+    Logger.debug(
+        `[CodeRuntime] ${action}：未打开项目，将走内联执行模式（无文件系统 / 依赖）。`,
     );
-    return { cwd: fallback, isProject: false };
+    return { isProject: false };
 }
 
 /**

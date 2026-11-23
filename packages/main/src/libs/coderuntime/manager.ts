@@ -14,11 +14,16 @@
 //     `disableEngine` 负责注销；`#registerEngineTool` 永不暴露到外部；
 //   - **下载前测速**：manager 主动 `probeUrls + sortByLatency` 排序候选源；
 //   - **下载后 SHA256 校验**：`archiveSha256` 配置优先；用户未自定义
-//     `archiveUrl` 时，回落到引擎给出的默认哈希；
+//     `archiveUrl` 时，回落到引擎给出的默认哈希；校验失败会删除坏归档，
+//     避免 `skipExisting` 导致"永远校验失败"的死循环；
 //   - **解压允许引擎定制**：`getExtractAllowSymlinks?.()` 控制 tar 归档
 //     中符号链接的放行策略（默认 false，通用安全策略）；
 //   - 每次状态跃迁点直接调用 `report / complete / fail`
-//     （`$libs/utils/task-progress.js`），`id = "code-runtime:" + engineId`。
+//     （`$libs/utils/task-progress.js`），`id = "code-runtime:" + engineId`；
+//   - **进度回调安全**：`report` / `complete` / `fail` 以及下载器的
+//     `onProgress` / `onSourceChange` 全部包裹 try/catch。这些回调一旦
+//     抛错会变成事件上下文里的未捕获异常，在 Node 15+ 默认
+//     `--unhandled-rejections=throw` 下会直接拖垮主进程。
 //
 // 状态持久化规则：
 //   - 进入 / 离开 `installing`、`ready`、`failed`、`interrupted` 时**强制写**；
@@ -67,6 +72,57 @@ const DOWNLOAD_PROBE_TIMEOUT_MS = 8_000;
 type RegisterToolFn = (
     def: ToolDefinition<unknown, unknown>,
 ) => Promise<unknown>;
+
+/**
+ * 状态补丁。
+ *
+ * 使用 `null` 表示**显式清除**字段；`undefined`（不传）表示保留旧值。
+ * 之前的实现用 `!== undefined` 判断，导致传 `undefined` 无法清除，
+ * `phase / message / lastError / verifiedVersion` 会永久残留。
+ */
+type StatusPatch = {
+    state?: CodeRuntimeEngineState;
+    installedRoot?: string | null;
+    lastError?: string | null;
+    phase?: string | null;
+    message?: string | null;
+    progress?: number | null;
+    verifiedVersion?: string | null;
+};
+
+function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * 任务进度回调安全包装。
+ *
+ * 进度上报 / 完成 / 失败上报都不应该影响运行时安装本身；同时这些回调
+ * 可能运行在下载器的事件上下文里，异常逃逸会产生未捕获 rejection。
+ */
+function safeReport(...args: Parameters<typeof report>): void {
+    try {
+        report(...args);
+    } catch (error) {
+        Logger.warn(`[CodeRuntime] 进度上报失败：${errorMessage(error)}`);
+    }
+}
+
+function safeComplete(...args: Parameters<typeof complete>): void {
+    try {
+        complete(...args);
+    } catch (error) {
+        Logger.warn(`[CodeRuntime] 完成上报失败：${errorMessage(error)}`);
+    }
+}
+
+function safeFail(...args: Parameters<typeof fail>): void {
+    try {
+        fail(...args);
+    } catch (error) {
+        Logger.warn(`[CodeRuntime] 失败上报失败：${errorMessage(error)}`);
+    }
+}
 
 async function pathExists(target: string): Promise<boolean> {
     try {
@@ -191,9 +247,7 @@ export class CodeRuntimeManager {
 
     #writeStatus(
         engineId: CodeRuntimeEngineId,
-        patch: Partial<Omit<CodeRuntimeEngineStatus, "state">> & {
-            state?: CodeRuntimeEngineState;
-        },
+        patch: StatusPatch,
     ): CodeRuntimeEngineStatus {
         const current = this.#readStatus(engineId);
         const next: CodeRuntimeEngineStatus = {
@@ -201,12 +255,26 @@ export class CodeRuntimeManager {
             state: patch.state ?? current.state,
             lastCheckAt: Date.now(),
         };
-        if (patch.installedRoot !== undefined) next.installedRoot = patch.installedRoot;
-        if (patch.lastError !== undefined) next.lastError = patch.lastError;
-        if (patch.phase !== undefined) next.phase = patch.phase;
-        if (patch.message !== undefined) next.message = patch.message;
-        if (patch.progress !== undefined) next.progress = patch.progress;
-        if (patch.verifiedVersion !== undefined) next.verifiedVersion = patch.verifiedVersion;
+
+        if (patch.installedRoot === null) delete next.installedRoot;
+        else if (patch.installedRoot !== undefined) next.installedRoot = patch.installedRoot;
+
+        if (patch.lastError === null) delete next.lastError;
+        else if (patch.lastError !== undefined) next.lastError = patch.lastError;
+
+        if (patch.phase === null) delete next.phase;
+        else if (patch.phase !== undefined) next.phase = patch.phase;
+
+        if (patch.message === null) delete next.message;
+        else if (patch.message !== undefined) next.message = patch.message;
+
+        if (patch.progress === null) delete next.progress;
+        else if (patch.progress !== undefined) next.progress = patch.progress;
+
+        if (patch.verifiedVersion === null) delete next.verifiedVersion;
+        else if (patch.verifiedVersion !== undefined) {
+            next.verifiedVersion = patch.verifiedVersion;
+        }
 
         const all = this.#readAllStatus();
         const nextAll: CodeRuntimeStatus = {
@@ -217,7 +285,7 @@ export class CodeRuntimeManager {
             stableConfig().set("codeRuntimeStatus", nextAll);
         } catch (error) {
             Logger.warn(
-                `[CodeRuntime] 持久化 ${engineId} 状态失败：${error instanceof Error ? error.message : String(error)}`,
+                `[CodeRuntime] 持久化 ${engineId} 状态失败：${errorMessage(error)}`,
             );
         }
         return next;
@@ -278,7 +346,7 @@ export class CodeRuntimeManager {
             });
         } catch (error) {
             Logger.warn(
-                `[CodeRuntime] 收敛 interrupted 状态失败：${error instanceof Error ? error.message : String(error)}`,
+                `[CodeRuntime] 收敛 interrupted 状态失败：${errorMessage(error)}`,
             );
         }
     }
@@ -340,7 +408,9 @@ export class CodeRuntimeManager {
             this.#writeStatus(engineId, {
                 state: "ready",
                 installedRoot: rootDir,
-                lastError: undefined,
+                lastError: null,
+                phase: null,
+                message: null,
             });
             return {
                 engine: engineId,
@@ -349,9 +419,23 @@ export class CodeRuntimeManager {
             };
         }
 
-        const reason = status.lastError ? ` 上次错误：${status.lastError}` : "";
+        // 记录 self-heal 失败：status 曾经是 ready 时必须纠正，否则 UI
+        // 会长期显示 "ready" 而实际文件已丢失。仅在这个条件下写盘，
+        // 避免工具调用在未安装场景下反复写配置。
+        if (status.state === "ready") {
+            this.#writeStatus(engineId, {
+                state: "not_ready",
+                installedRoot: null,
+                phase: null,
+                message: "运行时文件缺失，需要重新安装。",
+                progress: null,
+            });
+        }
+
+        const latest = this.#readStatus(engineId);
+        const reason = latest.lastError ? ` 上次错误：${latest.lastError}` : "";
         throw new Error(
-            `代码运行时 [${engineId}] 尚未就绪（状态：${status.state}）。${reason}`,
+            `代码运行时 [${engineId}] 尚未就绪（状态：${latest.state}）。${reason}`,
         );
     }
 
@@ -364,6 +448,9 @@ export class CodeRuntimeManager {
      * 内部检查 `#registeredTools` 与 config 启用状态，避免：
      *   - 重复注册；
      *   - 安装过程中用户已停用引擎导致的误注册。
+     *
+     * 注册失败时会 throw；调用方必须捕获并降级处理——注册失败只意味着
+     * 工具不可用，**不**意味着运行时安装失败，不应触发重新下载。
      */
     async #registerEngineTool(
         engineId: CodeRuntimeEngineId,
@@ -393,8 +480,7 @@ export class CodeRuntimeManager {
             );
         } catch (error) {
             Logger.error(
-                `[CodeRuntime] 注册工具 ${tool.name} 失败：${error instanceof Error ? error.message : String(error)
-                }`,
+                `[CodeRuntime] 注册工具 ${tool.name} 失败：${errorMessage(error)}`,
             );
             throw error;
         }
@@ -428,8 +514,7 @@ export class CodeRuntimeManager {
             );
         } catch (error) {
             Logger.warn(
-                `[CodeRuntime] 注销工具 ${name} 失败：${error instanceof Error ? error.message : String(error)
-                }`,
+                `[CodeRuntime] 注销工具 ${name} 失败：${errorMessage(error)}`,
             );
         }
     }
@@ -487,7 +572,7 @@ export class CodeRuntimeManager {
         const warningMessage =
             `${engineId} 安装路径较长（${rootDir.length} 字符），` +
             `可能触及 Windows 路径长度限制。若安装失败，请将应用数据目录调整到更短路径。`;
-        report(
+        safeReport(
             taskIdOf(engineId),
             "preparing",
             warningMessage,
@@ -519,14 +604,28 @@ export class CodeRuntimeManager {
             return this.#writeStatus(engineId, { state: "not_ready" });
         }
 
+        // ── 已就绪路径 ──
+        //
+        // `assertReady` 与工具注册必须分开 try/catch：此前二者共用同一个
+        // catch，注册失败会被当成“未就绪”，从而意外触发完整的重新下载
+        // 安装流程。注册失败仅意味着工具不可用，运行时本身仍然有效。
+        let alreadyReady = false;
         try {
             await this.assertReady(engineId);
-            // 已就绪：确保工具已注册（覆盖进程重启后工具表被清空、但磁盘
-            // 可执行文件仍在的自愈路径），然后直接返回。
-            await this.#registerEngineTool(engineId, registerTool);
-            return this.#readStatus(engineId);
+            alreadyReady = true;
         } catch {
-            // 继续安装
+            // 未就绪：继续安装流程。
+        }
+
+        if (alreadyReady) {
+            try {
+                await this.#registerEngineTool(engineId, registerTool);
+            } catch (error) {
+                Logger.error(
+                    `[CodeRuntime] ${engineId} 已就绪，但工具注册失败：${errorMessage(error)}`,
+                );
+            }
+            return this.#readStatus(engineId);
         }
 
         const handler = this.#getHandler(engineId);
@@ -546,10 +645,10 @@ export class CodeRuntimeManager {
             phase: "preparing",
             message: `正在准备 ${engineId} 运行时...`,
             progress: 5,
-            lastError: undefined,
-            verifiedVersion: undefined,
+            lastError: null,
+            verifiedVersion: null,
         });
-        report(taskId, "preparing", `正在准备 ${engineId} 运行时...`, 5);
+        safeReport(taskId, "preparing", `正在准备 ${engineId} 运行时...`, 5);
 
         try {
             // 1. 确定候选 URL：用户自定义优先；否则引擎默认
@@ -595,22 +694,60 @@ export class CodeRuntimeManager {
                 8,
                 true,
             );
-            report(
+            safeReport(
                 taskId,
                 "downloading",
                 `正在测速并选择 ${engineId} 下载源...`,
                 8,
             );
 
-            const sortedUrls = archiveUrls.length > 1
-                ? sortByLatency(
-                    await probeUrls(archiveUrls, {
+            // 测速只用于排序，不用于裁剪：不可达源保留在末尾作为兜底。
+            // 测速结果不代表真实下载可用性（HEAD/GET 行为、镜像鉴权差异等），
+            // 一旦把不可达源剔除，首个可达源后续失败时就没有 failover 列表了。
+            let orderedUrls: string[] = [...archiveUrls];
+            if (archiveUrls.length > 1) {
+                try {
+                    const probed = await probeUrls(archiveUrls, {
                         timeoutMs: DOWNLOAD_PROBE_TIMEOUT_MS,
-                    }),
-                )
-                    .map((r) => r.url)
-                    .filter((u) => Boolean(u))
-                : archiveUrls;
+                    });
+                    const sorted = sortByLatency(probed);
+                    const reachableCount = sorted.filter(
+                        (r) => r.reachable && Boolean(r.url),
+                    ).length;
+                    const sortedUrls = sorted.map((r) => r.url);
+
+                    if (sortedUrls.length > 0) {
+                        orderedUrls = sortedUrls;
+                    }
+
+                    if (reachableCount === 0) {
+                        Logger.warn(
+                            `[CodeRuntime] ${engineId} 候选下载源测速均不可达，` +
+                            `保留全部源并按配置顺序尝试。`,
+                        );
+                    } else if (reachableCount < sorted.length) {
+                        Logger.warn(
+                            `[CodeRuntime] ${engineId} 候选下载源 ${reachableCount}/${sorted.length} 可达；` +
+                            `不可达源保留在末尾作为兜底。`,
+                        );
+                    }
+                } catch (error) {
+                    Logger.warn(
+                        `[CodeRuntime] ${engineId} 下载源测速失败：${errorMessage(error)}；按配置顺序尝试。`,
+                    );
+                }
+            }
+            if (orderedUrls.length === 0) {
+                throw new Error(`引擎 [${engineId}] 没有可用的下载源。`);
+            }
+
+            // 下载目录必须存在。
+            //
+            // ipull 在 `skipExisting` 检查 / 创建目标文件时会对目标路径
+            // 做 `stat` / `open`；父目录不存在会抛 ENOENT，而 downloader
+            // 会把它归类为“源失败”，导致一个本地文件系统问题被误报成
+            // 所有下载源失败（Python 的 uv 只有一个国内源时会直接整体失败）。
+            await fs.mkdir(engineDownloadDir, { recursive: true });
 
             // 3. 下载（多源 failover）
             this.#persistProgress(
@@ -620,14 +757,17 @@ export class CodeRuntimeManager {
                 10,
                 true,
             );
-            report(taskId, "downloading", `正在下载 ${engineId} 运行时...`, 10);
+            safeReport(taskId, "downloading", `正在下载 ${engineId} 运行时...`, 10);
 
             const savePath = join(
                 engineDownloadDir,
-                deriveArchiveFilename(sortedUrls[0]!, ".zip"),
+                deriveArchiveFilename(
+                    orderedUrls[0]!,
+                    process.platform === "win32" ? ".zip" : ".tar.gz",
+                ),
             );
 
-            const sources = buildArchiveSources(handler, sortedUrls);
+            const sources = buildArchiveSources(handler, orderedUrls);
             let usedSourceLabel: string | undefined;
             await download({
                 sources,
@@ -635,19 +775,41 @@ export class CodeRuntimeManager {
                 skipExisting: true,
                 parallelStreams: 3,
                 onSourceChange: (source) => {
-                    usedSourceLabel = source.label;
+                    try {
+                        usedSourceLabel = source.label;
+                    } catch {
+                        // 仅日志用途，忽略。
+                    }
                 },
                 onProgress: (snap) => {
-                    if (snap.percent <= 0) return;
-                    const progress = 10 + Math.round(snap.percent * 0.45);
-                    const message = `正在下载 ${engineId} ${snap.percent.toFixed(1)}%`;
-                    this.#persistProgress(
-                        engineId,
-                        "downloading",
-                        message,
-                        progress,
-                    );
-                    report(taskId, "downloading", message, progress);
+                    // 回调运行在下载器的事件上下文中；异常逃逸会变成
+                    // 未捕获 rejection，在 Node 15+ 默认
+                    // `--unhandled-rejections=throw` 下直接拖垮主进程。
+                    try {
+                        const percent = snap?.percent;
+                        if (
+                            typeof percent !== "number" ||
+                            !Number.isFinite(percent) ||
+                            percent <= 0
+                        ) {
+                            return;
+                        }
+                        const clamped = Math.max(0, Math.min(100, percent));
+                        const progress = 10 + Math.round(clamped * 0.45);
+                        const message =
+                            `正在下载 ${engineId} ${clamped.toFixed(1)}%`;
+                        this.#persistProgress(
+                            engineId,
+                            "downloading",
+                            message,
+                            progress,
+                        );
+                        safeReport(taskId, "downloading", message, progress);
+                    } catch (error) {
+                        Logger.warn(
+                            `[CodeRuntime] ${engineId} 下载进度回调异常：${errorMessage(error)}`,
+                        );
+                    }
                 },
             });
             if (usedSourceLabel) {
@@ -673,11 +835,16 @@ export class CodeRuntimeManager {
                     55,
                     true,
                 );
-                report(taskId, "verifying", `正在校验 ${engineId} 归档...`, 55);
+                safeReport(taskId, "verifying", `正在校验 ${engineId} 归档...`, 55);
                 const actual = await sha256FileHex(savePath);
                 if (actual !== expectedSha) {
+                    // 删除损坏归档：否则 `skipExisting: true` 会让下次
+                    // ensure 继续复用同一份坏文件，形成“永远校验失败”
+                    // 的死循环，且用户无法通过重试自愈。
+                    await fs.unlink(savePath).catch(() => undefined);
                     throw new Error(
-                        `[${engineId}] 归档 SHA256 不匹配：期望 ${expectedSha}，实际 ${actual}。`,
+                        `[${engineId}] 归档 SHA256 不匹配：期望 ${expectedSha}，实际 ${actual}。` +
+                        `已删除损坏归档，下次将重新下载。`,
                     );
                 }
             }
@@ -695,7 +862,7 @@ export class CodeRuntimeManager {
                 60,
                 true,
             );
-            report(taskId, "extracting", `正在解压 ${engineId} 运行时...`, 60);
+            safeReport(taskId, "extracting", `正在解压 ${engineId} 运行时...`, 60);
             await clearDir(rootDir);
             const allowSymlinks =
                 handler.getExtractAllowSymlinks?.(
@@ -725,7 +892,7 @@ export class CodeRuntimeManager {
                     75,
                     true,
                 );
-                report(
+                safeReport(
                     taskId,
                     "post-processing",
                     `正在初始化 ${engineId} 环境...`,
@@ -747,37 +914,45 @@ export class CodeRuntimeManager {
                 88,
                 true,
             );
-            report(taskId, "verifying", `正在验证 ${engineId} 运行时...`, 88);
+            safeReport(taskId, "verifying", `正在验证 ${engineId} 运行时...`, 88);
             const version = await handler.verifyExecutable(executablePath, {});
             Logger.log(`[CodeRuntime] ${engineId} 就绪：${version}`);
 
-            const doneStatus: CodeRuntimeEngineStatus = {
+            this.#writeStatus(engineId, {
                 state: "ready",
                 installedRoot: rootDir,
-                lastCheckAt: Date.now(),
                 verifiedVersion: version,
-                phase: undefined,
-                message: undefined,
+                phase: null,
+                message: null,
                 progress: 100,
-                lastError: undefined,
-            };
-            this.#writeStatus(engineId, doneStatus);
+                lastError: null,
+            });
+            const doneStatus = this.#readStatus(engineId);
 
             // 8. 自动注册工具（内部闭环；用户若已在安装过程中停用则跳过）
-            await this.#registerEngineTool(engineId, registerTool);
+            //
+            // 注册失败降级为日志：运行时已经安装并验证通过，不应因为
+            // 工具表注册异常而把状态标记为 failed（否则用户会看到
+            // “安装失败”，但磁盘上一切正常）。
+            try {
+                await this.#registerEngineTool(engineId, registerTool);
+            } catch (error) {
+                Logger.error(
+                    `[CodeRuntime] ${engineId} 安装成功，但工具注册失败：${errorMessage(error)}`,
+                );
+            }
 
-            complete(taskId, `${engineId} 运行时已就绪。`);
+            safeComplete(taskId, `${engineId} 运行时已就绪。`);
             return doneStatus;
         } catch (error) {
-            const message =
-                error instanceof Error ? error.message : String(error);
+            const message = errorMessage(error);
             Logger.error(`[CodeRuntime] ${engineId} 初始化失败：${message}`);
             this.#writeStatus(engineId, {
                 state: "failed",
                 installedRoot: rootDir,
                 lastError: message,
             });
-            fail(taskId, `${engineId} 运行时初始化失败。`, message);
+            safeFail(taskId, `${engineId} 运行时初始化失败。`, message);
             throw error;
         }
     }
@@ -815,10 +990,8 @@ export class CodeRuntimeManager {
                 await this.ensureEngine(id, { registerTool });
             } catch (error) {
                 failureCount += 1;
-                const message =
-                    error instanceof Error ? error.message : String(error);
                 Logger.error(
-                    `[CodeRuntime] ${id} 初始化失败，相关工具本次未注册：${message}`,
+                    `[CodeRuntime] ${id} 初始化失败，相关工具本次未注册：${errorMessage(error)}`,
                 );
             }
         }

@@ -1,13 +1,13 @@
-// packages/main/src/libs/tooldb/tools/file-markdown.ts
-import { getRunnerContext } from "$libs/project/controllers/runner.js";
+// packages/main/src/libs/tooldb/tools/read_file.ts
 import { loadTextFileStrict } from "$libs/searchsrv/file-text-loader.js";
 import { fileTypeFromFile } from "file-type";
 import { isText } from "istextorbinary";
 import mime from "mime";
 import { promises as fs } from "node:fs";
-import { basename, isAbsolute } from "node:path";
+import { basename } from "node:path";
 import { z } from "zod";
 import type { ToolDefinition } from "../type.js";
+import { resolveReadPath, toProjectRelative } from "./path-utils.js";
 
 /** 内联给模型的单文件体积上限。超过只返回文本说明，避免撑爆请求体/上下文。 */
 const MAX_INLINE_BYTES = 20 * 1024 * 1024;
@@ -44,8 +44,9 @@ const inputSchema = z.object({
         .trim()
         .min(1)
         .describe(
-            "要读取并交给模型的文件路径。可传绝对路径；" +
-            "相对路径会基于当前任务目录解析为绝对路径。",
+            "要读取并交给模型的文件路径。**cwd 是项目目录**：" +
+            "优先传相对 项目目录 的路径；绝对路径仅在文件确实位于 项目目录 外时使用。" +
+            "相对路径会基于 项目目录 解析为绝对路径。",
         ),
     convert: convertSchema,
 });
@@ -54,6 +55,10 @@ const outputSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("text"),
         path: z.string().describe("实际读取的绝对路径。"),
+        relativePath: z
+            .string()
+            .optional()
+            .describe("项目目录 内文件的相对 项目目录 路径；文件在 项目目录 外时省略。"),
         mime: z.string().describe("检测到的 MIME 类型。"),
         markdown: z
             .string()
@@ -62,6 +67,10 @@ const outputSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("media"),
         path: z.string().describe("实际读取的绝对路径。"),
+        relativePath: z
+            .string()
+            .optional()
+            .describe("项目目录 内文件的相对 项目目录 路径；文件在 项目目录 外时省略。"),
         mime: z.string().describe("检测到的 MIME 类型。"),
     }),
 ]);
@@ -69,23 +78,15 @@ const outputSchema = z.discriminatedUnion("kind", [
 type FileMarkdownInput = z.infer<typeof inputSchema>;
 type FileMarkdownOutput = z.infer<typeof outputSchema>;
 
-function resolveProjectPath(raw: string): string {
-    const ctx = getRunnerContext();
-    return ctx.prj.getPath(raw);
-}
-
 async function detectMime(absPath: string): Promise<string> {
-    // 1. 先走 mime.getType，命中就直接返回（同步、零 I/O）
     const mimeType = mime.getType(absPath);
     if (mimeType) {
         return mimeType;
     }
-    // 2. 扩展名无法判断时，再读文件头
     const detected = await fileTypeFromFile(absPath);
     return detected?.mime ?? "application/octet-stream";
 }
 
-/** 规范成 provider 认的 IANA 类型；去掉 `; charset=utf-8` 这类参数。 */
 function normalizeMediaType(mimeType: string): string {
     const normalized = mimeType.split(";")[0]!.trim().toLowerCase();
     return MEDIA_TYPE_ALIASES[normalized] ?? normalized;
@@ -126,9 +127,10 @@ export const fileMarkdownToolDef: ToolDefinition<
 > = {
     name: "read_file",
     description:
-        "读取指定文件并交给模型。默认 smart：二进制文档转 Markdown，文本类原文返回，" +
-        "图片/音频/视频作为多模态素材注入。convert 可选 on（全部强转 Markdown）" +
-        "或 off（仅文本原文，其余二进制嵌入）。相对路径基于当前任务目录解析为绝对路径。",
+        "读取指定文件并交给模型。**cwd 是项目目录**：优先传相对 项目目录 的路径，" +
+        "绝对路径仅在文件确实位于 项目目录 外时使用。默认 smart：二进制文档转 Markdown，" +
+        "文本类原文返回，图片/音频/视频作为多模态素材注入。convert 可选 on（全部强转 Markdown）" +
+        "或 off（仅文本原文，其余二进制嵌入）。相对路径基于当前 项目目录 解析为绝对路径。",
     inputSchema,
     outputSchema,
     execute: async ({ path: rawPath, convert }) => {
@@ -137,51 +139,79 @@ export const fileMarkdownToolDef: ToolDefinition<
             throw new Error("path 不能为空。");
         }
 
-        const absPath = isAbsolute(trimmed)
-            ? trimmed
-            : resolveProjectPath(trimmed);
-        if (!isAbsolute(absPath)) {
-            throw new Error(`无法将路径解析为绝对路径: ${trimmed}`);
+        const absPath = resolveReadPath(trimmed);
+
+        const stat = await fs.stat(absPath);
+        if (!stat.isFile()) {
+            throw new Error(`不是普通文件: ${absPath}`);
         }
 
+        const relativePath = toProjectRelative(absPath) ?? undefined;
         const mimeType = await detectMime(absPath);
 
-        // smart / off 模式的媒体文件：execute 阶段不读字节，留给 toModelOutput 再读
         if (convert !== "on" && isMedia(mimeType)) {
-            return { kind: "media", path: absPath, mime: mimeType };
+            return {
+                kind: "media",
+                path: absPath,
+                ...(relativePath ? { relativePath } : {}),
+                mime: mimeType,
+            };
         }
 
-        // 读取一次 buffer，文本判断、原文解码、文档转换都复用它
         const buffer = await fs.readFile(absPath);
 
         if (convert === "on") {
             const markdown = await loadTextFileStrict(absPath, buffer);
-            return { kind: "text", path: absPath, mime: mimeType, markdown };
+            return {
+                kind: "text",
+                path: absPath,
+                ...(relativePath ? { relativePath } : {}),
+                mime: mimeType,
+                markdown,
+            };
         }
 
-        // 内容嗅探优先（空文件时 isText 返回 null，再退回 MIME 判断）
         const textFile =
             isText(basename(absPath), buffer) ?? isTextLikeMime(mimeType);
 
         if (textFile) {
             const markdown = buffer.toString("utf-8");
-            return { kind: "text", path: absPath, mime: mimeType, markdown };
+            return {
+                kind: "text",
+                path: absPath,
+                ...(relativePath ? { relativePath } : {}),
+                mime: mimeType,
+                markdown,
+            };
         }
 
         if (convert === "off") {
-            return { kind: "media", path: absPath, mime: mimeType };
+            return {
+                kind: "media",
+                path: absPath,
+                ...(relativePath ? { relativePath } : {}),
+                mime: mimeType,
+            };
         }
 
-        // smart：Office/PDF 等二进制文档 → 转 Markdown
         const markdown = await loadTextFileStrict(absPath, buffer);
-        return { kind: "text", path: absPath, mime: mimeType, markdown };
+        return {
+            kind: "text",
+            path: absPath,
+            ...(relativePath ? { relativePath } : {}),
+            mime: mimeType,
+            markdown,
+        };
     },
 
     toModelOutput: async ({ output }) => {
         const filename = basename(output.path);
         const mediaType = normalizeMediaType(output.mime);
+        const preferredPath = output.relativePath ?? output.path;
 
-        const textHeader = `读取文件: ${filename} (${output.mime})，绝对路径: ${output.path}。`;
+        const textHeader =
+            `读取文件: ${filename} (${output.mime})，` +
+            `后续优先使用相对路径: ${preferredPath}（绝对路径: ${output.path}）。`;
 
         if (output.kind === "text") {
             return {
@@ -189,15 +219,15 @@ export const fileMarkdownToolDef: ToolDefinition<
                 value: [
                     {
                         type: "text",
-                        text: `文件: ${filename} (${output.mime})，绝对路径: ${output.path}。`,
+                        text:
+                            `文件: ${filename} (${output.mime})，` +
+                            `后续优先使用相对路径: ${preferredPath}（绝对路径: ${output.path}）。`,
                     },
-                    // 空字符串 text part 会被部分 provider 拒绝，这里给个占位
                     { type: "text", text: output.markdown || "（文件内容为空）" },
                 ],
             };
         }
 
-        // 先看体积，超大文件不整个读进内存
         const { size } = await fs.stat(output.path);
         if (size > MAX_INLINE_BYTES) {
             return {
@@ -214,14 +244,6 @@ export const fileMarkdownToolDef: ToolDefinition<
             };
         }
 
-        // 直接读二进制。
-        //
-        // 图片走 ToolResultOutput.content 的 image-data part：
-        //   - 数据类型是 base64 字符串，mediaType 单独给；
-        //   - 这个 part 才会被 AI SDK 转换成下一次请求里真正的 image block；
-        //   - 用 message 输入格式 { type: "image", image: {...} } 不会被识别。
-        //
-        // 音频/视频走 file part（AI SDK 内已有 data: FileData 的通用形态）。
         const bytes = await fs.readFile(output.path);
 
         if (mediaType.startsWith("image/")) {

@@ -137,17 +137,28 @@
   }: {
     message: MarkdownMessage;
     isError?: boolean;
+    /**
+     * 整条消息是否仍在流式输出。
+     * 注意：这是**文档级**上界，不代表每个 code block 的完成状态；
+     * CodeBlock 会结合本块围栏是否闭合来判断，不直接使用这个布尔。
+     */
     streaming?: boolean;
     renderers?: MarkdownRenderers;
   } = $props();
 
   // ── 流式状态注入 ─────────────────────────────────────────
-  // 通过 Svelte Context 把 streaming 强制注入给所有 ext 渲染器（尤其是 CodeBlock）。
-  // 用 $state 包裹保证下游（getContext 后）在 streaming 变更时响应更新。
-  const streamingState: MarkdownStreamingState = $state({ streaming: false });
+  // 通过 Svelte Context 把"文档级流式"注入给所有 ext 渲染器（尤其是 CodeBlock）。
+  // 用 $state 包裹保证下游（getContext 后）在变更时响应更新。
+  //
+  // 语义：这里只放 `documentStreaming` 一个字段。它只表示"整条消息是否还在流"，
+  // 作为下游"本块是否已完成"推导的**上界**；下游不应直接据此禁用/开放复制，
+  // 而是结合本块围栏是否闭合综合判断（详见 MarkdownStreamingState 注释）。
+  const streamingState: MarkdownStreamingState = $state({
+    documentStreaming: false,
+  });
   setContext(MARKDOWN_STREAMING_KEY, streamingState);
   $effect(() => {
-    streamingState.streaming = streaming;
+    streamingState.documentStreaming = streaming;
   });
 
   let error = $derived(isError ?? message.isError ?? false);

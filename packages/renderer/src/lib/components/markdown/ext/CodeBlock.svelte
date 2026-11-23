@@ -1,19 +1,99 @@
 <!-- $lib/components/markdown/ext/CodeBlock.svelte -->
 <!--
   功能概览：
-  1. 流式输出期间（未拿到完整代码）禁用复制按钮；
-  2. 当 code block 的 header 滚出视口顶部、而 code block 仍有部分可见时，
-     在锚定到当前 code block 可见区域内的右侧浮动工具栏（含复制 / 滚动到头 / 滚动到尾）；
-     一旦 code block 完全离开视口，浮动工具栏一并消失，绝不会悬停在其它元素之上；
-  3. 内容长度超过视口时（"一屏装不下"），出现"滚动到代码开头 / 结尾"按钮，
-     与复制按钮放在一起（header 内 + 浮动工具栏内）；
-     内容够短时不出现。
+  1. 流式输出期间（本块未拿到完整代码）默认禁用复制按钮；
+     "是否完成"以「本代码块围栏是否闭合」为准，而不是整条消息是否结束。
+     这样一旦 ``` / ~~~ 闭合，本块可立即复制，即使整条消息仍在输出。
+  2. raw 缺失（库未按预期透传 token）→ 无法判断围栏闭合 → 按"已完成"处理，
+     即可直接复制。这样不会因为"库没传 raw"这种自身不可控原因导致用户等待
+     整条消息才可复制；文档级 streaming 只在"能证明本块未闭合"时才生效。
+  3. 兜底：鼠标悬停在代码块（或浮动工具栏）上、且按住 Ctrl / ⌘ 时，无条件
+     开放复制（即使能证明本块围栏尚未闭合）。
+  4. 当 code block 的 header 滚出视口顶部、而 code block 仍有部分可见时，
+     在锚定到当前 code block 可见区域内的右侧浮动工具栏（含复制 / 滚动到头 /
+     滚动到尾）；一旦 code block 完全离开视口，浮动工具栏一并消失，
+     绝不会悬停在其它元素之上。
+  5. 内容长度超过视口时（"一屏装不下"），出现"滚动到代码开头 / 结尾"按钮，
+     与复制按钮放在一起（header 内 + 浮动工具栏内）；内容够短时不出现。
   注意事项：
-  - 外层容器含 `contain:[layout_style]`，会为 `position: fixed` 后代创建新的包含块。
-    因此浮动工具栏必须渲染在容器外（同级 siblings），否则会固化为容器坐标而非视口坐标。
-  - 滚动监听使用 capture 阶段以捕获任意滚动容器的滚动（包括父级 overflow: auto 的场景），
-    不依赖 chat / 任何具体上下游，任何可滚动上下文都能工作。
+  - 外层容器含 `contain:[layout_style]`，会为 `position: fixed` 后代创建新的
+    包含块。因此浮动工具栏必须渲染在容器外（同级 siblings），否则会固化为
+    容器坐标而非视口坐标。
+  - 滚动监听使用 capture 阶段以捕获任意滚动容器的滚动（包括父级 overflow:
+    auto 的场景），不依赖 chat / 任何具体上下游。
+  - "本块是否闭合"依赖 code token 的 `raw`（含首尾围栏）。该属性由库的
+    `<Parser {...restProps} {...token}>` 展平下发，类型没声明但运行时到得了。
+    raw 缺失时，按"未知 → 视为已完成"处理（见 isFenceClosed 返回 null 分支），
+    不做"未知即禁用"的保守策略。
+  - a11y：带 pointerenter/leave 的静态元素必须携带 role，否则触发
+    a11y_no_static_element_interactions；这里用 role="group"（非 landmark，
+    不会污染阅读器的 landmark 导航）。
 -->
+
+<script module lang="ts">
+  /**
+   * 判定围栏代码块是否已经闭合。
+   *
+   * 依据（CommonMark）：
+   *   - 起始围栏：可选 ≤3 空格缩进 / 多级 blockquote `>` 前缀，≥3 个 ` 或 ~；
+   *   - 闭合围栏：必须独占一行、同一字符、长度 ≥ 起始围栏、且其余只允许空白。
+   *
+   * 返回值三态，语义在本次改动中明确区分：
+   *   true  → 明确已闭合           （本块已完成）
+   *   false → 明确未闭合           （跟随文档级 streaming 上界）
+   *   null  → 无法判断             （raw 缺失 / 起始围栏无法解析等）
+   *
+   * 对 null 的处理由调用方决定；本组件选择「未知视为已完成」，
+   * 保证"库没按预期透传属性"时不会让用户被迫等整条消息结束才能复制。
+   */
+  function isFenceClosed(
+    raw: string | undefined,
+    codeBlockStyle?: string,
+  ): boolean | null {
+    // raw 缺失 → 无法判断（可能是外部复用 CodeBlock 未传 raw）
+    if (!raw) return null;
+
+    // 缩进式代码块（4 空格缩进）在 markdown 中本就无需围栏 → 视为已完成
+    if (codeBlockStyle === "indented") return true;
+
+    // 找起始围栏：允许缩进 / 多级 blockquote `> ` 前缀；捕获组 1 是围栏本体
+    // 注意：`[^\n]*` 会把 `\r` 一并吃进 info string；这在判断"起点行末位置"时
+    // 不影响结果（startLineEnd 只用来切分"起始行 vs 余下内容"）。
+    const startMatch =
+      /^(?:[ \t]*(?:>[ \t]?)*)?(`{3,}|~{3,})[^\n]*(?:\n|$)/.exec(raw);
+    if (!startMatch) return null; // 非围栏代码块/畸形输入 → 无法判断
+
+    const fence = startMatch[1]!;
+    const fenceChar = fence[0]!;
+    const fenceLen = fence.length;
+    const startLineEnd = startMatch[0].length;
+
+    // 只剩起始行（无内容、无闭合行）→ 明确未闭合
+    if (startLineEnd >= raw.length) return false;
+
+    // 剥掉尾部空白（多余的 \n / \r / 空格），取末行做闭合对照
+    const trimmed = raw.trimEnd();
+    if (trimmed.length <= startLineEnd) return false;
+
+    const lastNL = trimmed.lastIndexOf("\n");
+    if (lastNL < startLineEnd - 1) return false;
+
+    // 末行：幂等剥掉 blockquote 前缀 + 首尾空白（允许多至 3 个前导空格，
+    // 即 CommonMark 对闭合围栏缩进的上限；trim 也顺带清掉尾部空白）。
+    const lastLine = trimmed
+      .slice(lastNL + 1)
+      .replace(/^[ \t]*(?:>[ \t]?)*/, "")
+      .trim();
+
+    // 长度必须 ≥ 起始围栏长度，且全部由同一围栏字符组成（长度不足是"假闭合"）
+    if (lastLine.length < fenceLen) return false;
+    for (const ch of lastLine) {
+      if (ch !== fenceChar) return false;
+    }
+    return true;
+  }
+</script>
+
 <script lang="ts">
   /* eslint-disable svelte/no-at-html-tags */
   import {
@@ -40,8 +120,19 @@
     lang = "",
     language = "",
     /**
-     * 流式状态。优先从 Svelte Context 读取（Message.svelte 注入，最可靠）；
-     * 若上溯环境没有 Context，则回退到 props（兼容挑岫使用或未来库透传 streaming）。
+     * code token 的原始 markdown（含首尾围栏）。
+     * 由库 Parser 从 token 展平下发；类型未声明但运行时存在。
+     * 用于判定"本块围栏是否已闭合"，从而决定是否真的可以复制。
+     */
+    raw = "",
+    /**
+     * marked 对缩进式代码块给出的 "indented"；围栏代码块通常无此字段。
+     */
+    codeBlockStyle = undefined,
+    /**
+     * 文档级流式状态。优先从 Svelte Context 读取（Message.svelte 注入，最可靠）；
+     * 若上溯环境没有 Context，则回退到 props（兼容直接使用或未来库透传）。
+     * 语义为"整条消息是否还在流"的上界，不直接等同于"本块可复制"。
      */
     streaming: streamingProp = undefined,
     ..._rest
@@ -51,15 +142,28 @@
     value?: string;
     lang?: string;
     language?: string;
+    raw?: string;
+    codeBlockStyle?: string;
     streaming?: boolean;
     [key: string]: unknown;
   } = $props();
 
   // ── 流式状态：Context 优先，prop 兜底 ────────────────────
+  // documentStreaming ：整条消息是否仍在流式（上界）
+  // fenceClosedKnown   ：本块围栏是否闭合；true/false 明确，null 表示无法判断
+  // fenceClosed        ：未知按"已完成"处理（配合 raw 缺失时"直接可复制"的
+  //                      产品选择；详见 module 里 isFenceClosed 的注释）
+  // streaming          ：本块自身的"仍在流"判定
+  //                      = 文档还在流 && 本块围栏明确未闭合
   const streamingCtx = getContext<MarkdownStreamingState | undefined>(
     MARKDOWN_STREAMING_KEY,
   );
-  let streaming = $derived(streamingCtx?.streaming ?? streamingProp ?? false);
+  let documentStreaming = $derived(
+    streamingCtx?.documentStreaming ?? streamingProp ?? false,
+  );
+  let fenceClosedKnown = $derived(isFenceClosed(raw, codeBlockStyle));
+  let fenceClosed: boolean = $derived(fenceClosedKnown ?? true);
+  let streaming: boolean = $derived(documentStreaming && !fenceClosed);
 
   let source = $derived(code || text || value || "");
   let langName = $derived(lang || language || "");
@@ -72,11 +176,11 @@
   // autoCollapsed : 由设置的 markdownAutoCollapseCode 阈值决定
   let userCollapsed = $state<boolean | undefined>(undefined);
   let lineCount = $derived(source ? source.split("\n").length : 0);
-  let autoCollapsed = $derived(
+  let autoCollapsed: boolean = $derived(
     configStore.markdownAutoCollapseCode > 0 &&
       lineCount > configStore.markdownAutoCollapseCode,
   );
-  let isCollapsed = $derived(userCollapsed ?? autoCollapsed);
+  let isCollapsed: boolean = $derived(userCollapsed ?? autoCollapsed);
 
   const fallbackPreClass =
     "m-0 overflow-x-auto bg-muted p-4 font-mono text-sm text-foreground";
@@ -95,19 +199,37 @@
 
   let copyText = $derived(source.trimEnd());
 
-  // ── 复制能力判定 ────────────────────────────────────────
-  // 流式未完成 / 内容为空 → 禁用复制。
-  let copyDisabled = $derived(streaming || !source);
+  // ── 鼠标悬停 / 修饰键交叉状态 ────────────────────────────
+  // hoveringCode  : 鼠标悬停在代码块容器上
+  // hoveringFloat : 鼠标悬停在（容器外的）浮动工具栏上
+  // focusWithin   : 焦点在容器内部（键盘可达）
+  // modifierHeld  : 全局按着 Ctrl / ⌘（切窗时会由 blur 兜底重置）
+  let hoveringCode = $state(false);
+  let hoveringFloat = $state(false);
+  let focusWithin = $state(false);
+  let modifierHeld = $state(false);
 
-  let copyTooltip = $derived(
-    copyDisabled
-      ? streaming
-        ? "流式输出中，尚不可复制"
-        : "无代码可复制"
-      : copied
-        ? "已复制"
-        : "复制代码",
-  );
+  let hovering = $derived(hoveringCode || hoveringFloat);
+  // 强制复制条件：同时满足"人在本块附近"+"按住修饰键"
+  let forceAvailable = $derived(modifierHeld && (hovering || focusWithin));
+
+  // ── 复制能力判定 ────────────────────────────────────────
+  // baseDisabled ：内容为空 / 本块仍在流式；forceAvailable 可绕过
+  //                空内容属于"确实无内容"，不绕过。
+  let baseDisabled = $derived(!source || streaming);
+  let copyDisabled = $derived(baseDisabled && !forceAvailable);
+
+  let copyTooltip = $derived.by(() => {
+    if (!source) return "无代码可复制";
+    if (copied) return "已复制";
+    if (streaming) {
+      if (forceAvailable) return "复制代码（强制，本块仍在流式）";
+      return "流式输出中，按住 Ctrl / ⌘ 可强制复制";
+    }
+    // 微调：本块已可用但整条消息仍在流式时，让用户知道"本块已可用"
+    if (documentStreaming) return "复制代码（本块已可用）";
+    return "复制代码";
+  });
 
   async function handleCopy() {
     if (copyDisabled) return;
@@ -279,6 +401,37 @@
     };
   });
 
+  // ── 全局修饰键监听（Ctrl / ⌘）─────────────────────────
+  // 说明：
+  //   - 使用全局 keydown/keyup，而非绑到容器上：用户常见动作是"鼠标悬停在
+  //     代码块上、然后空出一只手按下 Ctrl"，容器本身通常不可聚焦；
+  //   - keyup 用 `e.ctrlKey || e.metaKey` 同步：能兜住"用户在按住 Ctrl 时
+  //     又按了别的字母键"这类"按键序列"状态；
+  //   - blur 兜底：切窗/切标签/IME 弹出时按住键的 keyup 会丢，必须重置，
+  //     否则状态会卡在 true；
+  //   - Meta 覆盖 Mac：macOS 上 Ctrl+Click 是右键，Cmd 才是惯用复制修饰键，
+  //     一并放开兼容两边习惯（tooltip 里也写明）。
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) modifierHeld = true;
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      modifierHeld = e.ctrlKey || e.metaKey;
+    };
+    const onBlur = () => {
+      modifierHeld = false;
+    };
+    window.addEventListener("keydown", onKeyDown, { passive: true });
+    window.addEventListener("keyup", onKeyUp, { passive: true });
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  });
+
   // ── 复制计时器清理（卸载时）───────────────────────────
   $effect(() => {
     return () => {
@@ -295,9 +448,21 @@
   - `contain:[layout_style]` 是现有项目意的设计（为减少重排影响范围）；
   - 因此浮动工具栏必须渲染在 **此容器之外**，否则 `position: fixed` 会被
     约束到此容器的盒模型（而不是视口），锚定算法完全失效。
+  - pointerenter / pointerleave 用于 hover 判断（配合 Ctrl 强制复制）。
+  - focusin / focusout 用冒泡版本，让"键盘 Tab 进到本块内按钮时"也触发强制判定，
+    照顾无鼠标场景。
+  - a11y：带 pointerenter/leave 的静态元素必须携带 role，否则触发
+    a11y_no_static_element_interactions；这里选 role="group"（非 landmark，
+    不会污染阅读器的 landmark 导航），并用 aria-label 给出可访问名。
 -->
 <div
   bind:this={container}
+  onpointerenter={() => (hoveringCode = true)}
+  onpointerleave={() => (hoveringCode = false)}
+  onfocusin={() => (focusWithin = true)}
+  onfocusout={() => (focusWithin = false)}
+  role="group"
+  aria-label={langName ? `${langName} 代码块` : "代码块"}
   class="group relative w-full overflow-hidden rounded-xl border border-border/50 bg-card shadow-sm contain-[layout_style]"
 >
   <!--
@@ -367,13 +532,15 @@
       </button>
 
       <!--
-        复制：流式输出中（未拿到完整代码）时禁用。
-        disabled 状态与浮动工具栏中的复制按钮同源（copyDisabled），保持一致。
+        复制：
+        - 默认在本块流式未完成时禁用；
+        - 鼠标悬停 + Ctrl/⌘ 按住 → copyDisabled 变 false，强制可复制；
+        - disabled 与浮动工具栏内按钮共享 copyDisabled，保持一致。
       -->
       <button
         type="button"
         onclick={handleCopy}
-        // disabled={copyDisabled}
+        disabled={copyDisabled}
         aria-label={copyTooltip}
         title={copyTooltip}
         class="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
@@ -413,8 +580,17 @@
     style:top={`${floatingTop}px`}
     style:right={`${floatingRight}px`}
   >
+    <!--
+      a11y：内层带 pointerenter/leave，必须携带 role 消除
+      a11y_no_static_element_interactions。这里用 role="group"（工具栏组），
+      比 role="toolbar" 少一层"应实现 roving tabindex + 方向键导航"的 APG 期待。
+    -->
     <div
       class="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border/50 bg-popover/95 p-1 shadow-lg backdrop-blur-sm"
+      onpointerenter={() => (hoveringFloat = true)}
+      onpointerleave={() => (hoveringFloat = false)}
+      role="group"
+      aria-label="代码块操作"
     >
       {#if isLong && showScrollTop}
         <button

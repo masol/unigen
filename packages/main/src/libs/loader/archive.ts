@@ -18,7 +18,6 @@
 //
 // 兼容方案：
 //   - 本文件是**新统一入口**，建议新代码优先使用；
-//   - `zip.ts` 保留为向后兼容 shim（zip 专用 API + re-export 通用工具）。
 //
 // 注：zip 侧的符号链接需要解析 `extra field 0x000d`，AdmZip 不支持该
 // 语义；`allowSymlinks` 对 zip 归档无影响（符号链接条目会被忽略）。
@@ -33,7 +32,7 @@ import {
     promises as fs,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, posix } from "node:path";
+import { basename, dirname, isAbsolute, join, posix, relative, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
@@ -85,9 +84,6 @@ export function safeArchiveRelativeName(name: string): string | null {
     }
     return normalized;
 }
-
-/** 兼容旧命名（zip.ts 中的同名工具）。 */
-export const safeZipRelativeName = safeArchiveRelativeName;
 
 /**
  * 安装目录名安全化。
@@ -718,4 +714,161 @@ export async function findShallowestFile(
         )
         .sort((a, b) => pathDepth(a.path) - pathDepth(b.path));
     return matches[0] ?? null;
+}
+
+export interface CreateArchiveOptions {
+    /** 输出归档文件路径（绝对路径）。 */
+    outputPath: string;
+    /** 源文件或源目录（绝对路径）。 */
+    sourcePath: string;
+    /** 取消信号。 */
+    signal?: AbortSignal;
+    /** 每个成功写入条目的回调。 */
+    onEntry?: (relativePath: string, bytes?: number) => void;
+}
+
+export interface CreateArchiveResult {
+    outputPath: string;
+    kind: Extract<ArchiveKind, "zip" | "tar" | "tar.gz" | "tgz">;
+    entryCount: number;
+}
+
+/**
+ * 创建归档。
+ *
+ * 支持 .zip / .tar / .tar.gz / .tgz。
+ * .tar.bz2 / .bz2 暂不支持创建（Node 无内置 bzip2 编码器）。
+ *
+ * 安全约束：
+ * - 输出文件不能位于源目录内部（避免把正在写入的归档包含进自身）；
+ * - 归档内路径统一使用 POSIX 相对路径；
+ * - tar 侧不跟随符号链接。
+ */
+export async function createArchive(
+    opts: CreateArchiveOptions,
+): Promise<CreateArchiveResult> {
+    const kind = detectArchiveKind(opts.outputPath);
+    if (
+        kind === "unsupported" ||
+        kind === "tar.bz2" ||
+        kind === "bz2"
+    ) {
+        throw new Error(
+            `不支持的归档格式：${opts.outputPath}。` +
+            `创建归档支持 .zip / .tar / .tar.gz / .tgz。`,
+        );
+    }
+
+    if (opts.signal?.aborted) {
+        throw new Error(`创建归档已取消：${opts.outputPath}`);
+    }
+
+    await ensureDir(dirname(opts.outputPath));
+
+    const srcStat = await fs.stat(opts.sourcePath);
+    if (srcStat.isDirectory()) {
+        const rel = relative(opts.sourcePath, opts.outputPath);
+        if (
+            rel === "" ||
+            (!rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+        ) {
+            throw new Error(
+                `归档输出文件不能位于源目录内部: ${opts.outputPath}`,
+            );
+        }
+    }
+
+    if (kind === "zip") {
+        return createZipArchive(opts);
+    }
+
+    return createTarArchive(opts, kind, srcStat.isDirectory());
+}
+
+async function createZipArchive(
+    opts: CreateArchiveOptions,
+): Promise<CreateArchiveResult> {
+    // 延迟导入，避免顶层循环依赖
+    const AdmZip = (await import("adm-zip")).default;
+    const zip = new AdmZip();
+
+    const srcStat = await fs.stat(opts.sourcePath);
+    if (srcStat.isDirectory()) {
+        zip.addLocalFolder(opts.sourcePath, "");
+    } else {
+        zip.addLocalFile(opts.sourcePath, "");
+    }
+
+    const bytes = zip.toBuffer();
+    await fs.writeFile(opts.outputPath, bytes);
+
+    const entryCount = zip.getEntries().length;
+    opts.onEntry?.(
+        srcStat.isDirectory() ? "." : basename(opts.sourcePath),
+        bytes.length,
+    );
+
+    return {
+        outputPath: opts.outputPath,
+        kind: "zip",
+        entryCount,
+    };
+}
+
+async function createTarArchive(
+    opts: CreateArchiveOptions,
+    kind: Extract<ArchiveKind, "tar" | "tar.gz" | "tgz">,
+    sourceIsDirectory: boolean,
+): Promise<CreateArchiveResult> {
+    // 延迟导入，避免顶层循环依赖
+    const tar = await import("tar");
+
+    const cwd = sourceIsDirectory
+        ? opts.sourcePath
+        : dirname(opts.sourcePath);
+    const entries = sourceIsDirectory
+        ? ["."]
+        : [basename(opts.sourcePath)];
+
+    const gzip = kind === "tar.gz" || kind === "tgz";
+
+    let entryCount = 0;
+
+    await tar.c(
+        {
+            file: opts.outputPath,
+            cwd,
+            gzip,
+            filter: (entryPath: string, entry: { size?: number }) => {
+                if (opts.signal?.aborted) {
+                    throw new Error(
+                        `创建归档已取消：${opts.outputPath}`,
+                    );
+                }
+
+                // 防止把输出文件自身打进源目录
+                const abs = join(cwd, entryPath);
+                if (abs === opts.outputPath) {
+                    return false;
+                }
+
+                entryCount += 1;
+                opts.onEntry?.(entryPath, entry.size ?? 0);
+                return true;
+            },
+        },
+        entries,
+    );
+
+    if (entryCount === 0) {
+        throw new Error(
+            `归档内没有可压缩文件：${opts.sourcePath}`,
+        );
+    }
+
+    return {
+        outputPath: opts.outputPath,
+        kind,
+        entryCount,
+    };
 }

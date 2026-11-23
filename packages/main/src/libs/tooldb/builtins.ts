@@ -1,6 +1,14 @@
 // packages/main/src/libs/tooldb/builtins.ts
+import { applyPatchTool } from "./tools/apply_patch.js";
 import { clarifyTool } from "./tools/clarify.js";
-import { fileMarkdownToolDef } from "./tools/file-markdown.js";
+import { copyTool } from "./tools/copy.js";
+import { createArchiveTool } from "./tools/create_archive.js";
+import { diffTool } from "./tools/diff.js";
+import { editFileTool } from "./tools/edit_file.js";
+import { execTool } from "./tools/exec.js";
+import { extractArchiveTool } from "./tools/extract_archive.js";
+import { fetchUrlTool } from "./tools/fetch_url.js";
+import { grepTool } from "./tools/grep.js";
 import { invokeToolDef } from "./tools/meta-tools/invoke.js";
 import {
     loadSkillToolDef,
@@ -10,7 +18,13 @@ import {
     searchSkillsToolDef,
 } from "./tools/meta-tools/rag.js";
 import { searchToolDef } from "./tools/meta-tools/search.js";
+import { readDirTool } from "./tools/read_dir.js";
+import { fileMarkdownToolDef } from "./tools/read_file.js";
+import { readFileRangeTool } from "./tools/read_file_range.js";
+import { removeTool } from "./tools/remove.js";
 import { renderImageTool } from "./tools/renderimage.js";
+import { statTool } from "./tools/stat.js";
+import { writeFileTool } from "./tools/write_file.js";
 import type { ToolDefinition } from "./type.js";
 
 /**
@@ -50,7 +64,21 @@ export function getBuiltinTools(): ToolDefinition<unknown, unknown>[] {
     return [
         ...getMetaTools(),
         fileMarkdownToolDef,
+        readDirTool,
+        readFileRangeTool,
+        writeFileTool,
+        editFileTool,
+        copyTool,
+        removeTool,
+        statTool,
+        grepTool,
+        diffTool,
+        applyPatchTool,
+        execTool,
         renderImageTool,
+        createArchiveTool,
+        extractArchiveTool,
+        fetchUrlTool,
         clarifyTool,
     ] as ToolDefinition<unknown, unknown>[];
 }

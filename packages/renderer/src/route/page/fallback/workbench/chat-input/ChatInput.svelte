@@ -336,6 +336,7 @@
       bind:selectedItems={messageStore.selectedTools}
       builtinItems={messageStore.builtinTools}
       onClose={closeMenu}
+      onChange={(items) => messageStore.persistSelected("tools", items)}
     />
   {/if}
 
@@ -345,6 +346,7 @@
       bind:selectedItems={messageStore.selectedSkills}
       emptyLabel="没有匹配的技能，试试调整筛选词"
       onClose={closeMenu}
+      onChange={(items) => messageStore.persistSelected("skills", items)}
     />
   {/if}
 

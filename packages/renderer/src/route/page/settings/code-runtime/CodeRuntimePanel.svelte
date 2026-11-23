@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Skeleton } from "$lib/components/ui/skeleton";
+  import { messageStore } from "$lib/store/local/msg.svelte";
   import { taskProgressStore } from "$lib/store/task-progress.svelte";
   import { safeApi } from "$lib/utils/api";
   import { onDestroy, onMount } from "svelte";
@@ -55,6 +56,15 @@
       } else {
         await load(false);
       }
+
+      // 禁用路径：主进程使用 `void codeRuntimeManager.disableEngine(...)`
+      // 的 fire-and-forget 注销，没有任务推送；延迟一拍再刷新内建工具列表，
+      // 避免与主进程的注销竞争。启用路径由下方 $effect 在任务终态时刷新。
+      if (!enabled) {
+        setTimeout(() => {
+          void messageStore.init();
+        }, 300);
+      }
     } finally {
       pending[id] = false;
     }
@@ -71,7 +81,8 @@
   /**
    * 安装任务的状态以主进程推送的 task:update 为准（RuntimeCard 直接读
    * taskProgressStore）。当某个 code-runtime 任务结束后，这里触发一次
-   * 列表刷新，把 entries 中的 state 收敛为最终的 ready / failed。
+   * 列表刷新，把 entries 中的 state 收敛为最终的 ready / failed；
+   * 同时把内建工具列表刷新一遍，让 AI 侧立刻看到新注册 / 已注销的工具。
    */
   $effect(() => {
     for (const entry of entries) {
@@ -92,6 +103,7 @@
       if (settledTasks[taskId] === stamp) continue;
       settledTasks[taskId] = stamp;
       scheduleReload();
+      void messageStore.init();
     }
   });
 </script>
@@ -102,7 +114,7 @@
       编程环境
     </h1>
     <p class="text-sm text-muted-foreground">
-      管理 AI 在本机编程的环境。让 AI 可以自行编写并执行代码。
+      管理本机编程环境。让 AI 可以自行编写并执行代码(Everything as Code)。
     </p>
   </header>
 

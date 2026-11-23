@@ -3,7 +3,7 @@
 import {
     convertSchema,
     fileMarkdownToolDef,
-} from "$libs/tooldb/tools/file-markdown.js";
+} from "$libs/tooldb/tools/read_file.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { tool, type Tool } from "ai";
 import Logger from "electron-log/main.js";

@@ -13,6 +13,8 @@ export const ProjectDbKeys = {
     projectType: "project-type", // 指示任务类型。
     chat_settings: "chat_settings", // 保存客户端为此项目设置的agent setting,如果不为空，是一个Partial<ResolvedSettings>对象。
     sessionId: "sessionId", // 指示当前打开的sessionId。可以为空，此时新建。
+    // selectedTools:"selected_tools", // 指示当前用户选择的tool。服务器端不适用，由客户端维护。
+    // selectedSkills:"selected_skills", // 指示当前用户选择的skill. 服务器端不适用，由客户端维护。
 
     // extract_json_prompt: "_extract_json",
 

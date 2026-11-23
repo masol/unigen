@@ -35,7 +35,6 @@ interface RuntimeInfo {
     name: string;
     kind: "language" | "sandbox";
     tagline: string;
-    capability: string;
     icon?: string;
     approximateDownloadMB?: number;
     /** 就绪后点击"测试一下"运行的代码片段 */
@@ -47,8 +46,9 @@ const RUNTIME_INFO: Record<RuntimeId, RuntimeInfo> = {
         id: "python",
         name: "Python",
         kind: "language",
-        tagline: "用于数据分析、Excel/CSV 处理、图表、PDF",
-        capability: "计算和分析数据、生成图表、处理表格与 PDF。",
+        // 描述保持笼统：语言本身做的事太多、不同用户场景差异巨大，
+        // 唯一稳定让用户理解的价值就是「让 AI 可以使用这门语言、并调用其生态」。
+        tagline: "让 AI 使用 Python 工作，并利用 Python 生态。",
         icon: "IconBrandPython",
         approximateDownloadMB: 120,
         testSnippet: "print(1 + 1)",
@@ -57,8 +57,7 @@ const RUNTIME_INFO: Record<RuntimeId, RuntimeInfo> = {
         id: "nodejs",
         name: "Node.js",
         kind: "language",
-        tagline: "用于网页抓取、文档转换、调用本地工具",
-        capability: "运行 JS 脚本、处理文档与网页内容。",
+        tagline: "让 AI 使用 Node.js 工作，并利用 npm 生态。",
         icon: "IconBrandNodejs",
         approximateDownloadMB: 60,
         testSnippet: "console.log(1 + 1)",
@@ -86,7 +85,6 @@ const runtimeInfoSchema = z.object({
     name: z.string(),
     kind: z.enum(["language", "sandbox"]),
     tagline: z.string(),
-    capability: z.string(),
     icon: z.string().optional(),
     approximateDownloadMB: z.number().optional(),
     testSnippet: z.string(),

@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-@import 'katex/dist/katex.min.css';
+@import "katex/dist/katex.min.css";
 
 @source "../../main/knowledge/video/type.json";
 
@@ -24,6 +24,16 @@
   to {
     --uipkge-border-angle: 360deg;
   }
+}
+
+:focus,
+:focus-visible {
+  outline: none;
+}
+
+.kb-nav :focus {
+  outline: 2px solid #4c8dff;
+  outline-offset: 2px;
 }
 
 :root {
