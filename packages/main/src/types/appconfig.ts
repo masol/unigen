@@ -1,3 +1,4 @@
+// packages/main/src/types/appconfig.ts
 import type { RecentProject } from "./shared/api/recents.js";
 import type {
     CodeRuntimeConfig,
@@ -73,7 +74,7 @@ export interface AppConfig {
  * 任何「高频 UI 状态」「瞬时状态」都不应放在这里。
  *
  * 代码运行时 / 本机工具部分包含：
- *   - `codeRuntime`       ：用户意图（启用 / 版本 / 归档 / 镜像 / registry 等）；
+ *   - `codeRuntime`       ：用户意图（各引擎独立启用 / 版本 / 归档 / 镜像 / registry 等）；
  *   - `codeRuntimeStatus` ：持久化的安装状态（含历史遗留进度）；
  *                          由 `CodeRuntimeManager` 维护；**进程重启后用于恢复**；
  *   - `npmRegistryCache`  ：中国区 npm registry 测速结果的持久化缓存

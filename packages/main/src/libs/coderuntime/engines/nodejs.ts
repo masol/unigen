@@ -282,6 +282,8 @@ export class NodeRuntime implements EngineRuntimeHandler {
         if (process.platform === "win32") return;
 
         for (const entry of UNIX_NPM_SYMLINKS) {
+            if (ctx.signal?.aborted) return;
+
             const linkPath = join(ctx.rootDir, entry.link);
             const targetPath = join(ctx.rootDir, entry.absoluteTarget);
 
@@ -333,7 +335,7 @@ export class NodeRuntime implements EngineRuntimeHandler {
      */
     async verifyExecutable(
         executablePath: string,
-        ctx: { timeoutMs?: number },
+        ctx: { timeoutMs?: number; signal?: AbortSignal },
     ): Promise<string> {
         const timeoutMs = ctx.timeoutMs ?? 15_000;
 
@@ -342,6 +344,7 @@ export class NodeRuntime implements EngineRuntimeHandler {
             reject: false,
             windowsHide: true,
             timeout: timeoutMs,
+            cancelSignal: ctx.signal,
         });
         if (result.exitCode !== 0) {
             throw new Error(
@@ -366,7 +369,12 @@ export class NodeRuntime implements EngineRuntimeHandler {
             const npmResult = await execa(
                 npm.command,
                 [...npm.argsPrefix, "--version"],
-                { reject: false, windowsHide: true, timeout: timeoutMs },
+                {
+                    reject: false,
+                    windowsHide: true,
+                    timeout: timeoutMs,
+                    cancelSignal: ctx.signal,
+                },
             );
             if (npmResult.exitCode !== 0) {
                 Logger.warn(

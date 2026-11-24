@@ -193,7 +193,7 @@ export const aria2DownloadTool: ToolDefinition<
     outputSchema,
     execute: async (input) => {
         const cfg = stableConfig().get("codeRuntime");
-        if (!cfg?.enabled || !cfg.engines?.aria2?.enabled) {
+        if (!cfg.engines?.aria2?.enabled) {
             throw new Error(
                 "aria2 运行时未启用，请先在设置中开启后再试。",
             );

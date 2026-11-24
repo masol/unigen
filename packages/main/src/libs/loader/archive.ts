@@ -16,6 +16,17 @@
 //     逃逸" 的防御校验，与 node-tar `preservePaths=false` 的防护互补，
 //     任一侧判定逃逸即拒绝该条目。
 //
+// 取消（AbortSignal）：
+//   - zip：逐条目检查，在条目边界中止；
+//   - tar：node-tar **没有** AbortSignal 支持，因此通过 `filter`
+//     （每个条目被处理前同步调用）抛出 AbortError 截停；抛出的错误会让
+//     `tar.x` 的 Promise reject。不同版本的 node-tar 对 filter 异常的
+//     处理并不一致（个别版本会降级为 warn 后继续），因此额外在
+//     `catch` 与函数末尾各做一次兜底检查，保证信号中止的调用最终
+//     一定以 AbortError 结束；
+//   - bz2 / tar.bz2：解压流在 abort 时被 destroy，`pipeline` 随即失败；
+//     临时目录在 finally 中清理。
+//
 // 兼容方案：
 //   - 本文件是**新统一入口**，建议新代码优先使用；
 //
@@ -42,6 +53,20 @@ type WebReadableStream = NodeReadableStream<Uint8Array>;
 
 const SUPPORTED_ARCHIVE_HINT =
     ".zip / .tar / .tar.gz / .tgz / .tar.bz2 / .bz2";
+
+// ─── 取消辅助 ─────────────────────────────────────────────
+
+/**
+ * 构造标准化的取消错误。
+ *
+ * `name = "AbortError"` 让调用方（CodeRuntimeManager）可以不依赖文案
+ * 识别"这次失败是取消"，与 `loader/downloader.ts` 保持一致。
+ */
+function makeAbortError(message: string): Error {
+    const err = new Error(message);
+    err.name = "AbortError";
+    return err;
+}
 
 // ─── 路径安全工具 ─────────────────────────────────────────
 
@@ -193,7 +218,12 @@ export interface ExtractOptions {
     allowSymlinks?: boolean;
     /** 每个成功解压的条目回调（符号链接不触发，避免误导） */
     onEntry?: (relativePath: string, bytes: number) => void;
-    /** 取消信号（仅 zip 实现会中途检查；tar 通过 node-tar 内部实现） */
+    /**
+     * 取消信号。
+     *
+     * 语义：尽量在**条目边界**中止，已经解压出来的文件不会被回滚；
+     * 调用方（例如 CodeRuntimeManager）负责清理目标目录。
+     */
     signal?: AbortSignal;
 }
 
@@ -206,10 +236,11 @@ export async function extractArchive(opts: ExtractOptions): Promise<void> {
             `目前支持 ${SUPPORTED_ARCHIVE_HINT}。`,
         );
     }
-    await ensureDir(opts.targetDir);
+    // 先检查中止再创建目录：否则取消后仍会在磁盘上留下空目录。
     if (opts.signal?.aborted) {
-        throw new Error(`解压已取消：${opts.archivePath}`);
+        throw makeAbortError(`解压已取消：${opts.archivePath}`);
     }
+    await ensureDir(opts.targetDir);
     if (isZipKind(kind)) return extractZip(opts);
     if (kind === "bz2") return extractBz2(opts);
     if (kind === "tar.bz2") {
@@ -250,7 +281,7 @@ async function extractZip(opts: ExtractOptions): Promise<void> {
     let extracted = 0;
     for (const entry of zip.getEntries()) {
         if (opts.signal?.aborted) {
-            throw new Error(`解压已取消：${opts.archivePath}`);
+            throw makeAbortError(`解压已取消：${opts.archivePath}`);
         }
         if (entry.isDirectory) continue;
 
@@ -335,7 +366,7 @@ function createBz2Readable(
 
         if (signal.aborted) {
             onAbort();
-            throw new Error(`解压已取消：${archivePath}`);
+            throw makeAbortError(`解压已取消：${archivePath}`);
         }
 
         signal.addEventListener("abort", onAbort, { once: true });
@@ -375,6 +406,9 @@ async function decompressBz2ToFile(
     signal?: AbortSignal,
 ): Promise<void> {
     await ensureDir(dirname(destPath));
+    if (signal?.aborted) {
+        throw makeAbortError(`解压已取消：${archivePath}`);
+    }
     const readable = createBz2Readable(archivePath, signal);
     await pipeline(readable, createWriteStream(destPath));
 }
@@ -478,96 +512,129 @@ async function extractTar(opts: ExtractOptions): Promise<void> {
         opts.stripComponents ?? prefixDepth(opts.stripPrefix) ?? 0;
     const allowSymlinks = opts.allowSymlinks === true;
 
+    /**
+     * 条目边界上的取消检查。
+     *
+     * node-tar **没有** AbortSignal 支持（`tar.x` 的选项里也没有
+     * signal / abort）。`filter` 与 `onReadEntry` 是唯二会在每个条目上
+     * 被同步调用的钩子，从它们抛出错误会使 `tar.x` 的 Promise reject。
+     */
+    const ensureActive = () => {
+        if (opts.signal?.aborted) {
+            throw makeAbortError(`解压已取消：${opts.archivePath}`);
+        }
+    };
+
     let fileCount = 0;
-    await tar.x({
-        file: opts.archivePath,
-        cwd: opts.targetDir,
-        strip,
-        // `filter` 的 entry 类型在 node-tar 的类型声明中是 `ReadEntry | Stats`
-        // （同一声明兼顾 create 与 extract）。extract 场景下运行时一定是
-        // ReadEntry，此处做显式断言以通过编译。
-        filter: (path, entry) => {
-            const readEntry = entry as tar.ReadEntry;
+    try {
+        await tar.x({
+            file: opts.archivePath,
+            cwd: opts.targetDir,
+            strip,
+            // `filter` 的 entry 类型在 node-tar 的类型声明中是 `ReadEntry | Stats`
+            // （同一声明兼顾 create 与 extract）。extract 场景下运行时一定是
+            // ReadEntry，此处做显式断言以通过编译。
+            filter: (path, entry) => {
+                ensureActive();
 
-            // 硬链接：本仓内所有官方归档均不使用；保持拒绝使攻击面最小化。
-            // （硬链接 target 相对于归档根，语义与符号链接不同，安全校验
-            // 也更复杂；没有真实用例之前不为它引入复杂度。）
-            if (readEntry.type === "Link") {
-                Logger.warn(`[Archive] 跳过 hard link 条目：${path}`);
-                return false;
-            }
+                const readEntry = entry as tar.ReadEntry;
 
-            if (readEntry.type === "SymbolicLink") {
-                if (!allowSymlinks) {
-                    Logger.warn(`[Archive] 跳过 symbol link 条目：${path}`);
+                // 硬链接：本仓内所有官方归档均不使用；保持拒绝使攻击面最小化。
+                // （硬链接 target 相对于归档根，语义与符号链接不同，安全校验
+                // 也更复杂；没有真实用例之前不为它引入复杂度。）
+                if (readEntry.type === "Link") {
+                    Logger.warn(`[Archive] 跳过 hard link 条目：${path}`);
                     return false;
                 }
 
-                const linkpath = readEntry.linkpath;
-                if (typeof linkpath !== "string") {
-                    Logger.warn(
-                        `[Archive] 跳过缺少 linkpath 的 symbol link：${path}`,
-                    );
-                    return false;
-                }
+                if (readEntry.type === "SymbolicLink") {
+                    if (!allowSymlinks) {
+                        Logger.warn(`[Archive] 跳过 symbol link 条目：${path}`);
+                        return false;
+                    }
 
-                // `filter` 在 strip 之前调用；为了按"最终落点"判断逃逸，
-                // 这里显式执行一次 strip。strip 深度不足时 node-tar 会在
-                // 后续 CHECKPATH 阶段 skip 该条目，本层可放行。
-                const stripped = stripLeading(
-                    normalizeArchiveName(path),
-                    strip,
-                );
-                if (stripped) {
-                    const reason = checkSymlinkTarget(stripped, linkpath);
-                    if (reason) {
+                    const linkpath = readEntry.linkpath;
+                    if (typeof linkpath !== "string") {
                         Logger.warn(
-                            `[Archive] 跳过 symbol link：${path} -> ${linkpath}（${reason}）`,
+                            `[Archive] 跳过缺少 linkpath 的 symbol link：${path}`,
                         );
                         return false;
                     }
+
+                    // `filter` 在 strip 之前调用；为了按"最终落点"判断逃逸，
+                    // 这里显式执行一次 strip。strip 深度不足时 node-tar 会在
+                    // 后续 CHECKPATH 阶段 skip 该条目，本层可放行。
+                    const stripped = stripLeading(
+                        normalizeArchiveName(path),
+                        strip,
+                    );
+                    if (stripped) {
+                        const reason = checkSymlinkTarget(stripped, linkpath);
+                        if (reason) {
+                            Logger.warn(
+                                `[Archive] 跳过 symbol link：${path} -> ${linkpath}（${reason}）`,
+                            );
+                            return false;
+                        }
+                    }
                 }
-            }
 
-            return true;
-        },
-        onwarn: (code, message) => {
-            Logger.warn(`[Archive] tar ${code}: ${message}`);
-        },
-        onReadEntry: (entry) => {
-            const readEntry = entry as tar.ReadEntry;
-            if (readEntry.type === "Directory") return;
+                return true;
+            },
+            onwarn: (code, message) => {
+                Logger.warn(`[Archive] tar ${code}: ${message}`);
+            },
+            onReadEntry: (entry) => {
+                // 兜底：`filter` 已在上游对每个条目调用；但个别条目的
+                // filter 结果可能被 node-tar 内部路径跳过（例如 strip
+                // 深度不足），这里在真正读取条目数据前再检查一次，
+                // 保证取消不会漏过任何已进入读取阶段的条目。
+                ensureActive();
 
-            const isHardLink = readEntry.type === "Link";
-            const isSymLink = readEntry.type === "SymbolicLink";
+                const readEntry = entry as tar.ReadEntry;
+                if (readEntry.type === "Directory") return;
 
-            // 与 filter 保持一致：被跳过的链接不应计入 fileCount。
-            // onReadEntry 与 filter 的调用顺序在 node-tar 版本间可能不同，
-            // 这里显式再判断一次以避免把"被跳过的条目"计入。
-            if (isHardLink) return;
-            if (isSymLink && !allowSymlinks) return;
+                const isHardLink = readEntry.type === "Link";
+                const isSymLink = readEntry.type === "SymbolicLink";
 
-            fileCount += 1;
+                // 与 filter 保持一致：被跳过的链接不应计入 fileCount。
+                // onReadEntry 与 filter 的调用顺序在 node-tar 版本间可能不同，
+                // 这里显式再判断一次以避免把"被跳过的条目"计入。
+                if (isHardLink) return;
+                if (isSymLink && !allowSymlinks) return;
 
-            // 链接条目不算"解压文件"，跳过 onEntry 回调，避免误导调用方。
-            if (isSymLink) return;
+                fileCount += 1;
 
-            if (!opts.onEntry) return;
+                // 链接条目不算"解压文件"，跳过 onEntry 回调，避免误导调用方。
+                if (isSymLink) return;
 
-            const stripped = stripLeading(
-                normalizeArchiveName(readEntry.path),
-                strip,
-            );
-            if (!stripped) return;
+                if (!opts.onEntry) return;
 
-            const rel = safeArchiveRelativeName(stripped) ?? stripped;
-            const size =
-                typeof readEntry.size === "number" ? readEntry.size : 0;
-            opts.onEntry(rel, size);
-        },
-        // 一味 strict 会把非致命 warning 也当 error，误伤正常归档。
-        strict: false,
-    });
+                const stripped = stripLeading(
+                    normalizeArchiveName(readEntry.path),
+                    strip,
+                );
+                if (!stripped) return;
+
+                const rel = safeArchiveRelativeName(stripped) ?? stripped;
+                const size =
+                    typeof readEntry.size === "number" ? readEntry.size : 0;
+                opts.onEntry(rel, size);
+            },
+            // 一味 strict 会把非致命 warning 也当 error，误伤正常归档。
+            strict: false,
+        });
+    } catch (error) {
+        // 兜底：不同 node-tar 版本对 filter 抛错的处理不一致 —— 有的
+        // 会 reject，有的会降级为 warn 后继续处理剩余条目。只要信号
+        // 已中止，就以取消语义结束，不要把手上的非 abort 错误上抛给
+        // 调用方（否则 manager 的取消分支会错过"是用户取消"的事实）。
+        ensureActive();
+        throw error;
+    }
+
+    // 双保险：归档为空 / filter 从未被调用时，上面的检查不会触发。
+    ensureActive();
 
     if (fileCount === 0) {
         throw new Error(`归档内没有可解压文件：${opts.archivePath}`);
@@ -598,7 +665,7 @@ export async function listArchiveEntries(
         );
     }
     if (opts.signal?.aborted) {
-        throw new Error(`列出已取消：${archivePath}`);
+        throw makeAbortError(`列出已取消：${archivePath}`);
     }
     if (isZipKind(kind)) return listZipEntries(archivePath);
     if (kind === "bz2") return listBz2Entries(archivePath, opts);
@@ -760,7 +827,7 @@ export async function createArchive(
     }
 
     if (opts.signal?.aborted) {
-        throw new Error(`创建归档已取消：${opts.outputPath}`);
+        throw makeAbortError(`创建归档已取消：${opts.outputPath}`);
     }
 
     await ensureDir(dirname(opts.outputPath));
@@ -841,7 +908,7 @@ async function createTarArchive(
             gzip,
             filter: (entryPath: string, entry: { size?: number }) => {
                 if (opts.signal?.aborted) {
-                    throw new Error(
+                    throw makeAbortError(
                         `创建归档已取消：${opts.outputPath}`,
                     );
                 }

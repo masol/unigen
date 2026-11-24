@@ -1,3 +1,4 @@
+<!-- packages/renderer/src/route/page/settings/code-runtime/RuntimeCard.svelte -->
 <script lang="ts">
   import { RuntimeIcon } from "$lib/components/runtimeicon";
   import { Button } from "$lib/components/ui/button";
@@ -71,19 +72,14 @@
 
   let testing = $state(false);
   let testResult = $state<CodeRuntimeTestResult | null>(null);
-  let blockHint = $state<string | null>(null);
 
+  /**
+   * 启停一律放行：主进程的 `disableEngine` 会通过 AbortSignal 中断进行中
+   * 的安装（见 manager.ts），因此不再需要在“安装中不允许停用”上做 UI
+   * 拦截。`busy`（API pending）仍然禁用按钮，避免双击产生并发请求。
+   */
   function handleCheckedChange(next: boolean): void {
     if (unavailable) return;
-
-    if (!next && taskRunning) {
-      // 当前没有可用的安装取消接口；与其让用户误以为停用会终止安装，
-      // 不如阻止停用并明确提示等待任务结束。
-      blockHint = "安装进行中，需等待当前安装任务结束后才能停用。";
-      return;
-    }
-
-    blockHint = null;
     expanded = next;
     // 启停会改变运行环境，上一次的测试结果不再有参考意义。
     testResult = null;
@@ -235,12 +231,6 @@
     </div>
   </div>
 
-  {#if taskRunning && blockHint}
-    <div class="border-t border-border/40 px-5 py-2 text-xs text-amber-700">
-      {blockHint}
-    </div>
-  {/if}
-
   <!-- 详情区：始终渲染于 DOM，通过 grid-template-rows 平滑展开/收起 -->
   <div
     class="grid transition-[grid-template-rows] duration-200 ease-out {expanded
@@ -267,6 +257,7 @@
             />
             <p class="text-[11px] text-muted-foreground/80">
               首次启用需要下载约 {info.approximateDownloadMB ?? "少量"} MB，请稍候。
+              安装过程中随时可以关闭开关取消。
             </p>
           {:else if displayStatus === "failed"}
             <div

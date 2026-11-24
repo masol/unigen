@@ -81,10 +81,12 @@ export interface CodeRuntimeEngineConfig {
     registry?: string;
 }
 
-/** 代码运行时 / 本机工具总配置。 */
+/**
+ * 代码运行时 / 本机工具配置。
+ *
+ * 不再存在全局总开关：每个引擎的 `enabled` 独立决定是否安装 / 注册工具。
+ */
 export interface CodeRuntimeConfig {
-    /** 总开关；关闭时所有引擎均不生效，默认关闭。 */
-    enabled: boolean;
     /** 按引擎分项配置。 */
     engines: Record<CodeRuntimeEngineId, CodeRuntimeEngineConfig>;
 }

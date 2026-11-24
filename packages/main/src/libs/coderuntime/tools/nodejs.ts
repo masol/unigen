@@ -436,7 +436,7 @@ export const nodeRunTool: ToolDefinition<NodeRunInput, NodeRunOutput> = {
     outputSchema,
     execute: async (input) => {
         const cfg = stableConfig().get("codeRuntime");
-        if (!cfg?.enabled || !cfg.engines?.nodejs?.enabled) {
+        if (!cfg.engines?.nodejs?.enabled) {
             throw new Error(
                 "Node.js 代码运行时未启用，请先在设置中开启后再试。",
             );

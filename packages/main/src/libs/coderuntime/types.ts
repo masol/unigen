@@ -27,6 +27,14 @@ export interface PostExtractContext {
     downloadDir: string;
     /** 引擎配置（可能带 registry / version） */
     engineConfig: CodeRuntimeEngineConfig;
+    /**
+     * 安装取消信号。
+     *
+     * 后处理中任何长时间子进程（例如 `uv python install`）都必须把它
+     * 透传给 execa 的 `cancelSignal`，否则用户关闭开关后仍需等待后处理
+     * 自然结束。
+     */
+    signal?: AbortSignal;
 }
 
 /**
@@ -146,6 +154,6 @@ export interface EngineRuntimeHandler {
      */
     verifyExecutable(
         executablePath: string,
-        ctx: { timeoutMs?: number },
+        ctx: { timeoutMs?: number; signal?: AbortSignal },
     ): Promise<string>;
 }

@@ -136,13 +136,14 @@ export class Aria2Runtime implements EngineRuntimeHandler {
 
     async verifyExecutable(
         executablePath: string,
-        ctx: { timeoutMs?: number },
+        ctx: { timeoutMs?: number; signal?: AbortSignal },
     ): Promise<string> {
         const timeoutMs = ctx.timeoutMs ?? 15_000;
         const result = await execa(executablePath, ["--version"], {
             reject: false,
             windowsHide: true,
             timeout: timeoutMs,
+            cancelSignal: ctx.signal,
         });
         if (result.exitCode !== 0) {
             throw new Error(

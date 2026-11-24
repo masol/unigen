@@ -175,12 +175,17 @@ export class PythonRuntime implements EngineRuntimeHandler {
 
     async applyPostExtract(ctx: PostExtractContext): Promise<void> {
         const version = ctx.engineConfig.version ?? PYTHON_DEFAULT_VERSION;
-        await this.#installPythonInterpreter(ctx.executablePath, version);
+        await this.#installPythonInterpreter(
+            ctx.executablePath,
+            version,
+            ctx.signal,
+        );
     }
 
     async #installPythonInterpreter(
         uvExe: string,
         version: string,
+        signal?: AbortSignal,
     ): Promise<void> {
         Logger.log(`[CodeRuntime] 通过 uv 安装 Python ${version}...`);
         await execa(uvExe, ["python", "install", version], {
@@ -188,12 +193,13 @@ export class PythonRuntime implements EngineRuntimeHandler {
             windowsHide: true,
             env: buildUvEnv(),
             timeout: 15 * 60 * 1000,
+            cancelSignal: signal,
         });
     }
 
     async verifyExecutable(
         executablePath: string,
-        ctx: { timeoutMs?: number },
+        ctx: { timeoutMs?: number; signal?: AbortSignal },
     ): Promise<string> {
         const timeoutMs = ctx.timeoutMs ?? 15_000;
         const result = await execa(executablePath, ["--version"], {
@@ -201,6 +207,7 @@ export class PythonRuntime implements EngineRuntimeHandler {
             windowsHide: true,
             timeout: timeoutMs,
             env: buildUvEnv(),
+            cancelSignal: ctx.signal,
         });
         if (result.exitCode !== 0) {
             throw new Error(

@@ -37,13 +37,12 @@ import Logger from "electron-log/main.js";
 import { execa } from "execa";
 import { z } from "zod";
 import {
-    CODE_RUNTIME_IDS,
     RUNTIME_IDS,
     RUNTIME_INFO,
     isCodeRuntimeId,
     runtimeIdSchema,
     type CodeRuntimeId,
-    type RuntimeId,
+    type RuntimeId
 } from "./code.cfg.js";
 
 // ── 配置归一化 ──────────────────────────────────────────────────
@@ -101,29 +100,12 @@ function readCodeRuntimeConfig(): CodeRuntimeConfig {
         | CodeRuntimeConfig
         | undefined;
 
-    const engines: CodeRuntimeConfig["engines"] = {
-        python: pickEngineConfig(current?.engines?.python),
-        nodejs: pickEngineConfig(current?.engines?.nodejs),
-        aria2: pickEngineConfig(current?.engines?.aria2),
-    };
-
-    const anyEnabled = CODE_RUNTIME_IDS.some(
-        (id) => engines[id]?.enabled === true,
-    );
-    const enabled = (current?.enabled ?? anyEnabled) && anyEnabled;
-
-    // 总开关关闭时，引擎上的 enabled 只是 schema 默认值 / 历史残留，
-    // 不能在后续首次启用任一引擎时被一并激活。否则新安装配置中
-    // python/nodejs 的默认 enabled=true 会在启用 aria2 时一起开始安装。
-    if (!enabled) {
-        for (const id of CODE_RUNTIME_IDS) {
-            engines[id] = { ...engines[id], enabled: false };
-        }
-    }
-
     return {
-        enabled,
-        engines,
+        engines: {
+            python: pickEngineConfig(current?.engines?.python),
+            nodejs: pickEngineConfig(current?.engines?.nodejs),
+            aria2: pickEngineConfig(current?.engines?.aria2),
+        },
     };
 }
 
@@ -231,7 +213,7 @@ function toRuntimeEntry(id: RuntimeId, cfg: CodeRuntimeConfig): RuntimeEntry {
     const engineCfg = (
         cfg.engines as Record<string, CodeRuntimeEngineConfig | undefined>
     )[id];
-    const enabled = Boolean(cfg.enabled && engineCfg?.enabled);
+    const enabled = engineCfg?.enabled === true;
 
     return {
         info,
@@ -272,15 +254,6 @@ const setRuntimeEnabled = os
 
         const id = input.id;
 
-        if (!input.enabled) {
-            const engineStatus = codeRuntimeManager.getState(id);
-            if (engineStatus?.state === "installing") {
-                throw new Error(
-                    `${info.name} 正在安装，请等待当前安装任务结束后再停用。`,
-                );
-            }
-        }
-
         if (input.enabled) {
             // 启用前校验运行时来源：内置下载源 / 用户自定义 archiveUrl /
             // 系统已安装的运行时（Linux 与 macOS 的 aria2 属于这一类）。
@@ -312,15 +285,7 @@ const setRuntimeEnabled = os
             enabled: input.enabled,
         };
 
-        const anyEnabled = CODE_RUNTIME_IDS.some(
-            (runtimeId) => engines[runtimeId]?.enabled === true,
-        );
-
-        // `enabled` 是派生值：只要有任意引擎启用即为 true。
-        // 不再使用 `input.enabled ? true : ...`，避免“启用一个引擎”把
-        // 总开关关闭期间残留的其它引擎默认 enabled 一并激活。
         const next: CodeRuntimeConfig = {
-            enabled: anyEnabled,
             engines,
         };
 
@@ -341,8 +306,9 @@ const setRuntimeEnabled = os
                 );
             });
         } else {
-            // 停用：自动化注销工具。manager 在注销后会发送终态事件，
-            // renderer 无需定时器猜测注销时机。
+            // 停用：manager 会先中断正在进行的安装（若存在），再自动注销工具。
+            // 安装中断后 manager 会收敛状态并发送终态事件，renderer 无需
+            // 定时器猜测注销 / 中断时机。
             void codeRuntimeManager.disableEngine(id).catch((error: unknown) => {
                 Logger.warn(
                     `[CodeRuntime] 停用 ${id} 失败：${error instanceof Error ? error.message : String(error)
@@ -386,7 +352,7 @@ const testRuntime = os
 
         const id = input.id;
         const cfg = readCodeRuntimeConfig();
-        if (!cfg.enabled || !cfg.engines[id]?.enabled) {
+        if (!cfg.engines[id]?.enabled) {
             return {
                 ok: false,
                 output: "",

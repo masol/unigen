@@ -41,8 +41,11 @@
 //       · 下载完成后再做一次文件头检查。
 //     命中一律删文件，避免 `skipExisting` 反复命中坏文件形成死循环。
 //   - **429 / 503 退避**：携带 `Retry-After` 时按指示等待；否则指数
-//     退避；重试用尽后进入 failover。
-//   - **取消**：AbortSignal 会中断 fetch 与 aria2 子进程；
+//     退避；重试用尽后进入 failover。**退避等待本身可被 AbortSignal
+//     中断**（见 `sleep()`），取消不必等退避窗口自然结束。
+//   - **取消**：AbortSignal 会中断 fetch 请求体、可中断的退避等待，
+//     并通过 execa 的 `cancelSignal` 终止 aria2 子进程（POSIX 先
+//     SIGTERM，超时后 SIGKILL；Windows 走 taskkill 终止进程树）。
 //     部分文件保留用于下次续传。
 //
 // 已知限制：
@@ -163,6 +166,8 @@ export interface DownloadOptions {
     /**
      * aria2 后端失败后是否回退到 fetch 后端重试。
      * 默认 true；设为 false 时 aria2 失败直接抛错。
+     *
+     * 注意：**取消（AbortSignal 中止）不属于"后端失败"**，不会回退。
      */
     fallbackToFetchOnAria2Error?: boolean;
 }
@@ -171,7 +176,12 @@ export interface DownloadResult {
     url: string;
     savePath: string;
     size: number;
-    /** 是否命中已有文件（未重新下载）；断点续传时为 false */
+    /**
+     * 是否命中已有文件（未重新下载）。
+     *
+     * - 完整下载 / 断点续传追加写：`false`；
+     * - 416 且本地大小与远端一致、或 206 续传起点恰为文件末尾：`true`。
+     */
     reused: boolean;
     /** 实际使用的源 */
     source: DownloadSource;
@@ -234,6 +244,18 @@ function isAbortError(err: unknown, signal?: AbortSignal): boolean {
     return /已取消|aborted/i.test(errorMessage(err));
 }
 
+/**
+ * 构造标准化的取消错误。
+ *
+ * `name = "AbortError"` 让 `isAbortError()` 与上层（manager / 调用方）
+ * 可以稳定识别"这次失败是取消而不是网络故障"，无需依赖错误文案。
+ */
+function abortError(message = "下载已被取消"): Error {
+    const err = new Error(message);
+    err.name = "AbortError";
+    return err;
+}
+
 function callSafely(label: string, fn: () => void): void {
     try {
         fn();
@@ -242,23 +264,52 @@ function callSafely(label: string, fn: () => void): void {
     }
 }
 
-function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** 安全取消 fetch body（未消费的响应需要显式 cancel 释放连接）。 */
-async function safeBodyCancel(res: Response): Promise<void> {
-    try {
-        if (!res.body) return;
-        if (res.body.locked) {
-            const reader = res.body.getReader();
-            await reader.cancel().catch(() => undefined);
+/**
+ * 可被 AbortSignal 中断的 sleep。
+ *
+ * 之前的实现是裸 `setTimeout`：用户在 429/503 退避窗口（最长 10s）内
+ * 取消下载时，AbortSignal 只能"等退避自然结束再生效"，界面上表现为
+ * 点击取消后无响应。这里在等待期间监听 abort，立即 reject。
+ */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(abortError());
             return;
         }
-        await res.body.cancel().catch(() => undefined);
-    } catch {
-        /* ignore */
-    }
+
+        const cleanup = () => {
+            clearTimeout(timer);
+            signal?.removeEventListener("abort", onAbort);
+        };
+        const onAbort = () => {
+            cleanup();
+            reject(abortError());
+        };
+        const timer = setTimeout(() => {
+            cleanup();
+            resolve();
+        }, ms);
+
+        signal?.addEventListener("abort", onAbort, { once: true });
+    });
+}
+
+/**
+ * 安全取消 fetch body（未消费的响应需要显式 cancel 释放连接）。
+ *
+ * 注意：`body.locked` 为 true 表示已有 reader 持有该流。此时
+ * `body.getReader()` 会同步抛 TypeError，`body.cancel()` 也会 reject，
+ * 两条路都无法从"外部"安全取消 —— 只能交给持有方（本轮调用栈）自己
+ * 清理。因此这里直接跳过，不做无效尝试。
+ *
+ * 本模块内所有调用点（416 / 非 2xx / content-type 拦截 / 续传已完成）
+ * 都发生在 `getReader()` 之前，正常情况下 `locked` 恒为 false。
+ */
+async function safeBodyCancel(res: Response): Promise<void> {
+    const body = res.body;
+    if (!body || body.locked) return;
+    await body.cancel().catch(() => undefined);
 }
 
 /**
@@ -522,6 +573,9 @@ function parseAria2Progress(line: string): DownloadProgressSnapshot | null {
 // ─── aria2 后端 ────────────────────────────────────────────
 
 async function aria2Download(opts: DownloadOptions): Promise<DownloadResult> {
+    // 已中止的 signal 不应走到"起进程再杀进程"这一步。
+    if (opts.signal?.aborted) throw abortError();
+
     const aria2c = await resolveAria2cPath();
     if (!aria2c) throw new Error("aria2c 不可达，无法使用 aria2 后端。");
 
@@ -585,21 +639,23 @@ async function aria2Download(opts: DownloadOptions): Promise<DownloadResult> {
         `[Downloader] aria2 多源下载 ${opts.sources.length} 个源 → ${opts.savePath}`,
     );
 
+    // 取消由 execa 的 `cancelSignal` 承接：
+    //   - POSIX：先 SIGTERM，`forceKillAfterDelay`（默认 5s）后 SIGKILL；
+    //   - Windows：taskkill 终止进程树。
+    // 比手动 `subprocess.kill("SIGTERM")` 更可靠：后者在 pid 尚未分配 /
+    // aria2 不响应 SIGTERM 时会让取消静默失效，且没有强制升级手段。
+    // 中止时 execa 的 promise 会 reject（与 `reject: false` 无关，
+    // 该选项只影响非零退出码）。
     const subprocess = execa(aria2c, args, {
         reject: false,
         windowsHide: true,
+        cancelSignal: opts.signal,
     });
 
+    // 仅用于错误归因：区分"取消导致的非零退出"与"真实下载失败"。
     let aborted = false;
     const onAbort = () => {
         aborted = true;
-        if (typeof subprocess.pid === "number") {
-            try {
-                subprocess.kill("SIGTERM");
-            } catch {
-                /* ignore */
-            }
-        }
     };
     if (opts.signal) {
         if (opts.signal.aborted) onAbort();
@@ -634,7 +690,7 @@ async function aria2Download(opts: DownloadOptions): Promise<DownloadResult> {
     try {
         const result = await subprocess;
         if (aborted || opts.signal?.aborted) {
-            throw new Error("下载已被取消");
+            throw abortError();
         }
         if (result.exitCode !== 0) {
             throw new Error(
@@ -650,6 +706,7 @@ async function aria2Download(opts: DownloadOptions): Promise<DownloadResult> {
     }
 
     if (!succeeded) {
+        if (aborted || opts.signal?.aborted) throw abortError();
         if (lastError instanceof Error) throw lastError;
         throw new Error("aria2 下载失败。");
     }
@@ -696,6 +753,8 @@ async function aria2Download(opts: DownloadOptions): Promise<DownloadResult> {
  *   - 5xx（含 429 / 503，带 Retry-After 时按指示等待）；
  * 一旦拿到 200 / 206 响应开始流式读盘，任何中途错误都不重试
  * （续传在下次整个源尝试时通过 `Range` 处理）。
+ *
+ * 退避等待通过 `sleep(ms, signal)` 中断：取消后不必等退避窗口结束。
  */
 async function fetchWithRetry(
     url: string,
@@ -705,7 +764,7 @@ async function fetchWithRetry(
     let lastErr: unknown;
 
     for (let attempt = 1; attempt <= FETCH_MAX_RETRIES; attempt++) {
-        if (signal?.aborted) throw new Error("下载已被取消");
+        if (signal?.aborted) throw abortError();
 
         let res: Response;
         try {
@@ -724,7 +783,7 @@ async function fetchWithRetry(
                 `[Downloader] 请求异常：${url}：${errorMessage(err)}；` +
                 `${delay}ms 后重试（${attempt}/${FETCH_MAX_RETRIES}）`,
             );
-            await sleep(delay);
+            await sleep(delay, signal);
             continue;
         }
 
@@ -747,7 +806,7 @@ async function fetchWithRetry(
                 `[Downloader] ${url} 返回 ${res.status}，${delay}ms 后重试` +
                 `（${attempt}/${FETCH_MAX_RETRIES}）`,
             );
-            await sleep(delay);
+            await sleep(delay, signal);
             continue;
         }
 
@@ -780,7 +839,6 @@ function parseContentRangeStarTotal(value: string | null): number | null {
 async function fetchSingleSource(
     source: DownloadSource,
     opts: DownloadOptions,
-    existedBefore: boolean,
 ): Promise<DownloadResult> {
     const savePath = opts.savePath;
     const wantSkipExisting = opts.skipExisting ?? true;
@@ -844,7 +902,7 @@ async function fetchSingleSource(
             `删除并从头下载：${savePath}`,
         );
         await rm(savePath, { force: true }).catch(() => undefined);
-        return fetchSingleSource(source, { ...opts, skipExisting: false }, false);
+        return fetchSingleSource(source, { ...opts, skipExisting: false });
     }
 
     // 4. 常规错误码
@@ -1015,9 +1073,11 @@ async function fetchSingleSource(
         url: source.url,
         savePath,
         size: finalStat.size,
-        reused: !appendMode && existedBefore && finalStat.size === 0
-            ? true
-            : false,
+        // 走到这里一定发生了"写盘"（无论覆盖还是追加）：
+        // 命中已有文件的两个分支已在上面显式 return reused: true。
+        // 旧实现在此用 `finalStat.size === 0` 反推"未重新下载"，会把
+        // "服务器返回空内容 / 下载被清空"误标成复用，属于逻辑错误。
+        reused: false,
         source,
         backend: "fetch",
     };
@@ -1026,17 +1086,13 @@ async function fetchSingleSource(
 async function fetchDownload(opts: DownloadOptions): Promise<DownloadResult> {
     await ensureDir(dirname(opts.savePath));
 
-    const existedBefore = await stat(opts.savePath)
-        .then(() => true)
-        .catch(() => false);
-
     const failoverOnError = opts.failoverOnError ?? true;
     let lastError: unknown;
 
     for (let i = 0; i < opts.sources.length; i += 1) {
         const source = opts.sources[i]!;
         if (opts.signal?.aborted) {
-            throw new Error(`下载已被取消：${source.url}`);
+            throw abortError(`下载已被取消：${source.url}`);
         }
         try {
             if (opts.onSourceChange) {
@@ -1046,7 +1102,7 @@ async function fetchDownload(opts: DownloadOptions): Promise<DownloadResult> {
                 `[Downloader] fetch 尝试源 ${i + 1}/${opts.sources.length}：` +
                 `${source.label ?? source.url}`,
             );
-            return await fetchSingleSource(source, opts, existedBefore);
+            return await fetchSingleSource(source, opts);
         } catch (err) {
             lastError = err;
 
@@ -1084,6 +1140,8 @@ async function fetchDownload(opts: DownloadOptions): Promise<DownloadResult> {
  *     `auto` 在 aria2 失败时自动回退 fetch；
  *   - `isGithub + isChina` 时自动注入 github 代理，并把代理放在原始源之前；
  *   - aria2 失败后默认回退到 fetch 完整执行一次 failover；
+ *     **取消不属于"失败"**，不会回退（否则会用同一个已中止的 signal
+ *     再跑一遍必然立即失败的流程，既浪费又污染错误归因）；
  *   - 调用方应先 `probeUrls + sortByLatency` 排好 `sources` 顺序；
  *     本函数按 `sources` 顺序尝试（failover）；
  *   - **本机文件系统错误不会触发 failover**。
@@ -1091,6 +1149,9 @@ async function fetchDownload(opts: DownloadOptions): Promise<DownloadResult> {
 export async function download(opts: DownloadOptions): Promise<DownloadResult> {
     if (opts.sources.length === 0) {
         throw new Error("download: sources 为空。");
+    }
+    if (opts.signal?.aborted) {
+        throw abortError();
     }
 
     const githubProxyUsed = shouldUseGithubProxy(opts);
@@ -1131,6 +1192,9 @@ export async function download(opts: DownloadOptions): Promise<DownloadResult> {
         try {
             return await aria2Download(effectiveOpts);
         } catch (err) {
+            // 取消不是"后端失败"：回退 fetch 只会用同一个已中止的
+            // signal 再走一遍，最终仍以取消结束，纯属额外开销。
+            if (isAbortError(err, opts.signal)) throw err;
             if ((opts.fallbackToFetchOnAria2Error ?? true) === false) throw err;
             Logger.warn(
                 `[Downloader] aria2 失败，回退到 fetch：${errorMessage(err)}`,

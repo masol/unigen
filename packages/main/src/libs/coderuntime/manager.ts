@@ -5,8 +5,9 @@
 // 职责边界（本次重构后）：
 //   - **零私有状态**：所有引擎状态（含历史安装进度）持久化在 StableConfig，
 //     由 `#readStatus / #writeStatus` 统一读写；
-//   - **只保留瞬时调度状态**：`#chains` / `#inflight` / `#registeredTools`
-//     是“每进程”的缓存，不参与持久化（进程退出即丢失，符合语义）；
+//   - **只保留瞬时调度状态**：`#chains` / `#inflight` / `#registeredTools` /
+//     `#controllers` 是“每进程”的缓存，不参与持久化（进程退出即丢失，
+//     符合语义）；
 //   - **引擎实例化**：按 `engines/index.js` 的 `ENGINE_CLASSES` 在构造
 //     函数里 `new`，不依赖模块级单例；
 //   - `init()` 承担启动编排；依赖 `StableConfig` 与 `GlobalToolDB`；
@@ -33,6 +34,11 @@
 //   - **来源校验前移**：候选下载源为空时，在写 `installing` 状态之前就
 //     失败，避免界面上先闪一段“安装中”，也避免 `failed` 状态上挂着
 //     并不存在的 `installedRoot`；
+//   - **可取消安装**：`#ensureEngineNow` 为每组安装创建一个
+//     `AbortController`，并把 `signal` 透传给 `download` / `extractArchive`
+//     / `applyPostExtract` / `verifyExecutable`；`disableEngine` 通过
+//     `.abort()` 触发取消。取消路径会清理该引擎的下载目录，避免
+//     `skipExisting` 复用不完整归档造成“永远 sha 不匹配”；
 //   - **启停双向任务事件**：`ensureEngine`（安装 / 已就绪两条路径）与
 //     `disableEngine` 都会发送 `code-runtime:<engineId>` 的终态事件。
 //     renderer 的进度与工具列表刷新只订阅该事件，不再靠定时器猜测时机；
@@ -208,6 +214,23 @@ function taskIdOf(engineId: CodeRuntimeEngineId): string {
     return `code-runtime:${engineId}`;
 }
 
+/**
+ * 在阶段过渡点主动检查取消信号。
+ *
+ * `download` / `extractArchive` / `execa #{cancelSignal}` 都会在自身
+ * 生命周期内响应 abort；这里额外在**启动下一阶段之前**做一次显式检查，
+ * 避免已经 abort 之后仍然去 spawn 新的子进程 / 打开新的写句柄造成浪费。
+ */
+function throwIfAborted(
+    signal: AbortSignal,
+    engineId: CodeRuntimeEngineId,
+): void {
+    if (!signal.aborted) return;
+    const err = new Error(`[${engineId}] 安装已被取消。`);
+    err.name = "AbortError";
+    throw err;
+}
+
 export interface CodeRuntimeInitOptions {
     /** 工具注册回调；缺省 `globalToolDB.register`。 */
     registerTool?: RegisterToolFn;
@@ -226,16 +249,19 @@ export interface EnsureEngineOptions {
 /**
  * 引擎状态与 init 并发保护。
  *
- * `#chains`         ：单引擎串行队列（用于 ensureEngine 串行化）；
- * `#inflight`       ：ensure 复用（同一引擎进行中调用直接排队）；
- * `#registeredTools`：已注册工具名（engineId → tool.name），
- *                     与 `#chains` 一样是进程级缓存，不做持久化。
+ * `#chains`           ：单引擎串行队列（用于 ensureEngine 串行化）；
+ * `#inflight`         ：ensure 复用（同一引擎进行中调用直接排队）；
+ * `#registeredTools`  ：已注册工具名（engineId → tool.name），
+ *                       与 `#chains` 一样是进程级缓存，不做持久化；
+ * `#controllers`      ：**在安装期间的 AbortController**，供
+ *                       `disableEngine` 触发取消；安装结束后从表中移除。
  */
 export class CodeRuntimeManager {
     #engines: Map<CodeRuntimeEngineId, EngineRuntimeHandler>;
     #chains = new Map<CodeRuntimeEngineId, Promise<unknown>>();
     #inflight = new Map<CodeRuntimeEngineId, Promise<CodeRuntimeEngineStatus>>();
     #registeredTools = new Map<CodeRuntimeEngineId, string>();
+    #controllers = new Map<CodeRuntimeEngineId, AbortController>();
     #lastProgressPersist = new Map<
         CodeRuntimeEngineId,
         { percent: number; time: number }
@@ -453,9 +479,12 @@ export class CodeRuntimeManager {
         engineId: CodeRuntimeEngineId,
         handler: EngineRuntimeHandler,
         executablePath: string,
+        signal?: AbortSignal,
     ): Promise<string> {
         try {
-            const version = await handler.verifyExecutable(executablePath, {});
+            const version = await handler.verifyExecutable(executablePath, {
+                signal,
+            });
             Logger.log(
                 `[CodeRuntime] ${engineId} 使用系统已安装的运行时：` +
                 `${executablePath}（${version}）`,
@@ -480,6 +509,7 @@ export class CodeRuntimeManager {
     async #resolveSystemRuntime(
         engineId: CodeRuntimeEngineId,
         handler: EngineRuntimeHandler,
+        signal?: AbortSignal,
     ): Promise<ReadyRuntime | null> {
         const systemExe = await this.#detectSystemExecutable(engineId);
         if (!systemExe) return null;
@@ -489,6 +519,7 @@ export class CodeRuntimeManager {
             engineId,
             handler,
             systemExe,
+            signal,
         );
         this.#writeStatus(engineId, {
             state: "ready",
@@ -693,7 +724,7 @@ export class CodeRuntimeManager {
         if (this.#registeredTools.has(engineId)) return;
 
         const cfg = stableConfig().get("codeRuntime");
-        if (!cfg?.enabled || !cfg.engines?.[engineId]?.enabled) {
+        if (!cfg.engines?.[engineId]?.enabled) {
             Logger.log(
                 `[CodeRuntime] ${engineId} 安装完成但用户已停用，跳过工具注册。`,
             );
@@ -721,21 +752,50 @@ export class CodeRuntimeManager {
     }
 
     /**
-     * 停用引擎：从工具表中注销对应工具。
+     * 停用引擎：中断进行中的安装（若存在），并从工具表中注销对应工具。
      *
-     * 由 API 层在用户切换 `enabled = false` 时调用。运行时目录保留（不删除），
+     * 由 API 层在用户关闭 `enabled` 时调用。运行时目录保留（不删除），
      * 再次启用时 `ensureEngine` 会通过 `assertReady` 直接复用。
      *
-     * 幂等：未注册工具时注销是 no-op，但**仍然发送终态事件** ——
-     * renderer 以该事件收敛启停 UI（见 `CodeRuntimePanel` 的 `$effect`），
-     * 早期在这里提前 return 会让“未注册却要停用”的场景收不到任何事件，
-     * 迫使界面只能用定时器猜注销时机。
+     * 取消语义：
+     *   - 若有进行中的安装，会先 `AbortSignal.abort()`，然后**等待**
+     *     该安装 promise 落定；等待的目的是避免紧随其后的 re-enable
+     *     通过 `#inflight` 命中已 abort 的旧 promise，造成“重新启用
+     *     什么都不做”的假象；
+     *   - 取消路径在 `#ensureEngineNow` 的 catch 里已经把状态收敛为
+     *     `not_ready` 并发出了终态 task 事件；因此这里**不再**重复
+     *     `#emitCompleted`，避免"用户取消"被显示成"已就绪"。
+     *
+     * 幂等：未注册工具 / 无正在安装任务时注销是 no-op，但仍会发送
+     * 终态事件 —— renderer 以该事件收敛启停 UI（见 `CodeRuntimePanel`
+     * 的 `$effect`），早期在这里提前 return 会让“未注册却要停用”的场景
+     * 收不到任何事件，迫使界面只能用定时器猜注销时机。
      *
      * `globalToolDB.unregister` 兼容 id 或 name；`#registry.get()` 的 name
      * 索引行为取决于具体实现，先按 name 试，未命中再按 builtinId 重试
      * （两个调用都是幂等的，代价可忽略）。
      */
     async disableEngine(engineId: CodeRuntimeEngineId): Promise<void> {
+        // 1. 若存在进行中的安装，先取消。
+        let abortedInstall = false;
+        const controller = this.#controllers.get(engineId);
+        if (controller) {
+            abortedInstall = true;
+            this.#controllers.delete(engineId);
+            controller.abort();
+        }
+
+        // 2. 等待安装 promise 落定。
+        //
+        // 即便没有 controller，也可能存在一个 very-recent "alreadyReady"
+        // 快路径的 ensure 正在进行（不会创建 controller）；统一等待
+        // inflight 保证 re-enable 时能看到干净的 #inflight 状态。
+        const inflight = this.#inflight.get(engineId);
+        if (inflight) {
+            await inflight.catch(() => undefined);
+        }
+
+        // 3. 注销工具。
         const name = this.#registeredTools.get(engineId);
         if (name) {
             this.#registeredTools.delete(engineId);
@@ -754,11 +814,20 @@ export class CodeRuntimeManager {
             }
         }
 
-        this.#emitCompleted(
-            engineId,
-            "preparing",
-            `${engineId} 运行时已停用。`,
-        );
+        // 4. 终态事件。
+        //
+        // 若刚刚取消过安装，`#ensureEngineNow` 的 catch 已经发出
+        // `safeFail`（任务已落定为 failed），UI 的 effect 会被这条事件
+        // 触发；此时再发“已就绪”的 completed 会让界面短暂地从
+        // "取消中" 切到 "已完成"，属于误导。因此这里分支：取消路径
+        // 不再发 completed。
+        if (!abortedInstall) {
+            this.#emitCompleted(
+                engineId,
+                "preparing",
+                `${engineId} 运行时已停用。`,
+            );
+        }
     }
 
     // ---------- 安装入口 ----------
@@ -863,9 +932,6 @@ export class CodeRuntimeManager {
         registerTool?: RegisterToolFn,
     ): Promise<CodeRuntimeEngineStatus> {
         const cfg = stableConfig().get("codeRuntime");
-        if (!cfg?.enabled) {
-            return this.#writeStatus(engineId, { state: "not_ready" });
-        }
         const engineCfg: CodeRuntimeEngineConfig | undefined =
             cfg.engines?.[engineId];
         if (!engineCfg?.enabled) {
@@ -956,6 +1022,15 @@ export class CodeRuntimeManager {
 
         this.#checkWindowsPathLength(rootDir, engineId);
 
+        // ── 创建取消控制器 ──
+        //
+        // 放在校验之后的第一个副作用位置：若来源校验失败，用户还没有任何
+        // 可取消的安装，避免创建后永远是孤儿。`#controllers` 允许
+        // `disableEngine` 在任意阶段触发取消。
+        const controller = new AbortController();
+        const { signal } = controller;
+        this.#controllers.set(engineId, controller);
+
         this.#writeStatus(engineId, {
             state: "installing",
             installedRoot: rootDir,
@@ -988,6 +1063,7 @@ export class CodeRuntimeManager {
             }
 
             // 1. 下载前测速
+            throwIfAborted(signal, engineId);
             this.#persistProgress(
                 engineId,
                 "downloading",
@@ -1010,6 +1086,8 @@ export class CodeRuntimeManager {
                 try {
                     const probed = await probeUrls(archiveUrls, {
                         timeoutMs: DOWNLOAD_PROBE_TIMEOUT_MS,
+                        // 每源最长 8s；取消时没必要等测速窗口自然结束。
+                        signal,
                     });
                     const sorted = sortByLatency(probed);
                     const reachableCount = sorted.filter(
@@ -1052,6 +1130,7 @@ export class CodeRuntimeManager {
             await fs.mkdir(engineDownloadDir, { recursive: true });
 
             // 2. 下载（多源 failover）
+            throwIfAborted(signal, engineId);
             this.#persistProgress(
                 engineId,
                 "downloading",
@@ -1077,6 +1156,7 @@ export class CodeRuntimeManager {
                 skipExisting: true,
                 parallelStreams: 3,
                 isGithub: handler.isGithubArchive === true,
+                signal,
                 onSourceChange: (source) => {
                     try {
                         usedSourceLabel = source.label;
@@ -1122,6 +1202,7 @@ export class CodeRuntimeManager {
             }
 
             // 3. SHA256 校验
+            throwIfAborted(signal, engineId);
             const expectedSha =
                 engineCfg.archiveSha256?.toLowerCase() ??
                 (!engineCfg.archiveUrl
@@ -1139,7 +1220,10 @@ export class CodeRuntimeManager {
                     true,
                 );
                 safeReport(taskId, "verifying", `正在校验 ${engineId} 归档...`, 55);
-                const actual = await sha256FileHex(savePath);
+                // 大归档（Node / Python 解释器等）的流式哈希耗时可观；
+                // 把 AbortSignal 透传进去，取消时立即中断读取，而不是
+                // 等整包算完才发现已经不需要了。
+                const actual = await sha256FileHex(savePath, { signal });
                 if (actual !== expectedSha) {
                     // 删除损坏归档：否则 `skipExisting: true` 会让下次
                     // ensure 继续复用同一份坏文件，形成“永远校验失败”
@@ -1158,6 +1242,7 @@ export class CodeRuntimeManager {
             // 内置真实 npm.cmd，无需）。默认 false 保持通用安全策略。
             // 通用解压器内部对符号链接有逃逸校验，与 node-tar 内置防护
             // 互补；了解这一点是理解"为何敢放开"的关键背景。
+            throwIfAborted(signal, engineId);
             this.#persistProgress(
                 engineId,
                 "extracting",
@@ -1177,9 +1262,11 @@ export class CodeRuntimeManager {
                 targetDir: rootDir,
                 stripPrefix,
                 allowSymlinks,
+                signal,
             });
 
             // 5. 后处理
+            throwIfAborted(signal, engineId);
             const executablePath = join(rootDir, executableRel);
             if (!(await pathExists(executablePath))) {
                 throw new Error(
@@ -1206,10 +1293,12 @@ export class CodeRuntimeManager {
                     executablePath,
                     downloadDir: engineDownloadDir,
                     engineConfig: engineCfg,
+                    signal,
                 });
             }
 
             // 6. 验证
+            throwIfAborted(signal, engineId);
             this.#persistProgress(
                 engineId,
                 "verifying",
@@ -1218,7 +1307,9 @@ export class CodeRuntimeManager {
                 true,
             );
             safeReport(taskId, "verifying", `正在验证 ${engineId} 运行时...`, 88);
-            const version = await handler.verifyExecutable(executablePath, {});
+            const version = await handler.verifyExecutable(executablePath, {
+                signal,
+            });
             Logger.log(`[CodeRuntime] ${engineId} 就绪：${version}`);
 
             this.#writeStatus(engineId, {
@@ -1249,6 +1340,56 @@ export class CodeRuntimeManager {
             safeComplete(taskId, `${engineId} 运行时已就绪。`);
             return doneStatus;
         } catch (error) {
+            // ── 取消路径 ──
+            //
+            // `signal.aborted` 为真说明：
+            //   - `disableEngine` 主动触发了取消；或
+            //   - 底层（下载器 / execa / 解压器）因取消而失败。
+            // 两种情况下都应该收敛到用户可解释的状态，而不是把内部错误
+            // 当作普通安装失败展示。
+            if (signal.aborted) {
+                Logger.log(`[CodeRuntime] ${engineId} 安装已被取消。`);
+                // 清理残留的归档：`skipExisting: true` 会复用未完成文件
+                // 导致下次 sha 校验必然失败。
+                await clearDir(engineDownloadDir).catch((err: unknown) => {
+                    Logger.warn(
+                        `[CodeRuntime] 清理 ${engineId} 取消安装残留失败：${errorMessage(err)}`,
+                    );
+                });
+                // 半解压目录同样必须清理。
+                //
+                // `assertReady` 的磁盘自愈分支只要看到
+                // `rootDir/<executableRelativePath>` 存在，就会把状态直接
+                // 改写成 ready（**不重新验证**）；保留半解压目录会让
+                // "用户取消安装"在下次工具调用时被误判为安装完成，进而
+                // 暴露一个缺文件 / 缺后处理产物（如 uv 托管的 Python
+                // 解释器）的半成品运行时。
+                await clearDir(rootDir).catch((err: unknown) => {
+                    Logger.warn(
+                        `[CodeRuntime] 清理 ${engineId} 取消安装残留目录失败：${errorMessage(err)}`,
+                    );
+                });
+                this.#writeStatus(engineId, {
+                    state: "not_ready",
+                    installedRoot: null,
+                    executablePath: null,
+                    lastError: null,
+                    phase: null,
+                    message: null,
+                    progress: null,
+                    verifiedVersion: null,
+                });
+                safeFail(
+                    taskId,
+                    `${engineId} 安装已取消。`,
+                    "用户取消了安装。",
+                );
+                // 不向调用方抛错：取消是预期内的终止，调用方（
+                // `setRuntimeEnabled` 的 fire-and-forget catch）看到
+                // AbortError 只会打印一条噪音日志，反而不利于排查。
+                return this.#readStatus(engineId);
+            }
+
             const originalMessage = errorMessage(error);
             Logger.error(`[CodeRuntime] ${engineId} 初始化失败：${originalMessage}`);
 
@@ -1262,6 +1403,7 @@ export class CodeRuntimeManager {
                 const systemRuntime = await this.#resolveSystemRuntime(
                     engineId,
                     handler,
+                    signal,
                 );
                 if (systemRuntime) {
                     try {
@@ -1303,7 +1445,18 @@ export class CodeRuntimeManager {
                 lastError: message,
             });
             safeFail(taskId, `${engineId} 运行时初始化失败。`, message);
-            throwUnprocessable(message);
+            return throwUnprocessable(message);
+        } finally {
+            // 清理本次安装的瞬时资源：
+            //   - controller：只有自己还是当前 controller 时才删除，避免
+            //     去删一条本属于后续 ensure 的 controller（正常流程
+            //     不会发生，属于防御性写法）；
+            //   - 进度节流表：无论成功 / 失败 / 取消，缓存都是脏的，
+            //     下一次 ensure 应重新计时。
+            if (this.#controllers.get(engineId) === controller) {
+                this.#controllers.delete(engineId);
+            }
+            this.#lastProgressPersist.delete(engineId);
         }
     }
 
@@ -1319,9 +1472,16 @@ export class CodeRuntimeManager {
      */
     async init(opts: CodeRuntimeInitOptions = {}): Promise<void> {
         try {
+            this.#normalizeStaleStates();
+
             const cfg = stableConfig().get("codeRuntime");
-            if (!cfg?.enabled) {
-                Logger.log("[CodeRuntime] 总开关未启用，跳过初始化。");
+            const enabledIds = KNOWN_ENGINE_IDS.filter(
+                (id) => isKnownEngine(id) && cfg.engines?.[id]?.enabled,
+            );
+            if (enabledIds.length === 0) {
+                Logger.log(
+                    "[CodeRuntime] 没有启用任何引擎；跳过安装与工具注册。",
+                );
                 return;
             }
 
@@ -1329,18 +1489,6 @@ export class CodeRuntimeManager {
                 opts.registerTool ??
                 ((def: ToolDefinition<unknown, unknown>) =>
                     globalToolDB.register(def));
-
-            this.#normalizeStaleStates();
-
-            const enabledIds = KNOWN_ENGINE_IDS.filter(
-                (id) => isKnownEngine(id) && cfg.engines?.[id]?.enabled,
-            );
-            if (enabledIds.length === 0) {
-                Logger.log(
-                    "[CodeRuntime] 总开关已启用，但没有启用具体引擎；跳过安装与工具注册。",
-                );
-                return;
-            }
 
             let failureCount = 0;
             for (const id of enabledIds) {

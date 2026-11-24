@@ -373,7 +373,7 @@ export const pythonRunTool: ToolDefinition<PythonRunInput, PythonRunOutput> = {
     outputSchema,
     execute: async (input) => {
         const cfg = stableConfig().get("codeRuntime");
-        if (!cfg?.enabled || !cfg.engines?.python?.enabled) {
+        if (!cfg.engines?.python?.enabled) {
             throw new Error(
                 "Python 代码运行时未启用，请先在设置中开启后再试。",
             );
