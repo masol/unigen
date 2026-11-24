@@ -57,14 +57,10 @@
         await load(false);
       }
 
-      // 禁用路径：主进程使用 `void codeRuntimeManager.disableEngine(...)`
-      // 的 fire-and-forget 注销，没有任务推送；延迟一拍再刷新内建工具列表，
-      // 避免与主进程的注销竞争。启用路径由下方 $effect 在任务终态时刷新。
-      if (!enabled) {
-        setTimeout(() => {
-          void messageStore.init();
-        }, 300);
-      }
+      // 启 / 停两个方向都由主进程推送的 `code-runtime:<id>` 终态事件驱动
+      // 后续刷新（见下方 $effect）：启用路径覆盖安装完成与「系统运行时
+      // 已就绪」快路径，停用路径由 `codeRuntimeManager.disableEngine()`
+      // 在注销工具后发送。这里不再用定时器猜测主进程的注销时机。
     } finally {
       pending[id] = false;
     }
@@ -79,9 +75,9 @@
   });
 
   /**
-   * 安装任务的状态以主进程推送的 task:update 为准（RuntimeCard 直接读
+   * 安装 / 停用任务的状态以主进程推送的 task:update 为准（RuntimeCard 直接读
    * taskProgressStore）。当某个 code-runtime 任务结束后，这里触发一次
-   * 列表刷新，把 entries 中的 state 收敛为最终的 ready / failed；
+   * 列表刷新，把 entries 中的 state 收敛为最终的 ready / failed / disabled；
    * 同时把内建工具列表刷新一遍，让 AI 侧立刻看到新注册 / 已注销的工具。
    */
   $effect(() => {
@@ -113,10 +109,7 @@
     <h1 class="text-xl font-semibold tracking-tight text-foreground">
       本机工具
     </h1>
-    <p class="text-sm text-muted-foreground">
-      管理 AI
-      可调用的本机工具。
-    </p>
+    <p class="text-sm text-muted-foreground">管理 AI 可调用的本机工具。</p>
   </header>
 
   <WarningCard />

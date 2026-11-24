@@ -36,6 +36,16 @@ const codeRuntimeAria2EngineSchema = {
     default: { enabled: false },
 };
 
+/**
+ * 单个引擎的持久化状态 schema。
+ *
+ * ⚠️ `additionalProperties: false` + 写入路径（`#writeStatus`）内部
+ * try/catch 只 warn 的组合，意味着**任何一个在 `CodeRuntimeEngineStatus`
+ * 上新增的字段都必须同步到这里**：漏写不会让写入抛错传播，而是让整个
+ * `set("codeRuntimeStatus", ...)` 被拒绝、状态悄悄留在内存里，表现为
+ * 「重启后进度 / 版本信息回退到上一次成功写盘的值」。这类问题极难从
+ * 日志定位，修改类型时请一并核对本对象。
+ */
 const codeRuntimeEngineStatusSchema = {
     type: 'object' as const,
     additionalProperties: false,
@@ -48,6 +58,13 @@ const codeRuntimeEngineStatusSchema = {
             default: 'not_ready',
         },
         installedRoot: { type: 'string' as const },
+        // 入口可执行文件的完整路径（权威来源）。
+        //
+        // 与 installedRoot 分离的原因：系统已安装的运行时可能探测到与
+        // `executableRelativePath` 不一致的二进制名（如 aria2c-1.37 这类
+        // 版本化别名），此时用 `installedRoot + 相对路径` 复算会指向不存在
+        // 的文件。`assertReady` 优先使用本字段，缺失时回落到复算并回填。
+        executablePath: { type: 'string' as const },
         lastError: { type: 'string' as const },
         lastCheckAt: { type: 'number' as const },
         phase: { type: 'string' as const },

@@ -11,6 +11,9 @@
 //     内置下载源 / 用户自定义 archiveUrl / 系统已安装的运行时（Linux 与
 //     macOS 的 aria2）三条来源都没有时**直接抛错**，避免把配置写成
 //     enabled 后异步失败、界面长期停在 preparing；
+//   - **配置读取必须发生在 `assertInstallable()` 之后**：该调用是异步的，
+//     期间另一个引擎可能已经启停并写盘。用进入 handler 时的快照会把那次
+//     修改整体覆盖掉；
 //   - **配置读写必须经过 `pickEngineConfig`**：持久化 schema 对
 //     `codeRuntime.engines.<id>` 是严格的（未知键会被 `unrecognized_keys`
 //     拒绝）。任何从 store 读出的引擎配置都只能以
@@ -256,7 +259,6 @@ const setRuntimeEnabled = os
         }
 
         const id = input.id;
-        const current = readCodeRuntimeConfig();
 
         if (input.enabled) {
             // 启用前校验运行时来源：内置下载源 / 用户自定义 archiveUrl /
@@ -266,6 +268,14 @@ const setRuntimeEnabled = os
             // 自行安装后重新启用），而不是把 enabled 落盘后异步失败。
             await codeRuntimeManager.assertInstallable(id);
         }
+
+        // **必须**在 `assertInstallable()` 之后再读一次配置。
+        //
+        // 该调用是异步的（Linux / macOS 上要探测系统已安装的运行时），
+        // 期间用户可能在另一个引擎上完成启停并已写盘。继续使用进入
+        // handler 时的快照，会把那次修改连同它的 `engines.<other>` 一起
+        // 覆盖回旧值 —— 典型表现是刚启用的引擎被“退回”未启用。
+        const current = readCodeRuntimeConfig();
 
         // 三个引擎统一走白名单重建：只要有一个引擎带着 schema 未声明的键，
         // 整个 `set("codeRuntime", ...)` 都会被拒绝（zod 的 unrecognized_keys
@@ -298,7 +308,8 @@ const setRuntimeEnabled = os
             //
             // 对 Linux / macOS 的 aria2 来说，这里的 ensureEngine 通常是
             // 快路径：assertReady 命中系统已安装的 aria2c，直接注册工具，
-            // 不触发下载。
+            // 不触发下载；manager 会为该快路径同样发送
+            // `code-runtime:aria2` 的终态事件，renderer 据此收敛界面。
             void codeRuntimeManager.ensureEngine(id).catch((error: unknown) => {
                 Logger.error(
                     `[CodeRuntime] 启用 ${id} 失败：${error instanceof Error ? error.message : String(error)
@@ -306,7 +317,8 @@ const setRuntimeEnabled = os
                 );
             });
         } else {
-            // 停用：自动化注销工具。
+            // 停用：自动化注销工具。manager 在注销后会发送终态事件，
+            // renderer 无需定时器猜测注销时机。
             void codeRuntimeManager.disableEngine(id).catch((error: unknown) => {
                 Logger.warn(
                     `[CodeRuntime] 停用 ${id} 失败：${error instanceof Error ? error.message : String(error)
@@ -324,6 +336,9 @@ const setRuntimeEnabled = os
  * 复用工具的完整执行链（venv / 依赖安装 / 执行），确保测试等价于真实运行。
  * 不走正式工具注册表，因此不受"工具是否已注册"影响；但仍要求引擎处于
  * ready 且 config 已启用。
+ *
+ * 语言类与工具类都支持：aria2 固定执行 `aria2c --version`（见
+ * `executeTestCode`）；语言类执行引擎给出的 `testSnippet` 代码。
  */
 const testRuntime = os
     .input(
@@ -403,6 +418,8 @@ async function executeTestCode(
     code: string,
 ): Promise<ExecutedOutput> {
     if (id === "aria2") {
+        // 工具类运行时的"测试"是验证二进制本身可用：`code` 入参在
+        // aria2 分支不使用（UI 固定传 `aria2c --version`）。
         const runtime = await codeRuntimeManager.assertReady("aria2");
         const result = await execa(runtime.executablePath, ["--version"], {
             reject: false,

@@ -7,7 +7,8 @@
 //
 // 修改此文件时，请同步检查：
 //   - `libs/coderuntime/manager.ts`：状态机与持久化读写；
-//   - `libs/store/stable.schema.ts`：持久化 schema；
+//   - `libs/store/stable.schema.ts`：持久化 schema（**必须同步**：
+//     `additionalProperties: false` 下未声明的键会让状态写入被静默拒绝）；
 //   - `libs/coderuntime/engines/*.ts`：引擎实现的返回类型；
 //   - `api/common/code.cfg.ts` / `api/common/code.ts`：renderer 侧接口。
 
@@ -102,10 +103,28 @@ export interface CodeRuntimeEngineStatus {
      * 两种来源：
      *   - 托管安装：`<userData>/runtime/code/<engineId>/`；
      *   - 系统已安装的运行时（如 Linux / macOS 的 aria2c）：可执行文件
-     *     所在目录（例如 `/usr/bin`）。`assertReady` 会用它拼出入口路径，
-     *     因此这里必须始终是**可执行文件所在目录**，而不是安装包根目录。
+     *     所在目录（例如 `/usr/bin`）。
+     *
+     * **不再是入口路径的唯一来源**：入口以 `executablePath` 为准。
+     * 本字段现在只承担两个用途：
+     *   1. 向日志 / 诊断 / 上层展示运行时根目录；
+     *   2. 旧状态迁移的回落点 —— `executablePath` 缺失时，`assertReady`
+     *      会尝试 `installedRoot + executableRelativePath` 复算，命中后
+     *      **回填** `executablePath`，后续调用不再走复算分支。
      */
     installedRoot?: string;
+    /**
+     * 入口可执行文件的**完整路径**（权威来源）。
+     *
+     * 为什么必须独立存储：`installedRoot + executableRelativePath` 的复算
+     * 只有在二进制名与引擎声明完全一致时才成立。系统探测到的运行时可能
+     * 是别名（例如 `aria2c-1.37`、`aria2c-x86_64`），复算会指向不存在的
+     * 文件，把「运行时其实可用」误判成需要重装。
+     *
+     * 兼容性：升级前的状态没有本字段，`assertReady` 在复算命中后回填；
+     * 复算也落空时按既有磁盘自愈逻辑收敛为 `not_ready`。
+     */
+    executablePath?: string;
     /** 最近一次失败 / 中断的简短错误面（详情见 message）。 */
     lastError?: string;
     /** 最近一次状态变更的毫秒时间戳。 */

@@ -18,6 +18,10 @@
 //   - save_path 为相对路径时基于当前项目根解析；
 //   - 未打开项目时必须传绝对路径（避免写入主进程 cwd）；
 //   - 父目录不存在时自动创建。
+//
+// 输出中的 `command` 是给模型 / 日志看的展示串：请求头里可能出现
+// `Authorization: Bearer ...` 一类凭据，这类值在展示串中被替换为 `***`
+// （见 `redactArgs`）。真正传给 aria2c 的参数不受影响。
 
 import { stableConfig } from "$libs/store/stable.js";
 import type { ToolDefinition } from "$libs/tooldb/type.js";
@@ -33,6 +37,51 @@ import {
 } from "./shared.js";
 
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * 需要脱敏的请求头名判定。
+ *
+ * 覆盖常见凭据载体：`Authorization` / `Proxy-Authorization` / `Cookie`、
+ * 各类 token / secret / api-key / password / signature。判定只看头名，
+ * 头值一律保留 `***`（不保留前缀，避免长度 / 前缀泄露）。
+ */
+const SENSITIVE_HEADER_PATTERN =
+    /authorization|cookie|token|secret|api[-_]?key|password|signature/i;
+
+/**
+ * 单个 `--header` 值的脱敏。
+ *
+ * aria2 的 header 形式是 `Name: Value`；没有冒号的值（畸形输入）整体
+ * 替换为 `***`。非敏感头保持原样，尽量保留可复现信息。
+ */
+function maskHeaderValue(raw: string): string {
+    const colon = raw.indexOf(":");
+    if (colon <= 0) return "***";
+    const name = raw.slice(0, colon).trim();
+    if (!SENSITIVE_HEADER_PATTERN.test(name)) return raw;
+    return `${name}: ***`;
+}
+
+/**
+ * 生成**展示用**参数（不改变真正执行的 args）。
+ *
+ * 只处理 `--header` 这一种带凭据的选项；其余参数（URL、路径、连接数、
+ * checksum）保持原样，便于复现。URL 内嵌凭据（`https://user:pass@host`）
+ * 不在本次脱敏范围内。
+ */
+function redactArgs(args: readonly string[]): string[] {
+    const out: string[] = [];
+    for (let i = 0; i < args.length; i += 1) {
+        const arg = args[i]!;
+        out.push(arg);
+        if (arg !== "--header") continue;
+        const value = args[i + 1];
+        if (value === undefined) continue;
+        out.push(maskHeaderValue(value));
+        i += 1;
+    }
+    return out;
+}
 
 const inputSchema = z.object({
     url: z
@@ -66,7 +115,7 @@ const inputSchema = z.object({
         .optional()
         .describe(
             "额外 HTTP 请求头，例如 { \"Authorization\": \"Bearer ...\" }。" +
-            "会作为 aria2 --header 传入。",
+            "会作为 aria2 --header 传入；输出中此类头的值会被脱敏为 ***。",
         ),
     checksum: z
         .string()
@@ -101,7 +150,10 @@ const outputSchema = z.object({
     duration_ms: z.number().nonnegative(),
     command: z
         .string()
-        .describe("实际执行的命令（仅展示 / 复现用，未做 shell 转义）。"),
+        .describe(
+            "实际执行的命令（仅展示 / 复现用，未做 shell 转义；" +
+            "敏感请求头的值已脱敏为 ***）。",
+        ),
     timed_out: z.boolean().describe("是否因超时被终止。"),
     save_path: z.string().describe("最终尝试保存的绝对路径。"),
     size: z
@@ -200,7 +252,11 @@ export const aria2DownloadTool: ToolDefinition<
             stdout: limitOutput(result.stdout ?? ""),
             stderr: limitOutput(result.stderr ?? ""),
             duration_ms: Date.now() - start,
-            command: formatCommand(runtime.executablePath, args),
+            // 展示串对凭据脱敏；真正执行的 args 未改动。
+            command: formatCommand(
+                runtime.executablePath,
+                redactArgs(args),
+            ),
             timed_out: result.timedOut === true,
             save_path: savePath,
             size,

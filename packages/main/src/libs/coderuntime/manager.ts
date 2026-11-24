@@ -17,16 +17,26 @@
 //     `aria2c`）；命中即视为 ready，**不下载、不解压**。启用前由
 //     `assertInstallable()` 提前拦截“内置源 / 自定义 archiveUrl / 系统
 //     运行时”三条来源都没有的平台；
+//   - **可执行文件路径持久化**：状态里的 `executablePath` 是权威来源。
+//     系统运行时的 `installedRoot` 只是「二进制所在目录」，靠
+//     `installedRoot + executableRelativePath` 复算只有在二进制名与约定名
+//     完全一致时成立；引擎一旦探测到别名（`aria2c-1.37` 之类），复算
+//     就会落空。因此 `assertReady` 先用 `executablePath`，缺失时回落到
+//     复算并**回填**，让旧状态自动完成迁移；
 //   - **下载前测速**：manager 主动 `probeUrls + sortByLatency` 排序候选源；
 //   - **下载后 SHA256 校验**：`archiveSha256` 配置优先；用户未自定义
 //     `archiveUrl` 时，回落到引擎给出的默认哈希；校验失败会删除坏归档，
 //     避免 `skipExisting` 导致“永远校验失败”的死循环；
 //   - **解压允许引擎定制**：`getExtractAllowSymlinks?.()` 控制 tar 归档
 //     中符号链接的放行策略（默认 false，通用安全策略）；
+//   - **来源校验前移**：候选下载源为空时，在写 `installing` 状态之前就
+//     失败，避免界面上先闪一段“安装中”，也避免 `failed` 状态上挂着
+//     并不存在的 `installedRoot`；
+//   - **启停双向任务事件**：`ensureEngine`（安装 / 已就绪两条路径）与
+//     `disableEngine` 都会发送 `code-runtime:<engineId>` 的终态事件。
+//     renderer 的进度与工具列表刷新只订阅该事件，不再靠定时器猜测时机；
 //   - 每次状态跃迁点直接调用 `report / complete / fail`
 //     （`$libs/utils/task-progress.js`），`id = "code-runtime:" + engineId`；
-//     **已就绪快路径同样补发终态事件** —— renderer 的进度 UI 只由该事件
-//     收敛，系统已安装的 aria2c（Linux / macOS）走的正是这条快路径；
 //   - **进度回调安全**：`report` / `complete` / `fail` 以及下载器的
 //     `onProgress` / `onSourceChange` 全部包裹 try/catch。这些回调一旦
 //     抛错会变成事件上下文里的未捕获异常，在 Node 15+ 默认
@@ -97,6 +107,8 @@ type RegisterToolFn = (
 type StatusPatch = {
     state?: CodeRuntimeEngineState;
     installedRoot?: string | null;
+    /** 入口可执行文件的完整路径；系统运行时可能不是约定的文件名。 */
+    executablePath?: string | null;
     lastError?: string | null;
     phase?: string | null;
     message?: string | null;
@@ -272,6 +284,11 @@ export class CodeRuntimeManager {
 
         if (patch.installedRoot === null) delete next.installedRoot;
         else if (patch.installedRoot !== undefined) next.installedRoot = patch.installedRoot;
+
+        if (patch.executablePath === null) delete next.executablePath;
+        else if (patch.executablePath !== undefined) {
+            next.executablePath = patch.executablePath;
+        }
 
         if (patch.lastError === null) delete next.lastError;
         else if (patch.lastError !== undefined) next.lastError = patch.lastError;
@@ -497,11 +514,38 @@ export class CodeRuntimeManager {
             );
         }
 
-        // ── 1. 托管安装（下载 / 解压 / 校验由 manager 完成） ──
         const status = this.#readStatus(engineId);
+
+        // ── 1a. 持久化的完整可执行文件路径（权威来源） ──
+        //
+        // 系统运行时（Linux / macOS 的 aria2c）的 `installedRoot` 只是
+        // 「二进制所在目录」，`installedRoot + exeRel` 只有在二进制名与
+        // `executableRelativePath` 完全一致时才成立；引擎一旦探测到别名
+        // （`aria2c-1.37`、`aria2c-x86_64` 之类），复算就会指向不存在的
+        // 文件。因此显式记录的完整路径优先。
+        if (status.state === "ready" && status.executablePath) {
+            if (await pathExists(status.executablePath)) {
+                return {
+                    engine: engineId,
+                    executablePath: status.executablePath,
+                    rootDir:
+                        status.installedRoot ??
+                        dirname(status.executablePath),
+                };
+            }
+            Logger.warn(
+                `[CodeRuntime] ${engineId} 状态 ready 但可执行文件缺失：` +
+                `${status.executablePath}；尝试磁盘自愈。`,
+            );
+        }
+
+        // ── 1b. 托管安装（下载 / 解压 / 校验由 manager 完成） ──
         if (status.state === "ready" && status.installedRoot) {
             const exePath = join(status.installedRoot, exeRel);
             if (await pathExists(exePath)) {
+                // 回填完整路径：旧状态没有 executablePath 时，在这里完成
+                // 一次迁移，后续调用直接走上面更精确的分支。
+                this.#writeStatus(engineId, { executablePath: exePath });
                 return {
                     engine: engineId,
                     executablePath: exePath,
@@ -519,6 +563,7 @@ export class CodeRuntimeManager {
             this.#writeStatus(engineId, {
                 state: "ready",
                 installedRoot: rootDir,
+                executablePath: exePath,
                 lastError: null,
                 phase: null,
                 message: null,
@@ -533,8 +578,9 @@ export class CodeRuntimeManager {
         // ── 2. 系统已安装的运行时（Linux / macOS 上的 aria2c） ──
         //
         // 与托管安装的关系：**托管安装优先**（版本可控），这里是兜底。
-        // 命中后写回 ready（`installedRoot` 为二进制所在目录），下一次调用
-        // 直接走第 1 步，不再重复探测。
+        // 命中后写回 ready（`installedRoot` 为二进制所在目录，
+        // `executablePath` 为二进制完整路径），下一次调用直接走第 1a 步，
+        // 不再重复探测。
         const systemExe = await this.#detectSystemExecutable(engineId);
         if (systemExe) {
             const systemRoot = dirname(systemExe);
@@ -546,6 +592,7 @@ export class CodeRuntimeManager {
             this.#writeStatus(engineId, {
                 state: "ready",
                 installedRoot: systemRoot,
+                executablePath: systemExe,
                 verifiedVersion: version,
                 lastError: null,
                 phase: null,
@@ -568,6 +615,7 @@ export class CodeRuntimeManager {
             this.#writeStatus(engineId, {
                 state: "not_ready",
                 installedRoot: null,
+                executablePath: null,
                 phase: null,
                 message: "运行时文件缺失，需要重新安装。",
                 progress: null,
@@ -634,7 +682,10 @@ export class CodeRuntimeManager {
      * 由 API 层在用户切换 `enabled = false` 时调用。运行时目录保留（不删除），
      * 再次启用时 `ensureEngine` 会通过 `assertReady` 直接复用。
      *
-     * 幂等：未注册时是 no-op。
+     * 幂等：未注册工具时注销是 no-op，但**仍然发送终态事件** ——
+     * renderer 以该事件收敛启停 UI（见 `CodeRuntimePanel` 的 `$effect`），
+     * 早期在这里提前 return 会让“未注册却要停用”的场景收不到任何事件，
+     * 迫使界面只能用定时器猜注销时机。
      *
      * `globalToolDB.unregister` 兼容 id 或 name；`#registry.get()` 的 name
      * 索引行为取决于具体实现，先按 name 试，未命中再按 builtinId 重试
@@ -642,23 +693,28 @@ export class CodeRuntimeManager {
      */
     async disableEngine(engineId: CodeRuntimeEngineId): Promise<void> {
         const name = this.#registeredTools.get(engineId);
-        if (!name) return;
-
-        this.#registeredTools.delete(engineId);
-
-        try {
-            const removed = await globalToolDB.unregister(name);
-            if (!removed) {
-                await globalToolDB.unregister(builtinId(name));
+        if (name) {
+            this.#registeredTools.delete(engineId);
+            try {
+                const removed = await globalToolDB.unregister(name);
+                if (!removed) {
+                    await globalToolDB.unregister(builtinId(name));
+                }
+                Logger.log(
+                    `[CodeRuntime] 工具 ${name} 已注销（engine=${engineId}）。`,
+                );
+            } catch (error) {
+                Logger.warn(
+                    `[CodeRuntime] 注销工具 ${name} 失败：${errorMessage(error)}`,
+                );
             }
-            Logger.log(
-                `[CodeRuntime] 工具 ${name} 已注销（engine=${engineId}）。`,
-            );
-        } catch (error) {
-            Logger.warn(
-                `[CodeRuntime] 注销工具 ${name} 失败：${errorMessage(error)}`,
-            );
         }
+
+        this.#emitCompleted(
+            engineId,
+            "preparing",
+            `${engineId} 运行时已停用。`,
+        );
     }
 
     // ---------- 安装入口 ----------
@@ -733,24 +789,28 @@ export class CodeRuntimeManager {
     }
 
     /**
-     * 已就绪快路径的终态事件。
+     * 终态事件（完成）。
      *
-     * 为什么快路径也必须发：renderer 侧（`CodeRuntimePanel` 的 `$effect`）
-     * 只在该任务的 `code-runtime:<engineId>` 进入终态后才会重新拉取
-     * `listRuntimes`，进度 UI 完全由该事件驱动。
+     * `ensureEngine` 的已就绪快路径与 `disableEngine` 都必须调用：
+     * renderer 侧（`CodeRuntimePanel` 的 `$effect`）只在该任务的
+     * `code-runtime:<engineId>` 进入终态后才重新拉取 `listRuntimes` 并刷新
+     * 内建工具清单，进度 UI 完全由该事件驱动。
      *
-     * 系统运行时（Linux / macOS 上由 `detectSystemExecutable` 命中的
-     * `aria2c`）走的正是这条快路径：没有任何下载 / 解压阶段可推送，
-     * 若此处不发终态事件，界面会停留在 `setRuntimeEnabled` 响应里的
+     * 已就绪快路径尤其需要：系统运行时（Linux / macOS 上由
+     * `detectSystemExecutable` 命中的 `aria2c`）没有任何下载 / 解压阶段
+     * 可推送，不发终态事件界面会停在 `setRuntimeEnabled` 响应里的
      * “准备中”，必须离开设置页再回来才能恢复。
      *
      * 先补一条 100% 进度再收尾：进度上报同时负责在任务表中建立条目，
      * 避免 `complete` 依赖“任务条目已存在”这一隐含前提。
      */
-    #emitReadyEvent(engineId: CodeRuntimeEngineId): void {
+    #emitCompleted(
+        engineId: CodeRuntimeEngineId,
+        phase: string,
+        message: string,
+    ): void {
         const taskId = taskIdOf(engineId);
-        const message = `${engineId} 运行时已就绪。`;
-        safeReport(taskId, "verifying", message, 100);
+        safeReport(taskId, phase, message, 100);
         safeComplete(taskId, message);
     }
 
@@ -793,9 +853,12 @@ export class CodeRuntimeManager {
                 );
             }
             // 快路径没有下载 / 解压阶段，但 renderer 只依赖该任务的终态
-            // 事件收敛进度 UI；缺少它会让界面停在“准备中”（系统已安装
-            // 的 aria2c 走的正是这条路径）。
-            this.#emitReadyEvent(engineId);
+            // 事件收敛进度 UI；缺少它会让界面停在“准备中”。
+            this.#emitCompleted(
+                engineId,
+                "verifying",
+                `${engineId} 运行时已就绪。`,
+            );
             return this.#readStatus(engineId);
         }
 
@@ -807,6 +870,44 @@ export class CodeRuntimeManager {
         const rootDir = codeRuntimeDir(engineId);
         const engineDownloadDir = codeRuntimeDownloadDir(engineId);
         const taskId = taskIdOf(engineId);
+
+        // ── 来源校验前移 ──
+        //
+        // 候选源为空时，此前会先写 `installing`（并带上 `installedRoot`）
+        // 再失败：界面上先闪一段“安装中”，且 `failed` 状态挂着一个从未
+        // 存在过的安装目录。把校验提到状态写入之前，失败路径只留下一条
+        // 干净的 `failed` + `lastError`。
+        //
+        // 走到这里说明系统运行时探测同样没有命中（否则上面的
+        // `assertReady` 已经返回）。错误文案交给引擎给出，最贴近该工具的
+        // 实际安装方式。
+        const defaultUrls = handler.getDefaultArchiveUrls(
+            process.platform,
+            process.arch,
+        );
+        const archiveUrls: string[] = engineCfg.archiveUrl
+            ? [engineCfg.archiveUrl]
+            : defaultUrls ?? [];
+
+        if (archiveUrls.length === 0) {
+            const message =
+                handler.getMissingRuntimeMessage?.() ??
+                `引擎 [${engineId}] 在当前平台（${process.platform}-${process.arch}）` +
+                `没有内置下载源，请配置 codeRuntime.engines.${engineId}.archiveUrl。`;
+            Logger.error(`[CodeRuntime] ${engineId} 无可用下载源：${message}`);
+            this.#writeStatus(engineId, {
+                state: "failed",
+                installedRoot: null,
+                executablePath: null,
+                phase: null,
+                message: null,
+                progress: null,
+                verifiedVersion: null,
+                lastError: message,
+            });
+            safeFail(taskId, `${engineId} 运行时初始化失败。`, message);
+            throw new Error(message);
+        }
 
         this.#checkWindowsPathLength(rootDir, engineId);
 
@@ -822,26 +923,6 @@ export class CodeRuntimeManager {
         safeReport(taskId, "preparing", `正在准备 ${engineId} 运行时...`, 5);
 
         try {
-            // 1. 确定候选 URL：用户自定义优先；否则引擎默认
-            const defaultUrls = handler.getDefaultArchiveUrls(
-                process.platform,
-                process.arch,
-            );
-            const archiveUrls: string[] = engineCfg.archiveUrl
-                ? [engineCfg.archiveUrl]
-                : defaultUrls ?? [];
-
-            if (archiveUrls.length === 0) {
-                // 走到这里说明：托管安装没有下载源，且系统运行时探测也没
-                // 命中（否则上面的 assertReady 已经返回）。错误文案交给
-                // 引擎给出，最贴近该工具的实际安装方式。
-                throw new Error(
-                    handler.getMissingRuntimeMessage?.() ??
-                    `引擎 [${engineId}] 在当前平台（${process.platform}-${process.arch}）` +
-                    `没有内置下载源，请配置 codeRuntime.engines.${engineId}.archiveUrl。`,
-                );
-            }
-
             const stripPrefix =
                 engineCfg.extractStripPrefix ??
                 handler.getDefaultExtractStripPrefix?.(
@@ -861,7 +942,7 @@ export class CodeRuntimeManager {
                 );
             }
 
-            // 2. 下载前测速
+            // 1. 下载前测速
             this.#persistProgress(
                 engineId,
                 "downloading",
@@ -913,6 +994,7 @@ export class CodeRuntimeManager {
                 }
             }
             if (orderedUrls.length === 0) {
+                // 防御：来源校验已前移，正常情况下不会到达。
                 throw new Error(`引擎 [${engineId}] 没有可用的下载源。`);
             }
 
@@ -924,7 +1006,7 @@ export class CodeRuntimeManager {
             // 所有下载源失败（Python 的 uv 只有一个国内源时会直接整体失败）。
             await fs.mkdir(engineDownloadDir, { recursive: true });
 
-            // 3. 下载（多源 failover）
+            // 2. 下载（多源 failover）
             this.#persistProgress(
                 engineId,
                 "downloading",
@@ -994,7 +1076,7 @@ export class CodeRuntimeManager {
                 );
             }
 
-            // 4. SHA256 校验
+            // 3. SHA256 校验
             const expectedSha =
                 engineCfg.archiveSha256?.toLowerCase() ??
                 (!engineCfg.archiveUrl
@@ -1025,7 +1107,7 @@ export class CodeRuntimeManager {
                 }
             }
 
-            // 5. 解压
+            // 4. 解压
             //
             // allowSymlinks 由引擎决定（Node.js Unix 需要；Windows zip
             // 内置真实 npm.cmd，无需）。默认 false 保持通用安全策略。
@@ -1052,7 +1134,7 @@ export class CodeRuntimeManager {
                 allowSymlinks,
             });
 
-            // 6. 后处理
+            // 5. 后处理
             const executablePath = join(rootDir, executableRel);
             if (!(await pathExists(executablePath))) {
                 throw new Error(
@@ -1082,7 +1164,7 @@ export class CodeRuntimeManager {
                 });
             }
 
-            // 7. 验证
+            // 6. 验证
             this.#persistProgress(
                 engineId,
                 "verifying",
@@ -1097,6 +1179,7 @@ export class CodeRuntimeManager {
             this.#writeStatus(engineId, {
                 state: "ready",
                 installedRoot: rootDir,
+                executablePath,
                 verifiedVersion: version,
                 phase: null,
                 message: null,
@@ -1105,7 +1188,7 @@ export class CodeRuntimeManager {
             });
             const doneStatus = this.#readStatus(engineId);
 
-            // 8. 自动注册工具（内部闭环；用户若已在安装过程中停用则跳过）
+            // 7. 自动注册工具（内部闭环；用户若已在安装过程中停用则跳过）
             //
             // 注册失败降级为日志：运行时已经安装并验证通过，不应因为
             // 工具表注册异常而把状态标记为 failed（否则用户会看到
@@ -1126,6 +1209,7 @@ export class CodeRuntimeManager {
             this.#writeStatus(engineId, {
                 state: "failed",
                 installedRoot: rootDir,
+                executablePath: null,
                 lastError: message,
             });
             safeFail(taskId, `${engineId} 运行时初始化失败。`, message);
