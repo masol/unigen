@@ -39,6 +39,7 @@ import {
     nodeArchiveExt,
     nodeArchiveRootDir,
 } from "./nodejs.reg.js";
+import { findSystemExecutable } from "./system.js";
 
 function platformKey(
     platform: NodeJS.Platform,
@@ -118,8 +119,11 @@ export interface NpmCommand {
  * 解析 npm 入口。
  *
  * 优先级（Unix）：
- *   1. `bin/npm`（由通用解压器 + `applyPostExtract` 恢复，与官方等价）；
- *   2. `lib/node_modules/npm/bin/npm-cli.js`（通过 node 直连兜底）。
+ *   1. `<root>/bin/npm`（托管安装）；
+ *   2. `<root>/npm`（系统安装时 rootDir 可能已经是 bin 目录）；
+ *   3. `<root>/lib/node_modules/npm/bin/npm-cli.js`（通过 node 直连兜底）；
+ *   4. `<root>/../lib/node_modules/npm/bin/npm-cli.js`（系统 Node 的
+ *      rootDir 为 `<prefix>/bin` 时的兜底）。
  * 优先级（Windows）：`npm.cmd` 真实文件，直接使用。
  *
  * 返回 null 表示运行时目录缺少 npm；调用方应显式报错。
@@ -135,21 +139,24 @@ export async function resolveNpmCommand(
             : null;
     }
 
-    const binNpm = join(rootDir, "bin", "npm");
-    if (await pathExists(binNpm)) {
-        return { command: binNpm, argsPrefix: [] };
+    const npmCandidates = [
+        join(rootDir, "bin", "npm"),
+        join(rootDir, "npm"),
+    ];
+    for (const candidate of npmCandidates) {
+        if (await pathExists(candidate)) {
+            return { command: candidate, argsPrefix: [] };
+        }
     }
 
-    const cli = join(
-        rootDir,
-        "lib",
-        "node_modules",
-        "npm",
-        "bin",
-        "npm-cli.js",
-    );
-    if (await pathExists(cli)) {
-        return { command: nodeExe, argsPrefix: [cli] };
+    const cliCandidates = [
+        join(rootDir, "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+        join(rootDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+    ];
+    for (const cli of cliCandidates) {
+        if (await pathExists(cli)) {
+            return { command: nodeExe, argsPrefix: [cli] };
+        }
     }
 
     return null;
@@ -163,6 +170,32 @@ export class NodeRuntime implements EngineRuntimeHandler {
         arch: NodeJS.Architecture,
     ): boolean {
         return NODE_PLATFORM_KEYS[platformKey(platform, arch)] !== undefined;
+    }
+
+    /**
+     * 复用系统已安装的 Node.js。
+     *
+     * 托管安装优先；安装 / 下载最终失败后，manager 会回退到这里探测
+     * PATH 中的 node / node.exe，验证通过后直接使用系统二进制。
+     */
+    async detectSystemExecutable(): Promise<string | null> {
+        return findSystemExecutable({
+            binaryNames: process.platform === "win32" ? ["node.exe"] : ["node"],
+            logLabel: "Node.js",
+        });
+    }
+
+    getMissingRuntimeMessage(): string {
+        if (process.platform === "win32") {
+            return (
+                `未检测到可用的系统 Node.js。请安装 Node.js 并将其所在目录加入 PATH 后重新启用，` +
+                `或在 codeRuntime.engines.nodejs.archiveUrl 配置自定义下载源。`
+            );
+        }
+        return (
+            `未检测到系统安装的 Node.js。请通过系统包管理器、nvm 或官方安装包安装 Node.js，` +
+            `并确保 node 在 PATH 中；也可以在 codeRuntime.engines.nodejs.archiveUrl 配置自定义下载源。`
+        );
     }
 
     getDefaultArchiveUrls(

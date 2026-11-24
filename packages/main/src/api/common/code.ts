@@ -107,10 +107,22 @@ function readCodeRuntimeConfig(): CodeRuntimeConfig {
         aria2: pickEngineConfig(current?.engines?.aria2),
     };
 
+    const anyEnabled = CODE_RUNTIME_IDS.some(
+        (id) => engines[id]?.enabled === true,
+    );
+    const enabled = (current?.enabled ?? anyEnabled) && anyEnabled;
+
+    // 总开关关闭时，引擎上的 enabled 只是 schema 默认值 / 历史残留，
+    // 不能在后续首次启用任一引擎时被一并激活。否则新安装配置中
+    // python/nodejs 的默认 enabled=true 会在启用 aria2 时一起开始安装。
+    if (!enabled) {
+        for (const id of CODE_RUNTIME_IDS) {
+            engines[id] = { ...engines[id], enabled: false };
+        }
+    }
+
     return {
-        enabled:
-            current?.enabled ??
-            Object.values(engines).some((engine) => engine.enabled),
+        enabled,
         engines,
     };
 }
@@ -260,6 +272,15 @@ const setRuntimeEnabled = os
 
         const id = input.id;
 
+        if (!input.enabled) {
+            const engineStatus = codeRuntimeManager.getState(id);
+            if (engineStatus?.state === "installing") {
+                throw new Error(
+                    `${info.name} 正在安装，请等待当前安装任务结束后再停用。`,
+                );
+            }
+        }
+
         if (input.enabled) {
             // 启用前校验运行时来源：内置下载源 / 用户自定义 archiveUrl /
             // 系统已安装的运行时（Linux 与 macOS 的 aria2 属于这一类）。
@@ -295,8 +316,11 @@ const setRuntimeEnabled = os
             (runtimeId) => engines[runtimeId]?.enabled === true,
         );
 
+        // `enabled` 是派生值：只要有任意引擎启用即为 true。
+        // 不再使用 `input.enabled ? true : ...`，避免“启用一个引擎”把
+        // 总开关关闭期间残留的其它引擎默认 enabled 一并激活。
         const next: CodeRuntimeConfig = {
-            enabled: input.enabled ? true : current.enabled && anyEnabled,
+            enabled: anyEnabled,
             engines,
         };
 

@@ -44,6 +44,7 @@
 import { probeUrls, sortByLatency } from "$libs/loader/probe.js";
 import { stableConfig } from "$libs/store/stable.js";
 import type { ToolDefinition } from "$libs/tooldb/type.js";
+import { codeRuntimeDir } from "$libs/utils/sys/dir.js";
 import Logger from "electron-log/main.js";
 import { execa } from "execa";
 import { promises as fs } from "node:fs";
@@ -307,8 +308,11 @@ async function installDependencies(
 
     // 本地隔离：npm 的 cache 与 global prefix 全部指向应用数据目录，
     // 避免污染 `~/.npm` 与 `~/.npm-global`。
-    const localPrefix = join(runtime.rootDir, "npm-global");
-    const localCache = join(runtime.rootDir, "npm-cache");
+    //
+    // 使用 codeRuntimeDir 而不是 runtime.rootDir：回退到系统 Node 时
+    // runtime.rootDir 可能是 /usr/bin 等不可写目录。
+    const localPrefix = codeRuntimeDir("nodejs", "npm-global");
+    const localCache = codeRuntimeDir("nodejs", "npm-cache");
     await fs.mkdir(localPrefix, { recursive: true });
     await fs.mkdir(localCache, { recursive: true });
 

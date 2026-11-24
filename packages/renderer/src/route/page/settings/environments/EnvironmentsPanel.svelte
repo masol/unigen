@@ -58,7 +58,7 @@
         </p>
         <p>
           <span class="font-medium text-foreground">产品定位：</span>
-          Unigen 为个人服务，默认运行于民用电脑，不替代专业训练平台或工具。
+          Unigen 为个人服务，默认运行于民用电脑，无法替代专业训练平台或工具。
         </p>
       </div>
     {/if}

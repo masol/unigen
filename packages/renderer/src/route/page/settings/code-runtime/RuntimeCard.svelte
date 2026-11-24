@@ -71,9 +71,19 @@
 
   let testing = $state(false);
   let testResult = $state<CodeRuntimeTestResult | null>(null);
+  let blockHint = $state<string | null>(null);
 
   function handleCheckedChange(next: boolean): void {
     if (unavailable) return;
+
+    if (!next && taskRunning) {
+      // 当前没有可用的安装取消接口；与其让用户误以为停用会终止安装，
+      // 不如阻止停用并明确提示等待任务结束。
+      blockHint = "安装进行中，需等待当前安装任务结束后才能停用。";
+      return;
+    }
+
+    blockHint = null;
     expanded = next;
     // 启停会改变运行环境，上一次的测试结果不再有参考意义。
     testResult = null;
@@ -224,6 +234,12 @@
       />
     </div>
   </div>
+
+  {#if taskRunning && blockHint}
+    <div class="border-t border-border/40 px-5 py-2 text-xs text-amber-700">
+      {blockHint}
+    </div>
+  {/if}
 
   <!-- 详情区：始终渲染于 DOM，通过 grid-template-rows 平滑展开/收起 -->
   <div

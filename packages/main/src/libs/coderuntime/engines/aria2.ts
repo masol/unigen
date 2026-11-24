@@ -23,14 +23,13 @@
 
 import Logger from "electron-log/main.js";
 import { execa } from "execa";
-import { constants, promises as fs } from "node:fs";
-import { isAbsolute, join, resolve as resolvePath } from "node:path";
 import type { EngineRuntimeHandler } from "../types.js";
 import {
     ARIA2_RELEASE_BASE,
     ARIA2_VERSION,
     resolveAria2Asset,
 } from "./aria2.reg.js";
+import { findSystemExecutable } from "./system.js";
 
 /** POSIX 系统 PATH 中查找的可执行文件名。 */
 const POSIX_SYSTEM_BINARY_NAME = "aria2c";
@@ -51,74 +50,6 @@ const SYSTEM_BINARY_PLATFORMS: ReadonlySet<NodeJS.Platform> = new Set([
     "darwin",
 ]);
 
-/**
- * PATH 之外额外尝试的安装目录（仅 POSIX）。
- *
- * Windows 严格只搜索 PATH，符合“用户自行安装并加入 PATH 后重新探测”
- * 的语义；不额外猜测安装目录。
- *
- * 动机：GUI 启动的桌面应用（尤其 macOS）继承的是 launchd 的最小 PATH
- * （`/usr/bin:/bin:/usr/sbin:/sbin`），Homebrew（`/opt/homebrew/bin`、
- * `/usr/local/bin`）与 MacPorts（`/opt/local/bin`）通常不在其中；
- * Linux 上 `/usr/local/bin`、`/snap/bin` 也可能缺失。
- *
- * 这些都是**只读探测**：命中后 manager 仍会执行 `aria2c --version`
- * 验证，因此不会引入误判风险；代价仅仅是几十次 `stat`。
- */
-const EXTRA_SEARCH_DIRS: Partial<Record<NodeJS.Platform, readonly string[]>> = {
-    darwin: [
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        "/opt/local/bin",
-    ],
-    linux: [
-        "/usr/local/bin",
-        "/usr/bin",
-        "/bin",
-        "/usr/sbin",
-        "/snap/bin",
-    ],
-};
-
-/**
- * 构造探测目录列表：PATH 在前，补充目录在后，去重后顺序稳定。
- *
- * PATH 分隔符按平台选择（Windows `;`，POSIX `:`）；非绝对路径条目
- * （`~` 展开、相对目录、未展开的环境变量）被丢弃：它们在 GUI 进程里
- * 依赖 cwd 或运行时展开，语义不可靠。
- */
-function buildSearchDirs(): string[] {
-    const separator = process.platform === "win32" ? ";" : ":";
-    const fromEnv = (process.env.PATH ?? "")
-        .split(separator)
-        .map((entry) => entry.trim().replace(/^"(.*)"$/, "$1"))
-        .filter((entry) => isAbsolute(entry));
-    const extra = EXTRA_SEARCH_DIRS[process.platform] ?? [];
-
-    const seen = new Set<string>();
-    const dirs: string[] = [];
-    for (const dir of [...fromEnv, ...extra]) {
-        // 归一化去掉尾部斜杠，避免同一目录被探测多次。
-        const normalized = resolvePath(dir);
-        if (seen.has(normalized)) continue;
-        seen.add(normalized);
-        dirs.push(normalized);
-    }
-    return dirs;
-}
-
-/** 目标是否为**可执行**的普通文件（POSIX 语义，不看扩展名）。 */
-async function isExecutableFile(target: string): Promise<boolean> {
-    try {
-        const info = await fs.stat(target);
-        if (!info.isFile()) return false;
-        await fs.access(target, constants.X_OK);
-        return true;
-    } catch {
-        return false;
-    }
-}
-
 export class Aria2Runtime implements EngineRuntimeHandler {
     readonly id = "aria2" as const;
 
@@ -138,8 +69,8 @@ export class Aria2Runtime implements EngineRuntimeHandler {
     /**
      * 探测系统已安装的 aria2c。
      *
-     * 探测顺序：PATH 各目录 → `EXTRA_SEARCH_DIRS`（仅 POSIX，见文件头
-     * 注释）；返回**第一个**可执行的 `aria2c` / `aria2c.exe` 绝对路径。
+     * 探测顺序：PATH 各目录 → 通用常见目录（仅 POSIX，见 system.ts）；
+     * 返回**第一个**可执行的 `aria2c` / `aria2c.exe` 绝对路径。
      *
      * 这里不做版本验证：manager 拿到路径后会调用 `verifyExecutable()`
      * 执行 `aria2c --version`，避免同一动作重复 spawn 一次进程。
@@ -147,27 +78,12 @@ export class Aria2Runtime implements EngineRuntimeHandler {
     async detectSystemExecutable(): Promise<string | null> {
         if (!SYSTEM_BINARY_PLATFORMS.has(process.platform)) return null;
 
-        const dirs = buildSearchDirs();
-        const binaryNames =
-            process.platform === "win32"
+        return findSystemExecutable({
+            binaryNames: process.platform === "win32"
                 ? [WINDOWS_SYSTEM_BINARY_NAME]
-                : [POSIX_SYSTEM_BINARY_NAME];
-
-        for (const dir of dirs) {
-            for (const name of binaryNames) {
-                const candidate = join(dir, name);
-                if (!(await isExecutableFile(candidate))) continue;
-                Logger.log(
-                    `[CodeRuntime] 检测到系统安装的 aria2：${candidate}`,
-                );
-                return candidate;
-            }
-        }
-
-        Logger.log(
-            `[CodeRuntime] 未检测到系统安装的 aria2c（已检查 ${dirs.length} 个目录）。`,
-        );
-        return null;
+                : [POSIX_SYSTEM_BINARY_NAME],
+            logLabel: "aria2c",
+        });
     }
 
     getMissingRuntimeMessage(): string {

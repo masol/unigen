@@ -22,6 +22,8 @@ import {
 } from "$libs/utils/sys/dir.js";
 import Logger from "electron-log/main.js";
 import { execa } from "execa";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { EngineRuntimeHandler, PostExtractContext } from "../types.js";
 import {
     PYPI_INDEX,
@@ -31,6 +33,7 @@ import {
     UV_BINARY_BASE,
     UV_VERSION,
 } from "./python.reg.js";
+import { findSystemExecutable } from "./system.js";
 
 function platformKey(
     platform: NodeJS.Platform,
@@ -103,6 +106,34 @@ export class PythonRuntime implements EngineRuntimeHandler {
         return resolveUvAsset(platform, arch) != null;
     }
 
+    /**
+     * 复用系统已安装的 uv。
+     *
+     * 注意：这里探测的是 uv，而不是系统 python。当前 Python 工具链完全
+     * 基于 uv（venv / pip / run 均通过 uv），直接切到系统 python 会改变
+     * 依赖安装与执行语义，属于更大的改造。
+     */
+    async detectSystemExecutable(): Promise<string | null> {
+        const extraSearchDirs = [
+            join(homedir(), ".local", "bin"),
+            join(homedir(), ".cargo", "bin"),
+        ];
+
+        return findSystemExecutable({
+            binaryNames: process.platform === "win32" ? ["uv.exe"] : ["uv"],
+            extraSearchDirs,
+            logLabel: "uv",
+        });
+    }
+
+    getMissingRuntimeMessage(): string {
+        return (
+            `未检测到可用的系统 uv。Python 运行时基于 uv 管理解释器与依赖；` +
+            `请安装 uv 并加入 PATH 后重新启用，或在 ` +
+            `codeRuntime.engines.python.archiveUrl 配置自定义下载源。`
+        );
+    }
+
     getDefaultArchiveUrls(
         platform: NodeJS.Platform,
         arch: NodeJS.Architecture,
@@ -134,6 +165,10 @@ export class PythonRuntime implements EngineRuntimeHandler {
         platform: NodeJS.Platform,
         arch: NodeJS.Architecture,
     ): string | undefined {
+        // Windows 官方 zip 的 uv.exe / uvx.exe 直接位于归档根目录；
+        // macOS / Linux 的 tar.gz 才带有 `uv-<target>/` 内层根目录。
+        if (platform === "win32") return undefined;
+
         const asset = resolveUvAsset(platform, arch);
         return asset ? `uv-${asset.target}/` : undefined;
     }
