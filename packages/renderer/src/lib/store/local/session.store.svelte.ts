@@ -7,6 +7,8 @@ import { DbKeys } from '$lib/utils/service/dbkeys';
 import { default as log } from 'electron-log/renderer';
 import { i18nStore } from '../i18n.svelte';
 import type { ChatSession, SessionPatch } from './chat.types';
+import { showAutoTaskDialog, type AutoTaskKind } from './sess/auto-task';
+import { readAutoTaskConfig } from './sess/session.types';
 
 
 // ── 类型定义 ──
@@ -38,7 +40,7 @@ class SessionStore {
      * 为什么用「数组 + 整体替换」而不是 Set：
      * $state(new Set()) 的深层响应式在「写入发生在方法内、读取穿透到另一个方法」
      * 这种间接访问路径下不可靠——add()/delete() 后，读取方的 $derived 不会重跑，
-     * 表现为「状态已变但 UI 不刷新，切换其它过滤条件后才出现」。
+     * 表现为「状态已变但 UI 不刷新，切换其它过滤条件时才出现」。
      * 数组整体替换引用能 100% 触发所有读取方的派生重算。
      * running 数量通常为 0~数个，includes 的 O(n) 开销可忽略。
      */
@@ -282,6 +284,63 @@ class SessionStore {
             log.error(`[SessionStore] setPinned() failed, id=${id}`, err)
             return false
         }
+    }
+
+    // ── 扩展配置（extra）──
+
+    /**
+     * 合并写入 session.extra 的顶层 key。
+     *
+     * 语义：**顶层浅合并**（不覆盖未提及的 key）。
+     * 服务端 updateSessionExtra 以整体替换语义持久化，合并逻辑在客户端完成，
+     * 这样调用方只需关心自己那一片配置。
+     */
+    async updateSessionExtra(
+        id: string,
+        patch: Record<string, unknown>,
+    ): Promise<boolean> {
+        const session = this.#sessions.find((s) => s.id === id)
+        if (!session) return false
+
+        const currentExtra =
+            session.extra && typeof session.extra === 'object'
+                ? session.extra
+                : {}
+        const nextExtra = { ...currentExtra, ...patch }
+
+        this.#isUpdating = true
+        try {
+            await safeApi().project.updateSessionExtra({ id, extra: nextExtra })
+            session.extra = nextExtra
+            log.info(`[SessionStore] session extra updated, id=${id}`)
+            return true
+        } catch (err) {
+            log.error(`[SessionStore] updateSessionExtra() failed, id=${id}`, err)
+            return false
+        } finally {
+            this.#isUpdating = false
+        }
+    }
+
+    /**
+     * 打开「自动任务」对话框，并在确认后写回 session.extra.autoTask。
+     *
+     * - kind 默认为 "completion"（自动续写，目前唯一完成实现的策略）；
+     * - 对话框本身按 kind 拆分到 sess/auto-*，store 只负责编排；
+     * - 取消（onCancel）时 showAutoTaskDialog 返回 null，不写库。
+     */
+    async openAutoTaskDialog(
+        sessionId: string,
+        kind: AutoTaskKind = "completion",
+    ): Promise<void> {
+        const session = this.#sessions.find((s) => s.id === sessionId)
+        if (!session) return
+
+        const initialConfig = readAutoTaskConfig(session.extra)
+        const result = await showAutoTaskDialog(kind, initialConfig)
+        if (result == null) return
+
+        await this.updateSessionExtra(sessionId, { autoTask: result })
     }
 
     // ── 运行状态（瞬态、本地）──

@@ -67,6 +67,7 @@ import {
     patchTrace,
     saveMessage,
     saveTraces,
+    updateSessionExtra,
     updateSessionPinned,
     updateSessionTitle,
     upsertTrace
@@ -252,6 +253,11 @@ export class PrjDB extends BaseProjectController implements EmbedKVStore {
     }
 
     /* ──────────── Chat: Sessions ──────────── */
+
+    updateSessionExtra(id: string,
+        extra: Record<string, unknown> | undefined): void {
+        updateSessionExtra(this.ensureDB(), id, extra);
+    }
 
     createSession(input?: NewChatSession): string {
         return createSession(this.ensureDB(), input);

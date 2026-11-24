@@ -28,6 +28,10 @@ export const chatSessionSchema = z.object({
     lastMessageAt: epochMs.optional(),
     /** 累计消息数（冗余以免每次扫表） */
     messageCount: z.number().int().nonnegative(),
+    // 会话级配置或元数据
+    extra: z.object({})
+        /** 预留任意扩展键：写入不报错，读取侧按需收窄 */
+        .catchall(z.unknown()).optional(),
 });
 
 export type ChatSession = z.infer<typeof chatSessionSchema>;

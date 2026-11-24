@@ -71,6 +71,19 @@ const createSession = os
     });
 
 
+const updateSessionExtra = os
+    .input(z.object({
+        id: z.string(),
+        extra: z.object().catchall(z.unknown()).optional()
+    }))
+    .output(z.boolean())
+    .handler(async ({ input, context }) => {
+        const ctx = context as RpcContext;
+        const prjdb = PrjDB.ensure(ctx.project);
+        prjdb.updateSessionExtra(input.id, input.extra)
+        return true;
+    });
+
 
 const updateSessTitle = os
     .input(z.object({
@@ -162,6 +175,7 @@ export default {
     listSessions,
     deleteSession,
     createSession,
+    updateSessionExtra,
     pinSession,
     updateSessTitle,
     listMessage,

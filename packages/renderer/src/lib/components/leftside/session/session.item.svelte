@@ -5,12 +5,19 @@
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { i18nStore } from "$lib/store/i18n.svelte";
   import type { ChatSession } from "$lib/store/local/chat.types";
+  import {
+    hasAnyAutoTask,
+    readAutoTaskConfig,
+  } from "$lib/store/local/sess/session.types";
   import { sessionStore } from "$lib/store/local/session.store.svelte";
   import { confirmStore } from "$lib/store/ui/confirm.svelte";
   import {
+    IconBolt,
     IconCheck,
+    IconClock,
     IconDotsVertical,
     IconEdit,
+    IconFilter,
     IconLoader2,
     IconPin,
     IconProgress,
@@ -40,6 +47,14 @@
   const isActive = $derived(sessionStore.activeSessionId === session.id);
   // 运行状态与 active/switching 正交，作为独立派生读取
   const isRunning = $derived(sessionStore.isRunning(session.id));
+
+  // 自动任务配置（派生自 session.extra，随会话更新自动重算）
+  const autoTaskConfig = $derived(readAutoTaskConfig(session.extra));
+  const hasAutoTask = $derived(hasAnyAutoTask(session.extra));
+  const completionEnabled = $derived(
+    autoTaskConfig.completion?.enabled === true,
+  );
+
   const titleToneClass = $derived(
     isRunning
       ? "font-medium text-primary"
@@ -140,6 +155,10 @@
     if (ok) {
       await sessionStore.deleteSession(session.id);
     }
+  }
+
+  async function handleOpenAutoTask() {
+    await sessionStore.openAutoTaskDialog(session.id);
   }
 </script>
 
@@ -277,6 +296,16 @@
       stroke={1.5}
     />
   {:else if !isEditing}
+    <!-- 自动任务角标：任意一项已启用时显示，位于三点菜单左侧 -->
+    {#if hasAutoTask}
+      <span
+        class="mr-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"
+        title="已配置自动任务"
+        aria-label="已配置自动任务"
+      >
+        <IconBolt class="size-3" stroke={2} />
+      </span>
+    {/if}
     <DropdownMenu.Root bind:open={isMenuOpen}>
       <DropdownMenu.Trigger>
         {#snippet child({ props })}
@@ -295,7 +324,7 @@
           </button>
         {/snippet}
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end" sideOffset={4} class="w-36">
+      <DropdownMenu.Content align="end" sideOffset={4} class="w-44">
         <DropdownMenu.Item onSelect={handlePinToggle} class="gap-2 text-xs">
           <IconPin class="size-3.5" stroke={1.5} />
           {session.pinned ? "取消置顶" : "置顶"}
@@ -305,6 +334,45 @@
           <IconEdit class="size-3.5" stroke={1.5} />
           重命名
         </DropdownMenu.Item>
+        <DropdownMenu.Separator />
+
+        <!-- 自动任务分类：与 WorkbenchHeader 视觉一致 -->
+        <DropdownMenu.Group>
+          <DropdownMenu.Label
+            class="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+          >
+            自动任务
+          </DropdownMenu.Label>
+          <DropdownMenu.Item
+            onSelect={handleOpenAutoTask}
+            class="gap-2 text-xs"
+          >
+            <IconBolt class="size-3.5" stroke={1.5} />
+            <span class="flex-1">自动续写</span>
+            {#if completionEnabled}
+              <IconCheck class="size-3.5 text-primary" stroke={2} />
+            {/if}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item disabled class="gap-2 text-xs">
+            <IconClock class="size-3.5" stroke={1.5} />
+            <span class="flex-1">定时任务</span>
+            <span
+              class="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+            >
+              即将推出
+            </span>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item disabled class="gap-2 text-xs">
+            <IconFilter class="size-3.5" stroke={1.5} />
+            <span class="flex-1">条件任务</span>
+            <span
+              class="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+            >
+              即将推出
+            </span>
+          </DropdownMenu.Item>
+        </DropdownMenu.Group>
+
         <DropdownMenu.Separator />
         <DropdownMenu.Item
           onSelect={handleDelete}

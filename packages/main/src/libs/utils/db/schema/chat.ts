@@ -11,6 +11,8 @@
 //   - trace 行入库顺序通过 `created_at` 维持，无需额外 orderIndex。
 //   - sessions.titleManual 标志用户是否手动改过标题，自动改题逻辑读它决定是否覆盖。
 //   - trace 的模型用量独立存 `usage` JSON 列（方案 B），不混入 `extra`，与 kind 解耦。
+//   - sessions.extra 为客户端扩展 JSON（标签/颜色/归档状态等），服务端仅持久化，
+//     不参与检索/排序/业务逻辑；缺省为 `{}`。
 
 import type { AgentIdentity, MessageExtra, ModelUsage } from "$types/shared/chat.js";
 import { sql } from 'drizzle-orm';
@@ -36,6 +38,15 @@ export const sessions = sqliteTable(
             .$onUpdate(() => Date.now()),
         lastMessageAt: integer('last_message_at'),
         messageCount: integer('message_count').notNull().default(0),
+        /**
+         * 客户端扩展 JSON（标签、颜色、归档状态、UI 折叠态等）。
+         * 服务端仅持久化，不参与检索/排序/业务逻辑；缺省为 `{}`。
+         * 整体替换语义由上层 updateSessionExtra 负责。
+         */
+        extra: text('extra', { mode: 'json' })
+            .$type<Record<string, unknown>>()
+            .notNull()
+            .default(sql`'{}'`),
     },
     (table) => [
         index('idx_sessions_updated_at').on(table.updatedAt),

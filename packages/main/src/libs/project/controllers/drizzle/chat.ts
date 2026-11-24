@@ -9,6 +9,7 @@
 //     读取时对缺失父节点或非法关系做容错 (挂到根)，保证返回最小可用且结构完整。
 //   - FK 名义声明；运行期 pragma foreign_keys = OFF，故删除做手工级联。
 //   - trace.usage 独立列持久化，与 kind 解耦；旧数据为 null，读取转 undefined。
+//   - sessions.extra 为客户端扩展 JSON，只持久化/读取，不参与检索/排序/业务逻辑。
 
 import { ConstUntitled } from "$libs/const.js";
 import {
@@ -67,6 +68,7 @@ export function createSession(
             title,
             titleManual,
             pinned: false,
+            extra: {},
             createdAt: now,
             updatedAt: now,
             lastMessageAt: null,
@@ -160,6 +162,28 @@ export function updateSessionPinned(
 }
 
 /**
+ * 覆盖会话级客户端扩展 JSON (`sessions.extra`)。
+ *
+ * 语义:
+ *   - **整体替换**：客户端先读取、合并后写回；服务端不做增量合并、不做解析/校验。
+ *   - 传 `undefined` -> 落库为 `{}`，与 DB default 一致，避免 null 语义歧义。
+ *   - 不刷新 updatedAt，与 updateSessionPinned 一致；避免纯 UI 状态影响服务端排序。
+ *
+ * 该字段不参与检索/排序/业务逻辑，仅供渲染端持久化 UI 扩展态。
+ */
+export function updateSessionExtra(
+    db: DrizzleDBType,
+    id: string,
+    extra: Record<string, unknown> | undefined
+): void {
+    if (!id) throwPrecondition("updateSessionExtra: id is required");
+    db.update(sessions)
+        .set({ extra: extra ?? {} })
+        .where(eq(sessions.id, id))
+        .run();
+}
+
+/**
  * 删除会话 + 其下所有 messages + 所有 traces (手工级联)
  */
 export function deleteSession(db: DrizzleDBType, id: string): void {
@@ -185,6 +209,7 @@ function rowToSession(row: typeof sessions.$inferSelect): ChatSession {
         title: row.title,
         titleManual: row.titleManual,
         pinned: row.pinned,
+        extra: row.extra ?? {},
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         lastMessageAt: row.lastMessageAt ?? undefined,

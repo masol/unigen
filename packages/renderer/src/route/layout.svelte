@@ -10,13 +10,35 @@
   import HeaderBar from "./featured/header-bar.svelte";
   import LeftSidebar from "./featured/leftside/bar.svelte";
   import RightSidebar from "./featured/rightside/bar.svelte";
+  import RouterOutlet from "./featured/router-outlet.svelte";
   import StatusBar from "./featured/status.svelte";
+
+  // 稳定的 Router 宿主：布局重塑（{#key} 切换）时此元素不会被销毁，
+  // Router 实例只创建一次；具体显示位置由 <RouterOutlet> 负责搬运。
+  //
+  // 关键点：h-full / w-full / overflow-hidden 必须挂在 routerHost 上、
+  // 而不能只挂在 RouterOutlet 里的容器上。原因：
+  //   - 一旦 routerHost 只有 display:none→移除后剩 height:auto，
+  //     它就会截断 Router 内部的文档流高度链，内部滚动容器的 h-full
+  //     会退化为 auto，scrollHeight 不再超过容器高度，滚动条消失。
+  //   - 把"满尺寸 + 裁剪"语义挂在 routerHost 上，语义上等价于
+  //     "原单层包装 div{class='h-full w-full overflow-hidden'}"，
+  //     无论它被移动到何处，只要落点父级有确定高度，链就完整。
+  let routerHost = $state<HTMLDivElement>();
 </script>
 
 <!--══════════════════════════════════════════════════════════════ -->
 <!--ROOT LAYOUT                                                  -->
 <!-- ══════════════════════════════════════════════════════════════ -->
 <Tooltip.Provider delayDuration={300}>
+  <!-- 稳定宿主：位于所有 {#key} 之外，永远不会被按键切换销毁重建。
+       初始 hidden 让它在原位不参与布局；当 <RouterOutlet> 接管时，
+       routerHost 元素被原地移动到 dst 内（class 不变），
+       hidden 被移除，h-full / w-full / overflow-hidden 生效。 -->
+  <div bind:this={routerHost} class="hidden h-full w-full overflow-hidden">
+    <Router routes={routerStore.routes} />
+  </div>
+
   <div class="flex w-full h-full flex-col bg-background">
     <!-- HeaderBar：固定在顶部 -->
     <HeaderBar />
@@ -30,85 +52,89 @@
       <!--  Resizable Panel Group-->
       <!-- ══════════════════════════════════════════════ -->
       <div class="flex-1 min-w-0 min-h-0">
-        <Resizable.PaneGroup direction="horizontal" class="h-full">
-          <!-- ── Left Sidebar Pane ── -->
-          {#if layoutStore.isLeftOpen}
-            <Resizable.Pane
-              defaultSize={layoutStore.isAnyMaximized &&
-              layoutStore.maximizedPanel === "left"
-                ? 100
-                : 20}
-              minSize={14}
-              maxSize={layoutStore.isAnyMaximized ? 100 : 45}
-            >
-              <LeftSidebar></LeftSidebar>
-            </Resizable.Pane>
-            {#if !layoutStore.isAnyMaximized}
-              <Resizable.Handle
-                class="w-px bg-transparent hover:bg-primary/30 active:bg-primary/50 transition-colors duration-200"
-              />
+        {#key layoutStore.horizontalKey}
+          <Resizable.PaneGroup direction="horizontal" class="h-full">
+            <!-- ── Left Sidebar Pane ── -->
+            {#if layoutStore.isLeftOpen}
+              <Resizable.Pane
+                defaultSize={layoutStore.isAnyMaximized &&
+                layoutStore.maximizedPanel === "left"
+                  ? 100
+                  : 20}
+                minSize={14}
+                maxSize={layoutStore.isAnyMaximized ? 100 : 45}
+              >
+                <LeftSidebar></LeftSidebar>
+              </Resizable.Pane>
+              {#if !layoutStore.isAnyMaximized}
+                <Resizable.Handle
+                  class="w-px bg-transparent hover:bg-primary/30 active:bg-primary/50 transition-colors duration-200"
+                />
+              {/if}
             {/if}
-          {/if}
 
-          <!-- ── Center Column (Editor + Bottom Panel) ── -->
-          {#if layoutStore.showMainEditor || layoutStore.maximizedPanel === "bottom"}
-            <Resizable.Pane
-              defaultSize={layoutStore.maximizedPanel === "bottom"
-                ? 100
-                : undefined}
-              minSize={30}
-            >
-              <Resizable.PaneGroup direction="vertical" class="h-full">
-                <!-- Main Editor Area -->
-                {#if layoutStore.showMainEditor}
-                  <Resizable.Pane minSize={20}>
-                    <div class="h-full w-full overflow-hidden">
-                      <Router routes={routerStore.routes} />
-                    </div>
-                  </Resizable.Pane>
-                {/if}
-                <!-- Bottom Panel -->
-                {#if layoutStore.showBottom}
-                  {#if layoutStore.showMainEditor}
-                    <Resizable.Handle
-                      class="h-px bg-transparent hover:bg-primary/30 active:bg-primary/50 transition-colors duration-200"
-                    />
-                  {/if}
-                  <Resizable.Pane
-                    defaultSize={layoutStore.maximizedPanel === "bottom"
-                      ? 100
-                      : 30}
-                    minSize={15}
-                    maxSize={layoutStore.maximizedPanel === "bottom" ? 100 : 80}
-                  >
-                    <BottomBar></BottomBar>
-                    <!-- ╭─── / BottomPanel ───╮ -->
-                  </Resizable.Pane>
-                {/if}
-              </Resizable.PaneGroup>
-            </Resizable.Pane>
-          {/if}
-
-          <!-- ── Right Sidebar Pane ── -->
-          {#if layoutStore.showRight}
-            {#if !layoutStore.isAnyMaximized}
-              <Resizable.Handle
-                class="w-px bg-transparent hover:bg-primary/30 active:bg-primary/50 transition-colors duration-200"
-              />
+            <!-- ── Center Column (Editor + Bottom Panel) ── -->
+            {#if layoutStore.showMainEditor || layoutStore.maximizedPanel === "bottom"}
+              <Resizable.Pane
+                defaultSize={layoutStore.maximizedPanel === "bottom"
+                  ? 100
+                  : undefined}
+                minSize={30}
+              >
+                {#key layoutStore.verticalKey}
+                  <Resizable.PaneGroup direction="vertical" class="h-full">
+                    <!-- Main Editor Area：只放 RouterOutlet，不再直接持有 Router -->
+                    {#if layoutStore.showMainEditor}
+                      <Resizable.Pane minSize={20}>
+                        <RouterOutlet source={routerHost} />
+                      </Resizable.Pane>
+                    {/if}
+                    <!-- Bottom Panel -->
+                    {#if layoutStore.showBottom}
+                      {#if layoutStore.showMainEditor}
+                        <Resizable.Handle
+                          class="h-px bg-transparent hover:bg-primary/30 active:bg-primary/50 transition-colors duration-200"
+                        />
+                      {/if}
+                      <Resizable.Pane
+                        defaultSize={layoutStore.maximizedPanel === "bottom"
+                          ? 100
+                          : 30}
+                        minSize={15}
+                        maxSize={layoutStore.maximizedPanel === "bottom"
+                          ? 100
+                          : 80}
+                      >
+                        <BottomBar></BottomBar>
+                        <!-- ╭─── / BottomPanel ───╮ -->
+                      </Resizable.Pane>
+                    {/if}
+                  </Resizable.PaneGroup>
+                {/key}
+              </Resizable.Pane>
             {/if}
-            <Resizable.Pane
-              defaultSize={layoutStore.isAnyMaximized &&
-              layoutStore.maximizedPanel === "right"
-                ? 100
-                : 18}
-              minSize={12}
-              maxSize={layoutStore.isAnyMaximized ? 100 : 40}
-            >
-              <!-- ╭─── / RightSidebar ───╮ -->
-              <RightSidebar />
-            </Resizable.Pane>
-          {/if}
-        </Resizable.PaneGroup>
+
+            <!-- ── Right Sidebar Pane ── -->
+            {#if layoutStore.showRight}
+              {#if !layoutStore.isAnyMaximized}
+                <Resizable.Handle
+                  class="w-px bg-transparent hover:bg-primary/30 active:bg-primary/50 transition-colors duration-200"
+                />
+              {/if}
+              <Resizable.Pane
+                defaultSize={layoutStore.isAnyMaximized &&
+                layoutStore.maximizedPanel === "right"
+                  ? 100
+                  : 18}
+                minSize={12}
+                maxSize={layoutStore.isAnyMaximized ? 100 : 40}
+              >
+                <!-- ╭─── / RightSidebar ───╮ -->
+                <RightSidebar />
+              </Resizable.Pane>
+            {/if}
+          </Resizable.PaneGroup>
+        {/key}
       </div>
     </div>
     <!-- ══════════════════════════════════════════════ -->

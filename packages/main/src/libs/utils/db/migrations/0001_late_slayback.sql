@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `extra` text DEFAULT '{}' NOT NULL;
