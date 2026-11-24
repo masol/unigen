@@ -21,7 +21,13 @@ export interface ReadyRuntime {
 export interface PostExtractContext {
     /** 运行时根目录（解压完成） */
     rootDir: string;
-    /** 入口可执行文件的绝对路径 */
+    /**
+     * 入口可执行文件的绝对路径。
+     *
+     * 该值可能是 `rootDir/<executableRelativePath>`，也可能是引擎通过
+     * `locateExecutable()` 在归档内定位到的深路径（社区构建的布局可能
+     * 与约定不一致）。后处理应以此字段为准，不要自行拼 rootDir。
+     */
     executablePath: string;
     /** 下载缓存目录（供后处理下载 get-pip.py 等辅助文件） */
     downloadDir: string;
@@ -64,14 +70,14 @@ export interface EngineRuntimeHandler {
 
     /**
      * 可选：探测**系统已安装**的运行时（例如用户通过系统包管理器安装的
-     * `aria2c`），返回**绝对**可执行文件路径；未检测到返回 `null`。
+     * `aria2c` / `ffmpeg`），返回**绝对**可执行文件路径；未检测到返回 `null`。
      *
      * 语义约定：
      *   - 托管安装目录存在时优先，系统探测是兜底；
      *   - 平台没有内置下载源、且用户没有自定义 `archiveUrl` 时，
      *     `assertReady` 会在下载前探测（Linux / macOS 的 aria2）；
      *   - 有内置下载源时，安装 / 下载最终失败后由 `manager` 回退探测
-     *     （Windows 的 aria2）；
+     *     （Windows 的 aria2、各平台的 ffmpeg）；
      *   - 上次状态为 `failed` / `interrupted` 时，`assertReady` 也会
      *     探测，使“用户自行安装后重新启用”能直接命中系统运行时；
      *   - 命中后 manager 会调用 `verifyExecutable()` 验证一次，然后把状态
@@ -100,6 +106,11 @@ export interface EngineRuntimeHandler {
      * 顺序语义：由引擎给出"官方 + 若干镜像"的候选清单；
      * 具体排序由调用方通过 `probeUrls + sortByLatency` 决定。
      * 返回 `undefined` 表示当前平台无内置源，manager 会提示用户配置 `archiveUrl`。
+     *
+     * 注意：候选**不必**共享同一套路径规则。不同构建方的归档布局可能
+     * 完全不同（例如 ffmpeg 的 Jellyfin 便携构建 vs npm 镜像上的
+     * ffmpeg-builds），此时引擎应直接给出**完整 URL**，而不是
+     * `base + filename`。
      */
     getDefaultArchiveUrls(
         platform: NodeJS.Platform,
@@ -143,6 +154,30 @@ export interface EngineRuntimeHandler {
         platform: NodeJS.Platform,
         arch: NodeJS.Architecture,
     ): string | undefined;
+
+    /**
+     * 可选：解压后**定位**入口可执行文件。
+     *
+     * 适用场景：归档内布局与 `executableRelativePath` 约定不一致。
+     * 例如 npm 镜像上的 ffmpeg 构建把二进制埋在二级目录里，而约定路径
+     * 期望它平铺在运行时根目录。此时**不应**用 `extractStripPrefix` 强凑：
+     * 同一引擎的不同镜像源布局可能不同，而 stripPrefix 只能表达一种。
+     *
+     * 调用语义：
+     *   - manager 先按 `rootDir/<executableRelativePath>` 检查，
+     *     **未命中才调用本方法**；因此常规布局（二进制平铺）不会产生
+     *     任何扫描开销；
+     *   - 必须返回 `rootDir` 内的**绝对路径**；返回 `null` 表示未找到，
+     *     manager 会按既有逻辑报“解压后未找到可执行文件”；
+     *   - manager 会把返回值写入状态的 `executablePath`（权威来源），
+     *     因此实现方必须保证该路径在本次安装后长期有效；
+     *   - 实现必须自行限制扫描范围（深度 / 条目数）并响应 `signal`，
+     *     避免异常归档把安装流程拖住。
+     */
+    locateExecutable?(ctx: {
+        rootDir: string;
+        signal?: AbortSignal;
+    }): Promise<string | null>;
 
     /**
      * 解压后、验证前执行的平台定制化步骤。

@@ -58,9 +58,10 @@
    * 是否提供「测试一下」。
    *
    * 由服务端的 `testSnippet` 决定，而不是按 `kind` 判断：语言类与工具类
-   * 运行时都各自提供了可执行的验证片段（aria2 为 `aria2c --version`），
-   * 主进程 `testRuntime` 也已覆盖工具类（`executeTestCode` 直接跑
-   * `aria2c --version`）。按 `kind` 写死会让已具备能力的 aria2 看不到入口。
+   * 运行时都各自提供了可执行的验证片段（aria2 为 `aria2c --version`，
+   * ffmpeg 为 `ffmpeg -version`），主进程 `testRuntime` 也已覆盖工具类
+   * （见 `executeTestCode` 的 `UTILITY_VERSION_ARGV`）。按 `kind` 写死会让
+   * 已具备能力的工具类看不到入口。
    */
   const canTest = $derived(!unavailable && info.testSnippet.trim().length > 0);
 
@@ -110,9 +111,9 @@
   }
 
   /**
-   * 结果条是单行展示：`aria2c --version` 这类命令会输出多行版本信息，
-   * 直接内联会把结果条撑成一块。这里取首个非空行并截断，完整输出通过
-   * 结果条自身的 title 呈现。
+   * 结果条是单行展示：`aria2c --version` / `ffmpeg -version` 这类命令会
+   * 输出多行版本信息，直接内联会把结果条撑成一块。这里取首个非空行并
+   * 截断，完整输出通过结果条自身的 title 呈现。
    */
   function formatTestOutput(raw: string): string {
     const maxLength = 80;
@@ -165,17 +166,22 @@
         <p class="truncate text-sm font-semibold text-foreground">
           {info.name}
         </p>
+        <!--
+          标签优先用服务器下发的 `badge`：同一 kind 下的语义差异（aria2 是
+          下载、ffmpeg 是音视频）无法由粗粒度 kind 表达。`sandbox` 是唯一的
+          结构性分类，保留本地文案。
+        -->
         {#if info.kind === "sandbox"}
           <span
             class="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
           >
             隔离模式
           </span>
-        {:else if info.kind === "utility"}
+        {:else if info.badge}
           <span
             class="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
           >
-            下载加速
+            {info.badge}
           </span>
         {/if}
       </div>
@@ -245,7 +251,7 @@
             class="rounded-lg bg-muted/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground"
           >
             {info.name}
-            的界面入口已预留。主进程接入下载工具后，可在这里启用多线程下载加速。
+            的界面入口已预留。主进程接入该工具后，可在这里启用。
           </div>
         </div>
       {:else if enabled}

@@ -9,18 +9,20 @@
 //     `task:update` 事件（由 `codeRuntimeManager` 推送）流式到达 renderer；
 //   - 启用前会调用 `codeRuntimeManager.assertInstallable(id)` 做可用性校验：
 //     内置下载源 / 用户自定义 archiveUrl / 系统已安装的运行时（Linux 与
-//     macOS 的 aria2）三条来源都没有时**直接抛错**，避免把配置写成
-//     enabled 后异步失败、界面长期停在 preparing；
+//     macOS 的 aria2，以及各平台的 ffmpeg）三条来源都没有时**直接抛错**，
+//     避免把配置写成 enabled 后异步失败、界面长期停在 preparing；
 //   - **配置读取必须发生在 `assertInstallable()` 之后**：该调用是异步的，
 //     期间另一个引擎可能已经启停并写盘。用进入 handler 时的快照会把那次
 //     修改整体覆盖掉；
-//   - **配置读写必须经过 `pickEngineConfig`**：持久化 schema 对
-//     `codeRuntime.engines.<id>` 是严格的（未知键会被 `unrecognized_keys`
-//     拒绝）。任何从 store 读出的引擎配置都只能以
-//     `CodeRuntimeEngineConfig` 的已知字段重新构造后再写回，否则历史
-//     遗留键 / 值为 `undefined` 的键会让整个 `set("codeRuntime", ...)` 失败；
+//   - **配置读写必须经过 `pickEngineConfig` / `buildEngineConfigs`**：
+//     回写前把每个引擎收敛为 `CodeRuntimeEngineConfig` 的已知字段，避免
+//     历史遗留键、值为 `undefined` 的键、手工编辑产生的脏值被扩散进新写入；
+//   - **引擎清单不在此文件硬编码**：`buildEngineConfigs` 遍历
+//     `CODE_RUNTIME_IDS`，新增引擎时本文件无需修改（类型由联合类型收敛）；
 //   - `testRuntime` 复用运行时对应工具的执行链（`tool.inputSchema.parse`
 //     + `tool.execute`），保证测试与正式执行完全一致；
+//   - 工具类运行时（aria2 / ffmpeg）没有“代码”概念，测试统一跑各自版本
+//     命令（见 `UTILITY_VERSION_ARGV`），由同一张表扩展；
 //   - 所有对外暴露的 `id` 字段**必须**使用 `runtimeIdSchema`（闭集枚举），
 //     否则 renderer 侧 `CodeRuntimeEntry.info.id` 的联合类型会退化为
 //     `string`，导致严格赋值失败。
@@ -37,6 +39,7 @@ import Logger from "electron-log/main.js";
 import { execa } from "execa";
 import { z } from "zod";
 import {
+    CODE_RUNTIME_IDS,
     RUNTIME_IDS,
     RUNTIME_INFO,
     isCodeRuntimeId,
@@ -50,19 +53,13 @@ import {
 /**
  * 把任意来源的引擎配置收敛为 `CodeRuntimeEngineConfig`。
  *
- * 存在的原因：持久化 schema 对 `codeRuntime.engines.<id>` 做了严格校验，
- * 而 store 里可能残留历史字段、或值为 `undefined` 的键（zod 的 strict
- * 校验对"键存在但值为 undefined"同样会报 `unrecognized_keys`）。只要
- * 把读到的对象原样 spread 回写，`set("codeRuntime", ...)` 就会被拒绝，
- * 报错形如：
- *
- *   Config schema violation: `codeRuntime/engines/aria2` must NOT have
- *   additional properties
- *
- * 因此这里做一次显式白名单重建：
- *   - 只保留接口声明的字段；
+ * 存在的原因：这里的对象会被**整体回写**到 `stableConfig`，而回写前的
+ * 现值可能来自旧版本 schema、手工编辑的 stable.json、或上一版代码写入的
+ * 历史字段。收敛带来三点确定性：
+ *   - 只保留接口声明的字段，避免未知键 / 废弃键被扩散进新写入；
  *   - 字符串字段丢弃空串与空白串（等价于"未配置"）；
- *   - `enabled` 始终产出布尔值，保证必填字段存在。
+ *   - `enabled` 始终产出布尔值，保证必填字段存在（schema 内
+ *     `required: ['enabled']`，缺它会让整次 set 被拒绝）。
  *
  * 逐字段赋值而非循环赋值，是为了让类型收窄落在编译器可见的范围内，
  * 避免 `out[field] = value` 这类联合键写入的类型陷阱。
@@ -95,17 +92,34 @@ function pickEngineConfig(raw: unknown): CodeRuntimeEngineConfig {
     return out;
 }
 
+/**
+ * 按**已知引擎清单**重建 `engines` 配置（全量、白名单字段、默认关闭）。
+ *
+ * 清单来自 `CODE_RUNTIME_IDS`，因此新增引擎时本文件无需改动。
+ * 同时保证输出对象**四个键齐全**（`Record<CodeRuntimeEngineId, ...>` 的
+ * 结构要求），使回写不依赖 store 里实际存在的键。
+ */
+function buildEngineConfigs(source: unknown): CodeRuntimeConfig["engines"] {
+    const raw = (
+        source !== null && typeof source === "object" ? source : {}
+    ) as Record<string, unknown>;
+
+    const out = {} as CodeRuntimeConfig["engines"];
+    for (const id of CODE_RUNTIME_IDS) {
+        // 编译期护栏：若 `CodeRuntimeId` 与 `CodeRuntimeEngineId` 的联合成员
+        // 出现漂移，`out[id]` 会在这里报类型错误，而不是静默写入脏数据。
+        out[id] = pickEngineConfig(raw[id]);
+    }
+    return out;
+}
+
 function readCodeRuntimeConfig(): CodeRuntimeConfig {
     const current = stableConfig().get("codeRuntime") as
         | CodeRuntimeConfig
         | undefined;
 
     return {
-        engines: {
-            python: pickEngineConfig(current?.engines?.python),
-            nodejs: pickEngineConfig(current?.engines?.nodejs),
-            aria2: pickEngineConfig(current?.engines?.aria2),
-        },
+        engines: buildEngineConfigs(current?.engines),
     };
 }
 
@@ -126,6 +140,8 @@ const runtimeInfoSchema = z.object({
     kind: z.enum(["language", "sandbox", "utility"]),
     tagline: z.string(),
     icon: z.string().optional(),
+    // 必须声明：zod 默认 strip 未知字段，漏声明会让 badge 在输出校验时被丢弃。
+    badge: z.string().optional(),
     approximateDownloadMB: z.number().optional(),
     testSnippet: z.string(),
     available: z.boolean().optional(),
@@ -256,7 +272,8 @@ const setRuntimeEnabled = os
 
         if (input.enabled) {
             // 启用前校验运行时来源：内置下载源 / 用户自定义 archiveUrl /
-            // 系统已安装的运行时（Linux 与 macOS 的 aria2 属于这一类）。
+            // 系统已安装的运行时（Linux 与 macOS 的 aria2、各平台的
+            // ffmpeg 都可能属于这一类）。
             //
             // 放在写配置之前，未安装时直接抛出面向用户的错误（提示用户
             // 自行安装后重新启用），而不是把 enabled 落盘后异步失败。
@@ -269,16 +286,11 @@ const setRuntimeEnabled = os
         // 期间用户可能在另一个引擎上完成启停并已写盘。继续使用进入
         // handler 时的快照，会把那次修改连同它的 `engines.<other>` 一起
         // 覆盖回旧值 —— 典型表现是刚启用的引擎被“退回”未启用。
+        //
+        // `readCodeRuntimeConfig()` 已保证每个引擎都是白名单字段、键齐全，
+        // 因此这里只需浅拷贝后覆盖目标引擎。
         const current = readCodeRuntimeConfig();
-
-        // 三个引擎统一走白名单重建：只要有一个引擎带着 schema 未声明的键，
-        // 整个 `set("codeRuntime", ...)` 都会被拒绝（zod 的 unrecognized_keys
-        // 报错路径会指向那个引擎）。因此不能"只清洗被修改的那一个"。
-        const engines: CodeRuntimeConfig["engines"] = {
-            python: pickEngineConfig(current.engines.python),
-            nodejs: pickEngineConfig(current.engines.nodejs),
-            aria2: pickEngineConfig(current.engines.aria2),
-        };
+        const engines: CodeRuntimeConfig["engines"] = { ...current.engines };
 
         engines[id] = {
             ...engines[id],
@@ -295,10 +307,10 @@ const setRuntimeEnabled = os
             // 启用：触发安装 → 完成后由 manager 自动注册工具。
             // 独立 fire-and-forget，不阻塞 UI 返回。
             //
-            // 对 Linux / macOS 的 aria2 来说，这里的 ensureEngine 通常是
-            // 快路径：assertReady 命中系统已安装的 aria2c，直接注册工具，
-            // 不触发下载；manager 会为该快路径同样发送
-            // `code-runtime:aria2` 的终态事件，renderer 据此收敛界面。
+            // 对 Linux / macOS 的 aria2、以及探测到系统 ffmpeg 的场景来说，
+            // 这里的 ensureEngine 通常是快路径：assertReady 命中系统已安装
+            // 的二进制，直接注册工具，不触发下载；manager 会为该快路径
+            // 同样发送 `code-runtime:<id>` 的终态事件，renderer 据此收敛界面。
             void codeRuntimeManager.ensureEngine(id).catch((error: unknown) => {
                 Logger.error(
                     `[CodeRuntime] 启用 ${id} 失败：${error instanceof Error ? error.message : String(error)
@@ -321,14 +333,25 @@ const setRuntimeEnabled = os
     });
 
 /**
+ * 工具类运行时的版本探针参数。
+ *
+ * 工具类运行时（不是代码运行时）没有“执行代码”的语义，其"测试一下"
+ * 统一是验证二进制本身可用：各跑一次版本命令即可。
+ *
+ * 语言类运行时**不在**此表内，由下方 `executeTestCode` 的代码执行分支
+ * 处理（`run_python` / `run_node`）。
+ */
+const UTILITY_VERSION_ARGV: Partial<Record<CodeRuntimeId, readonly string[]>> = {
+    aria2: ["--version"],
+    ffmpeg: ["-version"],
+};
+
+/**
  * 运行测试片段（"测试一下"按钮）。
  *
  * 复用工具的完整执行链（venv / 依赖安装 / 执行），确保测试等价于真实运行。
  * 不走正式工具注册表，因此不受"工具是否已注册"影响；但仍要求引擎处于
  * ready 且 config 已启用。
- *
- * 语言类与工具类都支持：aria2 固定执行 `aria2c --version`（见
- * `executeTestCode`）；语言类执行引擎给出的 `testSnippet` 代码。
  */
 const testRuntime = os
     .input(
@@ -407,11 +430,13 @@ async function executeTestCode(
     id: CodeRuntimeId,
     code: string,
 ): Promise<ExecutedOutput> {
-    if (id === "aria2") {
-        // 工具类运行时的"测试"是验证二进制本身可用：`code` 入参在
-        // aria2 分支不使用（UI 固定传 `aria2c --version`）。
-        const runtime = await codeRuntimeManager.assertReady("aria2");
-        const result = await execa(runtime.executablePath, ["--version"], {
+    const versionArgv = UTILITY_VERSION_ARGV[id];
+    if (versionArgv) {
+        // 工具类运行时：`code` 入参在这里不使用（UI 传的是展示用的
+        // testSnippet），实际执行统一走版本命令，与工具层对二进制的
+        // 使用方式一致。
+        const runtime = await codeRuntimeManager.assertReady(id);
+        const result = await execa(runtime.executablePath, [...versionArgv], {
             reject: false,
             windowsHide: true,
             timeout: 15_000,

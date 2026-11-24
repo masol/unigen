@@ -11,6 +11,7 @@
 
 import type { CodeRuntimeEngineId } from "$types/appconfig.js";
 import { Aria2Runtime } from "./aria2.js";
+import { FfmpegRuntime } from "./ffmpeg.js";
 import { NodeRuntime } from "./nodejs.js";
 import { PythonRuntime } from "./python.js";
 
@@ -19,7 +20,7 @@ import { PythonRuntime } from "./python.js";
  */
 export const ENGINE_CLASSES: ReadonlyArray<
     new () => import("../types.js").EngineRuntimeHandler
-> = [NodeRuntime, PythonRuntime, Aria2Runtime];
+> = [NodeRuntime, PythonRuntime, Aria2Runtime, FfmpegRuntime];
 
 /**
  * 已知引擎 id 列表。
@@ -31,6 +32,7 @@ export const KNOWN_ENGINE_IDS: CodeRuntimeEngineId[] = [
     "nodejs",
     "python",
     "aria2",
+    "ffmpeg",
 ];
 
 export function isKnownEngine(id: string): id is CodeRuntimeEngineId {

@@ -58,6 +58,8 @@ export async function initApp(initConfig: AppInitConfig) {
   // 而不是直接把主进程带走。
   installProcessErrorGuards();
 
+  // 使得xz-compat禁止自动安装解压模块。
+  process.env.LZMA_NATIVE_DISABLE = '1';
   try {
     registerSchemes();
     // 首次报告即视为"启动开始"；不再有单独的 start 语义。

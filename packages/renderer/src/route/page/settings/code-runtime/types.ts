@@ -7,7 +7,7 @@
  *   - `packages/main/src/libs/coderuntime/engines/*.reg.ts` / engines / tools；
  *   - `packages/main/src/api/common/code.cfg.ts` 中的 `RUNTIME_IDS` 与 `RUNTIME_INFO`。
  */
-export type CodeRuntimeId = 'python' | 'nodejs' | 'aria2';
+export type CodeRuntimeId = 'python' | 'nodejs' | 'aria2' | 'ffmpeg';
 
 export type CodeRuntimeStatus = 'disabled' | 'preparing' | 'ready' | 'failed';
 
@@ -19,7 +19,9 @@ export type CodeRuntimeKind = 'language' | 'sandbox' | 'utility';
  *  - 环境清单不能硬编码在 UI，未来新增语言 / 沙盒 / 工具只改后端；
  *  - 每个条目的文案（tagline / testSnippet）都面向用户，不用内部术语；
  *  - `id` 使用 `CodeRuntimeId` 联合类型，使 `safeApi().code.setRuntimeEnabled`
- *    等接口的类型与 oRPC schema 严格对齐。
+ *    等接口的类型与 oRPC schema 严格对齐；
+ *  - `badge` 也由服务器下发：同一 `kind` 下的语义差异（aria2 是下载、
+ *    ffmpeg 是音视频）无法用粗粒度 kind 表达，UI 不再做 id 硬编码判断。
  */
 export interface CodeRuntimeInfo {
     id: CodeRuntimeId;
@@ -27,6 +29,8 @@ export interface CodeRuntimeInfo {
     kind: CodeRuntimeKind;
     tagline: string;
     icon?: string;
+    /** 标题行的小标签文案（如「下载加速」「音视频」）；缺省则不显示。 */
+    badge?: string;
     approximateDownloadMB?: number;
     /** 就绪后点击"测试一下"运行的代码片段 */
     testSnippet: string;

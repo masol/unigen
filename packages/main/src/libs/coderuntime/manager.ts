@@ -12,19 +12,28 @@
 //     函数里 `new`，不依赖模块级单例；
 //   - `init()` 承担启动编排；依赖 `StableConfig` 与 `GlobalToolDB`；
 //   - **工具注册/注销内部闭环**：`ensureEngine` 成功后自动注册；
-//     `disableEngine` 负责注销；`#registerEngineTool` 永不暴露到外部；
+//     `disableEngine` 负责注销；`#registerEngineTools` 永不暴露到外部；
+//   - **一个引擎可以注册多个工具**：`#registeredTools` 按引擎记录**工具名
+//     数组**，注册阶段逐个工具幂等处理（部分成功也保留，下次只补缺失的）。
+//     ffmpeg 需要同时注册 `run_ffmpeg` 与 `probe_media`，因此不能假设
+//     “一个引擎 = 一个工具”；
 //   - **系统运行时兜底**：平台没有内置下载源时，会调用引擎的
 //     `detectSystemExecutable?()`（例如 Linux / macOS 上用户自行安装的
-//     `aria2c`）；Windows 上的 aria2 则在托管安装 / 下载最终失败后回退
-//     探测 PATH 中的 `aria2c.exe`。命中即视为 ready，**不下载、不解压**。
-//     启用前由 `assertInstallable()` 提前拦截“内置源 / 自定义 archiveUrl /
-//     系统运行时”三条来源都没有的平台；
+//     `aria2c`、各平台自行安装的 `ffmpeg`）；Windows 上的 aria2 / ffmpeg
+//     则在托管安装 / 下载最终失败后回退探测 PATH。命中即视为 ready，
+//     **不下载、不解压**。启用前由 `assertInstallable()` 提前拦截“内置源 /
+//     自定义 archiveUrl / 系统运行时”三条来源都没有的平台；
 //   - **可执行文件路径持久化**：状态里的 `executablePath` 是权威来源。
 //     系统运行时的 `installedRoot` 只是「二进制所在目录」，靠
 //     `installedRoot + executableRelativePath` 复算只有在二进制名与约定名
 //     完全一致时成立；引擎一旦探测到别名（`aria2c-1.37` 之类），复算
 //     就会落空。因此 `assertReady` 先用 `executablePath`，缺失时回落到
 //     复算并**回填**，让旧状态自动完成迁移；
+//   - **解压后定位入口**：先按 `executableRelativePath` 约定检查可执行
+//     文件；未命中且引擎实现了 `locateExecutable()` 时，交给引擎在归档内
+//     递归定位（社区构建的布局可能与约定不一致，例如 npm 镜像上的
+//     ffmpeg 把二进制埋在二级目录）。定位结果以绝对路径写入
+//     `executablePath`，后续调用走 1a 快路径，不再重复扫描；
 //   - **下载前测速**：manager 主动 `probeUrls + sortByLatency` 排序候选源；
 //   - **下载后 SHA256 校验**：`archiveSha256` 配置优先；用户未自定义
 //     `archiveUrl` 时，回落到引擎给出的默认哈希；校验失败会删除坏归档，
@@ -36,9 +45,9 @@
 //     并不存在的 `installedRoot`；
 //   - **可取消安装**：`#ensureEngineNow` 为每组安装创建一个
 //     `AbortController`，并把 `signal` 透传给 `download` / `extractArchive`
-//     / `applyPostExtract` / `verifyExecutable`；`disableEngine` 通过
-//     `.abort()` 触发取消。取消路径会清理该引擎的下载目录，避免
-//     `skipExisting` 复用不完整归档造成“永远 sha 不匹配”；
+//     / `applyPostExtract` / `verifyExecutable` / `locateExecutable`；
+//     `disableEngine` 通过 `.abort()` 触发取消。取消路径会清理该引擎的
+//     下载目录，避免 `skipExisting` 复用不完整归档造成“永远 sha 不匹配”；
 //   - **启停双向任务事件**：`ensureEngine`（安装 / 已就绪两条路径）与
 //     `disableEngine` 都会发送 `code-runtime:<engineId>` 的终态事件。
 //     renderer 的进度与工具列表刷新只订阅该事件，不再靠定时器猜测时机；
@@ -114,7 +123,7 @@ type RegisterToolFn = (
 type StatusPatch = {
     state?: CodeRuntimeEngineState;
     installedRoot?: string | null;
-    /** 入口可执行文件的完整路径；系统运行时可能不是约定的文件名。 */
+    /** 入口可执行文件的完整路径；系统运行时 / 嵌套布局下可能不是约定名。 */
     executablePath?: string | null;
     lastError?: string | null;
     phase?: string | null;
@@ -251,7 +260,7 @@ export interface EnsureEngineOptions {
  *
  * `#chains`           ：单引擎串行队列（用于 ensureEngine 串行化）；
  * `#inflight`         ：ensure 复用（同一引擎进行中调用直接排队）；
- * `#registeredTools`  ：已注册工具名（engineId → tool.name），
+ * `#registeredTools`  ：已注册工具名（engineId → tool.name[]），
  *                       与 `#chains` 一样是进程级缓存，不做持久化；
  * `#controllers`      ：**在安装期间的 AbortController**，供
  *                       `disableEngine` 触发取消；安装结束后从表中移除。
@@ -260,7 +269,8 @@ export class CodeRuntimeManager {
     #engines: Map<CodeRuntimeEngineId, EngineRuntimeHandler>;
     #chains = new Map<CodeRuntimeEngineId, Promise<unknown>>();
     #inflight = new Map<CodeRuntimeEngineId, Promise<CodeRuntimeEngineStatus>>();
-    #registeredTools = new Map<CodeRuntimeEngineId, string>();
+    /** 单引擎可注册**多个**工具（ffmpeg = run_ffmpeg + probe_media）。 */
+    #registeredTools = new Map<CodeRuntimeEngineId, string[]>();
     #controllers = new Map<CodeRuntimeEngineId, AbortController>();
     #lastProgressPersist = new Map<
         CodeRuntimeEngineId,
@@ -592,10 +602,8 @@ export class CodeRuntimeManager {
         // ── 1a. 持久化的完整可执行文件路径（权威来源） ──
         //
         // 系统运行时（Linux / macOS 的 aria2c）的 `installedRoot` 只是
-        // 「二进制所在目录」，`installedRoot + exeRel` 只有在二进制名与
-        // `executableRelativePath` 完全一致时才成立；引擎一旦探测到别名
-        // （`aria2c-1.37`、`aria2c-x86_64` 之类），复算就会指向不存在的
-        // 文件。因此显式记录的完整路径优先。
+        // 「二进制所在目录」；嵌套布局（ffmpeg 的 npm 构建）甚至与
+        // `executableRelativePath` 完全对不上。因此显式记录的完整路径优先。
         if (status.state === "ready" && status.executablePath) {
             if (await pathExists(status.executablePath)) {
                 return {
@@ -656,9 +664,9 @@ export class CodeRuntimeManager {
         //   - 平台没有内置下载源，且用户没有自定义 archiveUrl
         //     （Linux / macOS 的 aria2 正常路径）；
         //   - 上次安装 / 下载失败（`failed` / `interrupted`）。
-        //     Windows 上的 aria2 默认优先托管安装；下载失败后用户可能
-        //     已经自行安装 aria2c，此时重新启用 / 工具调用应直接探测
-        //     系统，避免重复下载。
+        //     Windows 上的 aria2 / 各平台的 ffmpeg 默认优先托管安装；
+        //     下载失败后用户可能已经自行安装，此时重新启用 / 工具调用应
+        //     直接探测系统，避免重复下载。
         //
         // 命中后写回 ready（`installedRoot` 为二进制所在目录，
         // `executablePath` 为二进制完整路径），下一次调用直接走第 1a 步，
@@ -684,8 +692,8 @@ export class CodeRuntimeManager {
         // ── 3. 磁盘自愈失败：纠正陈旧的 ready 状态 ──
         //
         // 只在 status 曾经是 ready 时写盘，避免工具调用在未安装场景下
-        // 反复写配置。系统运行时同样适用：用户卸载 aria2 后，状态会
-        // 收敛为 not_ready，重新启用时会再次触发可用性校验。
+        // 反复写配置。系统运行时同样适用：用户卸载 aria2 / ffmpeg 后，
+        // 状态会收敛为 not_ready，重新启用时会再次触发可用性校验。
         if (status.state === "ready") {
             this.#writeStatus(engineId, {
                 state: "not_ready",
@@ -707,22 +715,25 @@ export class CodeRuntimeManager {
     // ---------- 工具注册 / 注销（内部闭环） ----------
 
     /**
-     * **内部方法**：注册引擎工具。
+     * **内部方法**：注册该引擎的全部工具。
      *
      * 由 `#ensureEngineNow` 在安装成功 / 已就绪路径自动调用，外部不应直接使用。
-     * 内部检查 `#registeredTools` 与 config 启用状态，避免：
-     *   - 重复注册；
-     *   - 安装过程中用户已停用引擎导致的误注册。
+     *
+     * 幂等与部分成功的语义：
+     *   - 每个工具**单独**判断是否已注册（`#registeredTools` 是名字数组），
+     *     已注册则跳过 —— 支持“上次只成功注册了第一个工具”的场景在本次
+     *     只补第二个；
+     *   - 每成功注册一个就把名字落表，因此后续抛错也不会丢掉已成功的记录；
+     *   - 内部检查 config 启用状态，避免安装过程中用户已停用引擎导致的
+     *     误注册。
      *
      * 注册失败时会 throw；调用方必须捕获并降级处理——注册失败只意味着
      * 工具不可用，**不**意味着运行时安装失败，不应触发重新下载。
      */
-    async #registerEngineTool(
+    async #registerEngineTools(
         engineId: CodeRuntimeEngineId,
         registerTool?: RegisterToolFn,
     ): Promise<void> {
-        if (this.#registeredTools.has(engineId)) return;
-
         const cfg = stableConfig().get("codeRuntime");
         if (!cfg.engines?.[engineId]?.enabled) {
             Logger.log(
@@ -731,23 +742,29 @@ export class CodeRuntimeManager {
             return;
         }
 
-        const tool = await this.#loadEngineTool(engineId);
+        const tools = await this.#loadEngineTools(engineId);
+        const registered = this.#registeredTools.get(engineId) ?? [];
+        this.#registeredTools.set(engineId, registered);
+
         const register =
             registerTool ??
             ((def: ToolDefinition<unknown, unknown>) =>
                 globalToolDB.register(def));
 
-        try {
-            await register(tool);
-            this.#registeredTools.set(engineId, tool.name);
-            Logger.log(
-                `[CodeRuntime] 工具 ${tool.name} 已注册（engine=${engineId}）。`,
-            );
-        } catch (error) {
-            Logger.error(
-                `[CodeRuntime] 注册工具 ${tool.name} 失败：${errorMessage(error)}`,
-            );
-            throw error;
+        for (const tool of tools) {
+            if (registered.includes(tool.name)) continue;
+            try {
+                await register(tool);
+                registered.push(tool.name);
+                Logger.log(
+                    `[CodeRuntime] 工具 ${tool.name} 已注册（engine=${engineId}）。`,
+                );
+            } catch (error) {
+                Logger.error(
+                    `[CodeRuntime] 注册工具 ${tool.name} 失败：${errorMessage(error)}`,
+                );
+                throw error;
+            }
         }
     }
 
@@ -795,22 +812,24 @@ export class CodeRuntimeManager {
             await inflight.catch(() => undefined);
         }
 
-        // 3. 注销工具。
-        const name = this.#registeredTools.get(engineId);
-        if (name) {
+        // 3. 注销工具（一个引擎可能注册了多个）。
+        const names = this.#registeredTools.get(engineId);
+        if (names && names.length > 0) {
             this.#registeredTools.delete(engineId);
-            try {
-                const removed = await globalToolDB.unregister(name);
-                if (!removed) {
-                    await globalToolDB.unregister(builtinId(name));
+            for (const name of names) {
+                try {
+                    const removed = await globalToolDB.unregister(name);
+                    if (!removed) {
+                        await globalToolDB.unregister(builtinId(name));
+                    }
+                    Logger.log(
+                        `[CodeRuntime] 工具 ${name} 已注销（engine=${engineId}）。`,
+                    );
+                } catch (error) {
+                    Logger.warn(
+                        `[CodeRuntime] 注销工具 ${name} 失败：${errorMessage(error)}`,
+                    );
                 }
-                Logger.log(
-                    `[CodeRuntime] 工具 ${name} 已注销（engine=${engineId}）。`,
-                );
-            } catch (error) {
-                Logger.warn(
-                    `[CodeRuntime] 注销工具 ${name} 失败：${errorMessage(error)}`,
-                );
             }
         }
 
@@ -910,8 +929,8 @@ export class CodeRuntimeManager {
      * 内建工具清单，进度 UI 完全由该事件驱动。
      *
      * 已就绪快路径尤其需要：系统运行时（Linux / macOS 上由
-     * `detectSystemExecutable` 命中的 `aria2c`）没有任何下载 / 解压阶段
-     * 可推送，不发终态事件界面会停在 `setRuntimeEnabled` 响应里的
+     * `detectSystemExecutable` 命中的 `aria2c` / `ffmpeg`）没有任何下载 /
+     * 解压阶段可推送，不发终态事件界面会停在 `setRuntimeEnabled` 响应里的
      * “准备中”，必须离开设置页再回来才能恢复。
      *
      * 先补一条 100% 进度再收尾：进度上报同时负责在任务表中建立条目，
@@ -944,9 +963,9 @@ export class CodeRuntimeManager {
         // catch，注册失败会被当成“未就绪”，从而意外触发完整的重新下载
         // 安装流程。注册失败仅意味着工具不可用，运行时本身仍然有效。
         //
-        // 系统运行时（Linux / macOS 的 aria2c，以及 Windows 下载失败后
-        // 回退成功的 aria2c）也走这条路径：`assertReady` 命中后这里直接
-        // 注册工具返回，**不会**进入下面的下载流程。
+        // 系统运行时（Linux / macOS 的 aria2c、各平台回退成功的 ffmpeg）
+        // 也走这条路径：`assertReady` 命中后这里直接注册工具返回，
+        // **不会**进入下面的下载流程。
         let alreadyReady = false;
         try {
             await this.assertReady(engineId);
@@ -957,7 +976,7 @@ export class CodeRuntimeManager {
 
         if (alreadyReady) {
             try {
-                await this.#registerEngineTool(engineId, registerTool);
+                await this.#registerEngineTools(engineId, registerTool);
             } catch (error) {
                 Logger.error(
                     `[CodeRuntime] ${engineId} 已就绪，但工具注册失败：${errorMessage(error)}`,
@@ -1265,15 +1284,43 @@ export class CodeRuntimeManager {
                 signal,
             });
 
-            // 5. 后处理
+            // 5. 定位入口可执行文件
+            //
+            // 多数引擎解压后二进制平铺在 rootDir，与
+            // `executableRelativePath` 约定一致；少数社区构建不是 —— 例如
+            // npm 镜像上的 ffmpeg 会把二进制埋在二级目录里。
+            //
+            // 因此先按约定路径检查，未命中再交给引擎的
+            // `locateExecutable()` 递归定位。定位结果必须以**绝对路径**
+            // 写进 `executablePath`（见下方 ready 写入）：`assertReady` 的
+            // `installedRoot + executableRelativePath` 复算只在二进制名与
+            // 约定完全一致时成立，嵌套布局下会落空。
             throwIfAborted(signal, engineId);
-            const executablePath = join(rootDir, executableRel);
+            let executablePath = join(rootDir, executableRel);
+            if (
+                !(await pathExists(executablePath)) &&
+                handler.locateExecutable
+            ) {
+                const located = await handler.locateExecutable({
+                    rootDir,
+                    signal,
+                });
+                if (located && (await pathExists(located))) {
+                    Logger.log(
+                        `[CodeRuntime] ${engineId} 归档布局与约定不一致，已定位到 ${located}`,
+                    );
+                    executablePath = located;
+                }
+            }
             if (!(await pathExists(executablePath))) {
                 throw new Error(
                     `[${engineId}] 解压后未找到可执行文件：${executablePath}` +
-                    `（extractStripPrefix 可能不正确）。`,
+                    `（extractStripPrefix / locateExecutable 可能不正确）。`,
                 );
             }
+
+            // 6. 后处理
+            throwIfAborted(signal, engineId);
             if (handler.applyPostExtract) {
                 this.#persistProgress(
                     engineId,
@@ -1297,7 +1344,7 @@ export class CodeRuntimeManager {
                 });
             }
 
-            // 6. 验证
+            // 7. 验证
             throwIfAborted(signal, engineId);
             this.#persistProgress(
                 engineId,
@@ -1324,13 +1371,13 @@ export class CodeRuntimeManager {
             });
             const doneStatus = this.#readStatus(engineId);
 
-            // 7. 自动注册工具（内部闭环；用户若已在安装过程中停用则跳过）
+            // 8. 自动注册工具（内部闭环；用户若已在安装过程中停用则跳过）
             //
             // 注册失败降级为日志：运行时已经安装并验证通过，不应因为
             // 工具表注册异常而把状态标记为 failed（否则用户会看到
             // “安装失败”，但磁盘上一切正常）。
             try {
-                await this.#registerEngineTool(engineId, registerTool);
+                await this.#registerEngineTools(engineId, registerTool);
             } catch (error) {
                 Logger.error(
                     `[CodeRuntime] ${engineId} 安装成功，但工具注册失败：${errorMessage(error)}`,
@@ -1397,7 +1444,8 @@ export class CodeRuntimeManager {
             //
             // 典型场景：Windows 上的 aria2 默认走托管下载；网络不可达
             // 或归档校验失败时，用户可能已经通过包管理器安装了 aria2c。
-            // 此时直接使用 PATH 中的二进制，而不是让整个运行时不可用。
+            // ffmpeg 同理（系统级安装是常态）。此时直接使用 PATH 中的
+            // 二进制，而不是让整个运行时不可用。
             let fallbackError: string | undefined;
             try {
                 const systemRuntime = await this.#resolveSystemRuntime(
@@ -1407,7 +1455,7 @@ export class CodeRuntimeManager {
                 );
                 if (systemRuntime) {
                     try {
-                        await this.#registerEngineTool(engineId, registerTool);
+                        await this.#registerEngineTools(engineId, registerTool);
                     } catch (registerError) {
                         Logger.error(
                             `[CodeRuntime] ${engineId} 已回退到系统运行时，但工具注册失败：${errorMessage(registerError)}`,
@@ -1519,20 +1567,34 @@ export class CodeRuntimeManager {
         }
     }
 
-    async #loadEngineTool(
+    /**
+     * 加载引擎的全部工具定义。
+     *
+     * 一个引擎**可以**对应多个工具（ffmpeg = `run_ffmpeg` + `probe_media`）。
+     * 新增引擎时在此登记；工具定义本身保持 `ToolDefinition` 形状，
+     * 由 `#registerEngineTools` 逐个注册 / 注销。
+     */
+    async #loadEngineTools(
         id: CodeRuntimeEngineId,
-    ): Promise<ToolDefinition<unknown, unknown>> {
+    ): Promise<ToolDefinition<unknown, unknown>[]> {
         if (id === "python") {
             const mod = await import("./tools/python.js");
-            return mod.pythonRunTool as ToolDefinition<unknown, unknown>;
+            return [mod.pythonRunTool as ToolDefinition<unknown, unknown>];
         }
         if (id === "nodejs") {
             const mod = await import("./tools/nodejs.js");
-            return mod.nodeRunTool as ToolDefinition<unknown, unknown>;
+            return [mod.nodeRunTool as ToolDefinition<unknown, unknown>];
         }
         if (id === "aria2") {
             const mod = await import("./tools/aria2.js");
-            return mod.aria2DownloadTool as ToolDefinition<unknown, unknown>;
+            return [mod.aria2DownloadTool as ToolDefinition<unknown, unknown>];
+        }
+        if (id === "ffmpeg") {
+            const mod = await import("./tools/ffmpeg.js");
+            return [
+                mod.ffmpegRunTool as ToolDefinition<unknown, unknown>,
+                mod.probeMediaTool as ToolDefinition<unknown, unknown>,
+            ];
         }
         throw new Error(`未知的代码运行时引擎：${id}`);
     }

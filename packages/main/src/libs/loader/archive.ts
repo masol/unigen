@@ -1,8 +1,28 @@
 // packages/main/src/libs/loader/archive.ts
 //
-// 统一压缩包接口：根据后缀自动选择 zip（adm-zip）或 tar（node-tar）。
+// 统一压缩包接口：根据后缀自动选择 zip（adm-zip）、tar（node-tar）、
+// bzip2（@openpgp/unbzip2-stream）、xz（xz-compat）。
 //
-// 支持的格式：.zip / .tar / .tar.gz / .tgz / .tar.bz2 / .bz2
+// 支持的格式：
+//   - 解压：.zip / .tar / .tar.gz / .tgz / .tar.bz2 / .tbz2 / .tbz /
+//           .bz2 / .tar.xz / .txz / .xz
+//   - 创建：.zip / .tar / .tar.gz / .tgz
+//
+// xz 说明（xz-compat）：
+//   - xz-compat **只解压、不压缩**，所以 `.xz` / `.tar.xz` 只支持解压，
+//     与 `.bz2` 一致；
+//   - `.tar.xz` 先流式解压成临时 `.tar`，再走统一 tar 分支，内存占用与
+//     压缩包体积无关（不要用 `decodeXZ` 一次读整包，几百 MB 的
+//     ffmpeg 归档会直接把主进程内存打满）；
+//   - 裸 `.xz` 视为单文件，解压为去掉 `.xz` 后缀的同名文件；
+//   - `.7z` **不支持**：xz-compat 只提供 7z **条目**内 raw LZMA / LZMA2 的
+//     解码 API（`decode7zLzma` / `decode7zLzma2`），并不解析 7z 容器
+//     （容器头、编码链、文件树需要调用方自行处理）。要支持 `.7z`
+//     需另引 `node-7z` / `7zip-bin` / `7z-wasm` 之类的容器实现；
+//   - `.lzma`（lzma_alone 单文件）**不支持**：该格式需要先自行解析 13
+//     字节头（5 字节 props + 8 字节 uncompressed size）再调 `decodeLzma`，
+//     与 `.xz` / `.tar.xz` 不是同一条路径，暂不纳入，避免引入未经
+//     验证的格式解析。
 //
 // 安全（与 zip.ts 保持一致）：
 //   - 路径统一按 POSIX 处理；
@@ -25,7 +45,10 @@
 //     `catch` 与函数末尾各做一次兜底检查，保证信号中止的调用最终
 //     一定以 AbortError 结束；
 //   - bz2 / tar.bz2：解压流在 abort 时被 destroy，`pipeline` 随即失败；
-//     临时目录在 finally 中清理。
+//     临时目录在 finally 中清理；
+//   - xz / tar.xz：`pipeline` 原生 `{ signal }` 在 abort 时销毁整条流，
+//     随后本文件把取消翻译成统一的 AbortError（不依赖 Node 的错误文案）；
+//     临时目录同样在 finally 中清理。
 //
 // 兼容方案：
 //   - 本文件是**新统一入口**，建议新代码优先使用；
@@ -44,7 +67,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, posix, relative, sep } from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import * as tar from "tar";
@@ -52,7 +75,8 @@ import * as tar from "tar";
 type WebReadableStream = NodeReadableStream<Uint8Array>;
 
 const SUPPORTED_ARCHIVE_HINT =
-    ".zip / .tar / .tar.gz / .tgz / .tar.bz2 / .bz2";
+    ".zip / .tar / .tar.gz / .tgz / .tar.bz2 / .tbz2 / .tbz / .bz2 / " +
+    ".tar.xz / .txz / .xz";
 
 // ─── 取消辅助 ─────────────────────────────────────────────
 
@@ -168,18 +192,30 @@ export type ArchiveKind =
     | "tar"
     | "tar.gz"
     | "tgz"
+    | "tar.xz"
     | "tar.bz2"
     | "bz2"
+    | "xz"
     | "unsupported";
 
 export function detectArchiveKind(filePath: string): ArchiveKind {
     const lower = filePath.toLowerCase();
-    if (lower.endsWith(".tar.bz2")) return "tar.bz2";
+    // 组合后缀必须先判断：`.tar` 不会出现在 `.tar.xz` 末尾，但顺序统一
+    // 按"最长后缀优先"排列，便于后续新增格式时不需要重新排。
+    if (
+        lower.endsWith(".tar.bz2") ||
+        lower.endsWith(".tbz2") ||
+        lower.endsWith(".tbz")
+    ) {
+        return "tar.bz2";
+    }
+    if (lower.endsWith(".tar.xz") || lower.endsWith(".txz")) return "tar.xz";
     if (lower.endsWith(".zip")) return "zip";
     if (lower.endsWith(".tar.gz")) return "tar.gz";
     if (lower.endsWith(".tgz")) return "tgz";
     if (lower.endsWith(".tar")) return "tar";
     if (lower.endsWith(".bz2")) return "bz2";
+    if (lower.endsWith(".xz")) return "xz";
     return "unsupported";
 }
 
@@ -241,12 +277,38 @@ export async function extractArchive(opts: ExtractOptions): Promise<void> {
         throw makeAbortError(`解压已取消：${opts.archivePath}`);
     }
     await ensureDir(opts.targetDir);
+
     if (isZipKind(kind)) return extractZip(opts);
-    if (kind === "bz2") return extractBz2(opts);
+    if (kind === "bz2") {
+        await extractSingleFile(
+            opts,
+            singleFileEntryName(opts.archivePath, /\.bz2$/i),
+            decompressBz2ToFile,
+        );
+        return;
+    }
+    if (kind === "xz") {
+        await extractSingleFile(
+            opts,
+            singleFileEntryName(opts.archivePath, /\.xz$/i),
+            decompressXzToFile,
+        );
+        return;
+    }
     if (kind === "tar.bz2") {
         await withDecompressedTarFile(
             opts.archivePath,
             opts.signal,
+            decompressBz2ToFile,
+            (tarPath) => extractTar({ ...opts, archivePath: tarPath }),
+        );
+        return;
+    }
+    if (kind === "tar.xz") {
+        await withDecompressedTarFile(
+            opts.archivePath,
+            opts.signal,
+            decompressXzToFile,
             (tarPath) => extractTar({ ...opts, archivePath: tarPath }),
         );
         return;
@@ -325,9 +387,15 @@ async function extractZip(opts: ExtractOptions): Promise<void> {
     }
 }
 
-function bz2EntryName(archivePath: string): string {
+/**
+ * 单文件归档（`.bz2` / `.xz`）的解压产物名：去掉压缩后缀的 basename。
+ *
+ * 后缀剥离后为空、`.` 或 `..` 时回退为 `decompressed`，避免产生
+ * 无意义或非法的路径（例如文件名恰好叫 `.xz`）。
+ */
+function singleFileEntryName(archivePath: string, suffix: RegExp): string {
     const base = posix.basename(normalizeArchiveName(archivePath));
-    const stripped = base.replace(/\.bz2$/i, "");
+    const stripped = base.replace(suffix, "");
     return stripped && stripped !== "." && stripped !== ".."
         ? stripped
         : "decompressed";
@@ -413,16 +481,124 @@ async function decompressBz2ToFile(
     await pipeline(readable, createWriteStream(destPath));
 }
 
+// ─── xz 解压（xz-compat） ─────────────────────────────────
+
+type XzCompatModule = typeof import("xz-compat");
+
+let xzCompatPromise: Promise<XzCompatModule> | undefined;
+
+/**
+ * 懒加载 xz-compat。
+ *
+ * 两个原因：
+ *   1. xz-compat 在加载时**可能尝试动态安装** `lzma-native` 原生模块。
+ *      主进程启动时已设置 `LZMA_NATIVE_DISABLE=1`，但本文件可能在更早
+ *      的导入链里被顶层加载（例如被某个模块 `import`）。把真实的
+ *      `import()` 推迟到首次解压时，能保证 env 一定已生效；这里再做
+ *      一次幂等兜底，防止 loader 被独立使用（测试 / 脚本）时漏掉。
+ *   2. 只处理 zip / tar 的调用方不必在启动阶段付一次加载成本。
+ */
+function loadXzModule(): Promise<XzCompatModule> {
+    if (!xzCompatPromise) {
+        if (!process.env.LZMA_NATIVE_DISABLE) {
+            process.env.LZMA_NATIVE_DISABLE = "1";
+        }
+        xzCompatPromise = import("xz-compat");
+    }
+    return xzCompatPromise;
+}
+
+/**
+ * 流水线式解压 xz → 任意 Writable。
+ *
+ * 使用 `pipeline` 原生的 `{ signal }`（Node 15+）：abort 时会按序销毁
+ * source / decoder / destination 并 reject。相比手动挂监听，省掉了
+ * "source 的 error 没有传播给 decoder" 这类坑。
+ *
+ * 取消统一翻译成 `makeAbortError`，让上层不依赖 Node 的错误文案。
+ */
+async function runXzPipeline(
+    archivePath: string,
+    destination: Writable,
+    signal?: AbortSignal,
+): Promise<void> {
+    const { createXZDecoder } = await loadXzModule();
+    // 文档示例为 `readStream.pipe(createXZDecoder()).pipe(writeStream)`，
+    // 说明其返回的是标准 Node Transform；类型声明未暴露细化类型，
+    // 这里显式断言以匹配 pipeline 的重载。
+    const decoder = createXZDecoder() as unknown as Transform;
+
+    try {
+        const source = createReadStream(archivePath);
+        if (signal) {
+            await pipeline(source, decoder, destination, { signal });
+        } else {
+            await pipeline(source, decoder, destination);
+        }
+    } catch (err) {
+        if (signal?.aborted) {
+            throw makeAbortError(`解压已取消：${archivePath}`);
+        }
+        throw err;
+    }
+}
+
+async function decompressXzToFile(
+    archivePath: string,
+    destPath: string,
+    signal?: AbortSignal,
+): Promise<void> {
+    await ensureDir(dirname(destPath));
+    if (signal?.aborted) {
+        throw makeAbortError(`解压已取消：${archivePath}`);
+    }
+    await runXzPipeline(archivePath, createWriteStream(destPath), signal);
+}
+
+async function decompressXzToBuffer(
+    archivePath: string,
+    signal?: AbortSignal,
+): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    const sink = new Writable({
+        write(chunk, _encoding, callback) {
+            chunks.push(
+                Buffer.isBuffer(chunk)
+                    ? chunk
+                    : Buffer.from(chunk as Uint8Array),
+            );
+            callback();
+        },
+    });
+
+    await runXzPipeline(archivePath, sink, signal);
+    return Buffer.concat(chunks);
+}
+
+// ─── 组合归档（tar.bz2 / tar.xz） ─────────────────────────
+
+type DecompressToFile = (
+    archivePath: string,
+    destPath: string,
+    signal?: AbortSignal,
+) => Promise<void>;
+
+type DecompressToBuffer = (
+    archivePath: string,
+    signal?: AbortSignal,
+) => Promise<Buffer>;
+
 async function withDecompressedTarFile<T>(
     archivePath: string,
     signal: AbortSignal | undefined,
+    decompress: DecompressToFile,
     fn: (tarPath: string) => Promise<T>,
 ): Promise<T> {
-    const dir = await fs.mkdtemp(join(tmpdir(), "loader-bz2-"));
+    const dir = await fs.mkdtemp(join(tmpdir(), "loader-tar-"));
     const tarPath = join(dir, "archive.tar");
 
     try {
-        await decompressBz2ToFile(archivePath, tarPath, signal);
+        await decompress(archivePath, tarPath, signal);
         return await fn(tarPath);
     } finally {
         await fs.rm(dir, { recursive: true, force: true }).catch(
@@ -431,8 +607,12 @@ async function withDecompressedTarFile<T>(
     }
 }
 
-async function extractBz2(opts: ExtractOptions): Promise<void> {
-    let relative = bz2EntryName(opts.archivePath);
+async function extractSingleFile(
+    opts: ExtractOptions,
+    entryName: string,
+    decompress: DecompressToFile,
+): Promise<void> {
+    let relative = entryName;
 
     const prefixed = stripPathPrefix(
         relative,
@@ -462,7 +642,7 @@ async function extractBz2(opts: ExtractOptions): Promise<void> {
     }
 
     const dest = join(opts.targetDir, safeRelative);
-    await decompressBz2ToFile(opts.archivePath, dest, opts.signal);
+    await decompress(opts.archivePath, dest, opts.signal);
 
     const fileStat = await fs.stat(dest);
     opts.onEntry?.(safeRelative, fileStat.size);
@@ -668,11 +848,35 @@ export async function listArchiveEntries(
         throw makeAbortError(`列出已取消：${archivePath}`);
     }
     if (isZipKind(kind)) return listZipEntries(archivePath);
-    if (kind === "bz2") return listBz2Entries(archivePath, opts);
+    if (kind === "bz2") {
+        return listSingleFileEntries(
+            archivePath,
+            singleFileEntryName(archivePath, /\.bz2$/i),
+            decompressBz2ToBuffer,
+            opts,
+        );
+    }
+    if (kind === "xz") {
+        return listSingleFileEntries(
+            archivePath,
+            singleFileEntryName(archivePath, /\.xz$/i),
+            decompressXzToBuffer,
+            opts,
+        );
+    }
     if (kind === "tar.bz2") {
         return withDecompressedTarFile(
             archivePath,
             opts.signal,
+            decompressBz2ToFile,
+            (tarPath) => listTarEntries(tarPath),
+        );
+    }
+    if (kind === "tar.xz") {
+        return withDecompressedTarFile(
+            archivePath,
+            opts.signal,
+            decompressXzToFile,
             (tarPath) => listTarEntries(tarPath),
         );
     }
@@ -696,16 +900,17 @@ async function listZipEntries(archivePath: string): Promise<ArchiveEntry[]> {
     return entries;
 }
 
-async function listBz2Entries(
+async function listSingleFileEntries(
     archivePath: string,
+    entryName: string,
+    decompressToBuffer: DecompressToBuffer,
     opts: { signal?: AbortSignal } = {},
 ): Promise<ArchiveEntry[]> {
-    const data = await decompressBz2ToBuffer(archivePath, opts.signal);
-    const path = bz2EntryName(archivePath);
+    const data = await decompressToBuffer(archivePath, opts.signal);
 
     return [
         {
-            path,
+            path: entryName,
             isDirectory: false,
             size: data.length,
             read: async () => data,
@@ -804,7 +1009,11 @@ export interface CreateArchiveResult {
  * 创建归档。
  *
  * 支持 .zip / .tar / .tar.gz / .tgz。
- * .tar.bz2 / .bz2 暂不支持创建（Node 无内置 bzip2 编码器）。
+ * .tar.bz2 / .bz2 / .tar.xz / .xz 均不支持创建：
+ *   - Node 无内置 bzip2 编码器；
+ *   - xz-compat 明确只提供解压（“This package decompresses; it does not
+ *     create XZ or LZMA archives”），要生成 xz 需依赖系统 `xz` 命令或
+ *     另引编码器实现。
  *
  * 安全约束：
  * - 输出文件不能位于源目录内部（避免把正在写入的归档包含进自身）；
@@ -818,7 +1027,9 @@ export async function createArchive(
     if (
         kind === "unsupported" ||
         kind === "tar.bz2" ||
-        kind === "bz2"
+        kind === "bz2" ||
+        kind === "tar.xz" ||
+        kind === "xz"
     ) {
         throw new Error(
             `不支持的归档格式：${opts.outputPath}。` +

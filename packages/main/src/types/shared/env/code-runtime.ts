@@ -17,19 +17,22 @@
  *
  * 命名沿用历史叫法「CodeRuntime」，实际语义是 **本机运行时 / 工具**：
  * 既包含语言运行时（Python / Node.js），也包含可复用的命令行工具
- * （如 aria2 这类下载工具）。它们共享同一套安装 / 验证 / 工具注册流程。
+ * （如 aria2 这类下载工具、ffmpeg 这类音视频工具）。它们共享同一套
+ * 安装 / 验证 / 工具注册流程。
  *
  * 新增引擎时：
  *   1. 扩充本联合类型；
  *   2. 同步 `stable.schema.ts` 中 `codeRuntime.engines` 与
- *      `codeRuntimeStatus.engines` 的 schema 键；
+ *      `codeRuntimeStatus.engines` 的 schema 键（**可选**：schema 已是
+ *      `additionalProperties: true`，补进 `properties` 只是为了获得字段级
+ *      校验与默认值）；
  *   3. 在 `engines/` 下提供 `EngineRuntimeHandler` 实现（并在
  *      `engines/index.js` 的 `ENGINE_CLASSES` / `KNOWN_ENGINE_IDS` 里登记）；
  *   4. 在 `tools/` 下提供对应工具（由 `CodeRuntimeManager` 自动注册 / 注销）；
  *   5. 同步 `api/common/code.cfg.ts` 的 `RUNTIME_IDS / CODE_RUNTIME_IDS /
  *      RUNTIME_INFO`，让 renderer 侧的设置页可见可控。
  */
-export type CodeRuntimeEngineId = "python" | "nodejs" | "aria2";
+export type CodeRuntimeEngineId = "python" | "nodejs" | "aria2" | "ffmpeg";
 
 /**
  * 引擎在磁盘上的状态机。
@@ -60,9 +63,9 @@ export interface CodeRuntimeEngineConfig {
      * - 缺省时由引擎实现按平台给出默认值（中国区自动切换国内镜像）；
      * - 提供时优先于引擎默认（**单源**，不再做镜像探测）。
      *
-     * 支持 `.zip` / `.tar` / `.tar.gz` / `.tgz`；各引擎会按自身官方
-     * 发布的格式约定选择（例如 aria2 只使用官方 zip、Node.js 在
-     * Windows 用 zip、其他平台用 tar.gz）。
+     * 支持 `.zip` / `.tar` / `.tar.gz` / `.tgz` / `.tar.xz`；各引擎会按自身
+     * 官方发布的格式约定选择（例如 aria2 只使用官方 zip、Node.js 在
+     * Windows 用 zip、ffmpeg 使用 zip 或 tar.xz）。
      */
     archiveUrl?: string;
     /** 归档 SHA256（hex）。提供则下载后校验，缺失则跳过。 */
@@ -70,13 +73,16 @@ export interface CodeRuntimeEngineConfig {
     /**
      * 解压后需要剥离的路径前缀，例如 `node-v20.17.0-win-x64/`。
      * 起始前缀，不允许中间段；末尾斜杠可省。
+     *
+     * 注意：只能表达**一种**布局。若同一引擎的不同镜像源布局不同
+     * （ffmpeg 即属此类），应留空并由引擎的 `locateExecutable()` 处理。
      */
     extractStripPrefix?: string;
     /** 入口可执行文件相对运行时根的路径，例如 `python.exe`。 */
     executableRelativePath?: string;
     /**
      * pip / npm 等包管理器的额外源配置；缺省使用内置默认（中国区自动注入镜像）。
-     * 不使用包管理器的工具类引擎（如 aria2）忽略此字段。
+     * 不使用包管理器的工具类引擎（如 aria2 / ffmpeg）忽略此字段。
      */
     registry?: string;
 }
@@ -104,8 +110,8 @@ export interface CodeRuntimeEngineStatus {
      *
      * 两种来源：
      *   - 托管安装：`<userData>/runtime/code/<engineId>/`；
-     *   - 系统已安装的运行时（如 Linux / macOS 的 aria2c）：可执行文件
-     *     所在目录（例如 `/usr/bin`）。
+     *   - 系统已安装的运行时（如 Linux / macOS 的 aria2c、ffmpeg）：
+     *     可执行文件所在目录（例如 `/usr/bin`）。
      *
      * **不再是入口路径的唯一来源**：入口以 `executablePath` 为准。
      * 本字段现在只承担两个用途：
@@ -119,9 +125,11 @@ export interface CodeRuntimeEngineStatus {
      * 入口可执行文件的**完整路径**（权威来源）。
      *
      * 为什么必须独立存储：`installedRoot + executableRelativePath` 的复算
-     * 只有在二进制名与引擎声明完全一致时才成立。系统探测到的运行时可能
-     * 是别名（例如 `aria2c-1.37`、`aria2c-x86_64`），复算会指向不存在的
-     * 文件，把「运行时其实可用」误判成需要重装。
+     * 只在两种情况下成立：二进制名与引擎声明完全一致、且二进制平铺在根
+     * 目录。系统探测到的运行时可能是别名（`aria2c-1.37`、`aria2c-x86_64`）；
+     * 社区构建的归档还可能把二进制埋在子目录里（npm 镜像上的 ffmpeg）。
+     * 这两种情况下复算都会指向不存在的文件，把「运行时其实可用」误判成
+     * 需要重装。
      *
      * 兼容性：升级前的状态没有本字段，`assertReady` 在复算命中后回填；
      * 复算也落空时按既有磁盘自愈逻辑收敛为 `not_ready`。

@@ -5,25 +5,27 @@
 
 import { z } from "zod";
 
-export const runtimeIdSchema = z.enum(["python", "nodejs", "aria2"]);
+export const runtimeIdSchema = z.enum(["python", "nodejs", "aria2", "ffmpeg"]);
 export type RuntimeId = z.infer<typeof runtimeIdSchema>;
 
 export const RUNTIME_IDS = [
     "python",
     "nodejs",
     "aria2",
+    "ffmpeg",
 ] as const satisfies readonly RuntimeId[];
 
 /**
  * 由 codeRuntimeManager 托管的运行时。
  *
- * aria2 是工具类运行时，不是“代码运行时”，但仍复用同一套安装 / 验证 /
- * 工具注册流程，因此也纳入该清单。
+ * aria2 / ffmpeg 是工具类运行时，不是“代码运行时”，但仍复用同一套安装 /
+ * 验证 / 工具注册流程，因此也纳入该清单。
  */
 export const CODE_RUNTIME_IDS = [
     "python",
     "nodejs",
     "aria2",
+    "ffmpeg",
 ] as const satisfies readonly RuntimeId[];
 export type CodeRuntimeId = (typeof CODE_RUNTIME_IDS)[number];
 
@@ -41,6 +43,16 @@ export interface RuntimeInfo {
     kind: RuntimeKind;
     tagline: string;
     icon?: string;
+    /**
+     * 卡片标题行的小标签（例如 aria2 的「下载加速」、ffmpeg 的「音视频」）。
+     *
+     * 为什么不直接由 `kind` 映射文案：`kind` 是粗粒度分类
+     * （language / sandbox / utility），同一分类下的运行时语义差异很大 ——
+     * aria2 是下载工具、ffmpeg 是音视频处理器，都归为 utility 却需要不同
+     * 文案。让服务器逐项声明，UI 就不必再写 `id === "aria2"` 这类
+     * 硬编码判断（见 RuntimeCard.svelte）。
+     */
+    badge?: string;
     approximateDownloadMB?: number;
     /** 就绪后点击"测试一下"运行的代码片段 */
     testSnippet: string;
@@ -78,7 +90,22 @@ export const RUNTIME_INFO: Record<RuntimeId, RuntimeInfo> = {
         kind: "utility",
         tagline: "多线程下载工具，为模型与依赖提供更稳定、快速的下载。",
         icon: "IconDownload",
+        badge: "下载加速",
         approximateDownloadMB: 5,
         testSnippet: "aria2c --version",
+    },
+    ffmpeg: {
+        id: "ffmpeg",
+        name: "FFmpeg",
+        kind: "utility",
+        // 同样保持笼统：ffmpeg 的能力面极大（转码 / 裁剪 / 抽帧 / 封装 /
+        // 滤镜……），罗列具体动作反而容易让用户以为只支持列出的那些。
+        tagline: "让 AI 处理音视频：转码、裁剪、抽帧、封装。",
+        // tabler 标准图标；语义上比通用的 IconCode 更贴合本工具。
+        icon: "IconPhotoVideo",
+        badge: "音视频",
+        // Jellyfin 便携构建（win64 ~65MB）是主源；npm 备源更大（~134MB）。
+        approximateDownloadMB: 70,
+        testSnippet: "ffmpeg -version",
     },
 };
