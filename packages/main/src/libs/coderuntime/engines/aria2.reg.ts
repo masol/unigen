@@ -5,9 +5,10 @@
 // 官方 Release 只提供 Windows 二进制与 Android 构建；桌面 Linux / macOS
 // 没有可直接下载的独立二进制，因此**托管安装**只声明 Windows x64 / ia32。
 //
-// Linux / macOS 不走托管安装，改由 `aria2.ts` 探测系统已安装的 aria2c
-// （`EngineRuntimeHandler.detectSystemExecutable`）；未安装时由
-// `getMissingRuntimeMessage()` 提示用户自行安装后重新启用。
+// Linux / macOS 正常路径直接探测系统已安装的 aria2c；Windows 仍优先托管
+// 安装，但托管安装 / 下载最终失败后会回退探测 PATH 中的 `aria2c.exe`
+// （见 `aria2.ts` / `manager.ts`）。未检测到时提示用户自行安装并加入
+// PATH 后重新探测。
 // 不支持的平台不做“源码编译”这类副作用路径。
 
 /** 当前固定的 aria2 版本。 */
@@ -38,7 +39,8 @@ export interface Aria2Asset {
  *     使用系统已安装的 aria2c；未安装时 `getMissingRuntimeMessage()` 会
  *     提示用户自行安装后重新启用；
  *   - Windows ARM64 同样没有官方资产，`hasDefaultArchive()` 为 false，
- *     `getMissingRuntimeMessage()` 会提示配置 `archiveUrl`。
+ *     `getMissingRuntimeMessage()` 会提示用户自行安装 aria2 并加入 PATH，
+ *     或配置 `archiveUrl`。
  */
 export const ARIA2_ASSETS: Record<string, Aria2Asset> = {
     "win32-x64": {

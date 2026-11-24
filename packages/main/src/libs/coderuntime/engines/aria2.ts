@@ -2,14 +2,18 @@
 //
 // aria2 运行时引擎。
 //
-// 两条安装路径：
+// 三条路径：
 //
-//   - **Windows**：官方 Release 提供独立二进制，由 manager 下载 / 解压 /
-//     校验后托管在 `runtime/code/aria2/`，版本由 `aria2.reg.ts` 固定；
-//   - **Linux / macOS**：官方 Release 没有桌面二进制，改为使用**系统已
-//     安装的 aria2c**（`detectSystemExecutable()`）。命中时不下载、不解压，
-//     直接把系统二进制的绝对路径交给工具层；未命中则抛面向用户的错误，
-//     提示用户自行安装后重新启用。
+//   - **Windows（优先托管）**：官方 Release 提供独立二进制，由 manager
+//     下载 / 解压 / 校验后托管在 `runtime/code/aria2/`，版本由
+//     `aria2.reg.ts` 固定；
+//   - **Windows（下载失败兜底）**：托管安装 / 下载最终失败后，回退探测
+//     PATH 中的 `aria2c.exe`。若命中则直接使用系统二进制；若未命中，
+//     提示用户自行安装并加入 PATH 后重新探测；
+//   - **Linux / macOS**：官方 Release 没有桌面二进制，正常路径直接使用
+//     系统已安装的 `aria2c`（`detectSystemExecutable()`）。命中时不下载、
+//     不解压，直接把系统二进制的绝对路径交给工具层；未命中则抛面向
+//     用户的错误，提示用户自行安装后重新启用。
 //
 // 为什么 Linux / macOS 不做源码编译或第三方二进制分发：
 //   - 编译有副作用（需要工具链、耗时不控、失败面大）；
@@ -20,7 +24,7 @@
 import Logger from "electron-log/main.js";
 import { execa } from "execa";
 import { constants, promises as fs } from "node:fs";
-import { join, resolve as resolvePath } from "node:path";
+import { isAbsolute, join, resolve as resolvePath } from "node:path";
 import type { EngineRuntimeHandler } from "../types.js";
 import {
     ARIA2_RELEASE_BASE,
@@ -28,22 +32,30 @@ import {
     resolveAria2Asset,
 } from "./aria2.reg.js";
 
-/** 系统 PATH 中查找的可执行文件名。 */
-const SYSTEM_BINARY_NAME = "aria2c";
+/** POSIX 系统 PATH 中查找的可执行文件名。 */
+const POSIX_SYSTEM_BINARY_NAME = "aria2c";
+
+/** Windows 系统 PATH 中查找的可执行文件名。 */
+const WINDOWS_SYSTEM_BINARY_NAME = "aria2c.exe";
 
 /**
- * 使用**系统已安装** aria2c 的平台。
+ * 允许探测系统已安装 aria2c 的平台。
  *
- * Windows 仍走官方 Release 托管安装：官方确实提供桌面二进制，托管安装
- * 版本可控、行为确定，因此不让系统 PATH 里的二进制抢占它。
+ * - Linux / macOS：没有官方桌面二进制，正常路径直接使用系统安装；
+ * - Windows：默认优先托管安装；只有托管安装 / 下载最终失败后，
+ *   manager 才会回退到这里探测 PATH 中的 `aria2c.exe`。
  */
 const SYSTEM_BINARY_PLATFORMS: ReadonlySet<NodeJS.Platform> = new Set([
+    "win32",
     "linux",
     "darwin",
 ]);
 
 /**
- * PATH 之外额外尝试的安装目录。
+ * PATH 之外额外尝试的安装目录（仅 POSIX）。
+ *
+ * Windows 严格只搜索 PATH，符合“用户自行安装并加入 PATH 后重新探测”
+ * 的语义；不额外猜测安装目录。
  *
  * 动机：GUI 启动的桌面应用（尤其 macOS）继承的是 launchd 的最小 PATH
  * （`/usr/bin:/bin:/usr/sbin:/sbin`），Homebrew（`/opt/homebrew/bin`、
@@ -71,15 +83,16 @@ const EXTRA_SEARCH_DIRS: Partial<Record<NodeJS.Platform, readonly string[]>> = {
 /**
  * 构造探测目录列表：PATH 在前，补充目录在后，去重后顺序稳定。
  *
- * 只在 POSIX 平台上被调用（Windows 不参与系统二进制探测），因此用 `:`
- * 作分隔符即可。PATH 中非绝对路径的条目（`~` 展开、相对目录）被丢弃：
- * 它们在 GUI 进程里依赖 cwd，语义不可靠。
+ * PATH 分隔符按平台选择（Windows `;`，POSIX `:`）；非绝对路径条目
+ * （`~` 展开、相对目录、未展开的环境变量）被丢弃：它们在 GUI 进程里
+ * 依赖 cwd 或运行时展开，语义不可靠。
  */
 function buildSearchDirs(): string[] {
+    const separator = process.platform === "win32" ? ";" : ":";
     const fromEnv = (process.env.PATH ?? "")
-        .split(":")
-        .map((entry) => entry.trim())
-        .filter((entry) => entry.startsWith("/"));
+        .split(separator)
+        .map((entry) => entry.trim().replace(/^"(.*)"$/, "$1"))
+        .filter((entry) => isAbsolute(entry));
     const extra = EXTRA_SEARCH_DIRS[process.platform] ?? [];
 
     const seen = new Set<string>();
@@ -125,8 +138,8 @@ export class Aria2Runtime implements EngineRuntimeHandler {
     /**
      * 探测系统已安装的 aria2c。
      *
-     * 探测顺序：PATH 各目录 → `EXTRA_SEARCH_DIRS`（见文件头注释）；
-     * 返回**第一个**可执行的 `aria2c` 绝对路径。
+     * 探测顺序：PATH 各目录 → `EXTRA_SEARCH_DIRS`（仅 POSIX，见文件头
+     * 注释）；返回**第一个**可执行的 `aria2c` / `aria2c.exe` 绝对路径。
      *
      * 这里不做版本验证：manager 拿到路径后会调用 `verifyExecutable()`
      * 执行 `aria2c --version`，避免同一动作重复 spawn 一次进程。
@@ -135,13 +148,20 @@ export class Aria2Runtime implements EngineRuntimeHandler {
         if (!SYSTEM_BINARY_PLATFORMS.has(process.platform)) return null;
 
         const dirs = buildSearchDirs();
+        const binaryNames =
+            process.platform === "win32"
+                ? [WINDOWS_SYSTEM_BINARY_NAME]
+                : [POSIX_SYSTEM_BINARY_NAME];
+
         for (const dir of dirs) {
-            const candidate = join(dir, SYSTEM_BINARY_NAME);
-            if (!(await isExecutableFile(candidate))) continue;
-            Logger.log(
-                `[CodeRuntime] 检测到系统安装的 aria2：${candidate}`,
-            );
-            return candidate;
+            for (const name of binaryNames) {
+                const candidate = join(dir, name);
+                if (!(await isExecutableFile(candidate))) continue;
+                Logger.log(
+                    `[CodeRuntime] 检测到系统安装的 aria2：${candidate}`,
+                );
+                return candidate;
+            }
         }
 
         Logger.log(
@@ -151,6 +171,13 @@ export class Aria2Runtime implements EngineRuntimeHandler {
     }
 
     getMissingRuntimeMessage(): string {
+        if (process.platform === "win32") {
+            return (
+                `未检测到可用的系统 aria2（或系统版本验证失败）。` +
+                `请自行安装 aria2 并将其所在目录加入 PATH 后重新启用或重试，` +
+                `也可以在 codeRuntime.engines.aria2.archiveUrl 配置自定义下载源。`
+            );
+        }
         if (!SYSTEM_BINARY_PLATFORMS.has(process.platform)) {
             return (
                 `aria2 在当前平台（${process.platform}-${process.arch}）没有内置下载源，` +

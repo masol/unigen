@@ -14,9 +14,10 @@
 //     `disableEngine` 负责注销；`#registerEngineTool` 永不暴露到外部；
 //   - **系统运行时兜底**：平台没有内置下载源时，会调用引擎的
 //     `detectSystemExecutable?()`（例如 Linux / macOS 上用户自行安装的
-//     `aria2c`）；命中即视为 ready，**不下载、不解压**。启用前由
-//     `assertInstallable()` 提前拦截“内置源 / 自定义 archiveUrl / 系统
-//     运行时”三条来源都没有的平台；
+//     `aria2c`）；Windows 上的 aria2 则在托管安装 / 下载最终失败后回退
+//     探测 PATH 中的 `aria2c.exe`。命中即视为 ready，**不下载、不解压**。
+//     启用前由 `assertInstallable()` 提前拦截“内置源 / 自定义 archiveUrl /
+//     系统运行时”三条来源都没有的平台；
 //   - **可执行文件路径持久化**：状态里的 `executablePath` 是权威来源。
 //     系统运行时的 `installedRoot` 只是「二进制所在目录」，靠
 //     `installedRoot + executableRelativePath` 复算只有在二进制名与约定名
@@ -419,6 +420,9 @@ export class CodeRuntimeManager {
     /**
      * 安全包装：探测系统已安装的运行时。
      *
+     * 调用场景：`assertReady` 在无内置源 / 上次失败时；以及
+     * `#ensureEngineNow` 在安装失败后的兜底路径。
+     *
      * 失败（PATH 异常、引擎实现抛错等）一律降级为 null 并保留日志原因：
      * 探测失败的信息量远小于“把异常抛给不知情的调用方”。
      */
@@ -463,6 +467,44 @@ export class CodeRuntimeManager {
                 `${errorMessage(error)}。请修复或重新安装后重试。`,
             );
         }
+    }
+
+    /**
+     * 探测并验证系统运行时，成功后写入 ready 状态。
+     *
+     * 返回 null 表示未探测到系统运行时；探测到但验证失败会抛出面向
+     * 用户的错误。调用方负责后续的工具注册与任务事件：
+     *   - `assertReady` 只返回运行期上下文；
+     *   - 安装失败后的兜底路径需要额外注册工具并发送终态事件。
+     */
+    async #resolveSystemRuntime(
+        engineId: CodeRuntimeEngineId,
+        handler: EngineRuntimeHandler,
+    ): Promise<ReadyRuntime | null> {
+        const systemExe = await this.#detectSystemExecutable(engineId);
+        if (!systemExe) return null;
+
+        const systemRoot = dirname(systemExe);
+        const version = await this.#verifySystemExecutable(
+            engineId,
+            handler,
+            systemExe,
+        );
+        this.#writeStatus(engineId, {
+            state: "ready",
+            installedRoot: systemRoot,
+            executablePath: systemExe,
+            verifiedVersion: version,
+            lastError: null,
+            phase: null,
+            message: null,
+            progress: 100,
+        });
+        return {
+            engine: engineId,
+            executablePath: systemExe,
+            rootDir: systemRoot,
+        };
     }
 
     /**
@@ -575,35 +617,37 @@ export class CodeRuntimeManager {
             };
         }
 
-        // ── 2. 系统已安装的运行时（Linux / macOS 上的 aria2c） ──
+        // ── 2. 系统已安装的运行时 ──
         //
         // 与托管安装的关系：**托管安装优先**（版本可控），这里是兜底。
+        //
+        // 探测条件：
+        //   - 平台没有内置下载源，且用户没有自定义 archiveUrl
+        //     （Linux / macOS 的 aria2 正常路径）；
+        //   - 上次安装 / 下载失败（`failed` / `interrupted`）。
+        //     Windows 上的 aria2 默认优先托管安装；下载失败后用户可能
+        //     已经自行安装 aria2c，此时重新启用 / 工具调用应直接探测
+        //     系统，避免重复下载。
+        //
         // 命中后写回 ready（`installedRoot` 为二进制所在目录，
         // `executablePath` 为二进制完整路径），下一次调用直接走第 1a 步，
         // 不再重复探测。
-        const systemExe = await this.#detectSystemExecutable(engineId);
-        if (systemExe) {
-            const systemRoot = dirname(systemExe);
-            const version = await this.#verifySystemExecutable(
+        const engineCfg = stableConfig().get("codeRuntime")?.engines?.[engineId];
+        const hasCustomArchive = Boolean(engineCfg?.archiveUrl?.trim());
+        const hasDefaultArchive = handler.hasDefaultArchive(
+            process.platform,
+            process.arch,
+        );
+        if (
+            status.state === "failed" ||
+            status.state === "interrupted" ||
+            (!hasCustomArchive && !hasDefaultArchive)
+        ) {
+            const systemRuntime = await this.#resolveSystemRuntime(
                 engineId,
                 handler,
-                systemExe,
             );
-            this.#writeStatus(engineId, {
-                state: "ready",
-                installedRoot: systemRoot,
-                executablePath: systemExe,
-                verifiedVersion: version,
-                lastError: null,
-                phase: null,
-                message: null,
-                progress: 100,
-            });
-            return {
-                engine: engineId,
-                executablePath: systemExe,
-                rootDir: systemRoot,
-            };
+            if (systemRuntime) return systemRuntime;
         }
 
         // ── 3. 磁盘自愈失败：纠正陈旧的 ready 状态 ──
@@ -834,8 +878,9 @@ export class CodeRuntimeManager {
         // catch，注册失败会被当成“未就绪”，从而意外触发完整的重新下载
         // 安装流程。注册失败仅意味着工具不可用，运行时本身仍然有效。
         //
-        // 系统运行时（Linux / macOS 的 aria2c）也走这条路径：`assertReady`
-        // 命中后这里直接注册工具返回，**不会**进入下面的下载流程。
+        // 系统运行时（Linux / macOS 的 aria2c，以及 Windows 下载失败后
+        // 回退成功的 aria2c）也走这条路径：`assertReady` 命中后这里直接
+        // 注册工具返回，**不会**进入下面的下载流程。
         let alreadyReady = false;
         try {
             await this.assertReady(engineId);
@@ -1204,8 +1249,53 @@ export class CodeRuntimeManager {
             safeComplete(taskId, `${engineId} 运行时已就绪。`);
             return doneStatus;
         } catch (error) {
-            const message = errorMessage(error);
-            Logger.error(`[CodeRuntime] ${engineId} 初始化失败：${message}`);
+            const originalMessage = errorMessage(error);
+            Logger.error(`[CodeRuntime] ${engineId} 初始化失败：${originalMessage}`);
+
+            // 安装 / 下载最终失败后，回退探测系统已安装的运行时。
+            //
+            // 典型场景：Windows 上的 aria2 默认走托管下载；网络不可达
+            // 或归档校验失败时，用户可能已经通过包管理器安装了 aria2c。
+            // 此时直接使用 PATH 中的二进制，而不是让整个运行时不可用。
+            let fallbackError: string | undefined;
+            try {
+                const systemRuntime = await this.#resolveSystemRuntime(
+                    engineId,
+                    handler,
+                );
+                if (systemRuntime) {
+                    try {
+                        await this.#registerEngineTool(engineId, registerTool);
+                    } catch (registerError) {
+                        Logger.error(
+                            `[CodeRuntime] ${engineId} 已回退到系统运行时，但工具注册失败：${errorMessage(registerError)}`,
+                        );
+                    }
+                    this.#emitCompleted(
+                        engineId,
+                        "verifying",
+                        `${engineId} 已回退到系统已安装的运行时。`,
+                    );
+                    return this.#readStatus(engineId);
+                }
+            } catch (fallbackException) {
+                fallbackError = errorMessage(fallbackException);
+                Logger.error(
+                    `[CodeRuntime] ${engineId} 回退系统运行时失败：${fallbackError}`,
+                );
+            }
+
+            const hint = handler.getMissingRuntimeMessage?.();
+            const message = [
+                originalMessage,
+                fallbackError
+                    ? `回退系统运行时失败：${fallbackError}`
+                    : undefined,
+                hint,
+            ]
+                .filter((part): part is string => Boolean(part))
+                .join("\n");
+
             this.#writeStatus(engineId, {
                 state: "failed",
                 installedRoot: rootDir,
@@ -1213,7 +1303,7 @@ export class CodeRuntimeManager {
                 lastError: message,
             });
             safeFail(taskId, `${engineId} 运行时初始化失败。`, message);
-            throw error;
+            throwUnprocessable(message);
         }
     }
 

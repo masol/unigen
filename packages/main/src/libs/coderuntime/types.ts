@@ -59,8 +59,13 @@ export interface EngineRuntimeHandler {
      * `aria2c`），返回**绝对**可执行文件路径；未检测到返回 `null`。
      *
      * 语义约定：
-     *   - 只在平台没有内置下载源（`hasDefaultArchive()` 为 false）时才
-     *     有意义；manager 仍会先检查托管安装目录，托管安装优先；
+     *   - 托管安装目录存在时优先，系统探测是兜底；
+     *   - 平台没有内置下载源、且用户没有自定义 `archiveUrl` 时，
+     *     `assertReady` 会在下载前探测（Linux / macOS 的 aria2）；
+     *   - 有内置下载源时，安装 / 下载最终失败后由 `manager` 回退探测
+     *     （Windows 的 aria2）；
+     *   - 上次状态为 `failed` / `interrupted` 时，`assertReady` 也会
+     *     探测，使“用户自行安装后重新启用”能直接命中系统运行时；
      *   - 命中后 manager 会调用 `verifyExecutable()` 验证一次，然后把状态
      *     标记为 `ready`（`installedRoot` 为可执行文件所在目录），
      *     **不下载、不解压**；
@@ -74,6 +79,8 @@ export interface EngineRuntimeHandler {
     /**
      * 可选：既没有内置下载源、也没有探测到系统运行时时的错误文案。
      *
+     * 同时会在“安装 / 下载失败后回退系统运行时也失败”的场景使用；
+     * 文案应避免把场景限定为“没有内置源”。
      * 会直接抛给调用方并展示在设置界面，因此应当写成面向用户的话：
      * 说明缺什么、怎么装、装完怎么继续。缺省由 manager 使用通用文案。
      */
