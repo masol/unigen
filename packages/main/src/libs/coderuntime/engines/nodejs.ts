@@ -163,7 +163,13 @@ export async function resolveNpmCommand(
 }
 
 export class NodeRuntime implements EngineRuntimeHandler {
-    readonly id = "nodejs" as const;
+    /**
+     * 静态 id：`engines/index.js` 用它派生 `KNOWN_ENGINE_IDS` 与做编译期
+     * 对齐断言。新增引擎时只需在 `ENGINE_CLASS_LIST` 里登记这个 class。
+     */
+    static readonly id = "nodejs" as const;
+
+    readonly id = NodeRuntime.id;
 
     hasDefaultArchive(
         platform: NodeJS.Platform,

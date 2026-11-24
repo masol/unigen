@@ -97,7 +97,13 @@ export function buildUvEnv(
 }
 
 export class PythonRuntime implements EngineRuntimeHandler {
-    readonly id = "python" as const;
+    /**
+     * 静态 id：`engines/index.js` 用它派生 `KNOWN_ENGINE_IDS` 与做编译期
+     * 对齐断言。新增引擎时只需在 `ENGINE_CLASS_LIST` 里登记这个 class。
+     */
+    static readonly id = "python" as const;
+
+    readonly id = PythonRuntime.id;
 
     hasDefaultArchive(
         platform: NodeJS.Platform,

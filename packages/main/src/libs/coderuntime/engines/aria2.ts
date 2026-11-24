@@ -51,7 +51,13 @@ const SYSTEM_BINARY_PLATFORMS: ReadonlySet<NodeJS.Platform> = new Set([
 ]);
 
 export class Aria2Runtime implements EngineRuntimeHandler {
-    readonly id = "aria2" as const;
+    /**
+     * 静态 id：`engines/index.js` 用它派生 `KNOWN_ENGINE_IDS` 与做编译期
+     * 对齐断言。新增引擎时只需在 `ENGINE_CLASS_LIST` 里登记这个 class。
+     */
+    static readonly id = "aria2" as const;
+
+    readonly id = Aria2Runtime.id;
 
     /**
      * 托管下载源只有官方 GitHub Release；manager 据此启用 GitHub 代理

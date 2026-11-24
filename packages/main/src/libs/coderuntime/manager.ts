@@ -17,6 +17,11 @@
 //     数组**，注册阶段逐个工具幂等处理（部分成功也保留，下次只补缺失的）。
 //     ffmpeg 需要同时注册 `run_ffmpeg` 与 `probe_media`，因此不能假设
 //     “一个引擎 = 一个工具”；
+//   - **工具清单外置**：引擎 id → 工具定义的映射放在 `./catalog/`（每个
+//     引擎一个小文件，`catalog/index.js` 汇总）。本文件只调用
+//     `loadEngineTools(engineId)`，**不再**持有 `if (id === "python") …`
+//     这类会随工具数量增长的分支链；未来给引擎加工具只需改 `catalog/`
+//     下对应的小文件，本文件保持不动；
 //   - **系统运行时兜底**：平台没有内置下载源时，会调用引擎的
 //     `detectSystemExecutable?()`（例如 Linux / macOS 上用户自行安装的
 //     `aria2c`、各平台自行安装的 `ffmpeg`）；Windows 上的 aria2 / ffmpeg
@@ -93,6 +98,7 @@ import type {
 import Logger from "electron-log/main.js";
 import { promises as fs } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { loadEngineTools } from "./catalog/index.js";
 import {
     ENGINE_CLASSES,
     isKnownEngine,
@@ -719,6 +725,9 @@ export class CodeRuntimeManager {
      *
      * 由 `#ensureEngineNow` 在安装成功 / 已就绪路径自动调用，外部不应直接使用。
      *
+     * 工具清单来自 `./catalog/`（见 `loadEngineTools`），本文件不持有
+     * “引擎 → 工具”的映射，也不做任何按引擎 id 的分支判断。
+     *
      * 幂等与部分成功的语义：
      *   - 每个工具**单独**判断是否已注册（`#registeredTools` 是名字数组），
      *     已注册则跳过 —— 支持“上次只成功注册了第一个工具”的场景在本次
@@ -742,7 +751,7 @@ export class CodeRuntimeManager {
             return;
         }
 
-        const tools = await this.#loadEngineTools(engineId);
+        const tools = await loadEngineTools(engineId);
         const registered = this.#registeredTools.get(engineId) ?? [];
         this.#registeredTools.set(engineId, registered);
 
@@ -1565,38 +1574,6 @@ export class CodeRuntimeManager {
                 `[CodeRuntime] 初始化编排失败（已兜底，不影响启动）：${errorMessage(error)}`,
             );
         }
-    }
-
-    /**
-     * 加载引擎的全部工具定义。
-     *
-     * 一个引擎**可以**对应多个工具（ffmpeg = `run_ffmpeg` + `probe_media`）。
-     * 新增引擎时在此登记；工具定义本身保持 `ToolDefinition` 形状，
-     * 由 `#registerEngineTools` 逐个注册 / 注销。
-     */
-    async #loadEngineTools(
-        id: CodeRuntimeEngineId,
-    ): Promise<ToolDefinition<unknown, unknown>[]> {
-        if (id === "python") {
-            const mod = await import("./tools/python.js");
-            return [mod.pythonRunTool as ToolDefinition<unknown, unknown>];
-        }
-        if (id === "nodejs") {
-            const mod = await import("./tools/nodejs.js");
-            return [mod.nodeRunTool as ToolDefinition<unknown, unknown>];
-        }
-        if (id === "aria2") {
-            const mod = await import("./tools/aria2.js");
-            return [mod.aria2DownloadTool as ToolDefinition<unknown, unknown>];
-        }
-        if (id === "ffmpeg") {
-            const mod = await import("./tools/ffmpeg.js");
-            return [
-                mod.ffmpegRunTool as ToolDefinition<unknown, unknown>,
-                mod.probeMediaTool as ToolDefinition<unknown, unknown>,
-            ];
-        }
-        throw new Error(`未知的代码运行时引擎：${id}`);
     }
 }
 
