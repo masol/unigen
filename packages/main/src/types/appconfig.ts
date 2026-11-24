@@ -72,12 +72,16 @@ export interface AppConfig {
  * 注意：这里的数据变化缓慢，读写频率远低于 secondConfig；
  * 任何「高频 UI 状态」「瞬时状态」都不应放在这里。
  *
- * 代码运行时部分包含：
- *   - `codeRuntime`       ：用户意图（启用 / 版本 / 归档 / 镜像）；
+ * 代码运行时 / 本机工具部分包含：
+ *   - `codeRuntime`       ：用户意图（启用 / 版本 / 归档 / 镜像 / registry 等）；
  *   - `codeRuntimeStatus` ：持久化的安装状态（含历史遗留进度）；
  *                          由 `CodeRuntimeManager` 维护；**进程重启后用于恢复**；
  *   - `npmRegistryCache`  ：中国区 npm registry 测速结果的持久化缓存
  *                          （7 天 TTL，见 `nodejs.ts` / `NpmRegistryCache`）。
+ *
+ * 注：`codeRuntime` / `codeRuntimeStatus` 同时容纳语言运行时（python / nodejs）
+ * 与工具类运行时（aria2）；各引擎的 `registry` / `archiveUrl` 字段按引擎
+ * 各取所需，例如 aria2 不使用 `registry`。
  */
 export interface StableConfig {
     /**
@@ -93,10 +97,10 @@ export interface StableConfig {
     isChinaCheckedAt: number;
     /** 在项目级 lancedb 成功创建一次之后，被设置为 true。 */
     search_inited: boolean;
-    /** 代码运行时配置（用户意图，可备份恢复）。 */
+    /** 代码运行时 / 本机工具配置（用户意图，可备份恢复）。 */
     codeRuntime: CodeRuntimeConfig;
     /**
-     * 代码运行时状态（持久化）。
+     * 代码运行时 / 本机工具状态（持久化）。
      *
      * 存在的意义：崩溃 / 断电 / 强杀进程后，下次启动仍能看到"上次安装到哪一步、
      * 失败原因是什么"，并让 `init` 决定是否重装；

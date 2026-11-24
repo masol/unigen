@@ -30,7 +30,8 @@
   };
   let { info, runtimeState, task, busy = false, onToggle }: Props = $props();
 
-  const enabled = $derived(runtimeState.status !== "disabled");
+  const unavailable = $derived(info.available === false);
+  const enabled = $derived(runtimeState.status !== "disabled" && !unavailable);
 
   const taskRunning = $derived(
     task?.status === "running" || task?.status === "pending",
@@ -50,20 +51,32 @@
     taskRunning ? (task?.message ?? "准备中…") : runtimeState.message,
   );
 
+  const canExpand = $derived(enabled || unavailable);
+
   /**
-   * 详情区展开状态：
-   * - 初始：disabled 时收起，其它状态展开；
-   * - 用户点击 Switch 时：启用 → 自动展开；禁用 → 自动收起；
-   * - 其它时间完全由用户通过 header 中的展开/收起按钮控制。
-   *   （不随 status 变化，避免安装中途被强行展开打断用户的阅读位置）
+   * 是否提供「测试一下」。
+   *
+   * 由服务端的 `testSnippet` 决定，而不是按 `kind` 判断：语言类与工具类
+   * 运行时都各自提供了可执行的验证片段（aria2 为 `aria2c --version`），
+   * 主进程 `testRuntime` 也已覆盖工具类（`executeTestCode` 直接跑
+   * `aria2c --version`）。按 `kind` 写死会让已具备能力的 aria2 看不到入口。
    */
-  let expanded = $state(runtimeState.status !== "disabled");
+  const canTest = $derived(!unavailable && info.testSnippet.trim().length > 0);
+
+  /**
+   * 刚进入页面时所有工具详情默认收起，避免长列表首屏被详情占满；
+   * 用户点击 Switch 时仍按原逻辑：启用即展开，禁用即收起。
+   */
+  let expanded = $state(false);
 
   let testing = $state(false);
   let testResult = $state<CodeRuntimeTestResult | null>(null);
 
   function handleCheckedChange(next: boolean): void {
+    if (unavailable) return;
     expanded = next;
+    // 启停会改变运行环境，上一次的测试结果不再有参考意义。
+    testResult = null;
     onToggle(next);
   }
 
@@ -72,7 +85,7 @@
   }
 
   async function runTest(): Promise<void> {
-    if (testing) return;
+    if (testing || !canTest) return;
     testing = true;
     testResult = null;
     try {
@@ -88,6 +101,24 @@
 
   function formatElapsed(ms: number): string {
     return ms < 1000 ? `${ms} 毫秒` : `${(ms / 1000).toFixed(1)} 秒`;
+  }
+
+  /**
+   * 结果条是单行展示：`aria2c --version` 这类命令会输出多行版本信息，
+   * 直接内联会把结果条撑成一块。这里取首个非空行并截断，完整输出通过
+   * 结果条自身的 title 呈现。
+   */
+  function formatTestOutput(raw: string): string {
+    const maxLength = 80;
+    const firstLine =
+      raw
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find(Boolean) ?? "";
+    if (!firstLine) return "（无输出）";
+    return firstLine.length > maxLength
+      ? `${firstLine.slice(0, maxLength)}…`
+      : firstLine;
   }
 </script>
 
@@ -134,13 +165,25 @@
           >
             隔离模式
           </span>
+        {:else if info.kind === "utility"}
+          <span
+            class="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+          >
+            下载加速
+          </span>
         {/if}
       </div>
       <p class="truncate text-xs text-muted-foreground">{info.tagline}</p>
     </div>
 
     <div class="flex shrink-0 items-center gap-2">
-      {#if enabled}
+      {#if unavailable}
+        <span
+          class="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+        >
+          即将支持
+        </span>
+      {:else if enabled}
         <span
           class="rounded-md px-1.5 py-0.5 text-[10px] font-medium {STATUS_CLASS[
             displayStatus
@@ -153,7 +196,9 @@
             ? ` · ${runtimeState.version}`
             : ""}
         </span>
+      {/if}
 
+      {#if canExpand}
         <button
           type="button"
           onclick={toggleExpanded}
@@ -172,8 +217,10 @@
       <Switch
         checked={enabled}
         onCheckedChange={handleCheckedChange}
-        disabled={busy}
-        aria-label={`${enabled ? "停用" : "启用"} ${info.name}`}
+        disabled={busy || unavailable}
+        aria-label={unavailable
+          ? `${info.name} 尚未支持`
+          : `${enabled ? "停用" : "启用"} ${info.name}`}
       />
     </div>
   </div>
@@ -186,7 +233,16 @@
     aria-hidden={!expanded}
   >
     <div class="min-h-0 overflow-hidden">
-      {#if enabled}
+      {#if unavailable}
+        <div class="space-y-3 border-t border-border/40 px-5 pb-5 pt-4">
+          <div
+            class="rounded-lg bg-muted/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground"
+          >
+            {info.name}
+            的界面入口已预留。主进程接入下载工具后，可在这里启用多线程下载加速。
+          </div>
+        </div>
+      {:else if enabled}
         <div class="space-y-3 border-t border-border/40 px-5 pb-5 pt-4">
           {#if displayStatus === "preparing"}
             <RuntimeProgress
@@ -213,38 +269,42 @@
             </Button>
           {:else if displayStatus === "ready"}
             <div class="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                class="rounded-lg"
-                onclick={() => void runTest()}
-                disabled={testing}
-              >
-                {testing ? "测试中…" : "测试一下"}
-              </Button>
-
-              {#if testResult}
-                <div
-                  transition:fade={{ duration: 150 }}
-                  class="flex flex-wrap items-center gap-1.5 rounded-md bg-muted/60 px-2 py-1 font-mono text-[11px]"
+              {#if canTest}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="rounded-lg"
+                  onclick={() => void runTest()}
+                  disabled={testing}
                 >
-                  <span class="text-muted-foreground">{info.testSnippet}</span>
-                  <span>→ {testResult.output}</span>
-                  <span
-                    class={testResult.ok
-                      ? "text-emerald-600"
-                      : "text-destructive"}
+                  {testing ? "测试中…" : "测试一下"}
+                </Button>
+
+                {#if testResult}
+                  <div
+                    transition:fade={{ duration: 150 }}
+                    class="flex flex-wrap items-center gap-1.5 rounded-md bg-muted/60 px-2 py-1 font-mono text-[11px]"
+                    title={testResult.output}
                   >
-                    {testResult.ok ? "✅" : "❌"}
-                  </span>
-                  <span class="text-muted-foreground/70">
-                    用时 {formatElapsed(testResult.elapsedMs)}
-                  </span>
-                </div>
-                {#if testResult.error && !testResult.ok}
-                  <div class="text-[11px] text-destructive">
-                    {testResult.error}
+                    <span class="text-muted-foreground">{info.testSnippet}</span
+                    >
+                    <span>→ {formatTestOutput(testResult.output)}</span>
+                    <span
+                      class={testResult.ok
+                        ? "text-emerald-600"
+                        : "text-destructive"}
+                    >
+                      {testResult.ok ? "✅" : "❌"}
+                    </span>
+                    <span class="text-muted-foreground/70">
+                      用时 {formatElapsed(testResult.elapsedMs)}
+                    </span>
                   </div>
+                  {#if testResult.error && !testResult.ok}
+                    <div class="text-[11px] text-destructive">
+                      {testResult.error}
+                    </div>
+                  {/if}
                 {/if}
               {/if}
             </div>

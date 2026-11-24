@@ -1,6 +1,6 @@
 // packages/main/src/types/shared/env/code-runtime.ts
 //
-// 代码运行时的共享类型定义。
+// 代码运行时 / 本机工具的共享类型定义。
 //
 // 这里的类型**同时被主进程与渲染进程引用**，因此必须保持对 Node 内置 API
 // 与主进程专用的工具函数的零依赖；唯一允许的对外协作方式是"纯数据 + 类型"。
@@ -8,18 +8,27 @@
 // 修改此文件时，请同步检查：
 //   - `libs/coderuntime/manager.ts`：状态机与持久化读写；
 //   - `libs/store/stable.schema.ts`：持久化 schema；
-//   - `libs/coderuntime/engines/*.ts`：引擎实现的返回类型。
+//   - `libs/coderuntime/engines/*.ts`：引擎实现的返回类型；
+//   - `api/common/code.cfg.ts` / `api/common/code.ts`：renderer 侧接口。
 
 /**
- * 代码运行时引擎标识。
+ * 代码运行时 / 本机工具引擎标识。
+ *
+ * 命名沿用历史叫法「CodeRuntime」，实际语义是 **本机运行时 / 工具**：
+ * 既包含语言运行时（Python / Node.js），也包含可复用的命令行工具
+ * （如 aria2 这类下载工具）。它们共享同一套安装 / 验证 / 工具注册流程。
+ *
  * 新增引擎时：
  *   1. 扩充本联合类型；
  *   2. 同步 `stable.schema.ts` 中 `codeRuntime.engines` 与
  *      `codeRuntimeStatus.engines` 的 schema 键；
- *   3. 在 `engines/` 下提供 `EngineRuntimeHandler`；
- *   4. 在 `tools/` 下提供对应工具。
+ *   3. 在 `engines/` 下提供 `EngineRuntimeHandler` 实现（并在
+ *      `engines/index.js` 的 `ENGINE_CLASSES` / `KNOWN_ENGINE_IDS` 里登记）；
+ *   4. 在 `tools/` 下提供对应工具（由 `CodeRuntimeManager` 自动注册 / 注销）；
+ *   5. 同步 `api/common/code.cfg.ts` 的 `RUNTIME_IDS / CODE_RUNTIME_IDS /
+ *      RUNTIME_INFO`，让 renderer 侧的设置页可见可控。
  */
-export type CodeRuntimeEngineId = "python" | "nodejs";
+export type CodeRuntimeEngineId = "python" | "nodejs" | "aria2";
 
 /**
  * 引擎在磁盘上的状态机。
@@ -50,7 +59,9 @@ export interface CodeRuntimeEngineConfig {
      * - 缺省时由引擎实现按平台给出默认值（中国区自动切换国内镜像）；
      * - 提供时优先于引擎默认（**单源**，不再做镜像探测）。
      *
-     * 支持 `.zip` / `.tar` / `.tar.gz` / `.tgz`。
+     * 支持 `.zip` / `.tar` / `.tar.gz` / `.tgz`；各引擎会按自身官方
+     * 发布的格式约定选择（例如 aria2 只使用官方 zip、Node.js 在
+     * Windows 用 zip、其他平台用 tar.gz）。
      */
     archiveUrl?: string;
     /** 归档 SHA256（hex）。提供则下载后校验，缺失则跳过。 */
@@ -62,11 +73,14 @@ export interface CodeRuntimeEngineConfig {
     extractStripPrefix?: string;
     /** 入口可执行文件相对运行时根的路径，例如 `python.exe`。 */
     executableRelativePath?: string;
-    /** pip / npm 额外源配置；缺省使用内置默认（中国区自动注入镜像）。 */
+    /**
+     * pip / npm 等包管理器的额外源配置；缺省使用内置默认（中国区自动注入镜像）。
+     * 不使用包管理器的工具类引擎（如 aria2）忽略此字段。
+     */
     registry?: string;
 }
 
-/** 代码运行时总配置。 */
+/** 代码运行时 / 本机工具总配置。 */
 export interface CodeRuntimeConfig {
     /** 总开关；关闭时所有引擎均不生效，默认关闭。 */
     enabled: boolean;
@@ -82,7 +96,15 @@ export interface CodeRuntimeConfig {
  */
 export interface CodeRuntimeEngineStatus {
     state: CodeRuntimeEngineState;
-    /** 最近一次安装根（可能无效，assertReady 会校验）。 */
+    /**
+     * 最近一次运行时的根目录（可能无效，`assertReady` 会校验）。
+     *
+     * 两种来源：
+     *   - 托管安装：`<userData>/runtime/code/<engineId>/`；
+     *   - 系统已安装的运行时（如 Linux / macOS 的 aria2c）：可执行文件
+     *     所在目录（例如 `/usr/bin`）。`assertReady` 会用它拼出入口路径，
+     *     因此这里必须始终是**可执行文件所在目录**，而不是安装包根目录。
+     */
     installedRoot?: string;
     /** 最近一次失败 / 中断的简短错误面（详情见 message）。 */
     lastError?: string;

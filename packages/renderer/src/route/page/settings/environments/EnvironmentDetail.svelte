@@ -1,33 +1,6 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
   import { push } from "@keenmate/svelte-spa-router";
-  import { IconChevronLeft, IconRefresh } from "@tabler/icons-svelte";
-  import { cubicInOut } from "svelte/easing";
-  import { slide } from "svelte/transition";
-  import ConnectionSettings from "./ConnectionSettings.svelte";
-  import FallbackConfig from "./configs/FallbackConfig.svelte";
-  import { resolveEnvironmentConfig } from "./registry";
-  import { environmentsStore } from "./store.svelte";
-
-  // 官方文档推荐方式：路由参数通过 $props().routeParams 注入
-  // （@keenmate/svelte-spa-router 没有 `params` 导出）。
-  type Props = {
-    routeParams?: Record<string, string>;
-  };
-  let { routeParams = {} }: Props = $props();
-
-  const id = $derived(routeParams.id);
-
-  // 用 $effect 而非 onMount：同一路由实例复用、id 变化时也能触发加载。
-  $effect(() => {
-    if (id) environmentsStore.loadDetail(id);
-  });
-
-  const detail = $derived(id ? environmentsStore.details[id] : undefined);
-  const loading = $derived(id ? environmentsStore.detailLoading[id] : false);
-  const ConfigComponent = $derived(
-    detail ? resolveEnvironmentConfig(detail.kind) : null,
-  );
+  import { IconChevronLeft } from "@tabler/icons-svelte";
 
   function goBack() {
     push("/settings/environments");
@@ -42,54 +15,19 @@
       class="flex items-center gap-1 rounded-md px-1.5 py-0.5 transition-colors hover:bg-accent hover:text-foreground"
     >
       <IconChevronLeft class="size-3.5" />
-      自有环境
+      自有算力
     </button>
     <span class="text-muted-foreground/50">/</span>
-    <span class="text-foreground">{detail?.name ?? id ?? ""}</span>
+    <span class="text-foreground">尚未实现</span>
   </nav>
 
-  {#if loading}
-    <p class="text-xs text-muted-foreground">加载中…</p>
-  {:else if !detail}
-    <div
-      class="rounded-2xl border border-dashed border-border/60 p-8 text-center text-sm text-muted-foreground"
-    >
-      未找到该环境。
-    </div>
-  {:else}
-    <header class="flex items-start justify-between gap-4">
-      <div class="space-y-1">
-        <h1 class="text-xl font-semibold tracking-tight text-foreground">
-          {detail.name}
-        </h1>
-        <p class="text-sm text-muted-foreground">{detail.description}</p>
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        class="gap-1.5 rounded-lg text-muted-foreground"
-        onclick={() => environmentsStore.probe(detail.id)}
-        disabled={detail.status === "checking"}
-      >
-        <IconRefresh
-          class="size-4 {detail.status === 'checking' ? 'animate-spin' : ''}"
-        />
-        重新检测
-      </Button>
-    </header>
-
-    <ConnectionSettings {detail} />
-
-    <div transition:slide={{ duration: 180, easing: cubicInOut }}>
-      {#if ConfigComponent}
-        <ConfigComponent
-          environmentId={detail.id}
-          config={detail.config}
-          onPatch={(patch) => environmentsStore.updateConfig(detail.id, patch)}
-        />
-      {:else}
-        <FallbackConfig />
-      {/if}
-    </div>
-  {/if}
+  <div
+    class="rounded-2xl border border-dashed border-border/60 p-8 text-center"
+  >
+    <p class="text-sm font-medium text-foreground">自有算力暂未实现</p>
+    <p class="mt-1 text-xs text-muted-foreground">
+      该入口已保留。当前请使用 Ollama / LM Studio 等工具运行模型，并在「设置 →
+      AIGC 模型」中手动接入。
+    </p>
+  </div>
 </div>

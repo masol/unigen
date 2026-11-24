@@ -4,8 +4,18 @@
 //
 // 约定：
 //   - 所有接口都以 runtime id 为入参，不按语言拆分；
+//   - 工具集定义统一收敛到 `code.cfg.ts`，本文件只保留状态推导与 procedure；
 //   - 安装/卸载是"操作"而不是"状态同步"：启用即触发安装，进度通过
 //     `task:update` 事件（由 `codeRuntimeManager` 推送）流式到达 renderer；
+//   - 启用前会调用 `codeRuntimeManager.assertInstallable(id)` 做可用性校验：
+//     内置下载源 / 用户自定义 archiveUrl / 系统已安装的运行时（Linux 与
+//     macOS 的 aria2）三条来源都没有时**直接抛错**，避免把配置写成
+//     enabled 后异步失败、界面长期停在 preparing；
+//   - **配置读写必须经过 `pickEngineConfig`**：持久化 schema 对
+//     `codeRuntime.engines.<id>` 是严格的（未知键会被 `unrecognized_keys`
+//     拒绝）。任何从 store 读出的引擎配置都只能以
+//     `CodeRuntimeEngineConfig` 的已知字段重新构造后再写回，否则历史
+//     遗留键 / 值为 `undefined` 的键会让整个 `set("codeRuntime", ...)` 失败；
 //   - `testRuntime` 复用运行时对应工具的执行链（`tool.inputSchema.parse`
 //     + `tool.execute`），保证测试与正式执行完全一致；
 //   - 所有对外暴露的 `id` 字段**必须**使用 `runtimeIdSchema`（闭集枚举），
@@ -21,56 +31,89 @@ import type {
 } from "$types/appconfig.js";
 import { os } from "@orpc/server";
 import Logger from "electron-log/main.js";
+import { execa } from "execa";
 import { z } from "zod";
+import {
+    CODE_RUNTIME_IDS,
+    RUNTIME_IDS,
+    RUNTIME_INFO,
+    isCodeRuntimeId,
+    runtimeIdSchema,
+    type CodeRuntimeId,
+    type RuntimeId,
+} from "./code.cfg.js";
 
-// ── Runtime 元信息与状态 ────────────────────────────────────────
-
-const runtimeIdSchema = z.enum(["python", "nodejs"]);
-type RuntimeId = z.infer<typeof runtimeIdSchema>;
-
-const RUNTIME_IDS: RuntimeId[] = ["python", "nodejs"];
-
-interface RuntimeInfo {
-    id: RuntimeId;
-    name: string;
-    kind: "language" | "sandbox";
-    tagline: string;
-    icon?: string;
-    approximateDownloadMB?: number;
-    /** 就绪后点击"测试一下"运行的代码片段 */
-    testSnippet: string;
-}
-
-const RUNTIME_INFO: Record<RuntimeId, RuntimeInfo> = {
-    python: {
-        id: "python",
-        name: "Python",
-        kind: "language",
-        // 描述保持笼统：语言本身做的事太多、不同用户场景差异巨大，
-        // 唯一稳定让用户理解的价值就是「让 AI 可以使用这门语言、并调用其生态」。
-        tagline: "让 AI 使用 Python 工作，并利用 Python 生态。",
-        icon: "IconBrandPython",
-        approximateDownloadMB: 120,
-        testSnippet: "print(1 + 1)",
-    },
-    nodejs: {
-        id: "nodejs",
-        name: "Node.js",
-        kind: "language",
-        tagline: "让 AI 使用 Node.js 工作，并利用 npm 生态。",
-        icon: "IconBrandNodejs",
-        approximateDownloadMB: 60,
-        testSnippet: "console.log(1 + 1)",
-    },
-};
+// ── 配置归一化 ──────────────────────────────────────────────────
 
 /**
- * ⚠️ 关键：`id` 必须使用 `runtimeIdSchema`（闭集），而不是 `z.string()`。
+ * 把任意来源的引擎配置收敛为 `CodeRuntimeEngineConfig`。
  *
- * oRPC 会从 `os.output(schema)` 推导 renderer 侧类型；一旦放宽为 `string`，
- * `CodeRuntimeInfo.id` 的 `CodeRuntimeId` 联合类型将不再匹配，引发
- * `Type 'string' is not assignable to type 'CodeRuntimeId'` 的编译错误。
+ * 存在的原因：持久化 schema 对 `codeRuntime.engines.<id>` 做了严格校验，
+ * 而 store 里可能残留历史字段、或值为 `undefined` 的键（zod 的 strict
+ * 校验对"键存在但值为 undefined"同样会报 `unrecognized_keys`）。只要
+ * 把读到的对象原样 spread 回写，`set("codeRuntime", ...)` 就会被拒绝，
+ * 报错形如：
+ *
+ *   Config schema violation: `codeRuntime/engines/aria2` must NOT have
+ *   additional properties
+ *
+ * 因此这里做一次显式白名单重建：
+ *   - 只保留接口声明的字段；
+ *   - 字符串字段丢弃空串与空白串（等价于"未配置"）；
+ *   - `enabled` 始终产出布尔值，保证必填字段存在。
+ *
+ * 逐字段赋值而非循环赋值，是为了让类型收窄落在编译器可见的范围内，
+ * 避免 `out[field] = value` 这类联合键写入的类型陷阱。
  */
+function pickEngineConfig(raw: unknown): CodeRuntimeEngineConfig {
+    const source = (
+        raw !== null && typeof raw === "object" ? raw : {}
+    ) as Record<string, unknown>;
+
+    const out: CodeRuntimeEngineConfig = {
+        enabled: source.enabled === true,
+    };
+
+    const put = (key: "version" | "archiveUrl" | "archiveSha256"
+        | "extractStripPrefix" | "executableRelativePath" | "registry"): void => {
+        const value = source[key];
+        if (typeof value !== "string") return;
+        const trimmed = value.trim();
+        if (!trimmed) return;
+        out[key] = trimmed;
+    };
+
+    put("version");
+    put("archiveUrl");
+    put("archiveSha256");
+    put("extractStripPrefix");
+    put("executableRelativePath");
+    put("registry");
+
+    return out;
+}
+
+function readCodeRuntimeConfig(): CodeRuntimeConfig {
+    const current = stableConfig().get("codeRuntime") as
+        | CodeRuntimeConfig
+        | undefined;
+
+    const engines: CodeRuntimeConfig["engines"] = {
+        python: pickEngineConfig(current?.engines?.python),
+        nodejs: pickEngineConfig(current?.engines?.nodejs),
+        aria2: pickEngineConfig(current?.engines?.aria2),
+    };
+
+    return {
+        enabled:
+            current?.enabled ??
+            Object.values(engines).some((engine) => engine.enabled),
+        engines,
+    };
+}
+
+// ── Runtime 状态 schema ─────────────────────────────────────────
+
 const runtimeStateSchema = z.object({
     id: runtimeIdSchema,
     status: z.enum(["disabled", "preparing", "ready", "failed"]),
@@ -83,11 +126,12 @@ const runtimeStateSchema = z.object({
 const runtimeInfoSchema = z.object({
     id: runtimeIdSchema,
     name: z.string(),
-    kind: z.enum(["language", "sandbox"]),
+    kind: z.enum(["language", "sandbox", "utility"]),
     tagline: z.string(),
     icon: z.string().optional(),
     approximateDownloadMB: z.number().optional(),
     testSnippet: z.string(),
+    available: z.boolean().optional(),
 });
 
 const runtimeEntrySchema = z.object({
@@ -106,32 +150,8 @@ type RuntimeState = z.infer<typeof runtimeStateSchema>;
 type RuntimeEntry = z.infer<typeof runtimeEntrySchema>;
 type RuntimeTestResult = z.infer<typeof runtimeTestResultSchema>;
 
-function readCodeRuntimeConfig(): CodeRuntimeConfig {
-    const current = stableConfig().get("codeRuntime") as
-        | CodeRuntimeConfig
-        | undefined;
-
-    const engines: CodeRuntimeConfig["engines"] = {
-        python: {
-            enabled: false,
-            ...(current?.engines?.python ?? {}),
-        },
-        nodejs: {
-            enabled: false,
-            ...(current?.engines?.nodejs ?? {}),
-        },
-    };
-
-    return {
-        enabled:
-            current?.enabled ??
-            Object.values(engines).some((engine) => engine.enabled),
-        engines,
-    };
-}
-
 function toRuntimeState(
-    id: RuntimeId,
+    id: CodeRuntimeId,
     engineCfg: CodeRuntimeEngineConfig | undefined,
     enabled: boolean,
 ): RuntimeState {
@@ -183,11 +203,23 @@ function toRuntimeState(
 }
 
 function toRuntimeEntry(id: RuntimeId, cfg: CodeRuntimeConfig): RuntimeEntry {
-    const engineCfg = cfg.engines[id];
+    const info = RUNTIME_INFO[id];
+
+    // 工具类入口目前只做 UI 预留；未托管到 codeRuntimeManager 之前始终展示 disabled。
+    if (info.available === false || !isCodeRuntimeId(id)) {
+        return {
+            info,
+            state: { id, status: "disabled" },
+        };
+    }
+
+    const engineCfg = (
+        cfg.engines as Record<string, CodeRuntimeEngineConfig | undefined>
+    )[id];
     const enabled = Boolean(cfg.enabled && engineCfg?.enabled);
 
     return {
-        info: RUNTIME_INFO[id],
+        info,
         state: toRuntimeState(id, engineCfg, enabled),
     };
 }
@@ -211,18 +243,46 @@ const setRuntimeEnabled = os
     )
     .output(runtimeEntrySchema)
     .handler(async ({ input }) => {
+        const info = RUNTIME_INFO[input.id];
+
+        if (info.available === false) {
+            throw new Error(
+                `${info.name} 尚未接入主进程，当前仅完成界面预留。`,
+            );
+        }
+
+        if (!isCodeRuntimeId(input.id)) {
+            throw new Error(`${info.name} 暂不支持在此启用。`);
+        }
+
+        const id = input.id;
         const current = readCodeRuntimeConfig();
 
+        if (input.enabled) {
+            // 启用前校验运行时来源：内置下载源 / 用户自定义 archiveUrl /
+            // 系统已安装的运行时（Linux 与 macOS 的 aria2 属于这一类）。
+            //
+            // 放在写配置之前，未安装时直接抛出面向用户的错误（提示用户
+            // 自行安装后重新启用），而不是把 enabled 落盘后异步失败。
+            await codeRuntimeManager.assertInstallable(id);
+        }
+
+        // 三个引擎统一走白名单重建：只要有一个引擎带着 schema 未声明的键，
+        // 整个 `set("codeRuntime", ...)` 都会被拒绝（zod 的 unrecognized_keys
+        // 报错路径会指向那个引擎）。因此不能"只清洗被修改的那一个"。
         const engines: CodeRuntimeConfig["engines"] = {
-            ...current.engines,
-            [input.id]: {
-                ...(current.engines[input.id] ?? { enabled: false }),
-                enabled: input.enabled,
-            },
+            python: pickEngineConfig(current.engines.python),
+            nodejs: pickEngineConfig(current.engines.nodejs),
+            aria2: pickEngineConfig(current.engines.aria2),
         };
 
-        const anyEnabled = RUNTIME_IDS.some(
-            (id) => engines[id]?.enabled === true,
+        engines[id] = {
+            ...engines[id],
+            enabled: input.enabled,
+        };
+
+        const anyEnabled = CODE_RUNTIME_IDS.some(
+            (runtimeId) => engines[runtimeId]?.enabled === true,
         );
 
         const next: CodeRuntimeConfig = {
@@ -235,31 +295,27 @@ const setRuntimeEnabled = os
         if (input.enabled) {
             // 启用：触发安装 → 完成后由 manager 自动注册工具。
             // 独立 fire-and-forget，不阻塞 UI 返回。
-            void codeRuntimeManager
-                .ensureEngine(input.id)
-                .catch((error: unknown) => {
-                    Logger.error(
-                        `[CodeRuntime] 启用 ${input.id} 失败：${error instanceof Error
-                            ? error.message
-                            : String(error)
-                        }`,
-                    );
-                });
+            //
+            // 对 Linux / macOS 的 aria2 来说，这里的 ensureEngine 通常是
+            // 快路径：assertReady 命中系统已安装的 aria2c，直接注册工具，
+            // 不触发下载。
+            void codeRuntimeManager.ensureEngine(id).catch((error: unknown) => {
+                Logger.error(
+                    `[CodeRuntime] 启用 ${id} 失败：${error instanceof Error ? error.message : String(error)
+                    }`,
+                );
+            });
         } else {
             // 停用：自动化注销工具。
-            void codeRuntimeManager
-                .disableEngine(input.id)
-                .catch((error: unknown) => {
-                    Logger.warn(
-                        `[CodeRuntime] 停用 ${input.id} 失败：${error instanceof Error
-                            ? error.message
-                            : String(error)
-                        }`,
-                    );
-                });
+            void codeRuntimeManager.disableEngine(id).catch((error: unknown) => {
+                Logger.warn(
+                    `[CodeRuntime] 停用 ${id} 失败：${error instanceof Error ? error.message : String(error)
+                    }`,
+                );
+            });
         }
 
-        return toRuntimeEntry(input.id, next);
+        return toRuntimeEntry(id, next);
     });
 
 /**
@@ -278,8 +334,20 @@ const testRuntime = os
     )
     .output(runtimeTestResultSchema)
     .handler(async ({ input }): Promise<RuntimeTestResult> => {
+        const info = RUNTIME_INFO[input.id];
+
+        if (info.available === false || !isCodeRuntimeId(input.id)) {
+            return {
+                ok: false,
+                output: "",
+                elapsedMs: 0,
+                error: `${info.name} 暂不支持运行测试。`,
+            };
+        }
+
+        const id = input.id;
         const cfg = readCodeRuntimeConfig();
-        if (!cfg.enabled || !cfg.engines[input.id]?.enabled) {
+        if (!cfg.enabled || !cfg.engines[id]?.enabled) {
             return {
                 ok: false,
                 output: "",
@@ -289,7 +357,7 @@ const testRuntime = os
         }
 
         try {
-            await codeRuntimeManager.assertReady(input.id);
+            await codeRuntimeManager.assertReady(id);
         } catch (err) {
             return {
                 ok: false,
@@ -302,7 +370,7 @@ const testRuntime = os
 
         const start = Date.now();
         try {
-            const result = await executeTestCode(input.id, input.code);
+            const result = await executeTestCode(id, input.code);
             const elapsedMs = Date.now() - start;
             const combined = (result.stdout || result.stderr).trim();
             return {
@@ -331,9 +399,24 @@ interface ExecutedOutput {
 }
 
 async function executeTestCode(
-    id: RuntimeId,
+    id: CodeRuntimeId,
     code: string,
 ): Promise<ExecutedOutput> {
+    if (id === "aria2") {
+        const runtime = await codeRuntimeManager.assertReady("aria2");
+        const result = await execa(runtime.executablePath, ["--version"], {
+            reject: false,
+            windowsHide: true,
+            timeout: 15_000,
+        });
+        return {
+            exit_code:
+                typeof result.exitCode === "number" ? result.exitCode : -1,
+            stdout: result.stdout ?? "",
+            stderr: result.stderr ?? "",
+        };
+    }
+
     if (id === "python") {
         const mod = await import("$libs/coderuntime/tools/python.js");
         const input = mod.pythonRunTool.inputSchema.parse({ code });

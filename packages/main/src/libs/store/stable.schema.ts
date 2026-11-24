@@ -17,6 +17,25 @@ const codeRuntimeEngineSchema = {
     },
 };
 
+/**
+ * aria2 引擎配置 schema。
+ *
+ * 字段集与 python / nodejs 保持一致（enabled / version / archiveUrl / ...），
+ * 仅 **default 值不同**：aria2 对多数用户是可选的下载工具，Linux / macOS
+ * 还需要系统包管理器安装，默认为 `false` 更符合语义；python / nodejs 作为
+ * 语言运行时默认开启。
+ *
+ * 这个变体同时也是 schema 的"单一真相源"：`CodeRuntimeManager` 与
+ * `api/common/code.ts` 的白名单重建逻辑始终按 `CodeRuntimeEngineId`
+ * 生成三个键，因此这里的 `properties` 必须逐一显式声明 `aria2`；
+ * `additionalProperties: false` 下任何未声明的键都会让
+ * `stableConfig().set("codeRuntime", ...)` 被 electron-store 拒绝。
+ */
+const codeRuntimeAria2EngineSchema = {
+    ...codeRuntimeEngineSchema,
+    default: { enabled: false },
+};
+
 const codeRuntimeEngineStatusSchema = {
     type: 'object' as const,
     additionalProperties: false,
@@ -80,6 +99,7 @@ export const stableSchema: Schema<StableConfig> = {
             engines: {
                 python: { enabled: true },
                 nodejs: { enabled: true },
+                aria2: { enabled: false },
             },
         },
         properties: {
@@ -87,14 +107,24 @@ export const stableSchema: Schema<StableConfig> = {
             engines: {
                 type: 'object',
                 additionalProperties: false,
+                // 注意：`required` 刻意 **不包含** `aria2`。
+                //
+                // 升级前的旧 store 里 `codeRuntime.engines` 只有
+                // python / nodejs；若把 aria2 列进 `required`，用户既有的
+                // `set` 调用都会被 electron-store 拒绝。运行期的写入路径
+                // （`CodeRuntimeManager` 与 `setRuntimeEnabled`）都会通过
+                // 各自的 `pickEngineConfig` 补齐 aria2，所以 required 无需
+                // 覆盖它也能保证"写出的式子"合法。
                 required: ['python', 'nodejs'],
                 default: {
                     python: { enabled: true },
                     nodejs: { enabled: true },
+                    aria2: { enabled: false },
                 },
                 properties: {
                     python: codeRuntimeEngineSchema,
                     nodejs: codeRuntimeEngineSchema,
+                    aria2: codeRuntimeAria2EngineSchema,
                 },
             },
         },
@@ -113,8 +143,13 @@ export const stableSchema: Schema<StableConfig> = {
                 additionalProperties: false,
                 default: {},
                 properties: {
+                    // 与 `codeRuntime.engines.properties` 一一对应：
+                    // `CodeRuntimeManager.#writeStatus` 会按
+                    // `KNOWN_ENGINE_IDS` 逐个写入，缺失的引擎一旦被写入就
+                    // 会被 `additionalProperties: false` 拒绝。
                     python: codeRuntimeEngineStatusSchema,
                     nodejs: codeRuntimeEngineStatusSchema,
+                    aria2: codeRuntimeEngineStatusSchema,
                 },
             },
             updatedAt: { type: 'number', default: 0 },

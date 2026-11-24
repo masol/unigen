@@ -111,10 +111,11 @@
 <div class="mx-auto flex h-full w-full max-w-4xl flex-col gap-6 p-6 md:p-8">
   <header class="space-y-1">
     <h1 class="text-xl font-semibold tracking-tight text-foreground">
-      编程环境
+      本机工具
     </h1>
     <p class="text-sm text-muted-foreground">
-      管理本机编程环境。让 AI 可以自行编写并执行代码(Everything as Code)。
+      管理 AI
+      可调用的本机工具。
     </p>
   </header>
 
@@ -131,7 +132,7 @@
       in:fade={{ duration: 180, easing: cubicInOut }}
       class="rounded-2xl border border-dashed border-border/60 p-8 text-center text-sm text-muted-foreground"
     >
-      当前版本暂未提供可用的代码环境。
+      当前版本暂未提供可用的本机工具。
     </div>
   {:else}
     <div class="space-y-3" in:fade={{ duration: 180, easing: cubicInOut }}>

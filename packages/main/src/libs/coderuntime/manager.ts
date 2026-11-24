@@ -12,6 +12,11 @@
 //   - `init()` 承担启动编排；依赖 `StableConfig` 与 `GlobalToolDB`；
 //   - **工具注册/注销内部闭环**：`ensureEngine` 成功后自动注册；
 //     `disableEngine` 负责注销；`#registerEngineTool` 永不暴露到外部；
+//   - **系统运行时兜底**：平台没有内置下载源时，会调用引擎的
+//     `detectSystemExecutable?()`（例如 Linux / macOS 上用户自行安装的
+//     `aria2c`）；命中即视为 ready，**不下载、不解压**。启用前由
+//     `assertInstallable()` 提前拦截“内置源 / 自定义 archiveUrl / 系统
+//     运行时”三条来源都没有的平台；
 //   - **下载前测速**：manager 主动 `probeUrls + sortByLatency` 排序候选源；
 //   - **下载后 SHA256 校验**：`archiveSha256` 配置优先；用户未自定义
 //     `archiveUrl` 时，回落到引擎给出的默认哈希；校验失败会删除坏归档，
@@ -20,6 +25,8 @@
 //     中符号链接的放行策略（默认 false，通用安全策略）；
 //   - 每次状态跃迁点直接调用 `report / complete / fail`
 //     （`$libs/utils/task-progress.js`），`id = "code-runtime:" + engineId`；
+//     **已就绪快路径同样补发终态事件** —— renderer 的进度 UI 只由该事件
+//     收敛，系统已安装的 aria2c（Linux / macOS）走的正是这条快路径；
 //   - **进度回调安全**：`report` / `complete` / `fail` 以及下载器的
 //     `onProgress` / `onSourceChange` 全部包裹 try/catch。这些回调一旦
 //     抛错会变成事件上下文里的未捕获异常，在 Node 15+ 默认
@@ -44,6 +51,7 @@ import { stableConfig } from "$libs/store/stable.js";
 import { globalToolDB } from "$libs/tooldb/globaltooldb.js";
 import { builtinId } from "$libs/tooldb/naming.js";
 import type { ToolDefinition } from "$libs/tooldb/type.js";
+import { throwUnprocessable } from "$libs/utils/err.js";
 import {
     codeRuntimeDir,
     codeRuntimeDownloadDir,
@@ -58,7 +66,7 @@ import type {
 } from "$types/appconfig.js";
 import Logger from "electron-log/main.js";
 import { promises as fs } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
     ENGINE_CLASSES,
     isKnownEngine,
@@ -375,6 +383,102 @@ export class CodeRuntimeManager {
         return s ? { ...s } : undefined;
     }
 
+    /**
+     * 当前平台是否有该引擎的内置下载源。
+     *
+     * 注意：`false` **不代表不可用** —— 引擎可能改用系统已安装的运行时
+     * （见 `detectSystemExecutable`）。启用前的完整校验请用
+     * `assertInstallable()`。
+     */
+    hasDefaultArchive(engineId: CodeRuntimeEngineId): boolean {
+        const handler = this.#getHandler(engineId);
+        return (
+            handler?.hasDefaultArchive(process.platform, process.arch) ?? false
+        );
+    }
+
+    // ---------- 系统运行时探测 ----------
+
+    /**
+     * 安全包装：探测系统已安装的运行时。
+     *
+     * 失败（PATH 异常、引擎实现抛错等）一律降级为 null 并保留日志原因：
+     * 探测失败的信息量远小于“把异常抛给不知情的调用方”。
+     */
+    async #detectSystemExecutable(
+        engineId: CodeRuntimeEngineId,
+    ): Promise<string | null> {
+        const handler = this.#getHandler(engineId);
+        if (!handler?.detectSystemExecutable) return null;
+        try {
+            const path = await handler.detectSystemExecutable();
+            return typeof path === "string" && path.trim() ? path : null;
+        } catch (error) {
+            Logger.warn(
+                `[CodeRuntime] 探测系统 ${engineId} 失败：${errorMessage(error)}`,
+            );
+            return null;
+        }
+    }
+
+    /**
+     * 验证系统运行时；失败时抛出**面向用户**的错误。
+     *
+     * 只在“从其它状态跃迁到系统运行时”的**第一次**执行：命中后 manager
+     * 会把状态写成 `ready`，后续调用直接从状态快路径返回，不会每次工具
+     * 调用都 spawn 一次 `--version`。
+     */
+    async #verifySystemExecutable(
+        engineId: CodeRuntimeEngineId,
+        handler: EngineRuntimeHandler,
+        executablePath: string,
+    ): Promise<string> {
+        try {
+            const version = await handler.verifyExecutable(executablePath, {});
+            Logger.log(
+                `[CodeRuntime] ${engineId} 使用系统已安装的运行时：` +
+                `${executablePath}（${version}）`,
+            );
+            return version;
+        } catch (error) {
+            throwUnprocessable(
+                `检测到系统安装的 ${engineId}（${executablePath}），但验证失败：` +
+                `${errorMessage(error)}。请修复或重新安装后重试。`,
+            );
+        }
+    }
+
+    /**
+     * 启用前校验：确认当前平台具备可用的运行时来源。
+     *
+     * 判定顺序与运行期一致：
+     *   1. 用户自定义 `archiveUrl`（交给下载器，不在此校验可达性）；
+     *   2. 引擎内置下载源；
+     *   3. 系统已安装的外部运行时（`detectSystemExecutable`）。
+     *
+     * 三者皆无时抛出面向用户的错误。放在“写配置之前”，是为了避免
+     * 把 `enabled = true` 落盘后再异步失败，让界面长期停在 preparing。
+     */
+    async assertInstallable(engineId: CodeRuntimeEngineId): Promise<void> {
+        const handler = this.#getHandler(engineId);
+        if (!handler) {
+            throw new Error(`未知的代码运行时引擎：${engineId}`);
+        }
+
+        const engineCfg = stableConfig().get("codeRuntime")?.engines?.[engineId];
+        if (engineCfg?.archiveUrl?.trim()) return;
+        if (handler.hasDefaultArchive(process.platform, process.arch)) return;
+        if (await this.#detectSystemExecutable(engineId)) return;
+
+        throw new Error(
+            handler.getMissingRuntimeMessage?.() ??
+            `引擎 [${engineId}] 在当前平台（${process.platform}-${process.arch}）` +
+            `没有内置下载源，也没有检测到系统已安装的运行时。` +
+            `请自行安装后重新启用，或在 codeRuntime.engines.${engineId}.archiveUrl ` +
+            `配置自定义下载源。`,
+        );
+    }
+
     // ---------- 工具执行入口 ----------
 
     async assertReady(engineId: CodeRuntimeEngineId): Promise<ReadyRuntime> {
@@ -393,6 +497,7 @@ export class CodeRuntimeManager {
             );
         }
 
+        // ── 1. 托管安装（下载 / 解压 / 校验由 manager 完成） ──
         const status = this.#readStatus(engineId);
         if (status.state === "ready" && status.installedRoot) {
             const exePath = join(status.installedRoot, exeRel);
@@ -425,9 +530,40 @@ export class CodeRuntimeManager {
             };
         }
 
-        // 记录 self-heal 失败：status 曾经是 ready 时必须纠正，否则 UI
-        // 会长期显示 "ready" 而实际文件已丢失。仅在这个条件下写盘，
-        // 避免工具调用在未安装场景下反复写配置。
+        // ── 2. 系统已安装的运行时（Linux / macOS 上的 aria2c） ──
+        //
+        // 与托管安装的关系：**托管安装优先**（版本可控），这里是兜底。
+        // 命中后写回 ready（`installedRoot` 为二进制所在目录），下一次调用
+        // 直接走第 1 步，不再重复探测。
+        const systemExe = await this.#detectSystemExecutable(engineId);
+        if (systemExe) {
+            const systemRoot = dirname(systemExe);
+            const version = await this.#verifySystemExecutable(
+                engineId,
+                handler,
+                systemExe,
+            );
+            this.#writeStatus(engineId, {
+                state: "ready",
+                installedRoot: systemRoot,
+                verifiedVersion: version,
+                lastError: null,
+                phase: null,
+                message: null,
+                progress: 100,
+            });
+            return {
+                engine: engineId,
+                executablePath: systemExe,
+                rootDir: systemRoot,
+            };
+        }
+
+        // ── 3. 磁盘自愈失败：纠正陈旧的 ready 状态 ──
+        //
+        // 只在 status 曾经是 ready 时写盘，避免工具调用在未安装场景下
+        // 反复写配置。系统运行时同样适用：用户卸载 aria2 后，状态会
+        // 收敛为 not_ready，重新启用时会再次触发可用性校验。
         if (status.state === "ready") {
             this.#writeStatus(engineId, {
                 state: "not_ready",
@@ -596,6 +732,28 @@ export class CodeRuntimeManager {
         );
     }
 
+    /**
+     * 已就绪快路径的终态事件。
+     *
+     * 为什么快路径也必须发：renderer 侧（`CodeRuntimePanel` 的 `$effect`）
+     * 只在该任务的 `code-runtime:<engineId>` 进入终态后才会重新拉取
+     * `listRuntimes`，进度 UI 完全由该事件驱动。
+     *
+     * 系统运行时（Linux / macOS 上由 `detectSystemExecutable` 命中的
+     * `aria2c`）走的正是这条快路径：没有任何下载 / 解压阶段可推送，
+     * 若此处不发终态事件，界面会停留在 `setRuntimeEnabled` 响应里的
+     * “准备中”，必须离开设置页再回来才能恢复。
+     *
+     * 先补一条 100% 进度再收尾：进度上报同时负责在任务表中建立条目，
+     * 避免 `complete` 依赖“任务条目已存在”这一隐含前提。
+     */
+    #emitReadyEvent(engineId: CodeRuntimeEngineId): void {
+        const taskId = taskIdOf(engineId);
+        const message = `${engineId} 运行时已就绪。`;
+        safeReport(taskId, "verifying", message, 100);
+        safeComplete(taskId, message);
+    }
+
     async #ensureEngineNow(
         engineId: CodeRuntimeEngineId,
         registerTool?: RegisterToolFn,
@@ -615,6 +773,9 @@ export class CodeRuntimeManager {
         // `assertReady` 与工具注册必须分开 try/catch：此前二者共用同一个
         // catch，注册失败会被当成“未就绪”，从而意外触发完整的重新下载
         // 安装流程。注册失败仅意味着工具不可用，运行时本身仍然有效。
+        //
+        // 系统运行时（Linux / macOS 的 aria2c）也走这条路径：`assertReady`
+        // 命中后这里直接注册工具返回，**不会**进入下面的下载流程。
         let alreadyReady = false;
         try {
             await this.assertReady(engineId);
@@ -631,6 +792,10 @@ export class CodeRuntimeManager {
                     `[CodeRuntime] ${engineId} 已就绪，但工具注册失败：${errorMessage(error)}`,
                 );
             }
+            // 快路径没有下载 / 解压阶段，但 renderer 只依赖该任务的终态
+            // 事件收敛进度 UI；缺少它会让界面停在“准备中”（系统已安装
+            // 的 aria2c 走的正是这条路径）。
+            this.#emitReadyEvent(engineId);
             return this.#readStatus(engineId);
         }
 
@@ -667,7 +832,11 @@ export class CodeRuntimeManager {
                 : defaultUrls ?? [];
 
             if (archiveUrls.length === 0) {
+                // 走到这里说明：托管安装没有下载源，且系统运行时探测也没
+                // 命中（否则上面的 assertReady 已经返回）。错误文案交给
+                // 引擎给出，最贴近该工具的实际安装方式。
                 throw new Error(
+                    handler.getMissingRuntimeMessage?.() ??
                     `引擎 [${engineId}] 在当前平台（${process.platform}-${process.arch}）` +
                     `没有内置下载源，请配置 codeRuntime.engines.${engineId}.archiveUrl。`,
                 );
@@ -780,6 +949,7 @@ export class CodeRuntimeManager {
                 savePath,
                 skipExisting: true,
                 parallelStreams: 3,
+                isGithub: handler.isGithubArchive === true,
                 onSourceChange: (source) => {
                     try {
                         usedSourceLabel = source.label;
@@ -1037,6 +1207,10 @@ export class CodeRuntimeManager {
         if (id === "nodejs") {
             const mod = await import("./tools/nodejs.js");
             return mod.nodeRunTool as ToolDefinition<unknown, unknown>;
+        }
+        if (id === "aria2") {
+            const mod = await import("./tools/aria2.js");
+            return mod.aria2DownloadTool as ToolDefinition<unknown, unknown>;
         }
         throw new Error(`未知的代码运行时引擎：${id}`);
     }

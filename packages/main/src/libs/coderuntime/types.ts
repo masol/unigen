@@ -43,8 +43,41 @@ export interface PostExtractContext {
 export interface EngineRuntimeHandler {
     readonly id: CodeRuntimeEngineId;
 
+    /**
+     * 可选：归档是否来自 GitHub Release。
+     *
+     * true 时 manager 会把 `isGithub` 传给下载器，从而在中国区自动注入
+     * GitHub 代理并使用浏览器 UA。
+     */
+    isGithubArchive?: boolean;
+
     /** 当前平台是否有内置默认下载源 */
     hasDefaultArchive(platform: NodeJS.Platform, arch: NodeJS.Architecture): boolean;
+
+    /**
+     * 可选：探测**系统已安装**的运行时（例如用户通过系统包管理器安装的
+     * `aria2c`），返回**绝对**可执行文件路径；未检测到返回 `null`。
+     *
+     * 语义约定：
+     *   - 只在平台没有内置下载源（`hasDefaultArchive()` 为 false）时才
+     *     有意义；manager 仍会先检查托管安装目录，托管安装优先；
+     *   - 命中后 manager 会调用 `verifyExecutable()` 验证一次，然后把状态
+     *     标记为 `ready`（`installedRoot` 为可执行文件所在目录），
+     *     **不下载、不解压**；
+     *   - 返回必须是绝对路径：manager 依赖它做后续存在性检查与日志归因，
+     *     裸命令名（交由 PATH 解析）会让状态不可复现；
+     *   - 实现方**不需要**自己执行 `--version`，验证由 manager 统一完成，
+     *     避免同一动作重复 spawn。
+     */
+    detectSystemExecutable?(): Promise<string | null>;
+
+    /**
+     * 可选：既没有内置下载源、也没有探测到系统运行时时的错误文案。
+     *
+     * 会直接抛给调用方并展示在设置界面，因此应当写成面向用户的话：
+     * 说明缺什么、怎么装、装完怎么继续。缺省由 manager 使用通用文案。
+     */
+    getMissingRuntimeMessage?(): string;
 
     /**
      * 按平台返回**候选**归档下载 URL 列表。

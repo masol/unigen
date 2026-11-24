@@ -5,19 +5,19 @@
  *   - 本文件；
  *   - `packages/main/src/types/shared/env/code-runtime.ts`；
  *   - `packages/main/src/libs/coderuntime/engines/*.reg.ts` / engines / tools；
- *   - `packages/main/src/api/common/code.ts` 中的 `RUNTIME_IDS` 与 `RUNTIME_INFO`。
+ *   - `packages/main/src/api/common/code.cfg.ts` 中的 `RUNTIME_IDS` 与 `RUNTIME_INFO`。
  */
-export type CodeRuntimeId = 'python' | 'nodejs';
+export type CodeRuntimeId = 'python' | 'nodejs' | 'aria2';
 
 export type CodeRuntimeStatus = 'disabled' | 'preparing' | 'ready' | 'failed';
 
-/** 环境类型：语言级 / 沙盒级。未来统一在此扩展即可。 */
-export type CodeRuntimeKind = 'language' | 'sandbox';
+/** 环境类型：语言级 / 沙盒级 / 本机工具。未来统一在此扩展即可。 */
+export type CodeRuntimeKind = 'language' | 'sandbox' | 'utility';
 
 /**
  * 由服务器提供、前端只读：
- *  - 环境清单不能硬编码在 UI，未来新增语言 / 沙盒只改后端；
- *  - 每个条目的文案（tagline / capability）都面向用户，不用内部术语；
+ *  - 环境清单不能硬编码在 UI，未来新增语言 / 沙盒 / 工具只改后端；
+ *  - 每个条目的文案（tagline / testSnippet）都面向用户，不用内部术语；
  *  - `id` 使用 `CodeRuntimeId` 联合类型，使 `safeApi().code.setRuntimeEnabled`
  *    等接口的类型与 oRPC schema 严格对齐。
  */
@@ -30,6 +30,10 @@ export interface CodeRuntimeInfo {
     approximateDownloadMB?: number;
     /** 就绪后点击"测试一下"运行的代码片段 */
     testSnippet: string;
+    /**
+     * 主进程是否已接入；false 时 UI 只做入口预留。
+     */
+    available?: boolean;
 }
 
 /**
@@ -39,7 +43,7 @@ export interface CodeRuntimeInfo {
  *   - 从 ready/failed → disabled 由 setRuntimeEnabled 触发。
  */
 export interface CodeRuntimeState {
-    id: string;
+    id: CodeRuntimeId;
     status: CodeRuntimeStatus;
     version?: string;
     /** preparing 阶段进度 0-100 */
