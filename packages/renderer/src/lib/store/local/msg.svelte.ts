@@ -5,6 +5,7 @@
 //   - helpers.ts  —— 无状态的 message / trace 遍历工具
 //   - recovery.ts —— reload 时根据会话状态（running / idle）选择的消息修复策略
 //   - stream.ts   —— ChatStreamEvent 到 ChatMessage[] 的纯函数应用
+//   - auto.ts     —— 自动续写的纯逻辑（追加提示词、思考/正文比较、完成标记检查）
 //
 // 本文件只保留 store 的「有状态」部分（响应式字段、生命周期、CRUD、run），
 // 以控制单文件行数；对外 API 与重构前完全一致。
@@ -20,6 +21,12 @@ import pTimeout, { TimeoutError } from "p-timeout";
 import { toast } from "svelte-sonner";
 
 import type { ChatMessage, ChatStreamEvent } from "./chat.types";
+import {
+    appendPassivePrompt,
+    buildAutoRuntime,
+    decideAutoContinue,
+    shouldAppendFirstUserContent,
+} from "./msg/auto";
 import {
     createDeferred,
     findMessageIn,
@@ -37,6 +44,7 @@ import type {
     SelectedItem,
     StreamSideEffects,
 } from "./msg/types";
+import { readAutoTaskConfig } from "./sess/session.types";
 import { sessionStore } from "./session.store.svelte";
 
 export type { BuiltinTool } from "@app/main/types";
@@ -310,6 +318,9 @@ class MessageStore {
             // 老的 liveSnapshot 数组引用此时不再需要，交由 GC。
             if (runState) {
                 runState.messages = this.messages
+                if (runState.auto) {
+                    runState.auto.messages = this.messages
+                }
             }
             log.info(
                 `[MessageStore] reload completed, loaded ${this.messages.length} messages, running=${running}`,
@@ -552,6 +563,16 @@ class MessageStore {
         const tools = this.selectedTools.map((t) => t.id);
         const skills = this.selectedSkills.map((s) => s.id);
 
+        const session = sessionStore.sessions.find((s) => s.id === sid);
+        const completion = readAutoTaskConfig(session?.extra).completion;
+        const autoRuntime = buildAutoRuntime(
+            completion,
+            mode,
+            tools,
+            skills,
+            this.messages,
+        );
+
         const seq = this.#nextSeq++;
         const runState: RunState = {
             seq,
@@ -565,6 +586,9 @@ class MessageStore {
             // 流事件（applyStreamEvent 就地修改）会同时作用于 this.messages
             // 和 state.messages，无需任何双写同步。
             messages: this.messages,
+            auto: autoRuntime,
+            appendUserContent: shouldAppendFirstUserContent(autoRuntime),
+            lastAssistantId: null,
         };
 
         this.#runsBySession.set(sid, runState);
@@ -603,9 +627,14 @@ class MessageStore {
 
         try {
             Logger.debug("skills,tools:", skills, tools)
+            const sendContent =
+                state.appendUserContent && state.auto
+                    ? appendPassivePrompt(userMessage.content, state.auto)
+                    : userMessage.content;
+
             stream = (await safeApi().project.runCommand(
                 {
-                    msg: userMessage.content,
+                    msg: sendContent,
                     msgId: userMessage.id,
                     files: userMessage.files ?? [],
                     tools,
@@ -722,6 +751,8 @@ class MessageStore {
                 }
             }
 
+            const nextContent = this.#computeNextAutoContent(state);
+
             state.activeAssistantId = null;
             state.aborting = false;
 
@@ -730,14 +761,123 @@ class MessageStore {
             }
             this.#runsBySeq.delete(seq);
 
-            // 运行状态清除：无论前台还是后台会话，都会走到这里，
-            // 左侧列表条目据此恢复为非 running 视觉
-            sessionStore.setSessionRunning(sessionId, false);
+            if (nextContent) {
+                // 保持会话 running / loading，立即启动下一轮自动续写。
+                this.#startAutoRound(state, nextContent);
+            } else {
+                // 运行状态清除：无论前台还是后台会话，都会走到这里，
+                // 左侧列表条目据此恢复为非 running 视觉
+                sessionStore.setSessionRunning(sessionId, false);
 
-            if (sessionStore.activeSessionId === sessionId) {
-                this.#syncRunStateForActive();
+                if (sessionStore.activeSessionId === sessionId) {
+                    this.#syncRunStateForActive();
+                }
             }
         }
+    }
+
+    /**
+     * 计算本轮结束后是否自动续写，以及下一轮要发送的用户内容。
+     *
+     * 使用 state.lastAssistantId 而非 activeAssistantId：后者在 message.end
+     * 时已被清空。任何错误、终止或无助手消息的场景都直接停止。
+     */
+    #computeNextAutoContent(state: RunState): string | null {
+        if (!state.auto || state.controller.signal.aborted) return null;
+
+        const assistantId = state.lastAssistantId;
+        if (!assistantId) return null;
+
+        const messages = state.messages ?? [];
+        const assistant = findMessageIn(messages, assistantId);
+        if (!assistant) return null;
+
+        return decideAutoContinue(state.auto, assistant);
+    }
+
+    /**
+     * 启动下一轮自动续写。
+     *
+     * 这里同步创建新的 RunState 并立即启动 #run，避免在轮次之间出现
+     * running/loading 状态空档。自动轮次使用首轮 tools/skills/mode 快照，
+     * 且不再追加 passiveAppendPrompt。
+     */
+    #startAutoRound(prevState: RunState, content: string): void {
+        const runtime = prevState.auto;
+        const sid = prevState.sessionId;
+
+        if (!runtime) {
+            sessionStore.setSessionRunning(sid, false);
+            if (sessionStore.activeSessionId === sid) {
+                this.#syncRunStateForActive();
+            }
+            return;
+        }
+
+        const messages = prevState.messages ?? runtime.messages;
+        runtime.messages = messages;
+
+        const userMsg: ChatMessage = {
+            id: newId(),
+            sessionId: sid,
+            role: "user",
+            content,
+            timestamp: Date.now(),
+        };
+
+        messages.push(userMsg);
+        sessionStore.updMessageCount(1, sid);
+        runtime.rounds += 1;
+
+        const state: RunState = {
+            seq: this.#nextSeq++,
+            sessionId: sid,
+            controller: new AbortController(),
+            promise: null,
+            deferred: createDeferred(),
+            activeAssistantId: null,
+            aborting: false,
+            messages,
+            auto: runtime,
+            appendUserContent: false,
+            lastAssistantId: null,
+        };
+
+        this.#runsBySession.set(sid, state);
+        this.#runsBySeq.set(state.seq, state);
+        sessionStore.setSessionRunning(sid, true);
+
+        if (sessionStore.activeSessionId === sid) {
+            this.isAborting = false;
+            this.setLoading(true);
+        }
+
+        const run = this.#run(
+            state,
+            userMsg,
+            runtime.mode,
+            runtime.tools,
+            runtime.skills,
+        );
+        state.promise = run;
+
+        void run
+            .finally(() => {
+                if (state.promise === run) {
+                    state.promise = null;
+                }
+            })
+            .catch((err) => {
+                Logger.error("[MessageStore] auto round failed", err);
+                if (this.#runsBySession.get(sid) === state) {
+                    this.#runsBySession.delete(sid);
+                    this.#runsBySeq.delete(state.seq);
+                    sessionStore.setSessionRunning(sid, false);
+                    if (sessionStore.activeSessionId === sid) {
+                        this.#syncRunStateForActive();
+                    }
+                }
+            });
     }
 
     async #waitForRunEnd(seq: number, state: RunState): Promise<void> {

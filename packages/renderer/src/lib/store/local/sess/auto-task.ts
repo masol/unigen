@@ -31,10 +31,16 @@ export async function showAutoTaskDialog(
 
     switch (kind) {
         case "completion":
-            return dialogStore.safeShow(AutoCompletionDialog, props);
+            return dialogStore.safeShow(AutoCompletionDialog, props, {
+                size: "xl2"
+            });
         case "schedule":
-            return dialogStore.safeShow(AutoScheduleDialog, props);
+            return dialogStore.safeShow(AutoScheduleDialog, props, {
+                size: "xl2"
+            });
         case "condition":
-            return dialogStore.safeShow(AutoConditionDialog, props);
+            return dialogStore.safeShow(AutoConditionDialog, props, {
+                size: "xl2"
+            });
     }
 }

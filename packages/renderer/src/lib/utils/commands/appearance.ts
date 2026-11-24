@@ -1,8 +1,22 @@
 // packages/renderer/src/lib/utils/commands/appearance.ts
 import { bottomPanelStore } from "$lib/store/local/bottombar.store.svelte";
 import { rightPanelStore } from "$lib/store/local/rightbar.store.svelte";
+import { projectStore } from "$lib/store/project.svelte";
 import { layoutStore } from "$lib/store/ui/layout.svelte";
 
+
+function toggleActivity(actId: string) {
+    if (projectStore.path) {
+        if (!layoutStore.isLeftOpen) {
+            layoutStore.openPanel('left');
+            layoutStore.setActiveActivity(actId)
+        } else if (layoutStore.activeActivity !== actId) {
+            layoutStore.setActiveActivity(actId);
+        } else {
+            layoutStore.closePanel('left');
+        }
+    }
+}
 
 /**
  * 外观类的面板开关命令。
@@ -39,6 +53,30 @@ export const AppearanceBuildin = [
         devOnly: true,
         handler: () => {
             layoutStore.togglePanel("left")
+        },
+    },
+    {
+        id: 'appearance.showSession',
+        label: '切换会话管理',
+        category: 'Appearance',
+        handler: () => {
+            toggleActivity("session-manager")
+        },
+    },
+    {
+        id: 'appearance.showModelConfig',
+        label: '切换对话设置',
+        category: 'Appearance',
+        handler: () => {
+            toggleActivity("model-config")
+        },
+    },
+    {
+        id: 'appearance.showPacEditor',
+        label: '切换工作指南',
+        category: 'Appearance',
+        handler: () => {
+            toggleActivity("pac-editor")
         },
     },
     {

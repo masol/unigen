@@ -3,9 +3,11 @@
 // msg store 拆分后对外/内部共享的类型：
 //   - SelectedItem 是对外类型，外部只关心 id/name；
 //   - RunState 是单次 run 的全部状态，仅在 msg store 内部流转；
+//   - AutoCompletionRuntime 是一次「手动请求 + 后续自动续写」链路的共享状态；
 //   - StreamSideEffects 把 MessageStore 的副作用注入到纯函数 `applyStreamEvent`，
 //     使流事件处理逻辑可不依赖 store 实例（更易测试，也避免循环引用 sessionStore）。
 import type { ChatMessage, ChatStreamEvent, TraceNode } from "../chat.types";
+import type { AutoCompletionConfig } from "../sess/session.types";
 
 export type { ChatMessage, ChatStreamEvent, TraceNode };
 
@@ -25,6 +27,32 @@ export type SelectedItem = {
 export interface SeqDeferred {
     promise: Promise<boolean>;
     resolve: (suc: boolean) => void;
+}
+
+/**
+ * 自动续写链路的共享运行时。
+ *
+ * 一次「用户手动发送」会创建该对象；后续每一轮自动续写复用同一对象，
+ * 以保证：
+ * - rounds 跨轮累加，严格受 maxRounds 限制；
+ * - tools / skills / mode 使用首轮快照，避免运行期间输入栏变更导致参数漂移；
+ * - messages 始终指向该会话在当前链路中的消息数组，切走/后台轮次仍可继续写入。
+ */
+export interface AutoCompletionRuntime {
+    /** 已归一化的自动续写配置。enabled 为 false 时不会创建该运行时。 */
+    config: AutoCompletionConfig;
+    /** 归一化后的最大自动发送轮次（不包含用户首轮）。 */
+    maxRounds: number;
+    /** 已经自动发送的轮次。 */
+    rounds: number;
+    /** 首轮 run 使用的 mode，后续自动轮次沿用。 */
+    mode: string | null;
+    /** 首轮 run 的工具 id 快照。 */
+    tools: string[];
+    /** 首轮 run 的技能 id 快照。 */
+    skills: string[];
+    /** 自动续写链路共享的消息数组。 */
+    messages: ChatMessage[];
 }
 
 export interface RunState {
@@ -49,6 +77,13 @@ export interface RunState {
      * - run 结束（finally）后仍保留（不主动清空），供兜底诊断使用。
      */
     messages: ChatMessage[] | null;
+
+    /** 本次 run 所属的自动续写链；未启用自动续写时为 null。 */
+    auto: AutoCompletionRuntime | null;
+    /** 本轮发送时是否要把 passiveAppendPrompt 追加到用户内容后方。 */
+    appendUserContent: boolean;
+    /** 本轮最后启动的助手消息 id，用于 run 结束后判断是否触发自动续写。 */
+    lastAssistantId: string | null;
 }
 
 export interface StreamSideEffects {

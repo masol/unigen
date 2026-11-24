@@ -43,7 +43,10 @@ export function applyStreamEvent(
             messages.push(msg);
             // 显式传 sessionId，避免后台事件累加到当前 active session 计数上
             side.bumpMessageCount(1, event.sessionId);
-            if (state) state.activeAssistantId = event.messageId;
+            if (state) {
+                state.activeAssistantId = event.messageId;
+                state.lastAssistantId = event.messageId;
+            }
             break;
         }
         case "message.delta": {
