@@ -187,7 +187,7 @@
         {
           id: "environments",
           label: "自有算力",
-          description: "自有设备做模型推理训练",
+          description: "自有设备做推理及训练",
           icon: IconServer2,
           path: "environments",
           // 由 environments store 模块底部注册（参见 LongTaskStore.register）
@@ -209,7 +209,7 @@
         {
           id: "code-runtime",
           label: "本机工具",
-          description: "安装AI可调用的本机工具",
+          description: "管理AI可使用的本机工具",
           icon: IconTerminal2,
           path: "code-runtime",
           // 由 code-runtime store 模块底部注册

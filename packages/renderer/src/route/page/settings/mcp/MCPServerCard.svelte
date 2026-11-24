@@ -42,6 +42,7 @@
   } = $props();
 
   const isDisabled = $derived(server.enabled === false);
+  const isStdio = $derived(server.transport.type === "stdio");
 
   const endpoint = $derived(
     server.transport.type === "stdio"
@@ -53,6 +54,18 @@
   let testResult = $state<McpConnectionTestResult | null>(null);
   let testError = $state("");
   let exporting = $state(false);
+  let lastTransportFingerprint = JSON.stringify(server.transport);
+
+  // 服务配置被编辑后，旧的测试结果不再代表当前连接参数。
+  $effect(() => {
+    const fingerprint = JSON.stringify(server.transport);
+    if (fingerprint === lastTransportFingerprint) return;
+
+    lastTransportFingerprint = fingerprint;
+    testState = "idle";
+    testResult = null;
+    testError = "";
+  });
 
   async function handleTest() {
     if (testState === "loading") return;
@@ -129,7 +142,13 @@
       <span class="beam-pulse z-10" aria-hidden="true"></span>
     {/if}
 
-    <div class="flex items-center gap-3 p-6">
+    <div
+      class={[
+        "flex items-center gap-3 p-6 transition-colors duration-200",
+        isStdio && "bg-amber-500/5 dark:bg-amber-400/5",
+        isStdio && (open ? "rounded-t-2xl" : "rounded-2xl"),
+      ]}
+    >
       <Collapsible.Trigger>
         {#snippet child({ props })}
           <button
@@ -139,13 +158,21 @@
             <div
               class={[
                 "flex size-10 shrink-0 items-center justify-center rounded-xl transition-all duration-200",
-                isDisabled ? "bg-muted" : "bg-primary/10",
+                isDisabled
+                  ? "bg-muted"
+                  : isStdio
+                    ? "bg-amber-500/10"
+                    : "bg-primary/10",
               ]}
             >
               <IconPlugConnected
                 size={20}
                 stroke={1.5}
-                class={isDisabled ? "text-muted-foreground/50" : "text-primary"}
+                class={isDisabled
+                  ? "text-muted-foreground/50"
+                  : isStdio
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-primary"}
               />
             </div>
 
@@ -181,11 +208,26 @@
                 {/if}
               </div>
 
-              <p
-                class="mt-0.5 truncate font-mono text-xs text-muted-foreground"
+              <div
+                class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1"
               >
-                {endpoint}
-              </p>
+                <p
+                  class="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
+                >
+                  {endpoint}
+                </p>
+
+                {#if isStdio}
+                  <span
+                    class="flex shrink-0 items-center gap-1 text-xs text-amber-600 opacity-80 dark:text-amber-400"
+                    title="stdio 会在本机启动进程"
+                  >
+                    <IconAlertTriangle size={12} stroke={1.5} />
+                    <span class="hidden sm:inline">stdio 将在本机启动进程</span>
+                    <span class="sm:hidden">本机进程</span>
+                  </span>
+                {/if}
+              </div>
             </div>
 
             <div
@@ -232,22 +274,6 @@
             </p>
           </div>
         </div>
-
-        {#if server.transport.type === "stdio"}
-          <div
-            class="flex items-start gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-muted-foreground"
-          >
-            <IconAlertTriangle
-              size={16}
-              stroke={1.5}
-              class="mt-0.5 shrink-0 text-destructive"
-            />
-            <p>
-              stdio 会在本机启动进程。请确认命令与参数来源可信；非必要建议使用
-              HTTP / SSE。
-            </p>
-          </div>
-        {/if}
 
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex flex-wrap items-center gap-2">

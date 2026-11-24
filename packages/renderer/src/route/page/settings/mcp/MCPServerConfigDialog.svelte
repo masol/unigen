@@ -368,6 +368,26 @@
     }
   });
 
+  // 进入“连接”步骤或切换传输协议后，焦点落到当前主输入框。
+  function focusConnectionInput(inputId: string) {
+    const input = document.getElementById(inputId);
+    if (!(input instanceof HTMLInputElement)) return;
+
+    input.focus({ preventScroll: true });
+
+    const end = input.value.length;
+    input.setSelectionRange(end, end);
+  }
+
+  $effect(() => {
+    if (currentStep !== 0) return;
+
+    const inputId = transportType === "stdio" ? "mcp-cmd" : "mcp-url";
+    const frame = requestAnimationFrame(() => focusConnectionInput(inputId));
+
+    return () => cancelAnimationFrame(frame);
+  });
+
   // ── 提交 ──
   async function handleSubmit() {
     if (!isFinalValid || isSubmitting) return;
@@ -435,7 +455,7 @@
                   : "border-border/50 bg-background text-muted-foreground hover:bg-muted",
               ]}
             >
-              {t === "stdio" ? "stdio（高级）" : t.toUpperCase()}
+              {t === "stdio" ? "STDIO" : t.toUpperCase()}
             </button>
           {/each}
         </div>
@@ -466,7 +486,7 @@
         </div>
 
         <div class="space-y-2">
-          <Label for="mcp-args">参数（空格分隔）</Label>
+          <Label for="mcp-args">可选参数（空格分隔）</Label>
           <Input
             id="mcp-args"
             bind:value={argsText}

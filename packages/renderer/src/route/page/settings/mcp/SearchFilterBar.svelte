@@ -12,7 +12,7 @@
   const TRANSPORTS = [
     { value: "http", label: "HTTP" },
     { value: "sse", label: "SSE" },
-    { value: "stdio", label: "stdio（高级）" },
+    { value: "stdio", label: "stdio" },
   ] as const;
 </script>
 
