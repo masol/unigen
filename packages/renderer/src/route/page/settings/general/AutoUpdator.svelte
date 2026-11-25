@@ -28,8 +28,25 @@
 
   let appVersion = $state<string | null>(null);
 
-  onMount(async () => {
-    appVersion = await api().system.version();
+  onMount(() => {
+    let disposed = false;
+    const settle = (value: string) => {
+      if (!disposed) appVersion = value;
+    };
+
+    // 包在 try/catch 内：RPC 失败时不能变成未捕获的 Promise 拒绝，
+    // 也不能让骨架屏永远停在那里。
+    void (async () => {
+      try {
+        settle(await api().system.version());
+      } catch {
+        settle("未知");
+      }
+    })();
+
+    return () => {
+      disposed = true;
+    };
   });
 </script>
 

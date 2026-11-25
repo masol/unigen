@@ -5,9 +5,14 @@ import { type ProjectType } from './types';
  * 获取本地已安装的有效项目类型。
  * Electron 环境下这里应替换为读取本地已安装模板的 IPC 调用。
  * 返回列表不含工作流工坊类型——工作流工坊由对话框内置置顶。
+ *
+ * force 为 true 时要求主进程绕过缓存、重新扫描类型目录，
+ * 用于设置页的显式刷新。
  */
-export async function fetchInstalledProjectTypes(): Promise<ProjectType[]> {
-    return await safeApi().system.prjTypes();
+export async function fetchInstalledProjectTypes(
+    force = false,
+): Promise<ProjectType[]> {
+    return await safeApi().system.prjTypes(force);
 }
 
 /**

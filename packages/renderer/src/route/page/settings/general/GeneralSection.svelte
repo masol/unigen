@@ -297,6 +297,8 @@
       </Button>
     </div>
 
+    <Separator class="bg-border/30" />
+
     <!-- Row: 模型根目录 -->
     <div
       class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-8 p-6"

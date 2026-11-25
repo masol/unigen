@@ -26,8 +26,6 @@
   let lineHeightLocal = $state(configStore.lineHeight);
 
   // 记录最近一次挂起值，供 flush 使用
-  let pendingFontSize = configStore.fontSize;
-  let pendingLineHeight = configStore.lineHeight;
 
   const commitFontSize = debounce({ delay: 500 }, (v: number) => {
     configStore.setConfig("fontSize", v);
@@ -38,22 +36,19 @@
 
   function onFontSizeChange(v: number) {
     fontSizeLocal = v; // 立即反馈
-    pendingFontSize = v; // 记录挂起值
     commitFontSize(v); // 500ms 防抖落库
   }
 
   function onLineHeightChange(v: number) {
     lineHeightLocal = v;
-    pendingLineHeight = v;
     commitLineHeight(v);
   }
 
   // 组件卸载前，冲刷尚未提交的挂起值
   $effect(() => {
     return () => {
-      if (commitFontSize.isPending()) commitFontSize.flush(pendingFontSize);
-      if (commitLineHeight.isPending())
-        commitLineHeight.flush(pendingLineHeight);
+      if (commitFontSize.isDebounced()) commitFontSize.flush();
+      if (commitLineHeight.isDebounced()) commitLineHeight.flush();
     };
   });
 
@@ -89,11 +84,7 @@
   }
 </script>
 
-<SettingsSection
-  icon={IconCode}
-  title="编辑器"
-  description="管理AI动态代码"
->
+<SettingsSection icon={IconCode} title="编辑器" description="管理AI动态代码">
   <SettingRow title="字体大小" description="编辑器正文字号（px）">
     {#snippet control()}
       <NumberField.Root

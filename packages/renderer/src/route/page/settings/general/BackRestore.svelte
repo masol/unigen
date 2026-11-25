@@ -7,7 +7,7 @@
   import { toast } from "svelte-sonner";
   import SectionCard from "./SectionCard.svelte";
 
-  let fileInput: HTMLInputElement;
+  let fileInput = $state<HTMLInputElement | null>(null);
 
   async function handleBackup() {
     try {
@@ -49,6 +49,18 @@
       if (!content) throw new Error("读取文件失败");
 
       const config = JSON.parse(content);
+
+      // 只做结构闸门：必须是包含字段的非数组对象。
+      // 字段级合法性交给 configStore / 主进程 schema 判定。
+      if (
+        typeof config !== "object" ||
+        config === null ||
+        Array.isArray(config) ||
+        Object.keys(config).length === 0
+      ) {
+        throw new Error("文件内容不是有效的配置备份");
+      }
+
       await configStore.setAll(config);
 
       toast.success("恢复成功");

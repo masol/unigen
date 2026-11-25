@@ -9,7 +9,7 @@
 
   // ── 每页条目数 ──
   let itemsPerPageLocal = $state(configStore.itemsPerPage);
-  let pendingItemsPerPage = configStore.itemsPerPage;
+  // let pendingItemsPerPage = configStore.itemsPerPage;
 
   const commitItemsPerPage = debounce({ delay: 500 }, (v: number) => {
     configStore.setConfig("itemsPerPage", v);
@@ -17,13 +17,13 @@
 
   function onItemsPerPageChange(v: number) {
     itemsPerPageLocal = v;
-    pendingItemsPerPage = v;
+    // pendingItemsPerPage = v;
     commitItemsPerPage(v);
   }
 
   // ── 并行度 ──
   let concurrencyLocal = $state(configStore.concurrency ?? 10); // 默认 10
-  let pendingConcurrency = configStore.concurrency ?? 10;
+  // let pendingConcurrency = configStore.concurrency ?? 10;
 
   const commitConcurrency = debounce({ delay: 500 }, (v: number) => {
     configStore.setConfig("concurrency", v);
@@ -31,18 +31,18 @@
 
   function onConcurrencyChange(v: number) {
     concurrencyLocal = v;
-    pendingConcurrency = v;
+    // pendingConcurrency = v;
     commitConcurrency(v);
   }
 
   // ── 卸载前冲刷所有挂起值 ──
   $effect(() => {
     return () => {
-      if (commitItemsPerPage.isPending()) {
-        commitItemsPerPage.flush(pendingItemsPerPage);
+      if (commitItemsPerPage.isDebounced()) {
+        commitItemsPerPage.flush();
       }
-      if (commitConcurrency.isPending()) {
-        commitConcurrency.flush(pendingConcurrency);
+      if (commitConcurrency.isDebounced()) {
+        commitConcurrency.flush();
       }
     };
   });
