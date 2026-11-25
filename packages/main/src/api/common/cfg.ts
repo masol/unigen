@@ -1,17 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import {
+    getGlobalEmbeddingService,
+    getGlobalRerankService,
+    recreateFtsIndexes,
+} from '$libs/searchsrv/index.js'
 import { configService } from '$libs/store/index.js'
 import { secondConfig } from '$libs/store/second.js'
 import { getTheme, resetTheme, setTheme } from '$libs/store/theme.js'
 import { dataCenter } from '$libs/utils/sys/data.js'
-import { embedingPath, rerankPath } from '$libs/utils/sys/dir.js'
 import { recentProjectSchema } from '$types/shared/api/recents.js'
 import { GetThemeSchema } from '$types/shared/api/theme.js'
 import { mcpServerConfigSchema } from '$types/shared/mcp.js'
 import { os } from '@orpc/server'
 import { nativeTheme } from 'electron'
-import FastGlob from 'fast-glob'
-import { ensureDir } from 'fs-extra'
-import { basename } from 'path'
 import { z } from 'zod'
 
 /**
@@ -119,36 +120,10 @@ const useDark = os
         return nativeTheme.shouldUseDarkColorsForSystemIntegratedUI
     })
 
-async function getModels(basepath: string): Promise<Array<{ value: string, label: string }>> {
-    await ensureDir(basepath);
-    const files = await FastGlob(FastGlob.convertPathToPattern(basepath) + '/**/*.gguf', {
-        absolute: true
-    })
-    return files.map(f => {
-        return {
-            value: f,
-            label: basename(f)
-        }
-    })
-}
-
-const getEmbedings = os
-    .output(z.array(z.object({
-        value: z.string(),
-        label: z.string()
-    })))
-    .handler(async () => {
-        return getModels(embedingPath());
-    })
-
-const getReranks = os
-    .output(z.array(z.object({
-        value: z.string(),
-        label: z.string()
-    })))
-    .handler(async () => {
-        return getModels(rerankPath());
-    })
+/**
+ * 注：本地 GGUF 的嵌入 / 重排模型已下线，模型选择统一走 `models` 中的
+ * 远程 Provider 能力声明，因此不再提供枚举本地模型目录的入口。
+ */
 
 const setheme = os
     .input(z.string())
@@ -176,14 +151,52 @@ const readData = os
         return dataCenter.readFile(input);
     })
 
+/**
+ * 显式刷新 Embedding 派生状态。
+ *
+ * 客户端契约：先调用 set/get 写入 embed_model，再调用本方法。
+ * 本方法会等待 Embedding 重建结束后返回（重建过程通过 task:update 广播进度，
+ * 客户端据此渲染进度条，不要用本 RPC 的返回时机去推断进度）。
+ */
+const refreshEmbedding = os
+    .output(z.boolean())
+    .handler(async () => {
+        await getGlobalEmbeddingService().refresh();
+        return true;
+    })
+
+/**
+ * 显式刷新 Rerank 派生状态。
+ *
+ * 客户端契约：先调用 set/get 写入 rerank_model，再调用本方法。
+ * Rerank 只替换内部 op 缓存，不重建索引，因此没有长时任务进度。
+ */
+const refreshRerank = os
+    .output(z.boolean())
+    .handler(async () => {
+        await getGlobalRerankService().refresh();
+        return true;
+    })
+
+/**
+ * 显式刷新 FTS 索引。
+ *
+ * 客户端契约：先调用 set/get 写入 fts_tokenizer，再调用本方法。
+ * 本方法会等待全部表 FTS 索引重建结束后返回（过程通过 task:update 广播进度）。
+ */
+const refreshFtsIndexes = os
+    .output(z.boolean())
+    .handler(async () => {
+        await recreateFtsIndexes();
+        return true;
+    })
+
 export default {
     getAll,
     setAll,
     get,
     set,
     useDark,
-    getEmbedings,
-    getReranks,
     recents,
     getMcpServer,
     setMcpServer,
@@ -191,5 +204,8 @@ export default {
     setTheme: setheme,
     resetTheme: resetheme,
     getTheme: getheme,
-    readData
+    readData,
+    refreshEmbedding,
+    refreshRerank,
+    refreshFtsIndexes
 }

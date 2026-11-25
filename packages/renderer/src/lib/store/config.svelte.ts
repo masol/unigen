@@ -8,7 +8,7 @@ import type {
     MarkdownFontFamily,
     McpServerConfig,
     Model,
-    Provider,
+    Provider
 } from '@app/main/types';
 import log from 'electron-log/renderer';
 import { setMode } from "mode-watcher";
@@ -35,12 +35,14 @@ const MD_DEFAULTS = {
 class ConfigStore {
     // ── 私有状态：配置项 ──
     #theme = $state<AppConfig['theme']>('system') // 原始值（三选一枚举） → $state
+    #fts_tokenizer = $state<AppConfig['fts_tokenizer']>('jieba')
     #lang = $state<string>('zh-CN')              // 原始值 → $state
     #embedModel = $state<string>('')                   // 原始值 → $state
     #rerankModel = $state<string>('')                   // 原始值 → $state
     #providers = $state<Provider[]>([])           // 复合对象整体替换 → $state.raw
     #mcpServers = $state<McpServerConfig[]>([])   // 复合对象整体替换 → $state.raw
     #task_dir = $state<string>("")           // 复合对象整体替换 → $state.raw
+    #model_dir = $state<string>("")
     #autoupdate = $state<boolean>(true)
     #disableHA = $state<boolean>(false)
     #showDevUI = $state<boolean>(false)
@@ -91,6 +93,8 @@ class ConfigStore {
     get telemetry() { return this.#telemetry }
     get concurrency() { return this.#concurrency }
     get task_dir() { return this.#task_dir }
+    get model_dir() { return this.#model_dir }
+    get fts_tokenizer() { return this.#fts_tokenizer }
 
     // ── 只读门面：Markdown 阅读外观 ──
     get markdownFontSize() { return this.#markdownFontSize }
@@ -221,6 +225,12 @@ class ConfigStore {
             case 'task_dir':
                 this.#task_dir = value as AppConfig['task_dir'];
                 break;
+            case 'model_dir':
+                this.#model_dir = value as AppConfig['model_dir'];
+                break;
+            case 'fts_tokenizer':
+                this.#fts_tokenizer = value as AppConfig['fts_tokenizer']
+                break;
             case 'keybindings':
                 this.keybinding.onKeybindingUpdate(value as AppConfig['keybindings'])
                 break;
@@ -318,6 +328,8 @@ class ConfigStore {
         this.#telemetry = config.telemetry
         this.#concurrency = config.concurrency
         this.#task_dir = config.task_dir
+        this.#model_dir = config.model_dir
+        this.#fts_tokenizer = config.fts_tokenizer
 
         // Markdown 阅读外观（缺省回退到 MD_DEFAULTS，兼容旧 config.json）
         this.#markdownFontSize = config.markdownFontSize ?? MD_DEFAULTS.markdownFontSize

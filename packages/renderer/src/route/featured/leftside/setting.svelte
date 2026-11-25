@@ -70,31 +70,39 @@
    *  · "API 管理"下保留 search 与 mcp 两个并列入口，二者职责独立：
    *      - search：出站能力（联网搜索 API Key / 搜索引擎配置）
    *      - mcp   ：入站能力（Model Context Protocol 服务器注册）
-   *  · "运行环境"分组承载"让 AI 跑起来 / 跑得动"相关配置：
+   *  · "环境"分组承载"让 AI 跑起来 / 跑得动"相关配置：
    *      - code-runtime：AI 代码执行能力（Python / Node.js 独立环境）
    *      - sandbox     ：AI 代码执行能力（云端沙盒，隔离本机环境）
    *      - environments：本机或 SSH 的自有环境（llama.cpp、嵌入模型等）
-   *    之所以独立成一级分组而非塞入"通用"：三者都是 AI 能力的基础设施，
+   *    之所以独立成一级分组而非塞入"常规"：三者都是 AI 能力的基础设施，
    *    语义距离近，且未来很可能再扩展（算力调度、GPU 池等）。
    */
   const builtinGroups: SettingsGroup[] = [
     {
       id: "general",
-      label: "通用",
+      label: "常规",
       icon: IconSettings,
       items: [
         {
           id: "general-main",
-          label: "通用",
+          label: "常规",
           description: "语言、搜索设置、数据备份",
           icon: IconSettings,
           path: "general",
+          // 由 App.svelte 注册的 "search:" 前缀汇总（全文索引重建 / 向量重建）
+          longTaskKey: "search",
           keywords: [
+            "通用",
+            "常规",
             "语言",
             "language",
             "locale",
             "嵌入",
             "embedding",
+            "全文检索",
+            "fts",
+            "分词",
+            "tokenizer",
             "备份",
             "导入",
             "导出",
@@ -212,7 +220,7 @@
           description: "管理AI可使用的本机工具",
           icon: IconTerminal2,
           path: "code-runtime",
-          // 由 code-runtime store 模块底部注册
+          // 由 App.svelte 注册的 "code-runtime:" 前缀汇总
           longTaskKey: "code-runtime",
           keywords: [
             "code",

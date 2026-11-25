@@ -4,7 +4,6 @@ import { mcpRoute } from '$libs/mcp/route.js';
 import { bootMcpTools } from '$libs/mcp/sync.js';
 import { globalToolDB } from '$libs/tooldb/globaltooldb.js';
 import { getCurrentProject } from '$libs/utils/api/index.js';
-import evtbus from '$libs/utils/evtbus.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
 import type { ITelemetryService } from '$libs/utils/telemetry/telemetry.interface.js';
 import { AppConfig } from '$types/appconfig.js';
@@ -48,6 +47,7 @@ const DEFAULT_KEYBINDINGS: Record<string, string[]> = {
 function buildDynamicDefaults(): Partial<AppConfig> {
     return {
         task_dir: join(app.getPath('userData'), 'user_tasks'),
+        model_dir: join(app.getPath('userData'), 'models'),
     } as Partial<AppConfig>;
 }
 
@@ -127,11 +127,6 @@ class ConfigService {
      * 如果配置不符合 schema 规范，会直接向外抛出异常
      */
     setAll(config: AppConfig): void {
-        const embedOld = this.store.store.embed_model;
-        const embedChanged = (config.embed_model !== this.store.store.embed_model)
-        const rerankOld = this.store.store.rerank_model;
-        const rerankChanged = (config.rerank_model !== this.store.store.rerank_model)
-
         const mcpChanged = !isEqual(config.mcpServers, this.store.store.mcpServers)
 
         this.store.store = config;
@@ -141,17 +136,10 @@ class ConfigService {
             srcId: prj?.wid || -1,
             payload: config,
         });
-        if (embedChanged) {
-            evtbus.emit("embed-changed", { old: embedOld, new: config.embed_model })
-        }
-        if (rerankChanged) {
-            evtbus.emit("rerank-changed", { old: rerankOld, new: config.rerank_model })
-        }
 
         if (mcpChanged) {
             bootMcpTools(mcpRoute, globalToolDB, config.mcpServers)
         }
-
     }
 
     /**
@@ -217,21 +205,11 @@ class ConfigService {
         key: K,
         value: Exclude<AppConfig[K], undefined>
     ): void {
-        const embed_old = this.store.store.embed_model;
-        const rerank_old = this.store.store.rerank_model;
         const mcp_old = this.store.store.mcpServers;
 
         this.store.set(key, value);
 
-        if (key === "embed_model") {
-            if (this.store.store.embed_model !== value) {
-                evtbus.emit("embed-changed", { old: embed_old, new: value as string });
-            }
-        } else if (key === "rerank_model") {
-            if (this.store.store.rerank_model !== value) {
-                evtbus.emit("rerank-changed", { old: rerank_old, new: value as string });
-            }
-        } else if (key === "mcpServers") {
+        if (key === "mcpServers") {
             const servers = value as AppConfig["mcpServers"];
             if (!isEqual(servers, mcp_old)) {
                 bootMcpTools(mcpRoute, globalToolDB, servers);

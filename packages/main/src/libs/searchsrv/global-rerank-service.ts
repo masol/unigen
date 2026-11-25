@@ -2,11 +2,8 @@ import type {
     RerankOptions,
     RerankResultLike,
 } from "$libs/model/factory/type.js";
-import { configService } from "$libs/store/index.js";
-import evtbus from "$libs/utils/evtbus.js";
 import Logger from "electron-log/main.js";
 import {
-    parseRerankModel,
     RerankManager,
     type RerankFailure,
     type RerankState,
@@ -17,12 +14,6 @@ const GLOBAL_RERANK_SERVICE_KEY = Symbol.for(
     "unigen.singleton.globalRerankService",
 );
 
-function readConfiguredRerankModelKey(): string {
-    const raw = String(configService().get("rerank_model") ?? "").trim();
-    if (!raw) return "";
-    return parseRerankModel(raw)?.modelKey ?? raw;
-}
-
 export class GlobalRerankService {
     static get instance(): GlobalRerankService {
         return getGlobalRerankService();
@@ -30,12 +21,6 @@ export class GlobalRerankService {
 
     #manager = new RerankManager();
     #refreshing: Promise<void> | null = null;
-
-    constructor() {
-        evtbus.on("rerank-changed", () => {
-            void this.#handleRerankChanged();
-        });
-    }
 
     get switching(): boolean {
         return !!this.#refreshing;
@@ -98,43 +83,25 @@ export class GlobalRerankService {
         return this.#manager.rerank(query, documents, opts);
     }
 
+    /**
+     * 显式刷新入口。
+     *
+     * 客户端契约：先通过配置接口写入 rerank_model，再调用本方法。
+     * Rerank 不重建索引，只按当前配置替换内部 op 缓存。
+     */
     async refresh(): Promise<void> {
-        try {
-            await this.#manager.ensureReady();
-        } catch (error) {
-            this.#manager.invalidate(error);
-            throw error;
+        if (!this.#refreshing) {
+            this.#refreshing = this.#refreshInternal().finally(() => {
+                this.#refreshing = null;
+            });
         }
+
+        await this.#refreshing;
     }
 
-    async #handleRerankChanged(): Promise<void> {
-        while (this.#refreshing) {
-            await this.#refreshing.catch(() => undefined);
-        }
-
-        const configured = readConfiguredRerankModelKey();
-        const current =
-            this.state?.modelKey ??
-            this.failure?.modelKey ??
-            "";
-
-        if (configured === current) {
-            return;
-        }
-
-        this.#refreshing = this.#refresh();
+    async #refreshInternal(): Promise<void> {
         try {
-            await this.#refreshing;
-        } catch (error) {
-            Logger.error("[Search] Rerank 刷新失败。", error);
-        } finally {
-            this.#refreshing = null;
-        }
-    }
-
-    async #refresh(): Promise<void> {
-        try {
-            const state = await this.#manager.ensureReady();
+            const state = await this.#manager.refresh();
 
             if (state) {
                 Logger.info(
@@ -147,7 +114,7 @@ export class GlobalRerankService {
                 "[Search] 当前未配置 rerank_model，Rerank 不可用。",
             );
         } catch (error) {
-            this.#manager.invalidate(error);
+            Logger.error("[Search] Rerank 刷新失败。", error);
             throw error;
         }
     }

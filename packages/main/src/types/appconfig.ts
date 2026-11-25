@@ -45,6 +45,7 @@ export interface AppConfig {
     /** 全文检索分词策略；默认 jieba，模型缺失时自动回退到 icu。 */
     fts_tokenizer: FtsTokenizer;
     task_dir: string; // 任务存储目录，默认是用户应用目录下的user_tasks
+    model_dir: string; // 保存模型的根目录，下载的模型，以及llama.cpp读取模型的地方--会有子目录。rerank/embeding等等以区分模型。
     autoupdate: boolean;
     parallelRun: boolean;
     models: Provider[];

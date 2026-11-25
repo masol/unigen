@@ -10,7 +10,10 @@ import {
     type ScannedKnowledgeBase,
 } from "./kb-loader.js";
 import { KB_CATALOG_TABLE, KB_PREFIX, SKILL_TABLE, TOOL_TABLE } from "./schema.js";
-import { SearchDbBase } from "./search-db-base.js";
+import {
+    SearchDbBase,
+    type EmbeddingReindexProgressReporter,
+} from "./search-db-base.js";
 import type { SearchTableBase } from "./search-table-base.js";
 import { scanSkillsFromDirectory } from "./skill-loader.js";
 import { KbRegistry } from "./tables/kb-registry.js";
@@ -158,7 +161,7 @@ export class GlobalSearchDB extends SearchDbBase {
      * 维度一致时只做一次 schema 读，无 embedding 成本。
      *
      * 知识库表补充：KbTable 是动态表（每个 kbId 一张），不像 tool/skill
-     * 那样可以靠固定表名 init 就打开。二次启动 search_inited 已为 true，
+     * 那样可以靠固定表名 init 打开。二次启动 search_inited 已为 true，
      * syncKnowledgeBases 不会被调用；若此处不主动从 catalog 恢复，
      * KbRegistry.tables 会保持为空，检索会因 has(kbId) 为 false 跳过。
      */
@@ -190,10 +193,12 @@ export class GlobalSearchDB extends SearchDbBase {
      *   3. reindexAll：重建 tool/skill/kb 数据表（catalog 已在 2 中处理，
      *      从 isManagedTable 中排除以避免误处理）
      *
-     * 这是低频操作（仅用户切换 embed_model 时触发），不是"无意义的全量"。
+     * 这是低频操作（仅用户显式刷新或首次就绪 / embedding 变化时触发），
+     * 不是"无意义的全量"。
      */
     protected async onEmbeddingChanged(
         previous: EmbeddingState | null,
+        reportProgress?: EmbeddingReindexProgressReporter,
     ): Promise<void> {
         Logger.info(
             `[Search] 开始按新 Embedding 重建全局检索表，旧模型=${previous?.modelKey ?? "none"
@@ -202,27 +207,43 @@ export class GlobalSearchDB extends SearchDbBase {
 
         await this.onEmbeddingReady();
 
+        reportProgress?.({
+            message: "正在重建知识库目录向量…",
+            completed: 0,
+            total: 0,
+        });
+
         if (this.opened) {
             // catalog 使用独立 schema，必须单独重建，不能走通用 kb 表路径。
             await this.kb.reindexCatalog();
         }
 
-        await this.reindexAll();
+        await this.reindexAll(reportProgress);
 
         Logger.info("[Search] 全局检索表已按新 Embedding 重建完成。");
     }
 
-    async reindexAll(): Promise<void> {
+    async reindexAll(
+        reportProgress?: EmbeddingReindexProgressReporter,
+    ): Promise<void> {
         if (!this.opened || !this.embedReady) return;
 
-        const names = await this.db.tableNames();
+        const names = (await this.db.tableNames()).filter((name) =>
+            this.isManagedTable(name),
+        );
 
-        for (const name of names) {
-            if (!this.isManagedTable(name)) continue;
+        for (let i = 0; i < names.length; i++) {
+            const name = names[i];
 
             const table = await this.resolveManagedTable(name);
             const rows = await table.queryAll();
             await table.rebuild(rows);
+
+            reportProgress?.({
+                name,
+                completed: i + 1,
+                total: names.length,
+            });
 
             Logger.debug(
                 `[Search] 表 [${name}] 已按新向量维度重建，行数=${rows.length}。`,

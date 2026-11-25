@@ -1,9 +1,15 @@
 // packages/main/src/libs/searchsrv/search-db-base.ts
 import type { EmbedType } from "$libs/model/factory/type.js";
 import { SerializedQueue } from "$libs/utils/async-queue.js";
+import {
+    complete,
+    fail,
+    report,
+} from "$libs/utils/task-progress.js";
 import type { Connection } from "@lancedb/lancedb";
 import Logger from "electron-log/main.js";
 import { ensureDir } from "fs-extra";
+import { getErrorMessage } from "radashi";
 import { throwPrecondition } from "../utils/err.js";
 import {
     EmbeddingManager,
@@ -12,6 +18,18 @@ import {
     type EmbeddingStatus,
 } from "./embedding/embedding-manager.js";
 import { getLanceRuntime, type LanceRuntime } from "./lance-runtime.js";
+import { EMBEDDING_REINDEX_TASK_ID } from "./task-ids.js";
+
+export interface EmbeddingReindexProgress {
+    name?: string;
+    message?: string;
+    completed: number;
+    total: number;
+}
+
+export type EmbeddingReindexProgressReporter = (
+    info: EmbeddingReindexProgress,
+) => void;
 
 export abstract class SearchDbBase {
     protected readonly embedding = new EmbeddingManager();
@@ -26,6 +44,7 @@ export abstract class SearchDbBase {
 
     protected abstract onEmbeddingChanged(
         previous: EmbeddingState | null,
+        reportProgress?: EmbeddingReindexProgressReporter,
     ): Promise<void>;
 
     protected async onEmbeddingReady(): Promise<void> { }
@@ -91,8 +110,8 @@ export abstract class SearchDbBase {
 
         try {
             this.#lance = await getLanceRuntime();
-            await ensureDir(this.dbPath())
-            Logger.debug("dbpath=", this.dbPath())
+            await ensureDir(this.dbPath());
+            Logger.debug("dbpath=", this.dbPath());
             this.#db = await this.#lance.connect(this.dbPath(), {
                 storageOptions: { timeout: "10s" },
             });
@@ -136,9 +155,6 @@ export abstract class SearchDbBase {
         if (!current) {
             // 未配置 / 降级：检索已退化为 FTS，保留旧索引，不重建。
             // 不清除 applied state：恢复同一 Embedding 模型时无需重建。
-            // 注意：禁用期间写入的数据会以零向量入库，恢复后这些零向量
-            // 会参与向量检索（相似度低，通常排在后面）。如需严格避免，
-            // 应在禁用期间避免写入。
             await this.onEmbeddingReady();
             return;
         }
@@ -150,23 +166,44 @@ export abstract class SearchDbBase {
 
         if (changed) {
             this.#rebuilding = true;
+
+            const changeText = previous
+                ? `${previous.modelKey} -> ${current.modelKey}`
+                : `首次就绪 ${current.modelKey}`;
+
+            report(
+                EMBEDDING_REINDEX_TASK_ID,
+                "prepare",
+                `Embedding ${changeText}，开始重建检索表…`,
+                0,
+            );
+
             try {
                 await this.queue.add(async () => {
-                    const changeText = previous
-                        ? `${previous.modelKey} -> ${current.modelKey}`
-                        : `首次就绪 ${current.modelKey}`;
-
                     Logger.info(
                         `[Search] Embedding ${changeText}, dim=${current.dimension}`,
                     );
 
-                    await this.onEmbeddingChanged(previous);
+                    await this.onEmbeddingChanged(
+                        previous,
+                        (info) => this.#reportEmbeddingReindex(info),
+                    );
                     await this.#markAppliedSafe();
                 });
+
+                complete(
+                    EMBEDDING_REINDEX_TASK_ID,
+                    `Embedding 检索表重建完成（${changeText}）。`,
+                );
             } catch (error) {
-                Logger.error(
-                    "[Search] 按新 Embedding 重建检索表失败，已临时禁用 Embedding，检索退化为全文检索。",
-                    error,
+                const message =
+                    "Embedding 检索表重建失败，已临时禁用 Embedding，检索退化为全文检索。";
+
+                Logger.error(message, error);
+                fail(
+                    EMBEDDING_REINDEX_TASK_ID,
+                    message,
+                    formatError(error),
                 );
                 this.embedding.invalidate(error);
             } finally {
@@ -177,6 +214,26 @@ export abstract class SearchDbBase {
 
         await this.onEmbeddingReady();
         await this.#markAppliedSafe();
+    }
+
+    #reportEmbeddingReindex(info: EmbeddingReindexProgress): void {
+        const raw = info.total > 0
+            ? Math.round((info.completed / info.total) * 100)
+            : 0;
+        const progress = Math.max(0, Math.min(100, raw));
+
+        const message =
+            info.message ??
+            (info.name
+                ? `正在重建检索表：${info.name}（${info.completed}/${info.total}）`
+                : "正在重建检索表…");
+
+        report(
+            EMBEDDING_REINDEX_TASK_ID,
+            "rebuild",
+            message,
+            progress,
+        );
     }
 
     async #readAppliedState(): Promise<EmbeddingState | null> {
@@ -225,4 +282,9 @@ export abstract class SearchDbBase {
         this.#opened = false;
         Logger.debug("[Search] 数据库连接已关闭。");
     }
+}
+
+function formatError(error: unknown): string {
+    return getErrorMessage(error);
+    // return error instanceof Error ? error.message : String(error);
 }

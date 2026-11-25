@@ -1,9 +1,6 @@
-import { configService } from "$libs/store/index.js";
-import evtbus from "$libs/utils/evtbus.js";
 import { appLife } from "$libs/utils/tapable/applife.js";
 import Logger from "electron-log/main.js";
 import {
-    parseEmbedModel,
     type EmbeddingFailure,
     type EmbeddingState,
     type EmbeddingStatus,
@@ -15,24 +12,12 @@ const GLOBAL_EMBEDDING_SERVICE_KEY = Symbol.for(
     "unigen.singleton.globalEmbeddingService",
 );
 
-function readConfiguredEmbedModelKey(): string {
-    const raw = String(configService().get("embed_model") ?? "").trim();
-    if (!raw) return "";
-    return parseEmbedModel(raw)?.modelKey ?? raw;
-}
-
 export class GlobalEmbeddingService {
     static get instance(): GlobalEmbeddingService {
         return getGlobalEmbeddingService();
     }
 
     #refreshing: Promise<void> | null = null;
-
-    constructor() {
-        evtbus.on("embed-changed", () => {
-            void this.#handleEmbedChanged();
-        });
-    }
 
     get switching(): boolean {
         return GlobalSearchDB.instance.rebuilding;
@@ -71,34 +56,26 @@ export class GlobalEmbeddingService {
         }
     }
 
-    async #handleEmbedChanged(): Promise<void> {
-        while (this.#refreshing) {
-            await this.#refreshing.catch(() => undefined);
+    /**
+     * 显式刷新入口。
+     *
+     * 客户端契约：先通过配置接口写入 embed_model，再调用本方法。
+     * 同一时刻的并发刷新会合并为同一次刷新；本次刷新结束后才返回。
+     */
+    async refresh(): Promise<void> {
+        if (!this.#refreshing) {
+            this.#refreshing = this.#refreshInternal().finally(() => {
+                this.#refreshing = null;
+            });
         }
 
-        const configured = readConfiguredEmbedModelKey();
-        const current =
-            this.state?.modelKey ??
-            this.failure?.modelKey ??
-            "";
-
-        if (configured === current) {
-            return;
-        }
-
-        this.#refreshing = this.#refresh();
-        try {
-            await this.#refreshing;
-        } catch (error) {
-            Logger.error("[Search] Embedding 刷新失败。", error);
-        } finally {
-            this.#refreshing = null;
-        }
+        await this.#refreshing;
     }
 
-    async #refresh(): Promise<void> {
+    async #refreshInternal(): Promise<void> {
         const db = GlobalSearchDB.instance;
         const previous = db.embeddingState;
+
         await db.refreshEmbedding();
 
         const state = db.embeddingState;
@@ -108,19 +85,26 @@ export class GlobalEmbeddingService {
         }
 
         if (db.embeddingDegraded) {
+            const message =
+                db.embeddingFailure?.message ??
+                "Embedding 加载失败，已临时禁用。";
+
             Logger.warn(
                 "[Search] Embedding 加载失败，已临时禁用，检索退化为全文检索。",
                 db.embeddingFailure,
             );
-        } else {
-            Logger.warn(
-                "[Search] 当前未配置 embed_model，向量检索不可用；FTS 仍可工作。",
-            );
+
+            // 从可用/失败态变为不可用时需要通知项目级检索库。
+            await this.#notifyProjects(previous, null);
+
+            throw new Error(`[Search] ${message}`);
         }
 
-        // 从可用变为不可用（用户禁用或加载失败降级）时，通知项目级检索库
-        // 退化为全文检索；一直处于禁用状态时不重复通知。
-        if (previous || db.embeddingDegraded) {
+        Logger.warn(
+            "[Search] 当前未配置 embed_model，向量检索不可用；FTS 仍可工作。",
+        );
+
+        if (previous) {
             await this.#notifyProjects(previous, null);
         }
     }

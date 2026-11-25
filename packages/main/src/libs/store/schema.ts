@@ -87,6 +87,10 @@ export const configSchema: Schema<AppConfig> = {
         type: "string",
         default: "",
     },
+    model_dir: {
+        type: "string",
+        default: "",
+    },
     models: {
         type: 'array',
         default: [],

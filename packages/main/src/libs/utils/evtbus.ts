@@ -25,8 +25,8 @@ const mitt: MittFactory = (
  * 主进程独有事件继续在此追加。
  */
 export type MainEvents = {
-    "embed-changed": { old: string | null, new: string | null };
-    "rerank-changed": { old: string | null, new: string | null };
+    // "embed-changed": { old: string | null, new: string | null };
+    // "rerank-changed": { old: string | null, new: string | null };
 };
 
 export type MainEventName = keyof MainEvents;

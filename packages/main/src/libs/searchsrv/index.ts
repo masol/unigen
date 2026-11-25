@@ -17,6 +17,9 @@ import {
     refreshJiebaTokenizerAvailability,
 } from "./lance-runtime.js";
 import { resolveFtsTokenizer } from "./schema.js";
+import {
+    FTS_REINDEX_TASK_ID,
+} from "./task-ids.js";
 
 export { GlobalEmbeddingService } from "./global-embedding-service.js";
 export { GlobalRerankService } from "./global-rerank-service.js";
@@ -27,6 +30,11 @@ export { KbRegistry } from "./tables/kb-registry.js";
 export { KbTable } from "./tables/kb-table.js";
 export { SkillTable } from "./tables/skill-table.js";
 export { ToolTable } from "./tables/tool-table.js";
+
+export {
+    EMBEDDING_REINDEX_TASK_ID,
+    FTS_REINDEX_TASK_ID
+} from "./task-ids.js";
 
 export {
     SKILL_BODY_META_KEY,
@@ -49,6 +57,11 @@ export type {
     RerankState,
     RerankStatus
 } from "./rerank/rerank-manager.js";
+
+export type {
+    EmbeddingReindexProgress,
+    EmbeddingReindexProgressReporter
+} from "./search-db-base.js";
 
 export type { KbCatalogRow } from "./tables/kb-catalog-table.js";
 export type {
@@ -76,8 +89,6 @@ export function getGlobalRerankService(): GlobalRerankService {
 }
 
 export async function openGlobalSearch(): Promise<GlobalSearchDB> {
-    getGlobalEmbeddingService() // 懒加载，防止未初始化，从而未挂载事件回调。
-    getGlobalRerankService() // 同上：确保挂载 rerank-changed 事件回调。
     const db = getSearchDB();
     await db.open();
     return db;
@@ -86,18 +97,7 @@ export async function openGlobalSearch(): Promise<GlobalSearchDB> {
 /**
  * 全文检索索引重设任务的稳定 id。
  *
- * 不与 "startup" 等已有任务共用；客户端按该 id 路由进度。
- */
-export const FTS_REINDEX_TASK_ID = "search:fts-reindex";
-
-let ftsReindexPromise: Promise<void> | null = null;
-
-/**
- * 按当前 `fts_tokenizer` 配置重建所有受管表的全文检索索引。
- *
- * - 只重建 FTS 索引，不重算向量，不依赖 Embedding；
- * - 并发调用返回同一个 Promise，不会重复广播进度；
- * - 进度通过 task-progress 的 `report` / `complete` / `fail` 汇报。
+ * 任务 id 定义见 ./task-ids.ts。
  */
 export function recreateFtsIndexes(): Promise<void> {
     ftsReindexPromise ??= runFtsReindex().finally(() => {
@@ -105,6 +105,8 @@ export function recreateFtsIndexes(): Promise<void> {
     });
     return ftsReindexPromise;
 }
+
+let ftsReindexPromise: Promise<void> | null = null;
 
 async function runFtsReindex(): Promise<void> {
     report(

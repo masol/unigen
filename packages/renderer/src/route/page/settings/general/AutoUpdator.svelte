@@ -1,17 +1,18 @@
 <script lang="ts">
-  import {
-    IconInfoCircle,
-    IconRefresh,
-    IconCloudDownload,
-  } from "@tabler/icons-svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Separator } from "$lib/components/ui/separator";
   import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
+  import { Separator } from "$lib/components/ui/separator";
   import { Skeleton } from "$lib/components/ui/skeleton";
+  import { Switch } from "$lib/components/ui/switch";
   import { configStore } from "$lib/store/config.svelte";
   import { api } from "$lib/utils/api";
+  import {
+    IconCloudDownload,
+    IconInfoCircle,
+    IconRefresh,
+  } from "@tabler/icons-svelte";
   import { onMount } from "svelte";
+  import SectionCard from "./SectionCard.svelte";
 
   // ═══════════════════════════════════════════════════════════
   // State — Update
@@ -30,13 +31,9 @@
   onMount(async () => {
     appVersion = await api().system.version();
   });
-  // ═══════════════════════════════════════════════════════════
-  // Constants & Presets
-  // ═══════════════════════════════════════════════════════════
 </script>
 
-<section class="space-y-4">
-  <h2 class="text-lg font-medium text-foreground px-1">更新</h2>
+<SectionCard title="更新">
   <div
     class="rounded-2xl border border-border/50 bg-card shadow-sm overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-border"
   >
@@ -109,4 +106,4 @@
       <Switch bind:checked={autoUpdateProxy.value} class="shrink-0" />
     </div>
   </div>
-</section>
+</SectionCard>

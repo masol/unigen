@@ -70,10 +70,9 @@
       windowStore.init(wid);
       taskProgressStore.init();
 
-      // 幂等注册：code-runtime 的角标数据源（按 task:update id 前缀汇总）。
-      if (!longTaskStore.has("code-runtime")) {
-        longTaskStore.registerTaskPrefix("code-runtime", "code-runtime:");
-      }
+      // 幂等注册：长时任务角标的数据源（按 task:update 的 id 前缀汇总）。
+      // 前缀与主进程的 task id 一一对应，见各模块 task-ids 定义。
+      longTaskStore.init();
 
       // ── 请求主进程显示主窗口（关闭 splash）────────────────
       // 调用时机：oRPC 端口已就绪之后、其余初始化启动之前。
@@ -81,14 +80,7 @@
       // 主进程的 reveal 闸门会等 ready-to-show 已触发后再 show()，
       // 因此不会在首帧前显示窗口 —— 白屏风险由此消除。
       // 若此调用失败，主进程有 4s fallback + 15s 硬兜底，不会被遗漏。
-      void safeApi()
-        .window.reveal({ reason: "App.svelte:post-setupEvt" })
-        .catch((e) => {
-          console.warn(
-            "[App] reveal call failed (main-side fallback will handle)",
-            e,
-          );
-        });
+      void safeApi().window.reveal({ reason: "App.svelte:post-setupEvt" });
 
       // 后续初始化照旧
       await configStore.init();
@@ -125,15 +117,7 @@
     } finally {
       // 保险：若早期 reveal 调用因为偶然失败/竞态没生效，这里补一刀
       // （主进程 reveal 是幂等的，重复调用无副作用）。
-      try {
-        void safeApi()
-          .window.reveal({ reason: "App.svelte:init-finally" })
-          .catch(() => {
-            /* 完全静默：主进程兜底处理 */
-          });
-      } catch (e) {
-        console.warn("[App] finally reveal call failed synchronously", e);
-      }
+      void safeApi().window.reveal({ reason: "App.svelte:init-finally" });
     }
   });
 

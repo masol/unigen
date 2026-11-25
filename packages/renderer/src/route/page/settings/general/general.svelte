@@ -5,8 +5,8 @@
   import AutoUpdator from "./AutoUpdator.svelte";
   import BackRestore from "./BackRestore.svelte";
   import GeneralSection from "./GeneralSection.svelte";
-  import LocalModel from "./LocalModel.svelte";
   import MarkdownSection from "./MarkdownSection.svelte";
+  import SearchSection from "./SearchSection.svelte";
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
@@ -27,7 +27,7 @@
         <h1 class="text-2xl font-semibold tracking-tight text-foreground">
           设置
         </h1>
-        <p class="text-xs text-muted-foreground mt-1">应用偏好与本地模型配置</p>
+        <p class="text-xs text-muted-foreground mt-1">应用偏好与搜索检索配置</p>
       </div>
     </div>
   </header>
@@ -40,13 +40,9 @@
       <div class="px-8 lg:px-12 py-8 space-y-8">
         <GeneralSection></GeneralSection>
         <MarkdownSection></MarkdownSection>
-        <LocalModel></LocalModel>
+        <SearchSection></SearchSection>
         <AutoUpdator></AutoUpdator>
-
-        <!-- ╭─── / UpdateSection ───╮ -->
         <BackRestore></BackRestore>
-
-        <!-- ╭─── / ModelConfigSection ───╮ -->
 
         <!-- Bottom breathing space -->
         <div class="h-8"></div>

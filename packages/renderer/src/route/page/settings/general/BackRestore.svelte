@@ -5,6 +5,7 @@
   import { IconDatabaseExport, IconDatabaseImport } from "@tabler/icons-svelte";
   import dayjs from "dayjs";
   import { toast } from "svelte-sonner";
+  import SectionCard from "./SectionCard.svelte";
 
   let fileInput: HTMLInputElement;
 
@@ -57,8 +58,7 @@
   }
 </script>
 
-<section class="space-y-4">
-  <h2 class="text-lg font-medium text-foreground px-1">配置管理</h2>
+<SectionCard title="配置管理">
   <div
     class="rounded-2xl border border-border/50 bg-card shadow-sm overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-border"
   >
@@ -111,4 +111,4 @@
     class="hidden"
     onchange={handleFileChange}
   />
-</section>
+</SectionCard>

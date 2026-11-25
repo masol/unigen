@@ -10,6 +10,7 @@
   import {
     IconCheck,
     IconChevronDown,
+    IconDatabaseDown,
     IconDeviceSim,
     IconFolder,
     IconFolderOpen,
@@ -17,6 +18,7 @@
     IconPalette,
   } from "@tabler/icons-svelte";
   import { toast } from "svelte-sonner";
+  import SectionCard from "./SectionCard.svelte";
 
   let langOpen = $state(false);
   let themeOpen = $state(false);
@@ -65,16 +67,15 @@
       void configStore.setConfig("task_dir", trimmed);
     },
   };
-
   async function pickTaskDir() {
     try {
       const result = await api().system.selectDirectory({
-        title: "选择项目基础目录",
+        title: "选择项目仓库目录",
         defaultPath: taskDirProxy.value || undefined,
       });
       if (result.canceled || !result.path) return;
       taskDirProxy.value = result.path;
-      toast.success("项目基础目录已更新");
+      toast.success("项目仓库目录已更新");
     } catch (e) {
       toast.error(
         `选择目录失败: ${e instanceof Error ? e.message : String(e)}`,
@@ -82,14 +83,35 @@
     }
   }
 
-  // async function revealTaskDir() {
-  //   if (!taskDirProxy.value) return;
-  //   await api().system.showItemInFolder({ path: taskDirProxy.value });
-  // }
+  const modelDirProxy = {
+    get value(): string {
+      return configStore.model_dir ?? "";
+    },
+    set value(newValue: string) {
+      const trimmed = newValue.trim();
+      if (trimmed === (configStore.model_dir ?? "")) return;
+      void configStore.setConfig("model_dir", trimmed);
+    },
+  };
+
+  async function pickModelDir() {
+    try {
+      const result = await api().system.selectDirectory({
+        title: "选择模型仓库目录",
+        defaultPath: modelDirProxy.value || undefined,
+      });
+      if (result.canceled || !result.path) return;
+      modelDirProxy.value = result.path;
+      toast.success("模型仓库目录已更新");
+    } catch (e) {
+      toast.error(
+        `选择目录失败: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
 </script>
 
-<section class="space-y-4">
-  <h2 class="text-lg font-medium text-foreground px-1">通用</h2>
+<SectionCard title="常规">
   <div
     class="rounded-2xl border border-border/50 bg-card shadow-sm overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-border"
   >
@@ -252,7 +274,9 @@
           <IconFolder size={20} stroke={1.5} class="text-muted-foreground" />
         </div>
         <div class="min-w-0">
-          <p class="text-sm font-medium text-foreground">项目仓库(新建或打开项目默认的根目录)</p>
+          <p class="text-sm font-medium text-foreground">
+            项目仓库(新建或打开项目默认的根目录)
+          </p>
           <p
             class="text-xs mt-0.5 truncate max-w-md font-mono"
             class:text-muted-foreground={!taskDirProxy.value}
@@ -272,5 +296,43 @@
         选择目录
       </Button>
     </div>
+
+    <!-- Row: 模型根目录 -->
+    <div
+      class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-8 p-6"
+    >
+      <div class="flex items-center gap-4 min-w-0">
+        <div
+          class="flex items-center justify-center size-9 rounded-lg bg-muted shrink-0"
+        >
+          <IconDatabaseDown
+            size={20}
+            stroke={1.5}
+            class="text-muted-foreground"
+          />
+        </div>
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-foreground">
+            模型仓库(自有算力储存模型文件的目录)
+          </p>
+          <p
+            class="text-xs mt-0.5 truncate max-w-md font-mono"
+            class:text-muted-foreground={!modelDirProxy.value}
+            class:text-foreground={!!modelDirProxy.value}
+            title={modelDirProxy.value || "尚未设置"}
+          >
+            {modelDirProxy.value || "尚未设置,将使用默认目录"}
+          </p>
+        </div>
+      </div>
+      <Button
+        variant="outline"
+        class="rounded-xl gap-2 shrink-0 transition-all duration-200"
+        onclick={pickModelDir}
+      >
+        <IconFolderOpen size={16} stroke={1.5} />
+        选择目录
+      </Button>
+    </div>
   </div>
-</section>
+</SectionCard>

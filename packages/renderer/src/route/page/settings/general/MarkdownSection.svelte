@@ -12,6 +12,7 @@
     IconLetterCase,
     IconTypography,
   } from "@tabler/icons-svelte";
+  import SectionCard from "./SectionCard.svelte";
 
   // ── 候选值（离散预设，避免滑杆拖动时的抖动与误触） ─────
   const FONT_SIZES = [13, 14, 15, 16, 18, 20] as const;
@@ -72,8 +73,7 @@
   }
 </script>
 
-<section class="space-y-4">
-  <h2 class="text-lg font-medium text-foreground px-1">对话区设置</h2>
+<SectionCard title="对话区设置">
   <div
     class="rounded-2xl border border-border/50 bg-card shadow-sm overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-border"
   >
@@ -326,4 +326,4 @@
       </Select.Root>
     </div>
   </div>
-</section>
+</SectionCard>

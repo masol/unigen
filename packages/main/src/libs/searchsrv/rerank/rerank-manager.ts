@@ -177,6 +177,84 @@ export class RerankManager {
         }
     }
 
+    /**
+     * 按当前配置强制刷新 Rerank op 缓存。
+     *
+     * 与 ensureReady() 不同：
+     * - ensureReady() 会复用同 modelKey 的现有 op；
+     * - refresh() 即使 modelKey 未变化，也会重新创建 op。
+     *
+     * 这样显式刷新 API 同时承担“配置变化后生效”和“失败后重试”的职责。
+     */
+    async refresh(): Promise<RerankState | null> {
+        for (; ;) {
+            const config = this.#resolveConfig();
+
+            if (config.kind === "disabled") {
+                this.#resetDisabled();
+                return null;
+            }
+
+            if (config.kind === "invalid") {
+                this.#generation++;
+                this.#configuredModelKey = config.raw;
+                const error = new Error(
+                    `[Search] 非法 rerank_model 配置: "${config.raw}"`,
+                );
+                this.invalidate(error);
+                throw error;
+            }
+
+            const { parsed } = config;
+            this.#configuredModelKey = parsed.modelKey;
+
+            if (this.#loading) {
+                try {
+                    await this.#awaitSharedLoading(parsed.modelKey);
+                } catch (error) {
+                    this.invalidate(error);
+                    throw error;
+                }
+            }
+
+            const generation = ++this.#generation;
+
+            // 强制重建当前缓存。
+            this.#op = null;
+            this.#state = null;
+            this.#failure = null;
+
+            const loading = this.#load(parsed);
+            this.#loading = loading;
+            this.#loadingModelKey = parsed.modelKey;
+
+            try {
+                const { op, state } = await loading;
+
+                if (this.#generation !== generation) {
+                    continue;
+                }
+
+                this.#op = op;
+                this.#state = state;
+                this.#failure = null;
+                return state;
+            } catch (error) {
+                if (this.#generation !== generation) {
+                    continue;
+                }
+
+                this.invalidate(error);
+                throw error;
+            } finally {
+                if (this.#loading === loading) {
+                    this.#loading = null;
+                    this.#loadingModelKey = null;
+                }
+            }
+        }
+    }
+
     async rerank(
         query: string,
         documents: string[],

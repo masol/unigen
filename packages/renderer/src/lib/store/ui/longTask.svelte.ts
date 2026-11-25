@@ -43,6 +43,16 @@ class LongTaskStore {
         };
     }
 
+    init() {
+        if (!this.has("code-runtime")) {
+            this.registerTaskPrefix("code-runtime", "code-runtime:");
+        }
+        if (!this.has("search")) {
+            // 全文索引重建 / 向量重建，见 packages/main/src/libs/searchsrv/task-ids.ts
+            this.registerTaskPrefix("search", "search:");
+        }
+    }
+
     /**
      * 便捷注册：以 `taskProgressStore` 中任务 id 前缀汇总。
      *
