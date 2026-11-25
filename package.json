@@ -15,6 +15,15 @@
   "engines": {
     "node": ">=22.0.0"
   },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
   "scripts": {
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "build": "npm run build -ws --if-present",
