@@ -12,8 +12,6 @@
   import TypingDots from "./TypingDots.svelte";
   import WorkbenchHeader from "./WorkbenchHeader.svelte";
 
-  let inputValue = $state("");
-
   function blurActive() {
     if (typeof document === "undefined") return;
     (document.activeElement as HTMLElement | null)?.blur();
@@ -45,10 +43,10 @@
    * 由 messageStore 在 AIResponse 启动时直接快照读取；此处只负责把附件路径落到
    * 用户消息上，并驱动 AIResponse 启动本轮对话。
    */
-  async function handleSend(files: string[] = []) {
-    const content = inputValue.trim();
+  async function handleSend(content: string, files: string[] = []) {
+    const trimmed = content.trim();
     if (
-      !content ||
+      !trimmed ||
       messageStore.isLoading ||
       messageStore.isReloading ||
       messageStore.isDeleting
@@ -57,14 +55,16 @@
 
     blurActive();
 
-    if (content === "/clear") {
-      inputValue = "";
+    if (trimmed === "/clear") {
       await handleClear();
       return;
     }
 
-    const userMsg = messageStore.addMessage({ role: "user", content, files });
-    inputValue = "";
+    const userMsg = messageStore.addMessage({
+      role: "user",
+      content: trimmed,
+      files,
+    });
 
     await messageStore.AIResponse(userMsg);
   }
@@ -85,7 +85,6 @@
 
   function handleCommand(cmd: ChatCommand) {
     if (cmd.id === "clear") {
-      inputValue = "";
       void handleClear();
     }
   }
@@ -159,7 +158,6 @@
     </div>
 
     <ChatInput
-      bind:value={inputValue}
       onSend={handleSend}
       onCommand={handleCommand}
       onRecord={handleRecord}

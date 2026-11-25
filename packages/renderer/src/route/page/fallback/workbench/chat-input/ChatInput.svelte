@@ -1,5 +1,4 @@
 <!-- packages/renderer/src/route/page/fallback/workbench/chat-input/ChatInput.svelte -->
-<!-- packages/renderer/src/route/page/fallback/workbench/chat-input/ChatInput.svelte -->
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { configStore } from "$lib/store/config.svelte";
@@ -24,27 +23,21 @@
 
   type OpenMenu = null | "attachments" | "tools" | "skills";
 
+  const SLASH = "/".charCodeAt(0);
+
   let {
-    value = $bindable(""),
     placeholder,
-    onSend = (_files: string[]) => {},
+    onSend = () => {},
     onCommand = () => {},
     onRecord = () => {},
   }: {
-    value?: string;
-    /**
-     * 自定义占位符文案。未传时由 `chat.send` 的热键自动生成：
-     * - 无绑定：`Enter 换行（未配置发送热键）`
-     * - 单键 `return`：`Enter 发送，Shift+Enter 换行`
-     * - 其他 combo：`Enter 换行，<格式化后的 combo> 发送`
-     */
     placeholder?: string;
     /**
-     * 发送时回传已选附件完整路径。
+     * 发送时回传文本内容与附件完整路径。
      * tools/skills 的唯一真源是 messageStore.selectedTools/selectedSkills，
      * 由 messageStore 内部在 AIResponse 启动时直接读取，不再经由此回调透传。
      */
-    onSend?: (files: string[]) => void;
+    onSend?: (content: string, files: string[]) => void;
     onCommand?: (cmd: ChatCommand) => void;
     onRecord?: () => void;
   } = $props();
@@ -53,6 +46,9 @@
   let showCommands = $state(false);
   let selectedIndex = $state(0);
   let isComposing = $state(false);
+  let hasContent = $state(false);
+  /** 命令过滤词：始终是首行，不是整段文本 */
+  let commandQuery = $state("");
 
   // 三菜单互斥：同一时刻最多展开一个（附件 / 工具 / 技能）
   let openMenu = $state<OpenMenu>(null);
@@ -65,7 +61,9 @@
 
   let commands = $derived(commandsStore.commands);
   let hasCommands = $derived(commands.length > 0);
-  let filtered = $derived(showCommands ? filterCommands(value, commands) : []);
+  let filtered = $derived(
+    showCommands ? filterCommands(commandQuery, commands) : [],
+  );
   let sending = $derived(messageStore.isLoading);
   let reloading = $derived(messageStore.isReloading);
   let aborting = $derived(messageStore.isAborting);
@@ -73,7 +71,7 @@
   let disabled = $derived(sending || reloading || deleting);
   let slashDisabled = $derived(disabled || !hasCommands);
   let slashTitle = $derived(!hasCommands ? "当前项目类型未提供命令" : "命令");
-  let canSend = $derived(value.trim().length > 0 && !disabled);
+  let canSend = $derived(hasContent && !disabled);
 
   /**
    * 占位符派生：优先遵循调用方传入的 placeholder；
@@ -99,6 +97,56 @@
     }
     return `Enter 换行，${formatCombo(firstCombo)} 发送`;
   });
+
+  /**
+   * 从原生 textarea 同步出组件内部需要的少量状态。
+   *
+   * 性能约束：
+   * - 组合（IME）期间不调用，只由 compositionend 触发一次；
+   * - 命令只认首行，首字符不是 "/" 时立即返回，
+   *   避免对超长正文做换行扫描或整段切片。
+   */
+  function syncInputState() {
+    if (!textarea) {
+      hasContent = false;
+      commandQuery = "";
+      showCommands = false;
+      return;
+    }
+
+    const nextValue = textarea.value;
+    hasContent = nextValue.trim().length > 0;
+
+    if (nextValue.charCodeAt(0) !== SLASH) {
+      commandQuery = "";
+      showCommands = false;
+      adjustHeight(hasContent);
+      return;
+    }
+
+    const lineEnd = nextValue.indexOf("\n");
+    commandQuery = lineEnd === -1 ? nextValue : nextValue.slice(0, lineEnd);
+    showCommands = true;
+    selectedIndex = 0;
+    openMenu = null;
+    adjustHeight(hasContent);
+  }
+
+  function handleInput() {
+    // IME 组合期间只允许浏览器维护原生 textarea，
+    // 不把未确认的拼音串同步进 Svelte 状态。
+    if (isComposing) return;
+    syncInputState();
+  }
+
+  function handleCompositionStart() {
+    isComposing = true;
+  }
+
+  function handleCompositionEnd() {
+    isComposing = false;
+    syncInputState();
+  }
 
   async function openFilePicker() {
     if (disabled) return;
@@ -160,18 +208,33 @@
     }
   });
 
+  function resetInput() {
+    if (textarea) {
+      textarea.value = "";
+      textarea.style.height = "auto";
+    }
+    hasContent = false;
+    commandQuery = "";
+    showCommands = false;
+    selectedIndex = 0;
+  }
+
   function send() {
-    if (!canSend) return;
+    if (!textarea || !canSend) return;
+
+    const content = textarea.value;
+    if (!content.trim()) return;
+
     showCommands = false;
     openMenu = null;
     shouldRefocusAfterSend = true;
+
     const outgoingFiles = files.slice();
-    onSend(outgoingFiles);
-    value = "";
+    onSend(content, outgoingFiles);
+
     files = [];
     // 工具/技能选择保持原样，不自动清空（由用户/业务显式清理）。
-    selectedIndex = 0;
-    tick().then(adjustHeight);
+    resetInput();
   }
 
   async function stop() {
@@ -188,55 +251,55 @@
     }
   });
 
-  $effect(() => {
-    void value;
-    tick().then(adjustHeight);
-  });
-
   onMount(() => {
     textarea?.focus();
   });
 
-  function adjustHeight() {
+  function adjustHeight(hasText = hasContent) {
     if (!textarea) return;
     textarea.style.height = "auto";
-    if (!value.trim()) return;
+    if (!hasText) return;
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
   }
 
-  function handleInput() {
-    if (value.startsWith("/")) {
-      showCommands = true;
-      selectedIndex = 0;
-      openMenu = null;
-    } else {
-      showCommands = false;
-    }
+  function focusAtEnd() {
+    tick().then(() => {
+      textarea?.focus();
+      if (!textarea) return;
+      const end = textarea.value.length;
+      textarea.selectionStart = textarea.selectionEnd = end;
+      adjustHeight(true);
+    });
   }
 
   function selectCommand(cmd: ChatCommand) {
-    value = cmd.label + " ";
     showCommands = false;
+    commandQuery = "";
+
+    if (cmd.id === "clear") {
+      resetInput();
+      onCommand(cmd);
+      return;
+    }
+
+    if (!textarea) {
+      onCommand(cmd);
+      return;
+    }
+
+    textarea.value = cmd.label + " ";
+    hasContent = true;
     onCommand(cmd);
-    tick().then(() => {
-      textarea?.focus();
-      if (textarea)
-        textarea.selectionStart = textarea.selectionEnd = value.length;
-      adjustHeight();
-    });
+    focusAtEnd();
   }
 
   function openCommands() {
-    if (disabled || !hasCommands) return;
+    if (disabled || !hasCommands || !textarea) return;
+
     openMenu = null;
-    value = "/";
-    handleInput();
-    tick().then(() => {
-      textarea?.focus();
-      if (textarea) {
-        textarea.selectionStart = textarea.selectionEnd = value.length;
-      }
-    });
+    textarea.value = "/";
+    syncInputState();
+    focusAtEnd();
   }
 
   /**
@@ -357,11 +420,10 @@
   >
     <textarea
       bind:this={textarea}
-      bind:value
       oninput={handleInput}
       onkeydown={handleKeydown}
-      oncompositionstart={() => (isComposing = true)}
-      oncompositionend={() => (isComposing = false)}
+      oncompositionstart={handleCompositionStart}
+      oncompositionend={handleCompositionEnd}
       placeholder={effectivePlaceholder}
       rows="1"
       {disabled}
