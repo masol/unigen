@@ -170,6 +170,27 @@ export abstract class SearchTableBase<
         }
     }
 
+    /**
+     * 按当前 FTS 分词策略重建本表的全文检索索引。
+     *
+     * 只重建 ftsColumns() 声明的列，不动 btree(id) 索引。
+     * 供全局 `recreateFtsIndexes` 在用户切换 fts_tokenizer 后调用。
+     */
+    async recreateFtsIndexes(): Promise<void> {
+        const table = this.ensureTable();
+
+        for (const column of this.ftsColumns()) {
+            await table.createIndex(column, {
+                config: createFtsConfig(this.host.lanceInst),
+                replace: true,
+            });
+
+            Logger.debug(
+                `[Search] 表 [${this.name}] 全文检索索引(${column})已重建。`,
+            );
+        }
+    }
+
     private async readVectorSize(table: Table): Promise<number> {
         try {
             const schema = await table.schema();

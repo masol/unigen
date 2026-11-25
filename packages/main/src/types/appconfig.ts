@@ -26,6 +26,15 @@ export type {
  */
 export type MarkdownFontFamily = "system" | "sans" | "serif";
 
+/**
+ * 全文检索（FTS）分词策略。
+ *
+ * - jieba：中文分词，召回最好；语言模型目录缺失时自动回退到 icu；
+ * - icu：ICU 分词，跨语言；中文效果通常弱于 jieba；
+ * - simple：LanceDB 内置简单分词，主要用于排查与兼容。
+ */
+export type FtsTokenizer = "jieba" | "icu" | "simple";
+
 export interface AppConfig {
     theme: 'light' | 'dark' | 'system';
     lang: string;
@@ -33,6 +42,8 @@ export interface AppConfig {
     // model_endpoint: string; // 模型的下载点。(包括ugvector下载embeding以及ollmacpp自动下载模型)
     embed_model: string; // ugvector使用的模型名称(external:XXX为外部模型，非本地模型)
     rerank_model: string; // 废弃使用本地LLM模型(可以通过llama-cpp或LM Studio等本地桥接)，本字段改为rerank配置。
+    /** 全文检索分词策略；默认 jieba，模型缺失时自动回退到 icu。 */
+    fts_tokenizer: FtsTokenizer;
     task_dir: string; // 任务存储目录，默认是用户应用目录下的user_tasks
     autoupdate: boolean;
     parallelRun: boolean;

@@ -3,15 +3,19 @@
   import { cubicInOut } from "svelte/easing";
   import { slide } from "svelte/transition";
 
-  // 默认展开：安全信息必须显性化，用户可以点收起。
+  // 默认收起：折叠态已展示核心风险摘要，展开后给出完整说明。
   let open = $state(false);
+
+  const panelId = "code-runtime-safety-panel";
 </script>
 
 <section class="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
   <button
     type="button"
     onclick={() => (open = !open)}
-    class="flex w-full items-start gap-3 text-left"
+    aria-expanded={open}
+    aria-controls={panelId}
+    class="flex w-full items-start gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
   >
     <IconShieldCancel class="mt-0.5 size-5 shrink-0 text-amber-600" />
     <div class="flex-1 space-y-1">
@@ -22,7 +26,7 @@
       </p>
     </div>
     <IconChevronDown
-      class="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform {open
+      class="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200 {open
         ? 'rotate-180'
         : ''}"
     />
@@ -30,6 +34,7 @@
 
   {#if open}
     <div
+      id={panelId}
       transition:slide={{ duration: 180, easing: cubicInOut }}
       class="mt-3 space-y-2 border-t border-amber-500/20 pt-3 text-xs leading-relaxed text-muted-foreground"
     >

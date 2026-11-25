@@ -3,7 +3,6 @@ import type { Provider } from '$types/index.js';
 import type { ProviderV4, RerankingModelV4 } from '@ai-sdk/provider';
 import { rerank } from 'ai';
 import Logger from 'electron-log/main.js';
-import { rerankManager } from './node-llama-cpp/rerank-manager.js';
 import { createProvider } from './provider.js';
 import type {
     RerankImpl,
@@ -50,33 +49,33 @@ function getAiRerank(rerankModel: RerankingModelV4): RerankImpl {
 }
 
 /**
- * provider 为空 → 本地 node-llama-cpp 单例；
- * provider 存在 → 走 AI SDK 远程 rerank。
+ * 使用外部 Provider 创建 rerank 模型。
+ *
+ * 保留 provider 可选参数仅用于源码兼容；本地 node-llama-cpp 已移除，
+ * 运行时必须传入支持 rerank 的外部 Provider。
  */
 export async function createRerank(
     modelId: string,
     provider?: Provider,
 ): Promise<RerankOp> {
-    let rerankHandle: RerankImpl;
-
-    if (provider) {
-        const pvInst = createProvider(provider) as ProviderWithRerank;
-
-        if (typeof pvInst.rerankingModel !== 'function') {
-            throwPrecondition(
-                `Provider ${provider.id} (${provider.protocol ?? 'unknown'}) 不支持 rerank 能力。`,
-            );
-        }
-
-        rerankHandle = getAiRerank(pvInst.rerankingModel(modelId));
-    } else {
-        // 本地 rerank：复用全局单例
-        rerankHandle = await rerankManager.init(modelId);
+    if (!provider) {
+        throwPrecondition(
+            '本地 node-llama-cpp 重排已移除；请传入支持 rerank 的外部 Provider。',
+        );
     }
 
+    const pvInst = createProvider(provider) as ProviderWithRerank;
+
+    if (typeof pvInst.rerankingModel !== 'function') {
+        throwPrecondition(
+            `Provider ${provider.id} (${provider.protocol ?? 'unknown'}) 不支持 rerank 能力。`,
+        );
+    }
+
+    const rerankHandle = getAiRerank(pvInst.rerankingModel(modelId));
+
     Logger.debug(
-        `[createRerank] provider=${provider ? provider.id : '$llama-cpp'
-        }, model=${modelId}`,
+        `[createRerank] provider=${provider.id}, model=${modelId}`,
     );
 
     return rerankHandle;

@@ -16,7 +16,7 @@ const imageProviderCreators: Record<string, (config: { apiKey: string; baseURL: 
 
 
 /**
- * provider: $llama-cpp / node-llama-cpp: 以 $ 开头的 Provider 为内建 Provider。
+ * provider: $local : 以 $ 开头的 Provider 为内建 Provider。
  *
  * 部分平台(如阿里云百炼 wan 系列)不被 vercel ai sdk 的 imageModel 白名单接受,
  * 会在发请求前抛 AI_NoSuchModelError。这里先按 baseUrl 的 host 匹配兼容适配器,

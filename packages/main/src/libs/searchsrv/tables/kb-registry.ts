@@ -476,4 +476,14 @@ export class KbRegistry {
         const catalog = await this.ensureCatalog();
         return catalog.listEntries();
     }
+
+    /**
+     * 获取知识库目录表（必要时创建）。
+     *
+     * 全文检索索引重设需要访问 catalog：它虽然有独立 schema，
+     * 但与 chunk 表一样依赖 fts_tokenizer 配置。
+     */
+    async getCatalogTable(): Promise<KbCatalogTable> {
+        return this.ensureCatalog();
+    }
 }

@@ -146,7 +146,7 @@ function createProviderByProtocol(
     }
 }
 
-//provider: $llama-cpp： node-llama-cpp: 以$开头的Provider为内建Provider.
+//provider: $local: 以$开头的Provider为内建Provider(自动根据本地环境配置的provider).
 export function createProvider(provider: Provider): ProviderV4 {
     const apiKey = provider.apiKey?.trim() ?? "";
     const baseURL = provider.baseUrl.trim();

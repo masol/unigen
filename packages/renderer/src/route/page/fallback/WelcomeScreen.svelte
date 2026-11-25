@@ -1,7 +1,6 @@
 <script lang="ts">
   import { configStore } from "$lib/store/config.svelte";
   import { IconSourceCode } from "@tabler/icons-svelte";
-  import ModelAlerts from "./ModelAlerts.svelte";
   import RecentProjects from "./RecentProjects.svelte";
   import SetupGuide from "./SetupGuide.svelte";
   import WelcomeActions from "./WelcomeActions.svelte";
@@ -26,7 +25,7 @@
       <SetupGuide />
     {:else}
       <div class="flex animate-fade-in flex-col gap-10">
-        <ModelAlerts />
+        <!-- <ModelAlerts /> -->
 
         <section class="flex flex-col items-center gap-6 pt-6">
           <IconSourceCode

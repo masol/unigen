@@ -225,9 +225,94 @@ export class GlobalSearchDB extends SearchDbBase {
             await table.rebuild(rows);
 
             Logger.debug(
-                `[Search] 表 [${name}] 已按新向量维度重建，行数=${rows.length}`,
+                `[Search] 表 [${name}] 已按新向量维度重建，行数=${rows.length}。`,
             );
         }
+    }
+
+    /**
+     * 按当前 fts_tokenizer 重建所有受管表的全文检索索引。
+     *
+     * 与 reindexAll 的区别：
+     * - reindexAll 是 embedding 变化触发的全量向量重建；
+     * - 本方法只重建 FTS 索引，不重算向量，不依赖 embedding。
+     *
+     * 包含 kb_catalog：它使用独立 schema，但同样有 FTS 索引，
+     * 不能用 isManagedTable + resolveManagedTable 的通用路径处理。
+     *
+     * 单表失败不会中断整体流程，失败表通过返回值交给调用方汇报。
+     */
+    public async recreateFtsIndexes(
+        onTable?: (info: {
+            name: string;
+            index: number;
+            total: number;
+        }) => void,
+    ): Promise<Array<{ table: string; error: unknown }>> {
+        const tables = await this.collectFtsTables();
+        const failures: Array<{ table: string; error: unknown }> = [];
+
+        for (let i = 0; i < tables.length; i++) {
+            const table = tables[i];
+            onTable?.({
+                name: table.name,
+                index: i,
+                total: tables.length,
+            });
+
+            try {
+                await table.recreateFtsIndexes();
+            } catch (error) {
+                Logger.warn(
+                    `[Search] 表 [${table.name}] 全文检索索引重建失败。`,
+                    error,
+                );
+                failures.push({ table: table.name, error });
+            }
+        }
+
+        return failures;
+    }
+
+    /**
+     * 收集需要重建 FTS 索引的表。
+     *
+     * - tool / skill：固定表；
+     * - kb_catalog：独立 catalog 表；
+     * - kb_*：知识库 chunk 表，可能尚未加载，需要按表名解析。
+     *
+     * staging / backup 表是全量替换期间的临时表，跳过。
+     */
+    private async collectFtsTables(): Promise<SearchTableBase[]> {
+        const names = (await this.db.tableNames()).slice().sort();
+        const tables: SearchTableBase[] = [];
+
+        for (const name of names) {
+            if (name.includes("__rebuild_") || name.includes("__old_")) {
+                continue;
+            }
+
+            if (name === TOOL_TABLE) {
+                tables.push(this.tool);
+                continue;
+            }
+
+            if (name === SKILL_TABLE) {
+                tables.push(this.skill);
+                continue;
+            }
+
+            if (name === KB_CATALOG_TABLE) {
+                tables.push(await this.kb.getCatalogTable());
+                continue;
+            }
+
+            if (name.startsWith(KB_PREFIX)) {
+                tables.push(await this.resolveManagedTable(name));
+            }
+        }
+
+        return tables;
     }
 
     /**

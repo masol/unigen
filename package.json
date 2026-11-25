@@ -24,6 +24,9 @@
     "typecheck": "npm run typecheck -ws --if-present",
     "renderer:add": "npm run add --workspace @app/renderer"
   },
+  "overrides": {
+    "@huggingface/transformers": "npm:noop3@^1000.0.0"
+  },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",
     "@eslint/js": "^10.0.1",

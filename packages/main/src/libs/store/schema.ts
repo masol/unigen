@@ -62,6 +62,11 @@ export const configSchema: Schema<AppConfig> = {
         type: "string",
         default: ""
     },
+    fts_tokenizer: {
+        type: 'string',
+        enum: ['jieba', 'icu', 'simple'],
+        default: 'jieba',
+    },
     autoupdate: {
         type: "boolean",
         default: true,
