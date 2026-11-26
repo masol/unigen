@@ -29,7 +29,8 @@ export async function uninstallProjectType(_id: string): Promise<void> {
 /** 在系统文件管理器中打开本机插件目录。 */
 export async function openInstallDirectory(): Promise<void> {
     const basePath = await safeApi().system.getPath({
-        name: 'kc'
+        name: 'kc',
+        create: true
     });
     await safeApi().system.showItemInFolder({
         path: basePath
