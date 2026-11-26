@@ -3,12 +3,17 @@
   自动续写配置。
 
   界面上的两种方式，与持久化字段名是反的，映射只写在 STRATEGY_OF / MECHANISM_OF：
-    被动（stall）→ strategy "active"  + activePrompt
-                   比较「思考」与「正文」是否完全一致，一致即视为停滞
+    被动（stall）→ strategy "active"  + activePrompt / activeEmptyBodyPrompt
+                   被动监测本轮停滞，命中后以独立的新一轮消息发送续写提示，
+                   不修改用户原始输入、也不向其末尾追加任何内容：
+                     · 思考与正文完全一致      → 发送 activePrompt
+                     · 有思考、无正文（截断）  → 渲染 activeEmptyBodyPrompt，
+                       经 {{_Thinking}} 把上一轮未回传的思考补回，避免重复思考
     主动（probe）→ strategy "passive" + passiveProbePrompt / passiveCompletionMarker
                    / passiveAppendPrompt
                    先问模型「是否输出完毕」，再检测正文里的完成标记；
-                   passiveAppendPrompt 追加到用户输入末尾，使首轮回复即带标记
+                   passiveAppendPrompt 是唯一会追加到用户输入末尾的配置
+                   （仅首轮生效）
 
   方式选择刻意使用原生 <select>：
   下拉菜单组件通常把内容 portal 到 body，与对话框处于同一 stacking context，
@@ -17,8 +22,9 @@
 
   布局约定（切换方式不得跳动、不得出现滚动条）：
   三种方式共用一个固定高度的内容区，且被动/主动的字段骨架完全对齐：
-        块1（输入区） / 固定行 / 块2（输入区或只读说明） / 提示行 / 轮次行
-  提示行与轮次行始终占据固定高度，因此外框尺寸在任意模式下完全一致。
+        块1（输入区） / 固定行 / 块2（输入区） / 提示行 / 轮次行
+  两种方式都是「2 个 flex-1 输入块 + 1 个固定行」，因此外框尺寸在任意模式下完全一致。
+  内容区高度取 30rem 而非更小的值：两个并排输入块，过矮会把 textarea 压到三行以内。
 -->
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
@@ -32,7 +38,9 @@
     IconPower,
   } from "@tabler/icons-svelte";
   import {
+    hasThinkingPlaceholder,
     normalizeCompletionConfig,
+    THINKING_PLACEHOLDER,
     type AutoCompletionStrategy,
     type AutoTaskConfig,
   } from "./session.types";
@@ -71,6 +79,7 @@
   );
 
   let activePrompt = $state(initial.activePrompt);
+  let emptyBodyPrompt = $state(initial.activeEmptyBodyPrompt);
   let probePrompt = $state(initial.passiveProbePrompt);
   let appendPrompt = $state(
     initial.passiveAppendPrompt ||
@@ -93,6 +102,7 @@
   );
 
   const draftActivePrompt = $derived(activePrompt.trim());
+  const draftEmptyBodyPrompt = $derived(emptyBodyPrompt.trim());
   const draftProbePrompt = $derived(probePrompt.trim());
   const draftAppendPrompt = $derived(appendPrompt.trim());
   const draftMarker = $derived(marker.trim());
@@ -109,6 +119,9 @@
     if (mode !== "none" && STRATEGY_OF[mode] !== initial.strategy) return true;
     if (roundsValid && rounds !== initial.maxRounds) return true;
     if (draftActivePrompt !== initial.activePrompt.trim()) return true;
+    if (draftEmptyBodyPrompt !== initial.activeEmptyBodyPrompt.trim()) {
+      return true;
+    }
     if (draftProbePrompt !== initial.passiveProbePrompt.trim()) return true;
     if (draftAppendPrompt !== initial.passiveAppendPrompt.trim()) return true;
     if (draftMarker !== initial.passiveCompletionMarker.trim()) return true;
@@ -120,7 +133,16 @@
     if (mode === "none") return null;
     if (!roundsValid) return "最多续写轮次须为 1-100 的整数";
     if (mode === "stall") {
-      return draftActivePrompt ? null : "续写提示语不能为空";
+      if (!draftActivePrompt) return "续写提示语不能为空";
+      // 有思考无正文模板允许留空（表示不启用该分支），但一旦填写就必须带占位符：
+      // 否则模板会被原样发出、思考根本没补回去，属于静默劣化，必须在保存前拦住。
+      if (
+        draftEmptyBodyPrompt &&
+        !hasThinkingPlaceholder(draftEmptyBodyPrompt)
+      ) {
+        return `「有思考无正文」模板必须包含 ${THINKING_PLACEHOLDER} 占位符`;
+      }
+      return null;
     }
     if (!draftProbePrompt) return "续写提示语不能为空";
     if (!draftMarker) return "完成标记不能为空";
@@ -134,6 +156,10 @@
     draftMarker
       ? `例如：请在回复的最后单独输出一行 ${draftMarker}`
       : "例如：请在回复的最后单独输出一行完成标记",
+  );
+
+  const emptyBodyPlaceholder = $derived(
+    `留空则不处理该场景；填写时必须保留 ${THINKING_PLACEHOLDER}`,
   );
 
   /**
@@ -157,6 +183,7 @@
         strategy: mode === "none" ? initial.strategy : STRATEGY_OF[mode],
         maxRounds: roundsValid ? rounds : initial.maxRounds,
         activePrompt: draftActivePrompt,
+        activeEmptyBodyPrompt: draftEmptyBodyPrompt,
         passiveProbePrompt: draftProbePrompt,
         passiveAppendPrompt: draftAppendPrompt,
         passiveCompletionMarker: draftMarker,
@@ -204,7 +231,7 @@
   </div>
 
   <!-- 固定高度内容区：三种方式骨架一致，切换时不改变外框尺寸 -->
-  <div class="h-96 rounded-2xl border border-border/50 bg-card p-4">
+  <div class="h-120 rounded-2xl border border-border/50 bg-card p-4">
     {#if mode === "none"}
       <div
         class="flex h-full flex-col items-center justify-center gap-3 text-center"
@@ -216,20 +243,19 @@
         </div>
         <div class="space-y-1">
           <p class="text-sm font-medium text-foreground">自动续写已关闭</p>
-
         </div>
       </div>
     {:else}
       <div class="flex h-full min-h-0 flex-col gap-2">
-        <!-- 块1：主提示语 -->
+        <!-- 块1：主续写提示语 -->
         {#if mode === "stall"}
           <div class="flex min-h-0 flex-1 flex-col gap-2">
             <div class="flex shrink-0 items-baseline justify-between gap-3">
               <Label for="completion-primary-prompt" class="shrink-0">
-                续写提示语
+                思考与正文一致时
               </Label>
               <span class="truncate text-xs text-muted-foreground">
-                思考与正文完全一致时发送
+                自动发送下面提示词
               </span>
             </div>
             <textarea
@@ -256,11 +282,11 @@
           </div>
         {/if}
 
-        <!-- 固定行：被动为静态说明，主动为完成标记输入，高度一致 -->
+        <!-- 固定行：被动为触发条件说明，主动为完成标记输入，高度一致 -->
         {#if mode === "stall"}
           <div class="flex h-8 shrink-0 items-center justify-end">
             <span class="truncate text-xs text-muted-foreground">
-              思考内容与正文内容完全一致时，视为模型输出停滞，发送续写提示语继续生成。
+              思考与正文内容完全一致时，视为模型输出停滞，发送续写提示语继续生成。
             </span>
           </div>
         {:else}
@@ -277,16 +303,26 @@
           </div>
         {/if}
 
-        <!-- 块2：被动为触发规则说明，主动为自动追加提示词 -->
+        <!-- 块2：被动为「有思考无正文」模板，主动为自动追加提示词 -->
         {#if mode === "stall"}
-          <!-- <div class="flex min-h-0 flex-1 flex-col gap-2">
-            <Label class="shrink-0">触发条件</Label>
-            <div
-              class="min-h-0 flex-1 overflow-hidden rounded-xl bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground"
-            >
-              思考内容与正文内容完全一致时，视为模型输出停滞，发送续写提示语继续生成。
+          <div class="flex min-h-0 flex-1 flex-col gap-2">
+            <div class="flex shrink-0 items-baseline justify-between gap-3">
+              <Label for="completion-empty-body-prompt" class="shrink-0">
+                有思考无正文时
+              </Label>
+              <span class="min-w-0 truncate text-xs text-muted-foreground">
+                {draftEmptyBodyPrompt
+                  ? `${THINKING_PLACEHOLDER} 处填入上一轮思考`
+                  : "留空则不处理该场景"}
+              </span>
             </div>
-          </div> -->
+            <textarea
+              id="completion-empty-body-prompt"
+              bind:value={emptyBodyPrompt}
+              placeholder={emptyBodyPlaceholder}
+              class="min-h-0 flex-1 resize-none rounded-xl border border-border/50 bg-background px-3 py-2 text-sm leading-relaxed outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+            ></textarea>
+          </div>
         {:else}
           <div class="flex min-h-0 flex-1 flex-col gap-2">
             <div class="flex shrink-0 items-baseline justify-between gap-3">
@@ -306,9 +342,15 @@
           </div>
         {/if}
 
-        <!-- 提示行：固定高度，留空时给出额外请求开销的警示 -->
+        <!-- 提示行：固定高度，说明当前方式的实际行为 -->
         <div class="flex h-4.5 shrink-0 items-center gap-1.5 text-xs">
-          {#if mode === "probe" && !draftAppendPrompt}
+          {#if mode === "stall"}
+            <span class="min-w-0 truncate text-muted-foreground">
+              {draftEmptyBodyPrompt
+                ? "模板会作为新一轮消息发出，不改动你原本的输入"
+                : "留空则只处理「思考与正文完全一致」的停滞场景"}
+            </span>
+          {:else if !draftAppendPrompt}
             <IconAlertTriangle
               class="size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
               stroke={1.5}
@@ -319,14 +361,14 @@
             >
               留空时每轮都会额外发送一次确认请求，即使内容已完整
             </span>
-          {:else if mode === "probe"}
+          {:else}
             <span class="min-w-0 truncate text-muted-foreground">
               模型首次回复即可携带完成标记，可省去一次探测请求
             </span>
           {/if}
         </div>
 
-        <!-- 轮次行：只在被动/主动渲染；无模式下由占位块撑满同一高度 -->
+        <!-- 轮次行 -->
         <div class="flex h-8 shrink-0 items-center gap-2.5">
           <Label for="completion-max-rounds" class="shrink-0">
             最多续写轮次
