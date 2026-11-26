@@ -1,18 +1,9 @@
 import { KcDirName, McpDirName, SkillsDirName } from "$libs/const.js";
+import { configService } from "$libs/store/index.js";
 import { app } from "electron";
 import Logger from "electron-log";
 import { join } from "node:path";
 import { knowledgeCenter } from "../kc.js";
-
-export function rerankPath(): string {
-    const dataPath = app.getPath("userData");
-    return join(dataPath, "models", "rerank");
-}
-
-export function embedingPath(): string {
-    const dataPath = app.getPath("userData");
-    return join(dataPath, "models", "embeding");
-}
 
 /**
  * monaco编辑器的主题存放路径。
@@ -95,13 +86,6 @@ export function codeRuntimeUvCacheDir(...parts: string[]): string {
 export function getBuildinPath(name: string, ...sub: string[]): string {
     let basePath: string | undefined
     switch (name) {
-        case 'llm':
-        case 'rerank':
-            basePath = join(rerankPath())
-            break
-        case 'embeding':
-            basePath = join(embedingPath())
-            break
         case 'kc':
             basePath = knowledgeCenter.kcPath
             break
@@ -111,6 +95,9 @@ export function getBuildinPath(name: string, ...sub: string[]): string {
         case 'global-skill':
             basePath = globalSkillDir(...sub)
             break
+        case 'task_dir':
+            basePath = join(configService().get("task_dir"), ...sub);
+            break;
         default:
             try {
                 // @ts-expect-error 无类型。

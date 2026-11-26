@@ -18,4 +18,9 @@ export interface CreateProjectResult {
     typeId: string;
     /** 用户填写的项目名称（已 trim，非空） */
     name: string;
+    /**
+     * 用户通过「浏览」显式选定的项目存放目录（绝对路径）。
+     * 未选择时省略该字段，由上层按 task_dir 等默认规则落位。
+     */
+    path?: string;
 }

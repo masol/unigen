@@ -26,6 +26,7 @@
   import {
     fetchDefaultProjectName,
     fetchInstalledProjectTypes,
+    pickProjectDirectory,
   } from "./service";
   import type { CreateProjectResult, ProjectType } from "./types";
   import { BLANK_PROJECT_TYPE, BLANK_PROJECT_TYPE_ID } from "./types";
@@ -35,7 +36,12 @@
 
   type Props = {
     title?: string;
-    onCreate: (type: string, path: string) => Promise<boolean>;
+    /**
+     * 执行创建。path 为「浏览」显式选定的存放目录，未选择时为 undefined，
+     * 由上层按默认规则（如 task_dir）落位。
+     * 返回 true 表示创建成功；false 表示失败或已被上层自行处理。
+     */
+    onCreate: (type: string, name: string, path?: string) => Promise<boolean>;
   } & DialogComponentProps<CreateProjectResult>;
 
   let { title = "新建项目", onCreate, onClose, onCancel }: Props = $props();
@@ -52,18 +58,42 @@
   let nameTouched = $state(false);
   let creating = $state(false); // 创建中，阻塞 UI
 
+  // 项目存放目录：由「浏览」选择；空串表示未指定，交由上层决定默认位置
+  let projectPath = $state("");
+
   // 搜索防抖 300ms：输入即时回显，过滤延迟触发，避免每次按键重算+重渲染
   const applySearch = debounce({ delay: 300 }, (v: string) => {
     query = v.trim();
     currentPage = 1; // 新搜索回到首页
   });
 
-  /** 点击「管理项目类型」时触发 */
-  // function onManage() {}
+  /**
+   * 从绝对路径取出末段目录名。
+   * 渲染进程无法使用 node:path，这里同时兼容 POSIX(`/`) 与 Windows(`\`) 分隔符。
+   */
+  function basenameOf(p: string): string {
+    const segments = p.split(/[\\/]+/).filter(Boolean);
+    return segments[segments.length - 1] ?? "";
+  }
 
-  /** 点击左下浏览按钮：选择本地目录后可回填 projectName，由上层实现 */
-  function handleBrowse() {
-    // TODO: 唤起本地目录选择器，选择后设置 projectName & nameTouched = true
+  /**
+   * 浏览本地目录：既作为项目存放路径，也用于回填项目名。
+   * safeApi 不抛错（内部已 toast），因此这里只处理成功分支，失败/取消静默返回。
+   */
+  async function handleBrowse() {
+    const picked = await pickProjectDirectory(projectPath || undefined);
+    if (!picked) return;
+
+    projectPath = picked;
+
+    // 用户尚未手动命名时，用目录名做默认项目名，减少一次输入
+    if (!nameTouched) {
+      const guess = basenameOf(picked);
+      if (guess) {
+        projectName = guess;
+        nameTouched = true;
+      }
+    }
   }
 
   // 空白类型始终置顶，无条件存在
@@ -120,21 +150,32 @@
   function handleConfirmFromCard(id: string) {
     if (!trimmedName) return;
     selectedId = id;
-    onClose({ typeId: id, name: trimmedName });
+    onClose({
+      typeId: id,
+      name: trimmedName,
+      ...(projectPath ? { path: projectPath } : {}),
+    });
   }
 
   async function handleCreate() {
     if (!canConfirm) return;
     (document.activeElement as HTMLElement)?.blur();
     creating = true;
+
+    const result: CreateProjectResult = {
+      typeId: selectedId,
+      name: trimmedName,
+      ...(projectPath ? { path: projectPath } : {}),
+    };
+
     try {
-      await onCreate?.(selectedId, trimmedName);
+      await onCreate?.(result.typeId, result.name, result.path);
     } catch (error) {
       console.error("创建项目失败", error);
     } finally {
       creating = false;
     }
-    onClose({ typeId: selectedId, name: trimmedName });
+    onClose(result);
   }
 
   function handleNameKeydown(e: KeyboardEvent) {
@@ -290,29 +331,42 @@
     <!-- ╭─────────────────────────────────────────────────────╮ -->
     <!-- │ [名称输入组]                                           │ -->
     <!-- │ 浏览按钮使用 ghost + muted 色，刻意低调，不与主按钮竞争   │ -->
+    <!-- │ 选定目录后在其下方显示一行截断路径，给出明确的落地位置反馈 │ -->
     <!-- ╰─────────────────────────────────────────────────────╯ -->
-    <div class="flex min-w-0 flex-1 items-center gap-1.5 sm:max-w-sm">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onclick={handleBrowse}
-        disabled={isLoading}
-        aria-label="浏览本地文件夹"
-        class="shrink-0 rounded-xl text-muted-foreground
+    <div class="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-sm">
+      <div class="flex min-w-0 items-center gap-1.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onclick={handleBrowse}
+          disabled={isLoading}
+          aria-label="浏览本地文件夹"
+          class="shrink-0 rounded-xl text-muted-foreground
                    hover:bg-muted hover:text-foreground"
-      >
-        <IconFolderSearch class="size-4" />
-      </Button>
-      <Input
-        bind:value={projectName}
-        oninput={() => (nameTouched = true)}
-        onkeydown={handleNameKeydown}
-        placeholder="项目名称"
-        aria-label="项目名称"
-        disabled={isLoading}
-        class="rounded-xl"
-      />
+        >
+          <IconFolderSearch class="size-4" />
+        </Button>
+        <Input
+          bind:value={projectName}
+          oninput={() => (nameTouched = true)}
+          onkeydown={handleNameKeydown}
+          placeholder="项目名称"
+          aria-label="项目名称"
+          disabled={isLoading}
+          class="rounded-xl"
+        />
+      </div>
+
+      {#if projectPath}
+        <p
+          class="flex min-w-0 items-center gap-1 pl-1 text-xs text-muted-foreground"
+          title={projectPath}
+        >
+          <IconFolderSearch class="size-3 shrink-0" />
+          <span class="truncate">{projectPath}</span>
+        </p>
+      {/if}
     </div>
 
     <div class="flex shrink-0 items-center gap-2">

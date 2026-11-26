@@ -23,3 +23,25 @@ export async function fetchInstalledProjectTypes(
 export async function fetchDefaultProjectName(): Promise<string> {
     return await safeApi().system.validTaskName();
 }
+
+/**
+ * 弹出系统目录选择器，返回用户选定的目录绝对路径。
+ *
+ * 约定：只有「用户明确选中了一个目录」才返回字符串；
+ * 用户取消、或调用失败（safeApi 已 toast 提示用户，此处不再重复上报）
+ * 一律返回 undefined，调用方静默终止即可。
+ *
+ * @param defaultPath 对话框的初始定位目录，通常传「上次选择的目录」。
+ */
+export async function pickProjectDirectory(
+    defaultPath?: string,
+): Promise<string | undefined> {
+    const result = await safeApi().system.selectDirectory({
+        title: '选择项目位置',
+        // 仅在非空时下发，避免把 defaultPath: undefined 送进序列化层
+        ...(defaultPath ? { defaultPath } : {}),
+    });
+
+    if (!result || result.canceled || !result.path) return undefined;
+    return result.path;
+}
