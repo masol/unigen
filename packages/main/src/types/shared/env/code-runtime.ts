@@ -13,7 +13,10 @@
 //   - `api/common/code.cfg.ts` / `api/common/code.ts`：renderer 侧接口。
 
 /**
- * 代码运行时 / 本机工具引擎标识。
+ * 代码运行时 / 本机工具引擎标识的候选值（运行时值）。
+ *
+ * 之所以需要运行时值：`type.json` 的 `requirements` 校验（zod `z.enum`）
+ * 必须在运行期拿到候选列表。新增引擎时只需改这里，类型与校验自动同步。
  *
  * 命名沿用历史叫法「CodeRuntime」，实际语义是 **本机运行时 / 工具**：
  * 既包含语言运行时（Python / Node.js），也包含可复用的命令行工具
@@ -21,7 +24,7 @@
  * 安装 / 验证 / 工具注册流程。
  *
  * 新增引擎时：
- *   1. 扩充本联合类型；
+ *   1. 扩充本列表；
  *   2. 同步 `stable.schema.ts` 中 `codeRuntime.engines` 与
  *      `codeRuntimeStatus.engines` 的 schema 键（**可选**：schema 已是
  *      `additionalProperties: true`，补进 `properties` 只是为了获得字段级
@@ -32,7 +35,14 @@
  *   5. 同步 `api/common/code.cfg.ts` 的 `RUNTIME_IDS / CODE_RUNTIME_IDS /
  *      RUNTIME_INFO`，让 renderer 侧的设置页可见可控。
  */
-export type CodeRuntimeEngineId = "python" | "nodejs" | "aria2" | "ffmpeg";
+export const CODE_RUNTIME_ENGINE_IDS = [
+    "python",
+    "nodejs",
+    "aria2",
+    "ffmpeg",
+] as const;
+
+export type CodeRuntimeEngineId = (typeof CODE_RUNTIME_ENGINE_IDS)[number];
 
 /**
  * 引擎在磁盘上的状态机。

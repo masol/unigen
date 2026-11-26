@@ -4,5 +4,15 @@
     "header": {
         "title": "动态智能体",
         "detail": "渐进式工具、技能及知识库的全自动决策与加载。"
-    }
+    },
+    "requirements": [
+        {
+            "type": "embedding",
+            "impact": "检索退化为全文检索，召回质量下降"
+        },
+        {
+            "type": "rerank",
+            "impact": "召回结果无法重排与截断"
+        }
+    ]
 }

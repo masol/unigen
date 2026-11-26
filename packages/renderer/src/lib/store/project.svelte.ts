@@ -1,8 +1,8 @@
 import SelectProjectTypeDialog from '$lib/components/dialog/project-type/SelectProjectTypeDialog.svelte';
 import { api, procApiError, safeApi } from "$lib/utils/api";
 import evtbus from "$lib/utils/evtbus";
-import { hooks } from '$lib/utils/hook';
-import { DbKeys } from '$lib/utils/service/dbkeys';
+import { hooks } from "$lib/utils/hook";
+import { DbKeys } from "$lib/utils/service/dbkeys";
 import type { ProjectActivityData, RunState } from "@app/main/types";
 import { push } from "@keenmate/svelte-spa-router";
 import { COMMON_ORPC_ERROR_DEFS, ORPCError } from "@orpc/client";
@@ -62,18 +62,38 @@ class ProjectStore {
     }
 
     // 需要确保本函数在path设置之前执行，否则可能触发主控台报错。
+    /**
+     * 展示项目打开 / 创建时的通知。
+     *
+     * 主进程已经把「静态 status + 依赖检查结果」合并进 `activityData.status`，
+     * 这里不重复拼文案，只用 `requirementIssues` 决定：
+     *   - 标题（依赖检查未通过 / 依赖检查提醒 / 状态说明）；
+     *   - 视觉等级（存在 error 时用危险样式）。
+     *
+     * 通知只是告知，**不阻塞**项目进入：用户点「我知道了」后照常使用，
+     * 可随后在设置里补齐依赖。
+     */
     private async setupUI(activityData: ProjectActivityData) {
-        const status = activityData.status;
+        const issues = activityData.requirementIssues ?? [];
+        const hasError = issues.some((issue) => issue.severity === "error");
+        const status = activityData.status?.trim();
+
         if (status) {
             await confirmStore.request({
-                title: "状态说明",
+                title:
+                    issues.length > 0
+                        ? hasError
+                            ? "依赖检查未通过"
+                            : "依赖检查提醒"
+                        : "状态说明",
                 hideCancel: true,
                 confirmLabel: "我知道了",
-                variant: "warning",
+                variant: hasError ? "error" : "warning",
                 markdown: true,
                 size: "xl2",
+                destructive: hasError,
                 message: status,
-            })
+            });
         }
         this.#activity = new ProjectActivity(activityData);
     }

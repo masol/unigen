@@ -12,75 +12,24 @@
         "title": "没有产品信息",
         "description": "点击这里打开产品管理，添加产品后，开始运行"
     },
-    "targets": [
+    "requirements": [
         {
-            "label": "产品解析",
-            "desc": "完成产品信息提取与分类后停止",
-            "icon": "IconPackage"
-        },
-        {
-            "label": "风格定义",
-            "desc": "完成广告图风格与色调选择后停止",
-            "icon": "IconPalette"
-        },
-        {
-            "label": "文案生成",
-            "desc": "完成广告标题、卖点与促销语文案后停止",
-            "icon": "IconWriting"
-        },
-        {
-            "label": "布局设计",
-            "desc": "完成多尺寸布局与文案位置规划后停止",
-            "icon": "IconLayoutBoard"
-        },
-        {
-            "label": "参考图生成",
-            "desc": "完成背景/装饰元素参考图提示词生成后停止",
-            "icon": "IconPhotoStar"
-        },
-        {
-            "label": "图片渲染",
-            "desc": "完成所有素材图片渲染后停止",
-            "icon": "IconPhoto"
-        },
-        {
-            "label": "广告图合成",
-            "desc": "完成全流程，输出最终多尺寸广告图",
-            "icon": "IconAdCircle"
+            "type": "model",
+            "abilities": [
+                "image-generation"
+            ],
+            "severity": "error",
+            "impact": "产品图无法生成"
         }
     ],
     "activities": [
         {
             "id": "input-manager",
-            "label": "产品管理",
+            "label": "产品管理(演示动态配置,不生效)",
             "icon": "IconPackage",
             "panel": {
                 "type": "panel",
                 "children": [
-                    {
-                        "type": "accordion-section",
-                        "title": "产品列表",
-                        "icon": "IconBoxMultiple",
-                        "defaultOpen": true,
-                        "badge": "count",
-                        "children": [
-                            {
-                                "type": "text-list",
-                                "binding": {
-                                    "key": "script"
-                                },
-                                "addLabel": "添加产品",
-                                "emptyTitle": "还没有产品",
-                                "emptyIcon": "IconPackage",
-                                "addDialogTitle": "添加产品",
-                                "editDialogTitle": "编辑产品",
-                                "editDialogDescription": "产品描述变动后，需要重新生成广告文案与布局。",
-                                "editAlert": true,
-                                "confirmTitle": "删除产品",
-                                "confirmMessage": "确定要删除这个产品吗？相关广告图也会被删除。"
-                            }
-                        ]
-                    },
                     {
                         "type": "accordion-section",
                         "title": "基础信息",
@@ -170,7 +119,7 @@
         },
         {
             "id": "spec-setting",
-            "label": "广告规格与风格",
+            "label": "广告规格与风格(演示动态配置,不生效)",
             "icon": "IconSettings",
             "panel": {
                 "type": "panel",

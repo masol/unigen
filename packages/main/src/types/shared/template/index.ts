@@ -6,3 +6,4 @@ export type { BlueprintFilterOption, BlueprintFilters, ProjectActivityData } fro
 export type { AccordionSectionNode, ButtonGroupNode, ButtonOption, DynNode, FieldNode, ImageGridNode, ListItemView, MarkdownNode, OptionBadge, PanelNode, SelectNode, SelectOption, TextListNode, TreeAction, TreeLevel, TreeNode } from './ast.js'
 export type { LeftSidebarItemJSON } from './sidebar.js'
 
+export type { ProjectRequirement, RequirementIssue } from './requirement.js'

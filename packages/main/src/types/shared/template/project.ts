@@ -1,6 +1,9 @@
 import { z } from "zod";
+import {
+    projectRequirementSchema,
+    requirementIssueSchema,
+} from "./requirement.js";
 import { leftSidebarItemJSONSchema } from "./sidebar.js";
-
 
 /**
  * 单个蓝图名称候选项 —— 提示不再是裸字符串，而是带描述的结构。
@@ -43,7 +46,15 @@ export type BlueprintFilters = z.infer<typeof blueprintFiltersSchema>;
 export const projectActivityDataSchema = z.object({
     /// 工作台header处的图标。
     icon: z.string(),
-    /// 如果设置，为markdown内容，此时，打开/创建此类型的任务时，会以对话框方式通知用户。用于重要信息说明。
+    /**
+     * 打开 / 创建项目时以对话框方式通知用户的 Markdown 内容。
+     *
+     * 来源有两个：
+     *  1. 模板作者写的静态说明（本字段）；
+     *  2. 系统根据 `requirements` 生成的「依赖检查」段落——在项目打开 /
+     *     创建时被追加到静态说明之后（以 `---` 分隔）。
+     * 若依赖全部就绪且作者未写静态说明，则本字段为空，不弹任何对话框。
+     */
     status: z.string().optional(),
     /// 在状态栏右侧的简短显示--通常用于指示此项目类型--可以与entry中的name相同。
     statusText: z.string(),
@@ -66,6 +77,23 @@ export const projectActivityDataSchema = z.object({
      * 顶部渲染为"素材"下拉。不设置或空数组 = 不渲染。
      */
     mediaFields: z.array(z.string()).optional(),
+
+    /**
+     * 项目运行所需的依赖声明。
+     *
+     * 打开 / 创建项目时逐项检查（模型、嵌入 / 重排、本机运行时、MCP、配置项），
+     * 缺失项汇总成一条通知，**不会阻止项目打开**。
+     * 类型与字段说明见 `./requirement.ts` 与 `docs/Panel-JSON.md`。
+     */
+    requirements: z.array(projectRequirementSchema).optional(),
+
+    /**
+     * 【系统生成，模板不要提供】依赖检查结果。
+     *
+     * 由主进程在打开 / 创建项目时写入；即使模板提供了也会被覆盖。
+     * 全部通过时为 `undefined`。
+     */
+    requirementIssues: z.array(requirementIssueSchema).optional(),
 });
 
 export type ProjectActivityData = z.infer<typeof projectActivityDataSchema>;

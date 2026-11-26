@@ -2,6 +2,7 @@
 import { test as base, _electron as electron } from '@playwright/test';
 import { globSync } from 'glob';
 import { platform } from 'node:process';
+import { runPacUnitTest } from './agent/pac-unit.spec';
 import { runCommonTest } from './common';
 import { runMainTest } from './main/iotype.spec';
 import type { TestFixtures, UnigenTestType } from './type';
@@ -66,6 +67,7 @@ const test: UnigenTestType = base.extend<TestFixtures>({
 
 runCommonTest(test);
 runMainTest(test);
+runPacUnitTest(test);
 
 
 // test.describe('Main window web content', async () => {

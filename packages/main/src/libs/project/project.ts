@@ -21,6 +21,7 @@ import { z } from "zod";
 import { closeProject, createProject, openProject } from "./helper/create.js";
 import type { IProjectPlugin } from "./plugin.js";
 import { registProjectBuildin } from "./register.js";
+import { checkProjectRequirements, formatRequirementIssues } from "./requirements.js";
 import { type IProjectContext, type IProjectController, ServiceToken } from "./type.js";
 
 export class ProjectContainer implements IProjectContext {
@@ -154,15 +155,49 @@ export class ProjectContainer implements IProjectContext {
         return filenamifyPath(absolute);
     }
 
-    private validatePrjData(file: string, type: unknown): ProjectActivityData {
-        const result = projectActivityDataSchema.safeParse(type);
+    /**
+     * 校验 `type.json` 的原始内容。
+     *
+     * 注意：必须返回 `result.data` 而不是原始输入 —— 只有解析后的对象才会
+     * 应用 zod 的 `.default()`（例如需求的 `severity`）并剥离未知字段。
+     * 返回原始输入会让类型断言成为谎言，默认值静默失效。
+     */
+    private validatePrjData(file: string, raw: unknown): ProjectActivityData {
+        const result = projectActivityDataSchema.safeParse(raw);
         if (result.success) {
-            return type as ProjectActivityData;
+            return result.data;
         }
         const formattedErrors = z.prettifyError(result.error);
         const msg = `任务UI文件${file}加载失败，详情查看日志。`
         Logger.error(msg, formattedErrors);
         throwUnprocessable(msg)
+    }
+
+    /**
+     * 计算并合并依赖检查结果。
+     *
+     * 只在打开 / 创建项目时执行一次：此时配置已加载完毕，且用户即将看到
+     * 项目内容。结果写入两个字段：
+     *   - `requirementIssues`：结构化记录，供 UI 决定通知标题与视觉等级；
+     *   - `status`：拼好的 Markdown 文案，直接用于弹窗展示。
+     *
+     * 全部通过时：清空 `requirementIssues`，`status` 保持作者原值（可能为空）。
+     * **检查失败不会阻止打开** —— 用户随时可以在设置里补齐依赖。
+     */
+    #finalizeActivityData(prjdata: ProjectActivityData): ProjectActivityData {
+        const issues = checkProjectRequirements(prjdata.requirements);
+
+        prjdata.requirementIssues = issues.length > 0 ? issues : undefined;
+
+        if (issues.length > 0) {
+            const generated = formatRequirementIssues(issues);
+            const staticStatus = prjdata.status?.trim();
+            prjdata.status = staticStatus
+                ? `${staticStatus}\n\n---\n\n${generated}`
+                : generated;
+        }
+
+        return prjdata;
     }
 
     async loadUI(): Promise<ProjectActivityData> {
@@ -178,7 +213,7 @@ export class ProjectContainer implements IProjectContext {
                 void (0);
             }
         }
-        return prjdata;
+        return this.#finalizeActivityData(prjdata);
     }
 
     // 创建失败，返回错误信息。成功返回空字符串。
@@ -251,7 +286,7 @@ export class ProjectContainer implements IProjectContext {
                 this.assetsFromType(type)
             ])
             await this.reloadAgent();
-            return prjdata;
+            return this.#finalizeActivityData(prjdata);
         } catch (e) {
             this.#path = "";
             throw e;
