@@ -8,7 +8,7 @@ import type { BlueprintKind } from '../../featured/rightside/glossary/store.svel
 
 export type { BlueprintKind };
 export type EditorLang = 'markdown' | 'json' | 'js';
-export type CntParam = EditorLang | 'new' | ''
+export type CntParam = EditorLang | 'new' | '';
 
 export interface PathAsset {
     fullKey: string;
@@ -23,6 +23,19 @@ export interface RouteParams {
     kind: BlueprintKind;
     id: string;
     contentFmt: CntParam;
+}
+
+/**
+ * init() 的规范化结果。
+ * 关键点：contentFmt 为 'new' 时内部状态是 ''，所以 routeKey 必须额外带上
+ * isNew 标记，否则“新建某条目”和“编辑同一条目”会得到相同的 key。
+ */
+interface NormalizedRoute {
+    kind: BlueprintKind;
+    id: string;
+    contentFmt: CntParam;
+    isNew: boolean;
+    routeKey: string;
 }
 
 const MONACO_LANG: Record<EditorLang, string> = {
@@ -53,7 +66,12 @@ export class EditorStore {
     content = $state<string>('');
     loadedContent = $state<string>('');
 
+    /** 已完成加载的路由键（包含 new 标记） */
     private loadedKey: string | null = null;
+    /** 正在加载的路由键，用于合并重复 init */
+    private inflightKey: string | null = null;
+    /** 递增请求序号，防止迟到的响应覆盖新路由 */
+    private loadSeq = 0;
 
     loading = $state<boolean>(false);
     busy = $state<boolean>(false);
@@ -123,104 +141,222 @@ export class EditorStore {
         return l === 'markdown' ? 'md' : l === 'js' ? 'js' : 'json';
     }
 
-    private fingerprint(p: RouteParams): string {
-        return `${p.kind}::${p.id}::${p.contentFmt}`;
+    private normalizeRoute(params: RouteParams): NormalizedRoute {
+        const rawFmt: CntParam = params.contentFmt ?? '';
+        const isNew = rawFmt === 'new';
+        const kind: BlueprintKind = params.kind ?? 'glossary';
+        const id = (params.id ?? '').trim();
+        const contentFmt: CntParam = isNew ? '' : rawFmt;
+
+        return {
+            kind,
+            id,
+            contentFmt,
+            isNew,
+            routeKey: `${kind}::${id}::${isNew ? 'new' : String(contentFmt)}`,
+        };
     }
 
-    async init(params: RouteParams) {
-        if (this.id === params.id && this.kind === params.kind) {
-            if ((params.contentFmt === 'new') && this.bCreateNew) return;
-            if (params.contentFmt === this.contentFmt) return;
-        }
-        if (params.contentFmt === 'new') {
-            this.bCreateNew = true;
-            this.contentFmt = "";
-            this.loadedKey = null;
-        } else {
-            this.bCreateNew = false;
-            this.contentFmt = params.contentFmt;
-        }
-
-        this.kind = params.kind;
-        this.id = params.id;
-        const key = this.fingerprint(params);
-
-        if (this.loadedKey === key && !this.loading) return;
-        await this.load(key);
+    private currentRoute(): NormalizedRoute {
+        return this.normalizeRoute({
+            kind: this.kind,
+            id: this.id,
+            contentFmt: this.bCreateNew ? 'new' : this.contentFmt,
+        });
     }
 
-    async load(key?: string) {
+    async init(params: RouteParams): Promise<void> {
+        const route = this.normalizeRoute(params);
+
+        // Logger.debug('[EditorStore] init', {
+        //     route,
+        //     current: {
+        //         kind: this.kind,
+        //         id: this.id,
+        //         contentFmt: this.contentFmt,
+        //         isNew: this.bCreateNew,
+        //     },
+        //     loadedKey: this.loadedKey,
+        //     inflightKey: this.inflightKey,
+        //     loading: this.loading,
+        //     busy: this.busy,
+        // });
+
+        // 完全相同的路由已经加载完毕：保持现场（包括未保存的编辑内容）
+        if (route.routeKey === this.loadedKey && !this.loading) {
+            this.kind = route.kind;
+            this.id = route.id;
+            this.contentFmt = route.contentFmt;
+            this.bCreateNew = route.isNew;
+            return;
+        }
+
+        // 同一路由正在加载中：不要重复发起请求。
+        // init 可能因为父组件更新、HMR、回调等原因被多次调用。
+        if (this.loading && this.inflightKey === route.routeKey) {
+            return;
+        }
+
+        this.kind = route.kind;
+        this.id = route.id;
+        this.contentFmt = route.contentFmt;
+        this.bCreateNew = route.isNew;
+
+        await this.load(route);
+    }
+
+    private async load(route: NormalizedRoute): Promise<void> {
+        const seq = ++this.loadSeq;
+        this.inflightKey = route.routeKey;
         this.loading = true;
         this.lastError = null;
+
+        // Logger.debug('[EditorStore] load start', {
+        //     routeKey: route.routeKey,
+        //     seq,
+        // });
+
         try {
-            const result = this.bCreateNew ? { content: "" } : (await this.loadFromSource());
+            const result = route.isNew
+                ? { content: '' }
+                : await this.loadFromSource(route);
+
+            if (seq !== this.loadSeq) {
+                Logger.debug('[EditorStore] load dropped (stale)', {
+                    routeKey: route.routeKey,
+                    seq,
+                    latest: this.loadSeq,
+                });
+                return;
+            }
+
             this.content = result.content;
             this.loadedContent = result.content;
-            this.loadedKey = key ?? this.fingerprint({
-                kind: this.kind,
-                id: this.id,
-                contentFmt: this.contentFmt
+            this.loadedKey = route.routeKey;
+
+            // Logger.debug('[EditorStore] load done', {
+            //     routeKey: route.routeKey,
+            //     seq,
+            //     length: result.content.length,
+            // });
+        } catch (e) {
+            if (seq !== this.loadSeq) return;
+            this.lastError = e instanceof Error ? e.message : String(e);
+            Logger.error('[EditorStore] load failed', {
+                routeKey: route.routeKey,
+                seq,
+                error: e,
+            });
+        } finally {
+            if (seq === this.loadSeq) {
+                this.loading = false;
+                this.inflightKey = null;
+            }
+        }
+    }
+
+    async save(): Promise<void> {
+        if (this.busy || this.loading) return;
+
+        const route = this.currentRoute();
+        if (!route.id) {
+            Logger.warn('[EditorStore] save ignored: empty id');
+            return;
+        }
+
+        const contentSnapshot = this.content;
+        // 语言判断必须在快照时刻完成：await 期间路由/内容可能变化
+        const needsJsonWrap =
+            route.kind === 'glossary' &&
+            route.contentFmt.length === 0 &&
+            this.editorLang !== 'json';
+
+        this.busy = true;
+        this.busyAction = 'save';
+
+        Logger.debug('[EditorStore] save start', {
+            route,
+            needsJsonWrap,
+            length: contentSnapshot.length,
+        });
+
+        try {
+            const payload = needsJsonWrap
+                ? JSON.stringify(contentSnapshot)
+                : contentSnapshot;
+
+            await safeApi().project.setContent({
+                id: route.id,
+                kind: route.kind,
+                content: payload,
+                code: route.contentFmt.length > 0,
+            });
+
+            /*
+             * 只有仍然停留在保存时的条目上，才更新 loadedContent。
+             * 否则保存期间切换路由，会把新条目的内容误标记为“已保存”。
+             */
+            if (this.currentRoute().routeKey === route.routeKey) {
+                this.loadedContent = contentSnapshot;
+            }
+            this.lastError = null;
+
+            Logger.debug('[EditorStore] save done', {
+                routeKey: route.routeKey,
             });
         } catch (e) {
             this.lastError = e instanceof Error ? e.message : String(e);
-        } finally {
-            this.loading = false;
-        }
-    }
-
-    async save() {
-        if (this.busy) return;
-        // if (!configStore.showDevUI) {
-        //     const confirm = confirmStore.request({
-        //         title: "项目可能无法运行",
-        //         message: `${this.kindLabel}条目“${this.id}”的变动，可能导致本项目无法执行，确定要继续保存吗？。`,
-        //         confirmLabel: "保存",
-        //         destructive: true
-        //     })
-        //     if (!confirm) return;
-        // }
-        this.busy = true;
-        this.busyAction = 'save';
-        try {
-            const code = this.contentFmt.length > 0;
-            let payload = this.content;
-
-            // 术语表在非 code 模式下，存储的必须是合法的 JSON 值。
-            // 当编辑器语言不是 JSON（即用户编辑纯文本/markdown 等）时，需要将其包裹为 JSON 字符串。
-            // 这样后端 JSON.parse 后才能得到正确的字符串原始值。
-            if (this.kind === 'glossary' && !code && this.editorLang !== 'json') {
-                payload = JSON.stringify(this.content);
-            }
-
-            await safeApi().project.setContent({
-                id: this.id,
-                kind: this.kind,
-                content: payload,
-                code
-            });
-            this.loadedContent = this.content;
+            Logger.error('[EditorStore] save failed', e);
         } finally {
             this.busy = false;
             this.busyAction = null;
         }
     }
 
-    async reload() {
-        if (this.busy) return;
+    async reload(): Promise<void> {
+        if (this.busy || this.loading) return;
+
+        const route = this.currentRoute();
+        if (!route.id && !route.isNew) return;
+
         this.busy = true;
         this.busyAction = 'reload';
+
+        const seq = ++this.loadSeq;
+        this.inflightKey = route.routeKey;
+
+        Logger.debug('[EditorStore] reload start', {
+            routeKey: route.routeKey,
+            seq,
+        });
+
         try {
-            const result = await this.loadFromSource();
+            const result = route.isNew
+                ? { content: '' }
+                : await this.loadFromSource(route);
+
+            if (seq !== this.loadSeq) return;
+
             this.content = result.content;
             this.loadedContent = result.content;
-            this.loadedKey = this.fingerprint({
-                kind: this.kind,
-                id: this.id,
-                contentFmt: this.contentFmt
+            this.loadedKey = route.routeKey;
+            this.lastError = null;
+
+            Logger.debug('[EditorStore] reload done', {
+                routeKey: route.routeKey,
+                seq,
             });
+        } catch (e) {
+            if (seq === this.loadSeq) {
+                this.lastError = e instanceof Error ? e.message : String(e);
+            }
+            Logger.error('[EditorStore] reload failed', e);
         } finally {
             this.busy = false;
             this.busyAction = null;
+            if (seq === this.loadSeq) {
+                this.inflightKey = null;
+            }
         }
     }
 
@@ -261,7 +397,6 @@ export class EditorStore {
 
     async previewAsset(relative: string): Promise<string | null> {
         try {
-
             const url = await safeApi().project.getURL(relative);
             projectStore.mediaURL = url;
             // 开始确认打开下方面板打开。
@@ -282,20 +417,20 @@ export class EditorStore {
         }
     }
 
-    private async loadFromSource(): Promise<LoadResult> {
-        if (!this.id) return { content: "" };
+    private async loadFromSource(route: NormalizedRoute): Promise<LoadResult> {
+        if (!route.id) return { content: '' };
 
-        const code = this.contentFmt.length > 0;
+        const code = route.contentFmt.length > 0;
         const raw = await safeApi().project.getContent({
-            kind: this.kind,
-            id: this.id,
+            kind: route.kind,
+            id: route.id,
             content: code
         });
 
-        if (!raw) return { content: "" };
+        if (!raw) return { content: '' };
 
         // 术语表非 code 模式下，存储的是 JSON 值，需要还原为编辑器显示文本。
-        if (this.kind === 'glossary' && !code) {
+        if (route.kind === 'glossary' && !code) {
             try {
                 const parsed = JSON.parse(raw);
                 if (typeof parsed === 'string') {

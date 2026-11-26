@@ -67,7 +67,6 @@ class RouterStore {
         '/flow/view/:id': FlowPage,
         '/paceditor': PacEditor,
         // content 为可选查询/路径参数
-        '/editor/:kind/:id': EditorPage,
         '/editor/:kind/:id/:content?': EditorPage,
         '/dev/icons': IconGallery,
         '/dev/emojis': EmojiGallery,
