@@ -1,3 +1,5 @@
+// packages/main/src/libs/blueprint/runner/cmd.ts
+
 import { PrjDB } from '$libs/project/controllers/drizzle/index.js';
 import { ProjectDbKeys } from '$libs/utils/db/dbkeys.js';
 import { throwNotfound, throwPrecondition } from '$libs/utils/err.js';
@@ -28,21 +30,45 @@ function stringifyToken(token: string | ParseEntry): string {
     return '';
 }
 
+/**
+ * 解析用户输入。
+ *
+ * 注意：
+ * - 只有首行可能承载命令与参数，后续行一律视为 body。
+ * - 该实现只对首行调用 shell-quote，避免 body 很长时被整段解析。
+ * - 排除源码注释 //、/* 开头的内容，避免把源代码误判为命令。
+ */
 export function parseCommandWithBody(userInput: string): CommandInfo {
-    const trimmed = userInput.trim();
-
-    // 1. 严格校验：只要以 / 开头就绝对是命令
-    if (!trimmed.startsWith('/')) {
-        return { isCommand: false, body: trimmed };
+    const firstNonWhitespaceIndex = userInput.search(/\S/);
+    if (firstNonWhitespaceIndex < 0) {
+        return { isCommand: false, body: "" };
     }
 
-    // 2. 利用 shell-quote 解析长文本/多行文本
-    const tokens = parse(trimmed);
+    const commandMarker = userInput[firstNonWhitespaceIndex];
+    const nextChar = userInput[firstNonWhitespaceIndex + 1];
+
+    // 命令必须以 / 开头；但 // 和 /* 更可能是源码注释，不能当作命令。
+    if (commandMarker !== '/' || nextChar === '/' || nextChar === '*') {
+        return { isCommand: false, body: userInput.trim() };
+    }
+
+    const firstLineEndIndex = userInput.indexOf('\n', firstNonWhitespaceIndex);
+    const firstLineRaw =
+        firstLineEndIndex === -1
+            ? userInput.slice(firstNonWhitespaceIndex)
+            : userInput.slice(firstNonWhitespaceIndex, firstLineEndIndex);
+    const restRaw =
+        firstLineEndIndex === -1 ? '' : userInput.slice(firstLineEndIndex + 1);
+    const hasFollowingBody = /\S/.test(restRaw);
+
+    // 只解析首行。后续 body 保持原始文本，避免 shell-quote 处理大文本。
+    const firstLine = firstLineRaw.trim();
+    const tokens = parse(firstLine);
 
     // 3. 提取首位的命令，并安全地移除开头的斜杠 '/'
     const rawCommand = tokens.shift();
     if (!rawCommand) {
-        return { isCommand: true, command: '', args: {}, body: '' };
+        return { isCommand: true, command: '', args: {}, body: restRaw.trim() };
     }
     const commandStr = stringifyToken(rawCommand);
     const command = commandStr.startsWith('/') ? commandStr.slice(1) : commandStr;
@@ -54,11 +80,19 @@ export function parseCommandWithBody(userInput: string): CommandInfo {
         const tokenStr = stringifyToken(tokens[i]);
         const prevTokenStr = i > 0 ? stringifyToken(tokens[i - 1]) : '';
 
+        // 首行最后一个 token 只有在“后面没有 body 行”时才可能作为 body 起点。
+        // 否则它更可能是上一参数的取值，例如：/cmd --model gpt-4\n后续 body。
+        const isFirstLineTrailingBodyCandidate =
+            i === tokens.length - 1 && !hasFollowingBody;
+
         // 判定边界：如果碰到了不以 - 开头的长文本（包含换行，或者是普通文本）
         // 且它不像是紧跟在参数名（如 --model）之后的简单参数值，就判定为 body 的起点
         if (
             !tokenStr.startsWith('-') &&
-            (tokenStr.includes('\n') || tokenStr.length > 20 || i === tokens.length - 1 || !prevTokenStr.startsWith('-'))
+            (tokenStr.includes('\n') ||
+                tokenStr.length > 20 ||
+                isFirstLineTrailingBodyCandidate ||
+                !prevTokenStr.startsWith('-'))
         ) {
             bodyStartIndex = i;
             break;
@@ -73,17 +107,24 @@ export function parseCommandWithBody(userInput: string): CommandInfo {
     const argsStrings = argsTokens.map(stringifyToken);
     const fullParsedArgs = yargsParser(argsStrings);
 
-    // 💡 修复位置：使用解构赋值剔除 '_' 属性，将剩余的参数存入 cleanArgs 中
+    // 💡 使用解构赋值剔除 '_' 属性，将剩余的参数存入 cleanArgs 中
     const { _, ...cleanArgs } = fullParsedArgs;
 
-    // 7. 还原 body 文本
-    const bodyText = bodyTokens.map(stringifyToken).join(' ');
+    // 7. 还原 body 文本。首行 body token 继续沿用原有 stringify 逻辑；
+    // 后续行保持原始文本，避免大文本被 shell-quote 逐 token 解析。
+    const bodyFromFirstLine = bodyTokens.map(stringifyToken).join(' ');
+    const bodyWithFollowingLines = bodyFromFirstLine
+        ? restRaw
+            ? `${bodyFromFirstLine}\n${restRaw}`
+            : bodyFromFirstLine
+        : restRaw;
+    const bodyText = bodyWithFollowingLines.trim();
 
     return {
         isCommand: true,
         command,
-        args: cleanArgs, // 👈 这里是已经剔除了 '_' 且符合 Record<string, any> 的干净对象
-        body: bodyText.trim()
+        args: cleanArgs,
+        body: bodyText
     };
 }
 
@@ -104,13 +145,37 @@ export class CmdRunner extends BaseRunner {
         }
     }
 
-    private async runCmdEntry(ctx: IRunnerContext): Promise<string> {
-        // 首先检查是否有
-        const kvKey4cap = `entry_${ctx.cmd.command}`;
+    /**
+     * 默认对话入口。
+     *
+     * 原 execute 的 else 分支抽出到这里，供两个地方复用：
+     * 1. 用户输入本来就不是命令；
+     * 2. 用户输入疑似命令，但没有命中 entry_xxx。
+     */
+    private async runDefault(ctx: IRunnerContext): Promise<string> {
+        const prjdb: PrjDB = PrjDB.ensure(ctx.prj);
+        const capId = prjdb.get<string>(ProjectDbKeys.entry_common);
+        if (!capId) {
+            if (ctx.prj.agent) {
+                return await this.runCap(ctx.prj.agent, ctx);
+            }
+            throwNotfound("版本错误？未发现Project的默认Agent.");
+        }
+        return await this.runCap(capId, ctx);
+    }
+
+    /**
+     * 尝试执行 entry_xxx；未命中时回退到默认对话。
+     *
+     * 这样即使首行类似 // 的源码被误送入命令分遣，也不会因为 entry_// 不存在
+     * 而直接抛 precondition；未知命令也会回退到默认对话。
+     */
+    private async runEntryOrFallback(ctx: IRunnerContext): Promise<string> {
+        const kvKey4cap = `entry_${ctx.cmd.command ?? ''}`;
         const prjdb: PrjDB = PrjDB.ensure(ctx.prj);
         const capId = prjdb.get<string>(kvKey4cap);
         if (!capId) {
-            throwPrecondition(`请求执行命令"${ctx.cmd.command ?? ""}"，但是未能发现对应${kvKey4cap}的入口定义，请自行编辑术语表，添加此入口。`)
+            return await this.runDefault(ctx);
         }
         return await this.runCap(capId, ctx);
     }
@@ -149,7 +214,7 @@ export class CmdRunner extends BaseRunner {
                 await delay(10000, ctx.signal);
                 return "";
             default:
-                return await this.runCmdEntry(ctx);
+                return await this.runEntryOrFallback(ctx);
         }
     }
 
@@ -177,23 +242,17 @@ export class CmdRunner extends BaseRunner {
         const cmdInfo = parseCommandWithBody(userInput);
         ctx.cmd = cmdInfo;
         ctx.cmd.args = { ...ctx.cmd.args, ...args };
-        const prjdb: PrjDB = PrjDB.ensure(ctx.prj);
+
         return withSpan(`CmdRunner.run`, async (span) => {
             span.setAttribute("command.userInput", userInput);
             span.addEvent("task_started", { message: `开始分遣命令: ${ctx.cmd.command}` });
             try {
                 if (cmdInfo.isCommand) {
                     return await this.dispatchCmds(ctx);
-                } else {
-                    const capId = prjdb.get<string>(ProjectDbKeys.entry_common);
-                    if (!capId) {
-                        if (ctx.prj.agent) {
-                            return await this.runCap(ctx.prj.agent, ctx);
-                        }
-                        throwNotfound("版本错误？未发现Project的默认Agent.")
-                    }
-                    return await this.runCap(capId, ctx);
                 }
+
+                // 非命令输入完全不经过 dispatch，直接进入默认对话。
+                return await this.runDefault(ctx);
             } catch (e) {
                 span.addEvent("command_run_failed");
                 const errMsg = getErrorMessage(e);
