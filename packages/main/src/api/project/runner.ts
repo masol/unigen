@@ -1,5 +1,5 @@
 import { PrjRunner } from '$libs/project/controllers/runner.js';
-import { userClarifyTool } from '$libs/tooldb/tools/clarify.js';
+import { userClarifyTool } from '$libs/tooldb/tools/interaction/clarify.js';
 import type { ChatStreamEvent } from '$types/index.js';
 import { RunnerParamSchema } from '$types/shared/api/runner.js';
 import { os } from "@orpc/server";

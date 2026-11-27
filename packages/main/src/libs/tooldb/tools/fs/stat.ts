@@ -1,8 +1,8 @@
 // packages/main/src/libs/tooldb/tools/stat.ts
 import { lstat, readlink, realpath } from "node:fs/promises";
 import { z } from "zod";
-import type { ToolDefinition } from "../type.js";
-import { resolveReadPath, toPreferredPath } from "./path-utils.js";
+import type { ToolDefinition } from "../../type.js";
+import { resolveReadPath, toPreferredPath } from "../path-utils.js";
 
 const inputSchema = z.object({
     path: z

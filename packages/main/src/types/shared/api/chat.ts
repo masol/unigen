@@ -338,7 +338,7 @@ export type ChatMessage = z.infer<typeof chatMessageSchema>;
 export const newChatMessageSchema = z.object({
     id: z.string().optional(),
     sessionId: z.string(),
-    role: z.enum(["user", "assistant"]),
+    role: z.enum(["user", "assistant"]), // , "tool", "system"
     content: z.string(),
     /** 相对项目根目录的文件路径数组 */
     files: z.array(z.string()).optional(),

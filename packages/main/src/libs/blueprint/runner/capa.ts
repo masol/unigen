@@ -7,7 +7,7 @@ import { BaseRunner } from './base.js';
 // 主任务执行器，维护异步状态--后台长期执行。
 export class CapaRunner extends BaseRunner {
     #state: RunState = "idle";
-    #running: Promise<void> | null = null;
+    #running: Promise<string> | null = null;
     #ctx: IRunnerContext | null = null;
     #startTime: number = 0;
 
@@ -57,11 +57,11 @@ export class CapaRunner extends BaseRunner {
         }
     }
 
-    async run(capaId: string, ctx: IRunnerContext): Promise<void> {
+    async run(capaId: string, ctx: IRunnerContext): Promise<string> {
         this.#startTime = new Date().getTime();
         this.#state = "running";
         try {
-            await this.runCap(capaId, ctx);
+            return await this.runCap(capaId, ctx);
         } finally {
             // 任何路径都清理状态，避免 #state 永驻 "running"
             this.#state = "idle";

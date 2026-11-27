@@ -16,7 +16,28 @@ import {
 } from "./types.js";
 
 export class PacAgent implements IPacAgent, IAgentExecutor {
-    constructor(private readonly compiled: CompiledPacAgent) { }
+    private runAsRoot: boolean;
+
+    constructor(
+        private readonly compiled: CompiledPacAgent,
+        runAsRoot = true,
+    ) {
+        this.runAsRoot = runAsRoot;
+    }
+
+    /**
+     * 设置本 PacAgent 是否以根 agent 身份运行。
+     *
+     * 由 PACFunctor 在运行前根据外部标志同步。为 false 时：
+     * - executeAgent 的 isRoot 恒为 false，不发送 message.start / message.delta /
+     *   message.end，不写 message 表，正文与生命周期汇报走 trace；
+     * - 不创建 assistant 占位消息；
+     * - 不持久化 trace 到独立 messageId 下（非根 agent 没有父 messageId 可挂，
+     *   写入只会产生孤立数据），但仍会通过 ctx.report 发送实时 trace 事件。
+     */
+    setRunAsRoot(value: boolean): void {
+        this.runAsRoot = value;
+    }
 
     getCompiled(): CompiledPacAgent {
         return this.compiled;
@@ -54,7 +75,12 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
         const mcpClients: McpClientCache = new Map();
         try {
             const prjdb = PrjDB.ensure(ctx.prj);
-            const persist = resolveEffectiveSettings(this.compiled.settings, ctx.settings).persist;
+            const runAsRoot = this.runAsRoot;
+            // 非根 agent（由外部 PACFunctor 作为子能力调用）不应创建 assistant 消息，
+            // 也不应持久化 trace 到独立 messageId 下：它没有父 messageId 可挂，
+            // 写入只会产生孤立的空消息/孤立 trace。实时事件仍通过 ctx.report 发出。
+            const persist = runAsRoot
+                && resolveEffectiveSettings(this.compiled.settings, ctx.settings).persist;
             const messageId = this.createAssistantMessageId(prjdb, ctx, persist);
 
             const state: PacRunState = {
@@ -72,7 +98,7 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
                 prjdb,
                 this.inputsFromCtx(ctx),
                 {},
-                { validateInputs: false, isRoot: true, stepPath: "1" },
+                { validateInputs: false, isRoot: runAsRoot, stepPath: "1" },
                 mcpClients,
                 state,
                 this,
@@ -84,6 +110,7 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
         }
     }
 
+    // PacAgent.runWithInputs 在 state 省略时仍未参考 this.runAsRoot。目前该路径实际只被 runSubAgent 以传入 state 的方式使用，因此不影响当前功能。若未来外部直接调用 runWithInputs 且省略 state，建议同样用 this.runAsRoot 控制 persist 与 isRoot。
     async runWithInputs(
         ctx: IRunnerContext,
         rawInputs: Record<string, unknown>,
@@ -134,7 +161,9 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
         mcpClients: McpClientCache,
         state: PacRunState,
     ): Promise<string> {
-        const subAgent = new PacAgent(compiled);
+        // 子 agent 在语义上永远不是根 agent；runWithInputs 会复用父 state，
+        // 这里显式传 false 以保持语义清晰，避免未来误用 runAsRoot 时出错。
+        const subAgent = new PacAgent(compiled, false);
         return subAgent.runWithInputs(ctx, inputs, inheritedDefaults, options, mcpClients, state);
     }
 

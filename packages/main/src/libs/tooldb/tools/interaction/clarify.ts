@@ -4,7 +4,7 @@ import Logger from "electron-log/main.js";
 import { randomUUID } from "node:crypto";
 import pTimeout from "p-timeout";
 import z from "zod";
-import type { ToolDefinition } from "../type.js";
+import type { ToolDefinition } from "../../type.js";
 
 // ─────────────────────────────────────────────────────────────
 // Schema 定义

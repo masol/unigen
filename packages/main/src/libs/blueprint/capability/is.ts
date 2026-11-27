@@ -37,12 +37,16 @@ export function localTypeName(name: CapaNameType): string {
     return `${localTypePrefix}${name}`;
 }
 
-
+const codeTypePrefix = "#code";
 export function isCode(name: CapaNameType): boolean {
     if (!name) {
         return false;
     }
-    return name.startsWith("#code");
+    return name.startsWith(codeTypePrefix);
+}
+
+export function makeCodeName(name: string): string {
+    return `${codeTypePrefix}_${name}`
 }
 
 export function isCapability(value: unknown): value is NewCapability {

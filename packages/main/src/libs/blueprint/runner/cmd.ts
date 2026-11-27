@@ -89,7 +89,9 @@ export function parseCommandWithBody(userInput: string): CommandInfo {
 
 // 命令执行器。解析命令字符串并加以执行。
 export class CmdRunner extends BaseRunner {
-    #running: Promise<void> | null = null;
+    // 运行时挂着的是"最近一次执行"的 Promise。用它做并发互斥；
+    // isRunning / waitFinish 只关系"是否存在"和"等待完成"，不关心值。
+    #running: Promise<string> | null = null;
 
     get isRunning(): boolean {
         return this.#running !== null;
@@ -102,7 +104,7 @@ export class CmdRunner extends BaseRunner {
         }
     }
 
-    private async runCmdEntry(ctx: IRunnerContext) {
+    private async runCmdEntry(ctx: IRunnerContext): Promise<string> {
         // 首先检查是否有
         const kvKey4cap = `entry_${ctx.cmd.command}`;
         const prjdb: PrjDB = PrjDB.ensure(ctx.prj);
@@ -113,38 +115,49 @@ export class CmdRunner extends BaseRunner {
         return await this.runCap(capId, ctx);
     }
 
-    private async dispatchCmds(ctx: IRunnerContext): Promise<void> {
+    /**
+     * 分遣内部子命令。
+     * 返回值约定：
+     *   - `run` / `default`（入口 cap）：返回被调能力的最终 message；
+     *   - 其他内部子命令（export / plan / prism / preprism / kv / aigc / test）：
+     *     它们通过 notify/report 与用户交流，本层不透出 message，返回 ""。
+     *     这样既保持既有通知通路不变，又为上层 flow.cmd 等调用者提供稳定语义。
+     */
+    private async dispatchCmds(ctx: IRunnerContext): Promise<string> {
         switch (ctx.cmd.command) {
             case 'export':
                 await doExport(ctx);
-                break;
+                return "";
             case 'plan':
                 await doPlan(ctx);
-                break;
+                return "";
             case 'prism':
                 await doPrism(ctx);
-                break;
+                return "";
             case 'preprism':
                 await doPreprism(ctx);
-                break;
+                return "";
             case 'run':
-                await doRun(ctx);
-                break;
+                return await doRun(ctx);
             case 'kv':
                 await doKV(ctx);
-                break;
+                return "";
             case 'aigc':
                 await doAIGC(ctx);
-                break;
+                return "";
             case 'test':
                 await delay(10000, ctx.signal);
-                break;
+                return "";
             default:
                 return await this.runCmdEntry(ctx);
         }
     }
 
-    async run(userInput: string, ctx: IRunnerContext, args?: Record<string, unknown>): Promise<void> {
+    /**
+     * 执行命令并返回其最终 message。
+     * 无文本结果时返回 ""。
+     */
+    async run(userInput: string, ctx: IRunnerContext, args?: Record<string, unknown>): Promise<string> {
         if (this.#running) {
             throwPrecondition("CmdRunner 实例不支持并发执行多个命令，请为每个命令创建独立实例。");
         }
@@ -152,7 +165,7 @@ export class CmdRunner extends BaseRunner {
         const running = this.execute(userInput, ctx, args);
         this.#running = running;
         try {
-            await running;
+            return await running;
         } finally {
             if (this.#running === running) {
                 this.#running = null;
@@ -160,7 +173,7 @@ export class CmdRunner extends BaseRunner {
         }
     }
 
-    private async execute(userInput: string, ctx: IRunnerContext, args?: Record<string, unknown>): Promise<void> {
+    private async execute(userInput: string, ctx: IRunnerContext, args?: Record<string, unknown>): Promise<string> {
         const cmdInfo = parseCommandWithBody(userInput);
         ctx.cmd = cmdInfo;
         ctx.cmd.args = { ...ctx.cmd.args, ...args };
@@ -170,7 +183,7 @@ export class CmdRunner extends BaseRunner {
             span.addEvent("task_started", { message: `开始分遣命令: ${ctx.cmd.command}` });
             try {
                 if (cmdInfo.isCommand) {
-                    await this.dispatchCmds(ctx);
+                    return await this.dispatchCmds(ctx);
                 } else {
                     const capId = prjdb.get<string>(ProjectDbKeys.entry_common);
                     if (!capId) {
@@ -179,14 +192,15 @@ export class CmdRunner extends BaseRunner {
                         }
                         throwNotfound("版本错误？未发现Project的默认Agent.")
                     }
-                    await this.runCap(capId, ctx);
+                    return await this.runCap(capId, ctx);
                 }
-                span.addEvent("command_run_success");
             } catch (e) {
                 span.addEvent("command_run_failed");
                 const errMsg = getErrorMessage(e);
                 span.setAttribute("command.errMessage", errMsg);
                 Logger.error(`执行命令出错:`, errMsg);
+                // 保持既有语义：错误仅记日志与 span，不向调用方抛出。返回空串。
+                return "";
             } finally {
                 span.setStatus({ code: SpanStatusCode.OK });
             }

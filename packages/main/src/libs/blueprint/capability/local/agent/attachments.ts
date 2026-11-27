@@ -3,7 +3,7 @@
 import {
     convertSchema,
     fileMarkdownToolDef,
-} from "$libs/tooldb/tools/read_file.js";
+} from "$libs/tooldb/tools/fs/read_file.js";
 import { escapeTableCell } from "$libs/utils/str.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { tool, type Tool } from "ai";

@@ -1,14 +1,24 @@
 // packages/main/src/libs/tooldb/builtins.ts
-import { applyPatchTool } from "./tools/apply_patch.js";
-import { clarifyTool } from "./tools/clarify.js";
-import { copyTool } from "./tools/copy.js";
-import { createArchiveTool } from "./tools/create_archive.js";
-import { diffTool } from "./tools/diff.js";
-import { editFileTool } from "./tools/edit_file.js";
-import { execTool } from "./tools/exec.js";
-import { extractArchiveTool } from "./tools/extract_archive.js";
-import { fetchUrlTool } from "./tools/fetch_url.js";
-import { grepTool } from "./tools/grep.js";
+import { createArchiveTool } from "./tools/archive/create_archive.js";
+import { extractArchiveTool } from "./tools/archive/extract_archive.js";
+import { contextInfoTool } from "./tools/context/info.js";
+import { runCapTool } from "./tools/context/run.js";
+import { applyPatchTool } from "./tools/fs/apply_patch.js";
+import { copyTool } from "./tools/fs/copy.js";
+import { diffTool } from "./tools/fs/diff.js";
+import { editFileTool } from "./tools/fs/edit_file.js";
+import { grepTool } from "./tools/fs/grep.js";
+import { readDirTool } from "./tools/fs/read_dir.js";
+import { fileMarkdownToolDef } from "./tools/fs/read_file.js";
+import { readFileRangeTool } from "./tools/fs/read_file_range.js";
+import { removeTool } from "./tools/fs/remove.js";
+import { statTool } from "./tools/fs/stat.js";
+import { writeFileTool } from "./tools/fs/write_file.js";
+import { clarifyTool } from "./tools/interaction/clarify.js";
+import { renderImageTool } from "./tools/media/renderimage.js";
+import { createCodeCapTool } from "./tools/memory/code_cap.js";
+import { dataStoreTool } from "./tools/memory/data.js";
+import { kvStoreTool } from "./tools/memory/kv.js";
 import { invokeToolDef } from "./tools/meta-tools/invoke.js";
 import {
     loadSkillToolDef,
@@ -18,13 +28,8 @@ import {
     searchSkillsToolDef,
 } from "./tools/meta-tools/rag.js";
 import { searchToolDef } from "./tools/meta-tools/search.js";
-import { readDirTool } from "./tools/read_dir.js";
-import { fileMarkdownToolDef } from "./tools/read_file.js";
-import { readFileRangeTool } from "./tools/read_file_range.js";
-import { removeTool } from "./tools/remove.js";
-import { renderImageTool } from "./tools/renderimage.js";
-import { statTool } from "./tools/stat.js";
-import { writeFileTool } from "./tools/write_file.js";
+import { fetchUrlTool } from "./tools/net/fetch_url.js";
+import { execTool } from "./tools/proc/exec.js";
 import type { ToolDefinition } from "./type.js";
 
 /**
@@ -47,6 +52,12 @@ export function getMetaTools(): ToolDefinition<unknown, unknown>[] {
         searchKnowledgeBasesToolDef,
         queryKnowledgeToolDef,
         queryAllKnowledgeToolDef,
+        // 以下几个工具，暂不进入搜索。
+        dataStoreTool,
+        createCodeCapTool,
+        // 上下文（新增）
+        contextInfoTool,
+        runCapTool,
     ] as ToolDefinition<unknown, unknown>[];
 }
 
@@ -63,6 +74,7 @@ export function getMetaTools(): ToolDefinition<unknown, unknown>[] {
 export function getBuiltinTools(): ToolDefinition<unknown, unknown>[] {
     return [
         ...getMetaTools(),
+        // 文件系统
         fileMarkdownToolDef,
         readDirTool,
         readFileRangeTool,
@@ -74,11 +86,18 @@ export function getBuiltinTools(): ToolDefinition<unknown, unknown>[] {
         grepTool,
         diffTool,
         applyPatchTool,
-        execTool,
-        renderImageTool,
+        // 归档
         createArchiveTool,
         extractArchiveTool,
+        // 网络
         fetchUrlTool,
+        // 进程
+        execTool,
+        // 媒体
+        renderImageTool,
+        // 交互
         clarifyTool,
+        // 项目记忆 / 数据（新增）
+        kvStoreTool,
     ] as ToolDefinition<unknown, unknown>[];
 }

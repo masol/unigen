@@ -1,12 +1,16 @@
 import { CmdRunner } from "$libs/blueprint/runner/cmd.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 
-async function runCommand(ctx: IRunnerContext, cmd: string, args?: Record<string, unknown>): Promise<void> {
+async function runCommand(
+    ctx: IRunnerContext,
+    cmd: string,
+    args?: Record<string, unknown>,
+): Promise<string> {
     // 通过 `= {}` 提供默认空对象，防止 args 为 undefined 时解构报错
     const runner = new CmdRunner();
     const oldCmd = ctx.cmd;
     try {
-        await runner.run(cmd, ctx, args);
+        return await runner.run(cmd, ctx, args);
     } finally {
         ctx.cmd = oldCmd;
     }

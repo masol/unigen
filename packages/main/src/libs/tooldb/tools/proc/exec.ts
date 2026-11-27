@@ -2,8 +2,8 @@
 import { execa } from "execa";
 import { isAbsolute, resolve } from "node:path";
 import { z } from "zod";
-import type { ToolDefinition } from "../type.js";
-import { resolveCwd } from "./path-utils.js";
+import type { ToolDefinition } from "../../type.js";
+import { resolveCwd } from "../path-utils.js";
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_OUTPUT_CHARS = 200_000;

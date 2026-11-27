@@ -2,12 +2,12 @@
 import { cp, lstat, mkdir, rm } from "node:fs/promises";
 import { dirname, isAbsolute, relative } from "node:path";
 import { z } from "zod";
-import type { ToolDefinition } from "../type.js";
+import type { ToolDefinition } from "../../type.js";
 import {
     resolveProjectWritePath,
     resolveReadPath,
     toPreferredPath,
-} from "./path-utils.js";
+} from "../path-utils.js";
 
 const inputSchema = z.object({
     source: z

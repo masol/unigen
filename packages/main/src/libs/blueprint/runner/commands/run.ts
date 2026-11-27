@@ -5,7 +5,7 @@ import type { IRunnerContext } from "$types/blueprint/context.js";
 import type { GDagJSON } from "$types/index.js";
 import validator from 'validator';
 
-export async function runCmd(ctx: IRunnerContext): Promise<void> {
+export async function runCmd(ctx: IRunnerContext): Promise<string> {
     const prjdb = PrjDB.ensure(ctx.prj);
     const args = ctx.cmd.args || {};
     let id = "";
@@ -29,12 +29,11 @@ export async function runCmd(ctx: IRunnerContext): Promise<void> {
 
     const functor = ctx.loadFunctor(id)
 
-
     if (!functor) {
         throwNotfound(`无法加载${id}对应的执行能力。`)
     }
 
-    await functor.run(ctx);
-
-    // ctx.notify("", result.text);
+    // 返回该能力的最终 message，交由 dispatchCmds / CmdRunner 沿调用链透出。
+    // 不在此处额外 notify：用户直跑 `/run` 时由被调能力自身的通知通路负责展示。
+    return await functor.run(ctx);
 }

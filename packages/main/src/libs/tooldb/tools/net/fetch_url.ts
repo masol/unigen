@@ -5,11 +5,11 @@ import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import type { ToolDefinition } from "../type.js";
+import type { ToolDefinition } from "../../type.js";
 import {
     resolveProjectWritePath,
     toPreferredPath,
-} from "./path-utils.js";
+} from "../path-utils.js";
 
 const MAX_INLINE_CHARS = 200_000;
 const MAX_RESPONSE_BYTES = 20 * 1024 * 1024;

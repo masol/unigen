@@ -5,7 +5,7 @@ import Logger from "electron-log/main.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import type { ToolDefinition } from "../type.js";
+import type { ToolDefinition } from "../../type.js";
 
 /**
  * 把用户给出的相对路径解析为绝对路径(基于当前任务目录);

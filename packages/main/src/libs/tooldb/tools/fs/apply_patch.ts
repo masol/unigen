@@ -5,11 +5,11 @@ import {
 } from "@sanity/diff-match-patch";
 import { readFile, writeFile } from "node:fs/promises";
 import { z } from "zod";
-import type { ToolDefinition } from "../type.js";
+import type { ToolDefinition } from "../../type.js";
 import {
     resolveProjectWritePath,
     toPreferredPath,
-} from "./path-utils.js";
+} from "../path-utils.js";
 
 const inputSchema = z.object({
     path: z

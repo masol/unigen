@@ -1,12 +1,12 @@
 // packages/main/src/libs/tooldb/tools/extract_archive.ts
 import { extractArchive } from "$libs/loader/archive.js";
 import { z } from "zod";
-import type { ToolDefinition } from "../type.js";
+import type { ToolDefinition } from "../../type.js";
 import {
     resolveProjectWritePath,
     resolveReadPath,
     toPreferredPath,
-} from "./path-utils.js";
+} from "../path-utils.js";
 
 const inputSchema = z.object({
     archive_path: z

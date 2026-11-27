@@ -5,8 +5,8 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import pMap from "p-map";
 import { z } from "zod";
-import type { ToolDefinition } from "../type.js";
-import { resolveReadPath, toPreferredPath } from "./path-utils.js";
+import type { ToolDefinition } from "../../type.js";
+import { resolveReadPath, toPreferredPath } from "../path-utils.js";
 
 const matchSchema = z.object({
     file: z.string().describe("项目目录 内显示相对 项目目录 的路径，项目目录 外显示绝对路径。"),

@@ -2,8 +2,8 @@
 import { createReadStream, promises as fs } from "node:fs";
 import { createInterface } from "node:readline";
 import { z } from "zod";
-import type { ToolDefinition } from "../type.js";
-import { resolveReadPath, toPreferredPath } from "./path-utils.js";
+import type { ToolDefinition } from "../../type.js";
+import { resolveReadPath, toPreferredPath } from "../path-utils.js";
 
 const MAX_RANGE_LINES = 2000;
 

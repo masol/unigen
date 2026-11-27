@@ -2,8 +2,8 @@
 import { makePatches, stringifyPatches } from "@sanity/diff-match-patch";
 import { promises as fs } from "node:fs";
 import { z } from "zod";
-import type { ToolDefinition } from "../type.js";
-import { resolveReadPath } from "./path-utils.js";
+import type { ToolDefinition } from "../../type.js";
+import { resolveReadPath } from "../path-utils.js";
 
 const sourceSchema = z.discriminatedUnion("type", [
     z.object({

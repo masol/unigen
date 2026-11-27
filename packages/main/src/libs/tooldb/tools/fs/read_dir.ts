@@ -3,8 +3,8 @@ import fg, { type Entry } from "fast-glob";
 import { promises as fs } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { z } from "zod";
-import type { ToolDefinition } from "../type.js";
-import { resolveReadPath, toPreferredPath } from "./path-utils.js";
+import type { ToolDefinition } from "../../type.js";
+import { resolveReadPath, toPreferredPath } from "../path-utils.js";
 
 const entrySchema = z.object({
     name: z.string(),

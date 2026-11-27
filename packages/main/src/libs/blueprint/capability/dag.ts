@@ -11,23 +11,18 @@ export class DagFunctor extends BaseFunctor {
         super(capa);
     }
 
-    private async execTask(ctx: IRunnerContext, id: string): Promise<void> {
-
-        // await delay(Math.random() * 10000);
-        // Logger.debug(`runnig id:${id}`);
-        // return;
-
+    private async execTask(ctx: IRunnerContext, id: string): Promise<string> {
         const runner = ctx.loadFunctor(id);
         if (runner) {
-            await runner.run(ctx);
+            return await runner.run(ctx);
         } else {
             throwNotfound(`无法加载id为${id}的能力对象。`)
         }
     }
 
     /**
- * 前置校验图的合法性
- */
+     * 前置校验图的合法性
+     */
     private validateGraph(): void {
         // 1. 空图检查
         if (this.dag.order === 0) {
@@ -46,14 +41,14 @@ export class DagFunctor extends BaseFunctor {
     }
 
     // 3. 核心运行函数：按“代”并行
-    async doTask(ctx: IRunnerContext): Promise<void> {
+    async doTask(ctx: IRunnerContext): Promise<string> {
         // 收集计算出的“代”队列
         const generations: string[][] = [];
 
         this.validateGraph();
 
         // 状态检查：如果校验完就已经被取消了，直接退出
-        if (ctx.isAborted) return;
+        if (ctx.isAborted) return "";
 
         forEachTopologicalGeneration(this.dag, (generation) => {
             // generation 是一个包含当前代所有节点 ID 的数组
@@ -61,6 +56,11 @@ export class DagFunctor extends BaseFunctor {
         });
 
         Logger.debug('--- 开始按代异步并行执行 ---', generations);
+
+        // 最终 message 只取「最后一代」的返回值：
+        //  - DAG 中间代之间的数据由 io 契约承载，返回值没有约定用途；
+        //  - 最后一代通常承载对外输出，其文本即为 DAG 的最终 message。
+        let finalResults: string[] = [];
 
         // 顺序遍历每一代
         for (let i = 0; i < generations.length; i++) {
@@ -79,36 +79,34 @@ export class DagFunctor extends BaseFunctor {
             // 1. 提前定义好监听函数和 reject 引用
             let abortHandler: (() => void) | null = null;
             try {
-
-                await Promise.race([
+                const results: string[] = await Promise.race([
                     Promise.all(promises),
                     new Promise<never>((_, _reject) => {
                         // 初始化时已触发abort，仅强制杀死才拒绝
                         if (ctx.signal.aborted) {
-                            // if (ctx.isForceKilled) {
-                            //     return reject(ctx.signal.reason);
-                            // }
-                            // 非强制终止，不reject，让Promise.all自行走完
                             return;
                         }
 
                         abortHandler = () => {
                             // 仅强制杀死时才抛出中断错误
-                            // if (ctx.isForceKilled) {
-                            //     reject(ctx.signal.reason);
-                            // }
                         };
 
                         ctx.signal.addEventListener('abort', abortHandler);
                     })
                 ]);
 
+                // 仅最后一代的返回值是本次 DAG 的最终 message。
+                // 中间代返回值不予保留（其数量与谁是谁无法向调用方承诺）。
+                if (i === generations.length - 1) {
+                    finalResults = results;
+                }
+
                 Logger.debug(`[第 ${i + 1} 代] 所有节点执行完毕。`);
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } catch (error: any) {
                 if (error?.code === 'ERR_ABORTED' || error?.name === 'AbortError') {
                     Logger.warn(`[第 ${i + 1} 代] 执行中收到终止信号。`);
-                    return;
+                    return "";
                 }
                 throw error;
             } finally {
@@ -123,8 +121,14 @@ export class DagFunctor extends BaseFunctor {
         // 最终状态检查
         if (ctx.isAborted) {
             Logger.debug('\n--- DAG 任务因终止信号退出 ---');
-        } else {
-            Logger.debug('\n--- DAG 所有任务执行完成 ---');
+            return "";
         }
+
+        Logger.debug('\n--- DAG 所有任务执行完成 ---');
+
+        // 过滤空串，避免多个"无输出"节点拼出一串无意义的 \n\n。
+        return finalResults
+            .filter((s): s is string => typeof s === "string" && s.length > 0)
+            .join("\n\n");
     }
 }

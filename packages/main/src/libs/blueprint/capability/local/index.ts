@@ -106,12 +106,40 @@ export class PACFunctor implements ICapaFunctor {
     private agent: PacAgent | null = null;
     private compileError: string | null = null;
     private inflight: Promise<void> | null = null;
+    private isRootAgent: boolean;
 
     constructor(
         readonly type: string,
         /** 入口文件相对项目根的分段路径；必须显式传入，不提供默认入口。 */
         private entry: string[],
-    ) { }
+        /**
+         * 是否以根 agent 身份运行。默认 true（与当前行为一致）。
+         *
+         * 运行期动态创建并被外部 agent 调用时，应设为 false。此时其内部根 agent
+         * 的 isRoot 恒为 false：正文与生命周期事件走 trace，不发送
+         * message.start / message.delta / message.end，不写 message 表，
+         * 也不会创建空的 assistant 占位消息。
+         */
+        isRootAgent = true,
+    ) {
+        this.isRootAgent = isRootAgent;
+    }
+
+    /**
+     * 设置是否以根 agent 身份运行。
+     *
+     * 可在 run 之前调用，也可在编译后调用；若 agent 已编译完成，会同步到内部
+     * PacAgent。默认值为 true，保持现有行为不变。
+     */
+    setRoot(isRoot: boolean): void {
+        this.isRootAgent = isRoot;
+        this.agent?.setRunAsRoot(isRoot);
+    }
+
+    /** 便捷方法：标记为子 agent（等价于 setRoot(false)） */
+    setAsSubAgent(): void {
+        this.setRoot(false);
+    }
 
     get id() {
         return `localAgent:${this.type}`;
@@ -161,7 +189,7 @@ export class PACFunctor implements ICapaFunctor {
 
         try {
             const compiled = await compilePacAgent(this.type, entry, undefined, prj);
-            nextAgent = new PacAgent(compiled);
+            nextAgent = new PacAgent(compiled, this.isRootAgent);
 
             Logger.debug(
                 `[PAC] 编译完成 ${compiled.name} [id=${compiled.id}]` +
@@ -179,22 +207,31 @@ export class PACFunctor implements ICapaFunctor {
         }
     }
 
-    async run(ctx: IRunnerContext): Promise<void> {
-        if (ctx.isAborted) return;
+    async run(ctx: IRunnerContext): Promise<string> {
+        if (ctx.isAborted) return "";
 
         // 懒编译时使用构造时传入的 this.entry。
         if (this.status !== "ready") await this.compile(ctx.prj);
 
         if (this.status !== "ready" || !this.agent) {
             ctx.error(`[PAC] agent 未就绪(${this.type}): ${this.compileError ?? "未知原因"}`);
-            return;
+            return "";
         }
 
+        // 编译可能发生在设置标志之前（例如先调 compile，再调 setAsSubAgent），
+        // 这里再同步一次，确保 isRoot 与外部设置一致。
+        this.agent.setRunAsRoot(this.isRootAgent);
+
         try {
+            // agent.run 已返回最终的 assistant text；此处直接透出，
+            // 不改动 ctx.prj.notify / ctx.report 通路。
             const result = await this.agent.run(ctx);
-            // ctx.notify("", result);
             ctx.debug(`[PAC] 运行结果(${this.type}):`, result);
+            return result;
         } catch (e) {
+            // 子 agent 模式下直接 throw e
+            if (!this.isRootAgent) throw e;
+
             const msg = `[PAC] 运行失败(${this.type}): ${getErrorMessage(e)}`;
             // Logger.error(msg, e);
             ctx.prj.notify("toast", {
@@ -202,6 +239,7 @@ export class PACFunctor implements ICapaFunctor {
                 msg: msg,
             });
             ctx.error(msg);
+            return "";
         }
     }
 }

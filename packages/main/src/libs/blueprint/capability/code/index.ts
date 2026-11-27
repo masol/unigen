@@ -46,7 +46,7 @@ ${capa.code}
         this.script = new vm.Script(wrappedCode, { filename });
     }
 
-    async doTask(ctx: IRunnerContext): Promise<void> {
+    async doTask(ctx: IRunnerContext): Promise<string> {
         // 1. 构造注入给源码的 ioc 对象（作为源码的“全局”作用域）
         const ioc: Record<string, unknown> = {
             ctx,
@@ -61,11 +61,15 @@ ${capa.code}
         // 2. 取出预编译的异步函数外壳（与主进程共享上下文）
         const asyncFn = this.script.runInThisContext() as (
             ioc: Record<string, unknown>,
-        ) => Promise<void>;
+        ) => Promise<unknown>;
 
         try {
             // 3. 注入 ioc 并等待单次执行完毕
-            await asyncFn(ioc);
+            const ret = await asyncFn(ioc);
+            // 约定：源码 return 一个字符串时视作本次运行的最终 message；
+            // 其他类型（包含 undefined / 对象 / 数组）不再隐式序列化——
+            // 避免用户无意 return 一个引用类型时改变既有行为。
+            return typeof ret === "string" ? ret : "";
         } catch (e) {
             Logger.error(`代码节点${this.capa.id}执行时报错:${getErrorMessage(e)}`)
             throw e;

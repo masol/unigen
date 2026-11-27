@@ -6,8 +6,8 @@ import mime from "mime";
 import { promises as fs } from "node:fs";
 import { basename } from "node:path";
 import { z } from "zod";
-import type { ToolDefinition } from "../type.js";
-import { resolveReadPath, toProjectRelative } from "./path-utils.js";
+import type { ToolDefinition } from "../../type.js";
+import { resolveReadPath, toProjectRelative } from "../path-utils.js";
 
 /** 内联给模型的单文件体积上限。超过只返回文本说明，避免撑爆请求体/上下文。 */
 const MAX_INLINE_BYTES = 20 * 1024 * 1024;
