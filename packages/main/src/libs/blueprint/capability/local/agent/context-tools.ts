@@ -6,6 +6,7 @@ import {
     loadSkillById,
     queryKnowledgeByIds,
 } from "$libs/tooldb/tools/meta-tools/rag.js";
+import { escapeTableCell } from "$libs/utils/str.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { tool, type Tool } from "ai";
 import Logger from "electron-log/main.js";
@@ -54,13 +55,6 @@ function readStringList(
 
 function normalizeSkillId(name: string): string {
     return name.startsWith("skill:") ? name : `skill:${name}`;
-}
-
-function escapeTableCell(value: string): string {
-    return value
-        .replace(/`/g, "\\`")
-        .replace(/\|/g, "\\|")
-        .replace(/\r?\n/g, " ");
 }
 
 async function getProjectSearchDB(

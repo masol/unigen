@@ -24,7 +24,7 @@
 | `activities`        | 否   | 作者             | 侧边栏面板定义，见第二部分。                                                                                                 |
 | `blueprintFilters`  | 否   | 作者             | 术语表 / 元术语表 / 能力表的名称候选，见下文。                                                                               |
 | `mediaFields`       | 否   | 作者             | 媒体资源字段名列表，见下文。                                                                                                 |
-| `requirements`      | 否   | 作者             | 依赖需求声明，见下文。                                                                                                       |
+| `requirements`      | 否   | 作者             | 依赖需求声明（需求树），见下文。                                                                                             |
 | `requirementIssues` | —    | **系统**         | 依赖检查结果。**不要写**；即使写了也会被覆盖。                                                                               |
 
 ## status 与需求检查的关系
@@ -39,18 +39,47 @@
 
 ## requirements：依赖需求
 
-`requirements` 是一组需求声明，每项检查一次。全部通过则静默，存在缺失则汇总成一条通知。
+`requirements` 是一棵**需求树**：顶层是数组，语义等价于一个隐式的 `allOf`（全部满足）。
+数组元素既可以是**叶子需求**（模型 / 嵌入 / 重排 / 本机运行时 / MCP / 配置项），
+也可以是**组合节点**（`allOf` / `anyOf`），组合节点之间可任意嵌套。
+
+打开 / 创建项目时检查一次：全部通过则静默，存在缺失则汇总成一条通知。
 
 ### 通用字段
 
-| 字段       | 必填 | 说明                                                                                           |
-| ---------- | ---- | ---------------------------------------------------------------------------------------------- |
-| `type`     | 是   | 判别式，决定检查方式。                                                                         |
-| `severity` | 否   | `"warning"`（默认）或 `"error"`。`error` 表示核心流程无法完成，通知会用危险视觉等级。          |
-| `label`    | 否   | 覆盖通知里的显示名。不填则由系统按类型生成（如「绘图模型」「MCP 服务「xxx」」）。              |
-| `impact`   | 否   | 缺失后果的一句话说明，追加到通知中。建议写业务影响（如「角色立绘无法生成」），而不是技术细节。 |
+叶子与组合节点共享以下字段：
 
-### 类型：`model`
+| 字段       | 必填 | 说明                                                                                  |
+| ---------- | ---- | ------------------------------------------------------------------------------------- |
+| `type`     | 是   | 判别式，决定节点类型。                                                                |
+| `severity` | 否   | `"warning"`（默认）或 `"error"`。`error` 表示核心流程无法完成，通知会用危险视觉等级。 |
+| `impact`   | 否   | 缺失后果的一句话说明。建议写业务影响（如「角色立绘无法生成」），而不是技术细节。      |
+| `label`    | 否   | 覆盖通知里的显示名。不填则由系统按类型生成。**不参与继承**（见下）。                  |
+
+#### severity / impact 的继承
+
+节点自身没写 `severity` / `impact` 时，取**最近一层写过该字段的祖先**；顶层未写视为 `severity: "warning"`。
+这让「整个子树都按 error 提醒」不必逐项重复：
+
+```json
+{
+  "type": "allOf",
+  "severity": "error",
+  "impact": "成片无法输出",
+  "of": [
+    { "type": "runtime", "engine": "ffmpeg" },
+    { "type": "model", "abilities": ["video-generation", "ff"] }
+  ]
+}
+```
+
+上面两个子节点都按 `error` / 「成片无法输出」上报。
+
+`label` **不**参与继承 —— 它只描述单个节点，逐层继承会掩盖「到底是哪个子项缺失」。
+
+### 叶子类型
+
+#### `model`
 
 需要某个能力的模型可用。
 
@@ -66,7 +95,7 @@
 { "type": "model", "abilities": ["image-generation"], "severity": "warning", "impact": "角色立绘与场景插图无法生成" }
 ```
 
-### 类型：`embedding` / `rerank`
+#### `embedding` / `rerank`
 
 需要已配置嵌入模型 / 重排模型（对应设置里的「搜索配置」）。无额外字段。
 
@@ -74,7 +103,7 @@
 { "type": "embedding", "impact": "检索退化为全文检索，召回质量下降" }
 ```
 
-### 类型：`runtime`
+#### `runtime`
 
 需要某个本机运行时 / 工具处于「已启用且就绪」状态。
 
@@ -88,7 +117,7 @@
 { "type": "runtime", "engine": "nodejs", "severity": "error", "impact": "依赖 Node.js 的后处理脚本无法运行" }
 ```
 
-### 类型：`mcp`
+#### `mcp`
 
 需要某个 MCP 服务已配置且启用。
 
@@ -100,7 +129,7 @@
 { "type": "mcp", "id": "image-gen", "severity": "error", "impact": "无法调用绘图 MCP 服务" }
 ```
 
-### 类型：`config`
+#### `config`
 
 需要某个配置项非空。**逃生通道**：当上面几种语义都表达不了时才使用。
 
@@ -108,9 +137,69 @@
 | ----- | ---- | --------------------------------------------------------------------------- |
 | `key` | 是   | `AppConfig` 的键名（如 `task_dir`）。拼错会得到「配置项不存在」的明确提示。 |
 
+空白字符串与空数组视为「为空」。
+
 ```json
 { "type": "config", "key": "task_dir" }
 ```
+
+### 组合节点
+
+| `type`  | 语义                                                                       |
+| ------- | -------------------------------------------------------------------------- |
+| `allOf` | 子节点**全部**满足才通过。失败时把每个失败子项逐一上报，自身不加汇总条目。 |
+| `anyOf` | 子节点**任意一个**满足即通过。全部失败时只上报**一条**汇总。               |
+
+| 字段 | 必填 | 说明                                                                 |
+| ---- | ---- | -------------------------------------------------------------------- |
+| `of` | 是   | 子需求数组，至少一项。元素可为任意叶子需求或组合节点（可任意嵌套）。 |
+
+- `allOf` 的 `severity` / `impact` 只作为**默认值**向子节点下传，自身不产生条目；
+- `anyOf` 失败时用自身（含继承）的 `severity` / `impact` 生成汇总条，
+  并在汇总条下列出每个备选的失败原因。
+
+> 命名沿用 JSON Schema 惯例：`allOf` = 全部满足（AND），`anyOf` = 任意一个（OR）。
+
+#### 例 1：多个 MCP 后端，任选其一
+
+```json
+{
+  "type": "anyOf",
+  "label": "绘图后端",
+  "severity": "error",
+  "impact": "分镜插图无法生成",
+  "of": [
+    { "type": "mcp", "id": "comfy-local" },
+    { "type": "mcp", "id": "comfy-remote" },
+    { "type": "model", "abilities": ["image-generation"] }
+  ]
+}
+```
+
+三个备选都不可用时，通知里**只出现一条**「绘图后端」，下面逐条列出各自为何不满足；
+只要有一个可用，这条需求就静默通过。
+
+#### 例 2：组合节点嵌套（任选其一，其中一个备选又要求 AND）
+
+```json
+{
+  "type": "anyOf",
+  "label": "绘图后端",
+  "of": [
+    {
+      "type": "allOf",
+      "label": "本地绘图链路",
+      "of": [
+        { "type": "mcp", "id": "comfy-local" },
+        { "type": "runtime", "engine": "python" }
+      ]
+    },
+    { "type": "model", "abilities": ["image-generation"] }
+  ]
+}
+```
+
+含义：要么「本地 MCP + Python」两者齐备，要么有一个可用的绘图模型。
 
 ### 完整示例
 
@@ -123,9 +212,26 @@
   "requirements": [
     { "type": "embedding", "impact": "剧本检索召回质量下降" },
     { "type": "rerank", "impact": "召回结果无法重排与截断" },
-    { "type": "model", "abilities": ["image-generation"], "severity": "error", "impact": "分镜插图无法生成" },
-    { "type": "model", "abilities": ["video-generation", "ff"], "severity": "error", "impact": "成片无法渲染" },
-    { "type": "runtime", "engine": "ffmpeg", "severity": "error", "impact": "视频拼接与转码无法执行" },
+    {
+      "type": "anyOf",
+      "label": "绘图后端",
+      "severity": "error",
+      "impact": "分镜插图无法生成",
+      "of": [
+        { "type": "mcp", "id": "comfy-local" },
+        { "type": "mcp", "id": "comfy-remote" },
+        { "type": "model", "abilities": ["image-generation"] }
+      ]
+    },
+    {
+      "type": "allOf",
+      "severity": "error",
+      "impact": "成片无法渲染",
+      "of": [
+        { "type": "model", "abilities": ["video-generation", "ff"] },
+        { "type": "runtime", "engine": "ffmpeg" }
+      ]
+    },
     { "type": "mcp", "id": "video-render" }
   ],
   "activities": [
@@ -134,10 +240,17 @@
 }
 ```
 
-### 扩展新需求类型
+### 扩展新的需求类型
 
-- 新增需求类型需要同时改三处：`types/shared/template/requirement.ts`（协议）、`libs/project/requirements.ts`（检查器）、本文档。
-- 检查器漏实现会**编译失败**（映射类型强制补全），不会静默放行。
+- 新增**叶子**类型：在 `types/shared/template/requirement.ts` 定义
+  `<name>RequirementSchema` 并加入 `leafRequirementSchemas`，同时在
+  `libs/project/requirements.ts` 的 `checkers` 中实现同名检查器，最后补本文档。
+  - 漏写检查器会**编译失败**（映射类型强制补全），不会静默放行；
+  - 忘了同步类型定义不会发生 —— 叶子类型由 `leafRequirementSchemas` 推导。
+- 新增**组合**类型：定义 schema 并加入 `projectRequirementSchema` 的
+  union，同时在 `RequirementGroup` 类型中补一支；漏补会在 schema 的类型
+  标注处**编译失败**。
+- 已有的 `allOf` / `anyOf` 是通用的，新增叶子类型不需要改动它们。
 
 ## blueprintFilters
 

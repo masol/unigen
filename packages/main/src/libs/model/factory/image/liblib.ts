@@ -8,7 +8,7 @@ import type {
 } from '@ai-sdk/provider';
 import Logger from 'electron-log/main.js';
 import { Buffer } from 'node:buffer';
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac, randomInt } from 'node:crypto';
 import type { ImageAdapterEntry } from './registry.js';
 
 /**
@@ -16,7 +16,7 @@ import type { ImageAdapterEntry } from './registry.js';
  *
  * 背景:vercel ai sdk 不认识 liblib 模型;这里绕过 SDK,直接调用
  * liblib 开放平台端点,并实现 ImageModelV4 契约。仅在 Electron main
- * (Node 环境)运行 —— HMAC-SHA1 签名走 node:crypto 静态导入。
+ * (Node 环境)执行 —— HMAC-SHA1 签名用 node:crypto 静态导入。
  *
  * ── 模型路由(按 modelId 子串识别)────────────────────────────
  *   star-3                → /api/generate/webui/text2img /img2img (靠 templateUuid 区分)
@@ -152,11 +152,24 @@ function buildSignatureArgs(
     return { accessKey, signature, timestamp, nonce };
 }
 
+/**
+ * 生成签名用 nonce(字母数字一次性随机串)。
+ *
+ * 刻意使用 crypto.randomInt,而不是 `randomBytes(1)[0] % chars.length`:
+ * 256 不是 62 的整数倍,直接取模会让字母表前 8 个字符的出现概率略高于其余字符
+ * (CodeQL js/biased-cryptographic-random / CWE-327)。randomInt 在其内部按范围
+ * 做拒绝采样,在 [0, chars.length) 上均匀分布,且本文件里不再出现任何对
+ * 随机字节取模/取除的表达式。
+ *
+ * nonce 对服务端是不透明串,只需长度与字符集稳定;更换生成算法不影响
+ * 签名协议(签名的内容是 path&timestamp&nonce 的原文)。
+ */
 function randomNonce(len: number): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    const buf = randomBytes(len);
     let out = '';
-    for (let i = 0; i < len; i++) out += chars[buf[i] % chars.length];
+    for (let i = 0; i < len; i++) {
+        out += chars.charAt(randomInt(chars.length));
+    }
     return out;
 }
 

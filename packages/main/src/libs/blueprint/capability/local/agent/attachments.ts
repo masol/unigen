@@ -4,6 +4,7 @@ import {
     convertSchema,
     fileMarkdownToolDef,
 } from "$libs/tooldb/tools/read_file.js";
+import { escapeTableCell } from "$libs/utils/str.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import { tool, type Tool } from "ai";
 import Logger from "electron-log/main.js";
@@ -96,12 +97,6 @@ function formatFileSize(bytes: number | null): string {
     return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
 }
 
-function escapeTableCell(value: string): string {
-    return value
-        .replace(/`/g, "\\`")
-        .replace(/\|/g, "\\|")
-        .replace(/\r?\n/g, " ");
-}
 
 function getBaseName(value: string): string {
     const normalized = value.replace(/\\/g, "/");

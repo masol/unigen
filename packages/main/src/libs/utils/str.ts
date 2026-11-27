@@ -43,3 +43,21 @@ export function truncate(str: string, maxLength = 30, ellipsis = '...') {
     }
     return str.slice(0, maxLength) + ellipsis;
 }
+
+
+
+/**
+ * 转义 Markdown 表格单元格内容。
+ *
+ * 顺序不可调换：必须先转义反斜杠本身。否则输入 `\|` 时，`|` 被转义成 `\|`，
+ * 与其前面的 `\` 拼成 `\\|` —— `\\` 会被解析成一个字面反斜杠，竖线重新裸露，
+ * 表格行被拆开（CodeQL js/incomplete-sanitization / CWE-116）。
+ * 换行（含孤立 \r）统一折叠为空格，避免把一行拆成多行、撑坏表格结构。
+ */
+export function escapeTableCell(value: string): string {
+    return value
+        .replace(/\\/g, "\\\\")
+        .replace(/`/g, "\\`")
+        .replace(/\|/g, "\\|")
+        .replace(/\r\n|\r|\n/g, " ");
+}

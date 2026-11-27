@@ -15,7 +15,6 @@ import { stableConfig } from '$libs/store/stable.js';
 import { initGlobalToolDB } from '$libs/tooldb/bootstrap.js';
 import { globalToolDB } from '$libs/tooldb/index.js';
 import { syncToolsToSearchDB } from '$libs/tooldb/search-sync.js';
-import { puppeteerInst } from '$libs/utils/puppeteer/index.js';
 import { broadcast } from '$libs/utils/rpcevt.js';
 import { themeFile } from '$libs/utils/sys/dir.js';
 import { report, type TaskWarning } from '$libs/utils/task-progress.js';
@@ -111,9 +110,7 @@ class UnigenModule implements AppModule {
             })
         })
 
-        // 网络区域探测（中国区决定镜像源）：
-        // 不阻塞启动主路径，但作为基础组件之一加入 Promise.all；
-        // 内部超时 3s，探测失败时保守视为中国（isChina = true）。
+        // 与initSearch不并行的原因，是都要写tool表，不确认lancedb对同一张表的并行写入是否安全。
         report(
             STARTUP_TASK_ID,
             "search-db",
@@ -123,9 +120,10 @@ class UnigenModule implements AppModule {
         await Promise.all([
             ensureDir(themeFile()),
             telemetryService.initialize(configService().get("telemetry")),
-            puppeteerInst.init(),
             openGlobalSearch(),
             tooldbPromise,
+            // 网络区域探测（中国区决定镜像源）：内部超时 3s，
+            // 探测失败时保守视为中国（isChina = true）。
             checkAndUpdateIsChina(),
         ]);
         configService().oTel = telemetryService;

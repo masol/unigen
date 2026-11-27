@@ -7,14 +7,22 @@
 //   - 需求如何声明由 `$types/shared/template/requirement.js` 定义（纯协议）；
 //   - 展示文案由 `formatRequirementIssues` 生成，UI 只负责标题与视觉等级。
 //
-// 扩展方式：新增一种需求类型时，
-//   1. 在 `$types/shared/template/requirement.js` 的 discriminatedUnion 中加分支；
-//   2. 在下方 `checkers` 中注册同名检查器（映射类型会强制要求补全）；
-//   3. 在 `docs/Panel-JSON.md` 补一节说明。
-// 不需要改动本文件之外的调度逻辑。
+// 需求是一棵树，因此检查也是递归的：
+//   - 顶层数组 = 隐式 `allOf`；
+//   - `allOf` 自身不产生条目，失败项直接展开到结果里（与旧版逐项上报一致）；
+//   - `anyOf` 只有**全部备选都失败**时才产生一条汇总条目，任一通过即静默；
+//   - `severity` / `impact` 就近覆盖、向子节点继承；`label` 不继承。
+//
+// 扩展方式：新增一种**叶子**需求类型时，
+//   1. 在 `$types/shared/template/requirement.js` 的 `leafRequirementSchemas`
+//      中加一项；
+//   2. 在下方 `checkers` 中注册同名检查器（映射类型会强制要求补全）。
+// 组合节点是通用的，新增叶子类型不需要改动本文件的调度逻辑。
 //
 // 容错原则：单项检查抛异常只记日志并跳过，绝不影响项目打开，也不吞掉
-// 其它检查结果。
+// 其它检查结果。注意由此带来的一个副作用：`anyOf` 的某个备选若因内部
+// 异常被跳过，该备选会被视为「满足」，从而让整组通过 —— 与旧版「异常即
+// 跳过」的取舍保持一致，避免把内部错误当成用户需要处理的缺失项。
 
 import { configService } from "$libs/store/index.js";
 import { stableConfig } from "$libs/store/stable.js";
@@ -27,6 +35,8 @@ import { ModelTags, type Model, type Provider } from "$types/shared/model.js";
 import type {
     ProjectRequirement,
     RequirementIssue,
+    RequirementLeaf,
+    RequirementSeverity,
 } from "$types/shared/template/requirement.js";
 import Logger from "electron-log/main.js";
 
@@ -46,6 +56,16 @@ type RequirementCheckResult =
         hint?: string;
         ok: false;
     };
+
+/**
+ * 从祖先继承下来的默认值。
+ *
+ * `severity` 由根节点统一给出默认值，因此任一节点处理时它必然是确定的。
+ */
+interface Inherited {
+    severity: RequirementSeverity;
+    impact?: string;
+}
 
 /** 模型能力标签 → 中文显示名。未收录的标签回退为裸标签名。 */
 const MODEL_TAG_LABELS: Partial<Record<ModelTags, string>> = {
@@ -100,14 +120,15 @@ function listAvailableModels(): Array<{
 }
 
 /**
- * 每种需求类型对应的检查器。
+ * 每种**叶子**需求类型对应的检查器。
  *
- * 映射类型 `[K in ProjectRequirement["type"]]` 保证：新增需求类型分支时，
- * 这里漏实现会直接编译失败，而不是在运行期静默通过。
+ * 映射类型 `[K in RequirementLeaf["type"]]` 保证：新增叶子类型时，这里漏
+ * 实现会直接编译失败，而不是在运行期静默通过。组合节点（`allOf` /
+ * `anyOf`）由 `collect()` 处理，不进入本表。
  */
 const checkers: {
-    [K in ProjectRequirement["type"]]: (
-        req: Extract<ProjectRequirement, { type: K }>,
+    [K in RequirementLeaf["type"]]: (
+        req: Extract<RequirementLeaf, { type: K }>,
     ) => RequirementCheckResult;
 } = {
     model: (req) => {
@@ -170,7 +191,7 @@ const checkers: {
                 ok: false,
                 label,
                 reason: `未启用 ${engineName}，依赖它的命令与脚本无法执行。`,
-                hint: "在「设置  → 本机工具」中启用该运行时。",
+                hint: "在「设置 → 本机工具」中启用该运行时。",
             };
         }
 
@@ -186,7 +207,7 @@ const checkers: {
                     state === "installing"
                         ? `${engineName} 正在安装，安装完成前无法执行。`
                         : `${engineName} 尚未就绪（当前状态：${state ?? "not_ready"}）。`,
-                hint: "在「设置  → 本机工具」中完成该运行时的安装与验证。",
+                hint: "在「设置 → 本机工具」中完成该运行时的安装与验证。",
             };
         }
 
@@ -224,7 +245,9 @@ const checkers: {
         const key = req.key as keyof AppConfig;
         const label = `配置项「${req.key}」`;
 
-        if (!(key in all)) {
+        // 用 own property 而非 `in`：`in` 会命中 Object.prototype 上的成员，
+        // 把 `toString` / `constructor` 这类拼写错误误判成「存在且非空」。
+        if (!Object.hasOwn(all, req.key)) {
             return {
                 ok: false,
                 label,
@@ -244,35 +267,120 @@ const checkers: {
     },
 };
 
+/** `anyOf` 未写 `label` 时的兜底名称。 */
+function anyOfFallbackLabel(children: readonly ProjectRequirement[]): string {
+    // 用户最常见的场景是「多个 MCP 任选其一」，此时给出更具体的名称。
+    if (children.length > 0 && children.every((child) => child.type === "mcp")) {
+        return "任一 MCP 服务";
+    }
+    return "以下任一依赖";
+}
+
+/** 把一条缺失记录压成一句话，供上层 `anyOf` 汇总时引用。 */
+function summarize(issue: RequirementIssue): string {
+    if (issue.alternatives?.length) {
+        return `${issue.label}（${issue.alternatives.join("；")}）`;
+    }
+    return `${issue.label}：${issue.message}`;
+}
+
 /**
- * 检查单条需求，返回缺失记录；满足时返回 `null`。
+ * 检查单个叶子需求，返回缺失记录；满足时返回 `null`。
  *
  * 类型收窄由 `checkers` 的映射类型保证，但 TS 无法在调用点把联合类型
  * 收窄到对应分支，因此在函数边界做一次断言。
  */
-function checkOne(req: ProjectRequirement): RequirementIssue | null {
+function checkLeaf(
+    req: RequirementLeaf,
+    resolved: Inherited,
+): RequirementIssue | null {
     const checker = checkers[req.type] as (
-        r: ProjectRequirement,
+        r: RequirementLeaf,
     ) => RequirementCheckResult;
 
-    const result = checker(req);
+    let result: RequirementCheckResult;
+    try {
+        result = checker(req);
+    } catch (error) {
+        Logger.error(`[Project] 依赖检查异常（type=${req.type}）`, error);
+        return null;
+    }
+
     if (result.ok) return null;
 
     return {
         type: req.type,
-        severity: req.severity,
+        severity: resolved.severity,
         label: req.label ?? result.label,
         message: result.reason,
-        impact: req.impact,
+        impact: resolved.impact,
         hint: result.hint,
     };
+}
+
+/**
+ * 递归检查一个需求节点，把缺失记录追加到 `out`。
+ *
+ * 不返回是否满足 —— 调用方通过 `out` 是否增长判断，语义更直观：
+ * `allOf` 需要展开全部子项，`anyOf` 需要为每个备选单独收集。
+ */
+function collect(
+    node: ProjectRequirement,
+    inherited: Inherited,
+    out: RequirementIssue[],
+): void {
+    // 就近覆盖：本节点的声明优先于祖先。
+    const resolved: Inherited = {
+        severity: node.severity ?? inherited.severity,
+        impact: node.impact ?? inherited.impact,
+    };
+
+    if (node.type === "allOf") {
+        for (const child of node.of) {
+            collect(child, resolved, out);
+        }
+        return;
+    }
+
+    if (node.type === "anyOf") {
+        // schema 已用 `.min(1)` 禁止空数组，这里兜底避免生成无内容的汇总条目。
+        if (node.of.length === 0) return;
+
+        const alternatives: string[] = [];
+
+        for (const child of node.of) {
+            const branch: RequirementIssue[] = [];
+            collect(child, resolved, branch);
+
+            // 任一备选通过 → 整组通过，不产生任何记录。
+            if (branch.length === 0) return;
+
+            alternatives.push(...branch.map(summarize));
+        }
+
+        out.push({
+            type: "anyOf",
+            severity: resolved.severity,
+            label: node.label ?? anyOfFallbackLabel(node.of),
+            message: "所有备选均未满足。",
+            impact: resolved.impact,
+            hint: "补齐上述任一备选即可。",
+            alternatives,
+        });
+        return;
+    }
+
+    const issue = checkLeaf(node, resolved);
+    if (issue) out.push(issue);
 }
 
 /**
  * 逐项检查项目声明的全部需求。
  *
  * - 未声明或空数组：返回空数组，调用方无需做特殊分支；
- * - 单项检查抛异常：记录日志并跳过，不影响其它检查结果，也不影响项目打开。
+ * - 顶层数组等价于隐式 `allOf`：每个元素独立检查，互不影响；
+ * - 某个元素内部抛异常：记录日志并跳过该元素，不影响其它元素，
+ *   也不影响项目打开。
  */
 export function checkProjectRequirements(
     requirements: readonly ProjectRequirement[] | undefined,
@@ -280,11 +388,12 @@ export function checkProjectRequirements(
     if (!requirements?.length) return [];
 
     const issues: RequirementIssue[] = [];
+    /** 顶层默认等级；节点未声明时由 `collect` 逐层继承。 */
+    const root: Inherited = { severity: "warning" };
 
     for (const req of requirements) {
         try {
-            const issue = checkOne(req);
-            if (issue) issues.push(issue);
+            collect(req, root, issues);
         } catch (error) {
             Logger.error(`[Project] 依赖检查异常（type=${req.type}）`, error);
         }
@@ -299,7 +408,7 @@ export function checkProjectRequirements(
  * 约定：
  *   - 明确写出「不影响项目打开」，避免用户误以为项目被拒绝；
  *   - `error` 级别额外提示可通过修改项目的「AI 工作指南」绕开相关能力；
- *   - 每条记录包含：等级 · 名称 · 事实 · 影响（作者声明）· 处理（修复指引）。
+ *   - 每条记录包含：等级 · 名称 · 事实 ·（`anyOf` 的备选明细）· 影响 · 处理。
  */
 export function formatRequirementIssues(
     issues: readonly RequirementIssue[],
@@ -319,6 +428,12 @@ export function formatRequirementIssues(
     for (const issue of issues) {
         const level = issue.severity === "error" ? "必需" : "建议";
         lines.push(`- **【${level}】${issue.label}**：${issue.message}`);
+
+        if (issue.alternatives?.length) {
+            for (const alternative of issue.alternatives) {
+                lines.push(`  - ${alternative}`);
+            }
+        }
         if (issue.impact) {
             lines.push(`  - 影响：${issue.impact}`);
         }
