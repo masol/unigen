@@ -12,6 +12,7 @@
   import PacEditorHeader from "./PacEditorHeader.svelte";
   import PacEditorLoading from "./PacEditorLoading.svelte";
 
+  // svelte-ignore non_reactive_update
   let editor: ReturnType<typeof createEditor> | undefined = createEditor({
     onUpdate: () => {
       if (!editor) return;
@@ -30,7 +31,7 @@
 
   editor?.setEditable(true);
 
-  const metaActions = createPacMetaActions(pacStore);
+  const metaActions = $derived(createPacMetaActions(pacStore));
 
   onMount(() => {
     if (editor) pacStore.attachEditor(editor);
@@ -89,7 +90,6 @@
               onSave={() => void pacStore.save()}
               canSave={pacStore.dirty}
               saving={pacStore.saving}
-              {metaActions}
               metaMenus={metaActions}
             />
           {/snippet}

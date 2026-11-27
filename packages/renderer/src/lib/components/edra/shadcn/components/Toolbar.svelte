@@ -18,12 +18,17 @@
   import { ISMAC } from "../../utils.js";
   import Tooltip from "./Tooltip.svelte";
 
+  type ToolbarBadgeTone = "muted" | "warning";
+
   type ToolbarMetaMenuItem = {
     label: string;
     icon: typeof IconChevronDown;
     /** 数字 1-5，对应 Alt+1 … Alt+5。 */
     hotKey?: number;
     onSelect: () => void;
+    badge?: string;
+    badgeTone?: ToolbarBadgeTone;
+    warning?: string;
   };
 
   type ToolbarMetaMenu = {
@@ -44,6 +49,9 @@
     items?: ToolbarMetaMenuItem[];
     /** 无 items 时点击按钮直接触发的回调。 */
     onSelect?: () => void;
+    badge?: string;
+    badgeTone?: ToolbarBadgeTone;
+    warning?: string;
   };
 
   interface Props {
@@ -86,6 +94,18 @@
   function formatHotKey(hotKey?: number): string {
     if (!hotKey) return "";
     return ISMAC ? `⌥${hotKey}` : `Alt+${hotKey}`;
+  }
+
+  function metaAriaLabel(menu: ToolbarMetaMenu): string {
+    const parts = [menu.label];
+
+    if (menu.badge && menu.badgeTone !== "warning") {
+      parts.push(`${menu.badge} 项`);
+    }
+
+    if (menu.warning) parts.push("需要注意");
+
+    return parts.join("，");
   }
 
   function useAI() {
@@ -134,6 +154,54 @@
       <IconChevronDown size={10} stroke={2.5} class="text-foreground/70" />
     </span>
   </Button>
+{/snippet}
+
+{#snippet metaButtonBadge(menu: ToolbarMetaMenu)}
+  {#if menu.badge}
+    <span
+      class={cn(
+        "absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-medium leading-none tabular-nums shadow-sm",
+        menu.badgeTone === "warning"
+          ? "bg-amber-500 text-white"
+          : "bg-muted text-muted-foreground",
+      )}
+      aria-hidden="true"
+    >
+      {menu.badge}
+    </span>
+  {/if}
+  {#if menu.warning}
+    <span
+      class="absolute -left-0.5 -top-0.5 size-1.5 rounded-full bg-amber-500"
+      aria-hidden="true"
+    ></span>
+  {/if}
+{/snippet}
+
+{#snippet metaItemBadge(item: ToolbarMetaMenuItem)}
+  {#if item.badge}
+    <span
+      class={cn(
+        "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-1 text-[9px] font-medium leading-none tabular-nums",
+        item.hotKey ? "ml-1" : "ml-auto",
+        item.badgeTone === "warning"
+          ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+          : "bg-muted text-muted-foreground",
+      )}
+    >
+      {item.badge}
+    </span>
+  {:else if item.warning}
+    <span
+      class={cn(
+        "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-amber-500/15 px-1 text-[9px] font-medium leading-none text-amber-700 dark:text-amber-300",
+        item.hotKey ? "ml-1" : "ml-auto",
+      )}
+      aria-label="需要注意"
+    >
+      !
+    </span>
+  {/if}
 {/snippet}
 
 <div class={cn("flex h-full w-fit items-center gap-2", className)}>
@@ -272,7 +340,12 @@
       {@const MenuIcon = menu.icon}
       {#if menu.items && menu.items.length > 0}
         <DropdownMenu.Root>
-          <Tooltip tooltip={menu.label} shortCut={formatHotKey(menu.hotKey)}>
+          <Tooltip
+            tooltip={menu.warning
+              ? `${menu.label} · ${menu.warning}`
+              : menu.label}
+            shortCut={formatHotKey(menu.hotKey)}
+          >
             <DropdownMenu.Trigger>
               {#snippet child({ props })}
                 <Button
@@ -280,9 +353,10 @@
                   variant="ghost"
                   size="icon"
                   class="relative"
-                  aria-label={menu.label}
+                  aria-label={metaAriaLabel(menu)}
                 >
                   <MenuIcon />
+                  {@render metaButtonBadge(menu)}
                   <span
                     class="absolute -right-0.5 -bottom-0.5 flex size-4 items-center justify-center rounded-full bg-background"
                   >
@@ -300,7 +374,14 @@
           <DropdownMenu.Content align="end" class="w-56">
             {#each menu.items as item (item.label)}
               {@const ItemIcon = item.icon}
-              <DropdownMenu.Item onSelect={item.onSelect}>
+              <DropdownMenu.Item
+                onSelect={item.onSelect}
+                title={item.warning}
+                class={cn(
+                  item.warning &&
+                    "text-amber-700 focus:text-amber-800 dark:text-amber-300 dark:focus:text-amber-200",
+                )}
+              >
                 <ItemIcon size={16} />
                 <span>{item.label}</span>
                 {#if item.hotKey}
@@ -308,19 +389,27 @@
                     {formatHotKey(item.hotKey)}
                   </DropdownMenu.Shortcut>
                 {/if}
+                {@render metaItemBadge(item)}
               </DropdownMenu.Item>
             {/each}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
       {:else if menu.onSelect}
-        <Tooltip tooltip={menu.label} shortCut={formatHotKey(menu.hotKey)}>
+        <Tooltip
+          tooltip={menu.warning
+            ? `${menu.label} · ${menu.warning}`
+            : menu.label}
+          shortCut={formatHotKey(menu.hotKey)}
+        >
           <Button
             variant="ghost"
             size="icon"
-            aria-label={menu.label}
+            class="relative"
+            aria-label={metaAriaLabel(menu)}
             onclick={() => menu.onSelect?.()}
           >
             <MenuIcon />
+            {@render metaButtonBadge(menu)}
           </Button>
         </Tooltip>
       {/if}

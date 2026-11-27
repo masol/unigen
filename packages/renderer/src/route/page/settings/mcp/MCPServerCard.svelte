@@ -13,13 +13,18 @@
   } from "@app/main/types";
   import {
     IconAlertTriangle,
+    IconBroadcast,
+    IconCheck,
     IconChevronDown,
     IconCloudOff,
+    IconCopy,
     IconDownload,
     IconLoader2,
     IconPencil,
     IconPlugConnected,
+    IconTerminal2,
     IconTrash,
+    IconWorld,
   } from "@tabler/icons-svelte";
   import { toast } from "svelte-sonner";
   import McpTestResult from "./McpTestResult.svelte";
@@ -43,6 +48,12 @@
 
   const isDisabled = $derived(server.enabled === false);
   const isStdio = $derived(server.transport.type === "stdio");
+  const isSse = $derived(server.transport.type === "sse");
+
+  /** 名称可能为空串，退回服务标识兜底 */
+  const displayName = $derived(server.name?.trim() || server.id);
+
+  const transportLabel = $derived(isStdio ? "STDIO" : isSse ? "SSE" : "HTTP");
 
   const endpoint = $derived(
     server.transport.type === "stdio"
@@ -50,6 +61,80 @@
       : server.transport.url,
   );
 
+  // 协议图标容器配色：以「形状 + 色调」编码传输协议，取代原先统一的占位图标。
+  const iconBoxClass = $derived(
+    isDisabled
+      ? "bg-muted"
+      : isStdio
+        ? "bg-amber-500/10"
+        : isSse
+          ? "bg-sky-500/10"
+          : "bg-primary/10",
+  );
+
+  const iconFgClass = $derived(
+    isDisabled
+      ? "text-muted-foreground/50"
+      : isStdio
+        ? "text-amber-600 dark:text-amber-400"
+        : isSse
+          ? "text-sky-600 dark:text-sky-400"
+          : "text-primary",
+  );
+
+  // ── 服务标识复制 ──
+  let copied = $state(false);
+  let copyTimer: ReturnType<typeof setTimeout> | undefined;
+
+  async function writeClipboard(text: string): Promise<boolean> {
+    const clipboard = navigator.clipboard;
+    if (clipboard?.writeText) {
+      try {
+        await clipboard.writeText(text);
+        return true;
+      } catch {
+        // 权限被拒 / 非安全上下文：走下面的兜底路径
+      }
+    }
+
+    try {
+      const el = document.createElement("textarea");
+      el.value = text;
+      el.readOnly = true;
+      el.style.position = "fixed";
+      el.style.top = "0";
+      el.style.left = "-9999px";
+      el.style.opacity = "0";
+      document.body.appendChild(el);
+      el.select();
+      const ok = document.execCommand("copy");
+      el.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async function handleCopyId() {
+    const ok = await writeClipboard(server.id);
+
+    if (!ok) {
+      toast.error("复制失败，请手动选择服务标识");
+      return;
+    }
+
+    copied = true;
+    if (copyTimer) clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => (copied = false), 1600);
+  }
+
+  $effect(
+    () => () => {
+      if (copyTimer) clearTimeout(copyTimer);
+    },
+  );
+
+  // ── 连接测试 ──
   let testState = $state<"idle" | "loading" | "success" | "error">("idle");
   let testResult = $state<McpConnectionTestResult | null>(null);
   let testError = $state("");
@@ -142,9 +227,15 @@
       <span class="beam-pulse z-10" aria-hidden="true"></span>
     {/if}
 
+    <!--
+      头部：
+      - 触发器做成覆盖整个头部的「真空按钮」，让整行保持可点击展开；
+      - 内容层 pointer-events-none，点击穿透到触发器；
+        这样「复制服务标识」才能是一个合法的、独立的 button（不嵌套 button）。
+    -->
     <div
       class={[
-        "flex items-center gap-3 p-6 transition-colors duration-200",
+        "relative flex items-center gap-3 p-6 transition-colors duration-200",
         isStdio && "bg-amber-500/5 dark:bg-amber-400/5",
         isStdio && (open ? "rounded-t-2xl" : "rounded-2xl"),
       ]}
@@ -153,100 +244,119 @@
         {#snippet child({ props })}
           <button
             {...props}
-            class="flex min-w-0 flex-1 cursor-pointer items-center gap-4 text-left transition-colors duration-200 select-none"
-          >
-            <div
-              class={[
-                "flex size-10 shrink-0 items-center justify-center rounded-xl transition-all duration-200",
-                isDisabled
-                  ? "bg-muted"
-                  : isStdio
-                    ? "bg-amber-500/10"
-                    : "bg-primary/10",
-              ]}
-            >
-              <IconPlugConnected
-                size={20}
-                stroke={1.5}
-                class={isDisabled
-                  ? "text-muted-foreground/50"
-                  : isStdio
-                    ? "text-amber-600 dark:text-amber-400"
-                    : "text-primary"}
-              />
-            </div>
-
-            <div
-              class={[
-                "min-w-0 flex-1 transition-opacity duration-200",
-                isDisabled && "opacity-50",
-              ]}
-            >
-              <div class="flex flex-wrap items-center gap-2">
-                <span
-                  class={[
-                    "text-lg font-medium transition-all duration-200",
-                    isDisabled &&
-                      "line-through decoration-muted-foreground/40 decoration-1",
-                  ]}
-                >
-                  {server.name ?? server.id}
-                </span>
-
-                <Badge variant="secondary" class="rounded-lg text-xs">
-                  {server.transport.type}
-                </Badge>
-
-                {#if isDisabled}
-                  <Badge
-                    variant="secondary"
-                    class="rounded-lg border-none bg-destructive/10 text-xs text-destructive"
-                  >
-                    <IconCloudOff size={12} stroke={1.5} class="mr-1" />
-                    已禁用
-                  </Badge>
-                {/if}
-              </div>
-
-              <div
-                class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1"
-              >
-                <p
-                  class="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
-                >
-                  {endpoint}
-                </p>
-
-                {#if isStdio}
-                  <span
-                    class="flex shrink-0 items-center gap-1 text-xs text-amber-600 opacity-80 dark:text-amber-400"
-                    title="stdio 会在本机启动进程"
-                  >
-                    <IconAlertTriangle size={12} stroke={1.5} />
-                    <span class="hidden sm:inline">stdio 将在本机启动进程</span>
-                    <span class="sm:hidden">本机进程</span>
-                  </span>
-                {/if}
-              </div>
-            </div>
-
-            <div
-              class={[
-                "shrink-0 transition-transform duration-200",
-                open && "rotate-180",
-              ]}
-            >
-              <IconChevronDown
-                size={20}
-                stroke={1.5}
-                class="text-muted-foreground"
-              />
-            </div>
-          </button>
+            class="absolute inset-0 z-0 cursor-pointer rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            aria-label={`${open ? "收起" : "展开"} ${displayName} 的详情`}
+            title={displayName}
+          ></button>
         {/snippet}
       </Collapsible.Trigger>
 
-      <div class="flex shrink-0 items-center gap-3">
+      <div
+        class="pointer-events-none relative z-10 flex min-w-0 flex-1 items-center gap-4"
+      >
+        <!-- 协议图标：唯一的协议标识（形状 + 色调），不再是统一占位图标 -->
+        <div
+          role="img"
+          aria-label={`传输协议 ${transportLabel}`}
+          class={[
+            "flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors duration-200",
+            iconBoxClass,
+          ]}
+        >
+          {#if isStdio}
+            <IconTerminal2 size={20} stroke={1.5} class={iconFgClass} />
+          {:else if isSse}
+            <IconBroadcast size={20} stroke={1.5} class={iconFgClass} />
+          {:else}
+            <IconWorld size={20} stroke={1.5} class={iconFgClass} />
+          {/if}
+        </div>
+
+        <div class="min-w-0 flex-1">
+          <div class="flex min-w-0 items-center gap-2">
+            <span
+              class={[
+                "min-w-0 truncate text-lg font-medium transition-colors duration-200",
+                isDisabled &&
+                  "opacity-50 line-through decoration-muted-foreground/40 decoration-1",
+              ]}
+            >
+              {displayName}
+            </span>
+
+            {#if isDisabled}
+              <Badge
+                variant="secondary"
+                class="shrink-0 rounded-lg border-none bg-destructive/10 text-xs text-destructive"
+              >
+                <IconCloudOff size={12} stroke={1.5} class="mr-1" />
+                已禁用
+              </Badge>
+            {/if}
+
+            <!-- 服务标识：常驻可见但层级极低；hover/focus 才升起；点击即拷贝。
+                 禁用态同样可拷贝（不进入 opacity 组）。 -->
+            <button
+              type="button"
+              class={[
+                "pointer-events-auto inline-flex max-w-40 shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px] leading-none transition-colors duration-200",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                copied
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-muted-foreground/80 hover:bg-muted hover:text-foreground",
+              ]}
+              title="复制服务标识"
+              aria-label={`复制服务标识 ${server.id}`}
+              onclick={handleCopyId}
+            >
+              <span class="min-w-0 truncate">{server.id}</span>
+              {#if copied}
+                <IconCheck size={12} stroke={2} class="shrink-0" />
+              {:else}
+                <IconCopy size={12} stroke={1.5} class="shrink-0" />
+              {/if}
+            </button>
+            <span class="sr-only" aria-live="polite">
+              {copied ? `已复制 ${server.id}` : ""}
+            </span>
+          </div>
+
+          <div
+            class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1"
+          >
+            <p
+              class="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
+            >
+              {endpoint}
+            </p>
+
+            {#if isStdio}
+              <span
+                class="flex shrink-0 items-center gap-1 text-xs text-amber-600 opacity-80 dark:text-amber-400"
+              >
+                <IconAlertTriangle size={12} stroke={1.5} />
+                <span class="hidden sm:inline">stdio 将在本机启动进程</span>
+                <span class="sm:hidden">本机进程</span>
+              </span>
+            {/if}
+          </div>
+        </div>
+
+        <div
+          class={[
+            "shrink-0 transition-transform duration-200",
+            open && "rotate-180",
+          ]}
+        >
+          <IconChevronDown
+            size={20}
+            stroke={1.5}
+            class="text-muted-foreground"
+          />
+        </div>
+      </div>
+
+      <div class="relative z-10 flex shrink-0 items-center gap-3">
         <Switch
           checked={!isDisabled}
           onCheckedChange={(checked) => onToggleEnabled?.(checked)}

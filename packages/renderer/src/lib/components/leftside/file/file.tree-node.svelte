@@ -115,6 +115,14 @@
     return (n.children ?? []).some((c) => subtreeContainsMatch(c, query));
   }
 
+  /** 递归统计后代数量，用于删除确认文案（提示将被一并移除的条目数）。 */
+  function countDescendants(n: FileNode): number {
+    return (n.children ?? []).reduce(
+      (sum, c) => sum + 1 + countDescendants(c),
+      0,
+    );
+  }
+
   $effect(() => {
     if (node.type !== "folder") return;
     if (fileStore.shouldExpandFolder(node.path)) {
@@ -193,14 +201,21 @@
     e.stopPropagation();
   }
 
+  /**
+   * 删除节点（不可恢复）。
+   *
+   * 交互顺序：先做破坏性确认 → 再交给 fileStore 删除。
+   * 关闭「删除目标 = 当前打开文件或其祖先目录」时所需的未保存确认
+   * 在 store 内部完成，避免先关文件、又在删除确认框选择取消导致状态错乱。
+   */
   async function handleDelete() {
     const isFolder = node.type === "folder";
-    const childCount = isFolder ? (node.children?.length ?? 0) : 0;
+    const childCount = isFolder ? countDescendants(node) : 0;
     const message = isFolder
       ? childCount > 0
-        ? `删除「${node.name}」后，其中的 ${childCount} 个项目将一并移除。确定继续吗？`
-        : `确定删除文件夹「${node.name}」吗？`
-      : `确定删除「${node.name}」吗？`;
+        ? `删除「${node.name}」后，其中的 ${childCount} 个项目将一并移除，且不可恢复。确定继续吗？`
+        : `确定删除文件夹「${node.name}」吗？此操作不可恢复。`
+      : `确定删除「${node.name}」吗？此操作不可恢复。`;
 
     const confirmed = await confirmStore.request({
       title: isFolder ? "删除文件夹" : "删除文件",
@@ -209,7 +224,12 @@
     });
     if (!confirmed) return;
 
-    console.info("[FileTreeNode] delete not implemented in mock:", node.path);
+    const ok = await fileStore.deleteNode(node);
+    if (ok) {
+      toast.success(`已删除「${node.name}」`);
+    } else {
+      toast.error(`删除「${node.name}」失败，请稍后重试`);
+    }
   }
 
   async function handleContextAction(action: string) {
@@ -312,6 +332,8 @@
 
           <div
             class="flex min-w-0 flex-1 items-center gap-0.5"
+            role="button"
+            tabindex="-1"
             onclick={(e) => e.stopPropagation()}
             ondblclick={(e) => e.stopPropagation()}
             onkeydown={(e) => e.stopPropagation()}
@@ -432,6 +454,8 @@
           {#if isRenaming}
             <div
               class="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5"
+              role="button"
+              tabindex="-1"
               onclick={(e) => e.stopPropagation()}
               ondblclick={(e) => e.stopPropagation()}
               onkeydown={(e) => e.stopPropagation()}

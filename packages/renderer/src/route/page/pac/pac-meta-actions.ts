@@ -25,9 +25,13 @@ import PacMetaToolsDialog from "./dialog/tools/PacMetaToolsDialog.svelte";
  * 这里直接用 Tabler 图标的构造签名作为菜单图标类型。
  */
 type PacMetaIcon = typeof IconTool;
+type PacMetaBadgeTone = "muted" | "warning";
 
 export interface PacMetaStore {
-    readonly doc: { readonly meta: PacFrontMatter } | null;
+    readonly doc: {
+        readonly meta: PacFrontMatter;
+        readonly path: string;
+    } | null;
     updateMeta(patch: Partial<PacFrontMatter>): void;
 }
 
@@ -37,6 +41,11 @@ export interface PacMetaMenuItem {
     /** 数字 1-5，对应 Alt+1 … Alt+5。 */
     hotKey?: number;
     onSelect: () => void;
+    /** 右上角小角标；为空时不渲染。 */
+    badge?: string;
+    badgeTone?: PacMetaBadgeTone;
+    /** 非阻塞提示；用于 title / Tooltip，不弹 toast。 */
+    warning?: string;
 }
 
 /**
@@ -53,6 +62,9 @@ export interface PacMetaMenu {
     hotKey?: number;
     items?: PacMetaMenuItem[];
     onSelect?: () => void;
+    badge?: string;
+    badgeTone?: PacMetaBadgeTone;
+    warning?: string;
 }
 
 type MetaDialogComponent = Component<{
@@ -71,6 +83,102 @@ const DIALOG_IDS = {
     user_template: "pac-meta-user-template",
     environment: "pac-meta-environment",
 } as const;
+
+const INPUT_REQUIRED_WARNING =
+    "未设置前置信息。子 Agent 通常需要前置信息；若通过变量系统处理，可忽略此提示。";
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasText(value: unknown): boolean {
+    return typeof value === "string" && value.trim().length > 0;
+}
+
+function isIndexFile(path: string): boolean {
+    const name = path.split("/").filter(Boolean).at(-1) ?? "";
+    return name.toLowerCase() === "index.md";
+}
+
+/**
+ * 装备数量：tools 数组（type=agent 的子 Agent 已包含在内）+ skills。
+ * knowledgeBases 不计入，避免与“工具 / 技能 / 子 Agent”的口径混淆。
+ */
+function countEquipments(meta: PacFrontMatter): number {
+    const tools = Array.isArray(meta.tools) ? meta.tools.length : 0;
+    const skills = Array.isArray(meta.skills) ? meta.skills.length : 0;
+    return tools + skills;
+}
+
+function countInputProperties(inputs: unknown): number {
+    if (!isPlainObject(inputs)) return 0;
+
+    const schema =
+        inputs.type === "array" && isPlainObject(inputs.items)
+            ? inputs.items
+            : inputs;
+    const properties = schema.properties;
+
+    if (!isPlainObject(properties)) return 0;
+    return Object.keys(properties).length;
+}
+
+/**
+ * 只有确定没有任何前置信息时才返回 true。
+ * 非普通对象（例如手动写入的自定义 schema）视为已有定义，避免误报。
+ */
+function isInputsEmpty(inputs: unknown): boolean {
+    if (inputs === undefined || inputs === null) return true;
+    if (!isPlainObject(inputs)) return false;
+    if (Object.keys(inputs).length === 0) return true;
+
+    const schema =
+        inputs.type === "array" && isPlainObject(inputs.items)
+            ? inputs.items
+            : inputs;
+
+    const properties = schema.properties;
+    if (isPlainObject(properties)) {
+        return Object.keys(properties).length === 0;
+    }
+
+    return schema.type === "object" || schema.type === "array";
+}
+
+function hasEnvironmentValue(
+    field: keyof PacFrontMatter,
+    value: unknown,
+): boolean {
+    // history: null 表示“全部历史”，是有效设置，不能按未设置处理。
+    if (field === "history") {
+        return value === null || typeof value === "number";
+    }
+
+    if (value === undefined || value === null) return false;
+    if (typeof value === "string") return value.trim().length > 0;
+    if (Array.isArray(value)) return value.length > 0;
+    if (isPlainObject(value)) return Object.keys(value).length > 0;
+    return true;
+}
+
+function countEnvironmentRequirements(meta: PacFrontMatter): number {
+    return PAC_META_SECTIONS.environment.fields.reduce((count, field) => {
+        return hasEnvironmentValue(field, meta[field]) ? count + 1 : count;
+    }, 0);
+}
+
+function buildIntroWarning(
+    hasName: boolean,
+    hasDescription: boolean,
+): string | undefined {
+    if (hasName && hasDescription) return undefined;
+
+    const missing: string[] = [];
+    if (!hasName) missing.push("名称");
+    if (!hasDescription) missing.push("简介");
+
+    return `建议补充${missing.join("、")}，便于其他 Agent 发现与调用。`;
+}
 
 async function openMetaDialog(
     store: PacMetaStore,
@@ -101,15 +209,44 @@ const TOOLS_GROUP = PAC_META_CAPABILITY_GROUPS.find((g) => g.id === "tools")!;
 const CONTRACT_GROUP = PAC_META_CAPABILITY_GROUPS.find((g) => g.id === "inputs")!;
 
 export function createPacMetaActions(store: PacMetaStore): PacMetaMenu[] {
+    const meta = store.doc?.meta ?? {};
+    const path = store.doc?.path ?? "";
+    const isIndex = isIndexFile(path);
+
+    const equipmentCount = countEquipments(meta);
+    const inputCount = countInputProperties(meta.inputs);
+    const inputWarning =
+        !isIndex && inputCount === 0 && isInputsEmpty(meta.inputs)
+            ? INPUT_REQUIRED_WARNING
+            : undefined;
+
+    const hasName = hasText(meta.name);
+    const hasDescription = hasText(meta.description);
+    const introWarning = isIndex
+        ? undefined
+        : buildIntroWarning(hasName, hasDescription);
+
+    const environmentCount = countEnvironmentRequirements(meta);
+    const capabilityWarning =
+        [introWarning, inputWarning]
+            .filter((message): message is string => Boolean(message))
+            .join("；") || undefined;
+
     const capabilities: PacMetaMenu = {
         id: "capabilities",
         label: "能力",
         icon: IconTool,
+        badge: equipmentCount > 0 ? String(equipmentCount) : undefined,
+        badgeTone: "muted",
+        warning: capabilityWarning,
         items: [
             {
                 label: "自我介绍",
                 icon: IconUserCircle,
                 hotKey: 1,
+                badge: introWarning ? "!" : undefined,
+                badgeTone: introWarning ? "warning" : undefined,
+                warning: introWarning,
                 onSelect: () => {
                     void openMetaDialog(
                         store,
@@ -123,6 +260,13 @@ export function createPacMetaActions(store: PacMetaStore): PacMetaMenu[] {
                 label: "前置信息",
                 icon: IconListCheck,
                 hotKey: 2,
+                badge: inputWarning
+                    ? "!"
+                    : inputCount > 0
+                        ? String(inputCount)
+                        : undefined,
+                badgeTone: inputWarning ? "warning" : "muted",
+                warning: inputWarning,
                 onSelect: () => {
                     void openMetaDialog(
                         store,
@@ -136,6 +280,8 @@ export function createPacMetaActions(store: PacMetaStore): PacMetaMenu[] {
                 label: "AI装备栏",
                 icon: IconTool,
                 hotKey: 3,
+                badge: equipmentCount > 0 ? String(equipmentCount) : undefined,
+                badgeTone: "muted",
                 onSelect: () => {
                     void openMetaDialog(
                         store,
@@ -168,6 +314,8 @@ export function createPacMetaActions(store: PacMetaStore): PacMetaMenu[] {
         label: "环境",
         icon: IconSettings,
         hotKey: 5,
+        badge: environmentCount > 0 ? String(environmentCount) : undefined,
+        badgeTone: "muted",
         onSelect: () => {
             void openMetaDialog(
                 store,

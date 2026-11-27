@@ -6,6 +6,7 @@ import { toast } from "svelte-sonner";
 import {
     createFileApi,
     createFolderApi,
+    deleteNodeApi,
     fetchFileTree,
     reCompile,
     renameNodeApi,
@@ -51,9 +52,24 @@ function findFolderByPath(root: FileNode, path: string): FileNode | null {
     return null;
 }
 
+function findNodeByPath(root: FileNode, path: string): FileNode | null {
+    if (root.path === path) return root;
+    for (const c of root.children ?? []) {
+        const found = findNodeByPath(c, path);
+        if (found) return found;
+    }
+    return null;
+}
+
 function getParentPath(path: string): string {
     const idx = path.lastIndexOf('/');
     return idx <= 0 ? '/' : path.slice(0, idx);
+}
+
+/** 判断 target 是否为 ancestor 本身或其子路径（ancestor 不以 / 结尾）。 */
+function isSameOrDescendantPath(target: string, ancestor: string): boolean {
+    if (!ancestor || ancestor === '/') return target.startsWith('/');
+    return target === ancestor || target.startsWith(`${ancestor}/`);
 }
 
 /** 将文件夹路径拆成祖先链，例如 '/a/b' → ['/a', '/a/b']。 */
@@ -370,6 +386,59 @@ class FileStore {
             log.error('[FileStore] rename failed', err);
             return false;
         }
+    }
+
+    /**
+     * 删除节点（不可恢复）。
+     *
+     * 顺序很重要：
+     * 1. 若当前打开的文件位于被删子树内，先走 pacStore.closeFile() 完成
+     *    未保存确认与导航；用户取消则整体中止，避免删除后仍持有脏文档、
+     *    后续保存写回已不存在的路径。
+     * 2. 调用主进程删除。
+     * 3. 重新拉取文件树：以服务端结果为准，同时校验删除是否真正生效
+     *    （主进程 handler 无 output，无法从返回值判断成败）。
+     *
+     * reload 使用 id 作为 keyed each 的键，节点被移除、其余节点复用组件实例，
+     * 展开状态得以保留。
+     */
+    async deleteNode(node: FileNode): Promise<boolean> {
+        if (!this.#tree) return false;
+        // 根目录不允许删除（防御性校验，避免误删整个 PAC 目录）。
+        if (!node.path || node.path === '/' || node.path === '') return false;
+
+        const openedPath = pacStore.doc?.path ?? null;
+        if (openedPath && isSameOrDescendantPath(openedPath, node.path)) {
+            const closed = await pacStore.closeFile();
+            if (!closed) return false;
+            this.#openedFileId = null;
+            this.#activeFileId = null;
+        }
+
+        try {
+            await deleteNodeApi(node.path);
+        } catch (err) {
+            log.error('[FileStore] delete failed', err);
+            return false;
+        }
+
+        if (this.#renamingNodeId === node.id) {
+            this.#renamingNodeId = null;
+        }
+
+        const reloaded = await this.reload();
+        if (!reloaded) {
+            log.error('[FileStore] delete succeeded but tree reload failed');
+            return false;
+        }
+
+        if (findNodeByPath(this.#tree!, node.path)) {
+            log.error(`[FileStore] delete not applied: ${node.path}`);
+            return false;
+        }
+
+        log.info(`[FileStore] deleted ${node.path}`);
+        return true;
     }
 }
 
