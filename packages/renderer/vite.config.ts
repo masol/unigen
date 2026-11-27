@@ -27,6 +27,14 @@ export default defineConfig({
       outdir: path.resolve(__dirname, "./src/lib/paraglide"),
     }),
   ],
+  optimizeDeps: {
+    include: [
+      "monaco-editor",
+      "shiki",
+      "@shikijs/monaco",
+      'monaco-editor/esm/vs/editor/editor.worker',
+    ],
+  },
   build: {
     // Electron 场景的安全阈值
     chunkSizeWarningLimit: 1024,
@@ -45,9 +53,6 @@ export default defineConfig({
       external: [
         "@app/main",
         "@iconify-json/twemoji/icons.json",
-        "shiki",
-        "@shikijs/monaco",
-        'monaco-editor'
       ],
       output: {
         // 文件名添加 hash：文件变化才更新，静态资源强缓存

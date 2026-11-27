@@ -32,8 +32,9 @@ function loadCode(capa: Capability): ICapaFunctor | null {
     return new VmCapaFunctor(capa);
 }
 
+// posix路径风格--会自动转化为相对项目路径的本地路径。
 function loadLocaltype(type: string): ICapaFunctor | null {
-    return new PACFunctor(type, [type]);
+    return new PACFunctor(type, type.split('/'));
 }
 
 function loadLLMNode(capa: Capability): ICapaFunctor | null {

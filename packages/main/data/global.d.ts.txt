@@ -82,7 +82,7 @@ declare global {
   }
 
   export interface ICapaFunctor {
-    run(ctx: IRunnerContext): Promise<void>;
+    run(ctx: IRunnerContext): Promise<string>;
   }
 
   interface PrjTimeStore<T> {
