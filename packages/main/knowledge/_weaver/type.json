@@ -1,8 +1,8 @@
 {
     "icon": "IconPencilRuler",
-    "statusText": "Agent孵化器",
+    "statusText": "Agent制作器",
     "header": {
-        "title": "Agent孵化器",
+        "title": "Agent制作器",
         "detail": "指定输入/输出，构建一个智能体。"
     },
     "requirements": [

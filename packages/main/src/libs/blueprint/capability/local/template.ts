@@ -109,7 +109,11 @@ function warnMissingVarsOnce(c: CompiledPacAgent, finalCtx: Record<string, unkno
  * assistant 占位），数据源与执行路径一致：根 agent 走 PrjDB，子 agent 走
  * PacRunState 内存历史。
  *
- * @param isRoot 仅根 agent 为 true；控制 `_BI_input` 是否允许回退到 ctx.cmd.body。
+ * @param isRoot 仅根 agent 为 true；控制历史读取路径。
+ * @param allowBodyFallback 控制 `_BI_input` 是否可以读 ctx.cmd.body；
+ *        由 executeAgent 从 RunOptions.allowBodyFallback ?? isRoot 派生。
+ *        与 isRoot 解耦：run_cap 可以 isRoot=false 但 allowBodyFallback=true，
+ *        从而在不写会话历史的前提下让 user_message 进入 `_BI_input`。
  */
 async function buildContext(
     c: CompiledPacAgent,
@@ -118,6 +122,7 @@ async function buildContext(
     inputs: Record<string, unknown>,
     effectiveDefaults: Record<string, JsonValue>,
     isRoot: boolean,
+    allowBodyFallback: boolean,
 ): Promise<Record<string, unknown>> {
     const fm = c.config as Record<string, unknown>;
 
@@ -136,7 +141,7 @@ async function buildContext(
             biVars[root] = c.toolDoc;
         } else if (root === INPUT_VAR) {
             loadedRoots.add(root);
-            biVars[root] = await loadInputVar(ctx, inputs, isRoot);
+            biVars[root] = await loadInputVar(ctx, inputs, allowBodyFallback);
         } else if (root === HISTORY_VAR) {
             loadedRoots.add(root);
             biVars[root] = await loadHistoryForTemplate(ctx, state, c, isRoot);
@@ -147,7 +152,6 @@ async function buildContext(
             loadedRoots.add(root);
             biVars[root] = c.settings;
         } else {
-            // 未知内置变量：扁平键写入空串，保留旧行为并告警一次。
             Logger.warn(
                 `[PAC] ${c.sourcePath}: 未知内置变量 {{${name}}},渲染为空串`,
             );
@@ -180,10 +184,13 @@ export async function renderSystemPrompt(
     inputs: Record<string, unknown>,
     effectiveDefaults: Record<string, JsonValue>,
     isRoot: boolean,
+    allowBodyFallback: boolean,
 ): Promise<string> {
     const d = getDelegates(c).system;
     if (!d) return "";
-    const tplCtx = await buildContext(c, ctx, state, inputs, effectiveDefaults, isRoot);
+    const tplCtx = await buildContext(
+        c, ctx, state, inputs, effectiveDefaults, isRoot, allowBodyFallback,
+    );
     return d(tplCtx);
 }
 
@@ -194,12 +201,15 @@ export async function buildUserPrompt(
     inputs: Record<string, unknown>,
     effectiveDefaults: Record<string, JsonValue>,
     isRoot: boolean,
+    allowBodyFallback: boolean,
 ): Promise<string> {
     const d = getDelegates(c).user;
     if (!d) {
         Logger.warn(`[PAC] ${c.sourcePath}: userTemplate 为空,返回空用户提示词`);
         return "";
     }
-    const tplCtx = await buildContext(c, ctx, state, inputs, effectiveDefaults, isRoot);
+    const tplCtx = await buildContext(
+        c, ctx, state, inputs, effectiveDefaults, isRoot, allowBodyFallback,
+    );
     return d(tplCtx);
 }

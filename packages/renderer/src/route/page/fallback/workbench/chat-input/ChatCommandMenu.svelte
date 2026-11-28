@@ -1,8 +1,8 @@
 <!-- src/lib/components/chat/ChatCommandMenu.svelte -->
 <script lang="ts">
+  import type { ChatCommand } from "$lib/store/local/commands.store.svelte";
   import autoAnimate from "@formkit/auto-animate";
   import { IconSlash } from "@tabler/icons-svelte";
-  import type { ChatCommand } from "./commands";
 
   let {
     commands = [],

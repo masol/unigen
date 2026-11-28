@@ -3,7 +3,8 @@ import { IProjectContext } from "$libs/project/type.js";
 import type { IRunnerContext } from "$types/blueprint/context.js";
 import Logger from "electron-log/main.js";
 import { getErrorMessage } from "radashi";
-import { ICapaFunctor } from "../type.js";
+import { scopeRunnerContext } from "../run-env.js";
+import type { CapaRunInput, ICapaFunctor } from "../type.js";
 import { PacAgent } from "./agent/index.js";
 import { compilePacAgent } from "./compiler/index.js";
 import type { CompiledPacAgent } from "./type.js";
@@ -100,6 +101,16 @@ export type CompileStatus = "idle" | "compiling" | "ready" | "failed";
  * 编译期一次性构建整棵树(纯函数,与 ctx 无关);
  * 运行期按 ctx 物化 ToolSet,并为每个步骤分配 stepPath(如 "1.2.1"),
  * 通过 ctx.debug 上报进入/完成及输入/输出,通过 ctx.notify("usage", ...) 上报 token 用量。
+ *
+ * **CapaRunInput 作用域**:
+ *   run(ctx, input) 会在 input 非空时把 ctx 包装成一个作用域视图，
+ *   使得本次运行内部读取 ctx.cmd / ctx.files 时得到 view，而非外层原值。
+ *   input 为空时直接走原 ctx，与旧版完全一致。
+ *   典型用途：agent 通过 run_cap 调用子能力时，用 input 指定本轮用户消息，
+ *   而不污染外层会话的 ctx。
+ *
+ *   input.isRoot 显式提供时，在本轮 run 中切换 root / sub-agent 语义
+ *   （run_cap 固定传 false，避免污染会话历史）；未提供时保持构造期默认。
  */
 export class PACFunctor implements ICapaFunctor {
     private status: CompileStatus = "idle";
@@ -119,6 +130,8 @@ export class PACFunctor implements ICapaFunctor {
          * 的 isRoot 恒为 false：正文与生命周期事件走 trace，不发送
          * message.start / message.delta / message.end，不写 message 表，
          * 也不会创建空的 assistant 占位消息。
+         *
+         * 也可在 run 时通过 CapaRunInput.isRoot 临时覆盖（见 run 内部实现）。
          */
         isRootAgent = true,
     ) {
@@ -207,10 +220,15 @@ export class PACFunctor implements ICapaFunctor {
         }
     }
 
-    async run(ctx: IRunnerContext): Promise<string> {
+    async run(ctx: IRunnerContext, input?: CapaRunInput): Promise<string> {
         if (ctx.isAborted) return "";
 
-        // 懒编译时使用构造时传入的 this.entry。
+        // input.isRoot 显式提供时切换 root / sub-agent 语义；未提供时保持构造期默认。
+        // 放在 compile 之前，保证首次编译就以正确的 isRoot 构造 PacAgent。
+        if (input?.isRoot !== undefined) {
+            this.setRoot(input.isRoot);
+        }
+
         if (this.status !== "ready") await this.compile(ctx.prj);
 
         if (this.status !== "ready" || !this.agent) {
@@ -218,22 +236,29 @@ export class PACFunctor implements ICapaFunctor {
             return "";
         }
 
-        // 编译可能发生在设置标志之前（例如先调 compile，再调 setAsSubAgent），
-        // 这里再同步一次，确保 isRoot 与外部设置一致。
+        // 编译可能发生在设置标志之前（如先 compile 再 run 且 run 中通过 input.isRoot 覆盖），
+        // 这里再同步一次。
         this.agent.setRunAsRoot(this.isRootAgent);
 
+        // input 为空时直接返回原 ctx；有 input 时得到作用域视图。
+        const scopedCtx = scopeRunnerContext(ctx, input);
+
         try {
-            // agent.run 已返回最终的 assistant text；此处直接透出，
-            // 不改动 ctx.prj.notify / ctx.report 通路。
-            const result = await this.agent.run(ctx);
+            // allowBodyFallback 通过 RunOptions 透传到 executeAgent，
+            // 与 isRoot 解耦：run_cap 可以 isRoot=false + allowBodyFallback=true，
+            // 从而在不写会话历史的前提下让 user_message 进入 _BI_input。
+            const runOptions =
+                input?.allowBodyFallback !== undefined
+                    ? { allowBodyFallback: input.allowBodyFallback }
+                    : undefined;
+
+            const result = await this.agent.run(scopedCtx, runOptions);
             ctx.debug(`[PAC] 运行结果(${this.type}):`, result);
             return result;
         } catch (e) {
-            // 子 agent 模式下直接 throw e
             if (!this.isRootAgent) throw e;
 
             const msg = `[PAC] 运行失败(${this.type}): ${getErrorMessage(e)}`;
-            // Logger.error(msg, e);
             ctx.prj.notify("toast", {
                 type: "error",
                 msg: msg,

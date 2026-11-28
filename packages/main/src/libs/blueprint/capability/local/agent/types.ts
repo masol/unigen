@@ -105,6 +105,13 @@ export interface RunOptions {
     isRoot?: boolean;
     stepPath?: string;
     parentTraceId?: string;
+    /**
+    * `_BI_input` 是否允许使用 ctx.cmd.body 作为回退。
+    *
+    * 未提供时默认取 `isRoot`（root 读 body；sub-agent 只读 inputs 以避免幽灵上下文）。
+    * 提供时以本字段为准，典型用途见 CapaRunInput.allowBodyFallback。
+    */
+    allowBodyFallback?: boolean;
 }
 
 export interface StreamResult {

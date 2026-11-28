@@ -66,7 +66,17 @@ export async function executeAgent(
     state: PacRunState,
     agentExecutor: IAgentExecutor,
 ): Promise<ExecutionResult> {
-    const { validateInputs = true, isRoot = false, stepPath = "1", parentTraceId } = options;
+    const {
+        validateInputs = true,
+        isRoot = false,
+        stepPath = "1",
+        parentTraceId,
+        allowBodyFallback: rawAllowBodyFallback,
+    } = options;
+
+    // `_BI_input` 是否允许读 ctx.cmd.body：默认取 isRoot，
+    // 但 run_cap 场景需要 isRoot=false + allowBodyFallback=true —— 二者解耦。
+    const allowBodyFallback = rawAllowBodyFallback ?? isRoot;
 
     if (ctx.isAborted) return { text: "", usage: undefined };
 
@@ -231,10 +241,10 @@ export async function executeAgent(
     }
 
     const system = await renderSystemPrompt(
-        compiled, ctx, state, inputs, effectiveDefaults, isRoot,
+        compiled, ctx, state, inputs, effectiveDefaults, isRoot, allowBodyFallback,
     );
     const userText = await buildUserPrompt(
-        compiled, ctx, state, inputs, effectiveDefaults, isRoot,
+        compiled, ctx, state, inputs, effectiveDefaults, isRoot, allowBodyFallback,
     );
     const userMessage: ModelMessage = { role: "user", content: userText };
 

@@ -22,8 +22,7 @@ export const clarifyInputSchema = z.object({
         .string()
         .optional()
         .describe(
-            '可选的澄清模式。不传时为标准对话选择；传入 "confirm" 时表示仅询问是否(是/否)。' +
-            "也可在直接调用 callTool 时通过第三个 mode 参数覆盖(优先级更高)。",
+            '可选的澄清模式。不传时为标准对话选择；传入 "confirm" 时表示仅询问是否(是/否)。'
         ),
 });
 

@@ -5,9 +5,13 @@ import Logger from "electron-log/main.js";
 /**
  * 加载 {{_BI_input}}。
  *
- * - 根调用 + inputs 非空 → 序列化 inputs
- * - 根调用 + inputs 空   → 回退 ctx.cmd.body / getInput()
- * - 子 agent 调用        → 只序列化 inputs,绝不借用根 body(避免幽灵上下文)
+ * - inputs 非空             → 序列化 inputs（结构化调用路径）
+ * - inputs 空 + 允许 body   → 回退 ctx.cmd.body / getInput()
+ * - inputs 空 + 禁用 body   → "{}"（子 agent 被父调用时，防止读取父的幽灵 ctx.cmd.body）
+ *
+ * 判定使用 `=== undefined || === null` 而非 `!input`：
+ * 空字符串是合法的用户输入（如 user_message=""），应原样作为 `_BI_input`，
+ * 而不是触发下方的旧路径告警。
  */
 export async function loadInputVar(
     ctx: IRunnerContext,
@@ -22,11 +26,15 @@ export async function loadInputVar(
         return "{}";
     }
 
-    let input = ctx.cmd?.body;
-    if (!input) {
-        Logger.error("旧代码访问？新机制下，用户输入都是从ctx.cmd.body处获取，而不是从kv-store,请报告问题!")
-        const got = getInput(ctx, "script");
-        input = got.length > 0 ? got.join("\n") : "";
+    const input = ctx.cmd?.body;
+    if (input !== undefined && input !== null) {
+        return input;
     }
-    return input;
+
+    Logger.error(
+        "旧代码访问？新机制下，用户输入都是从ctx.cmd.body处获取，" +
+        "而不是从kv-store,请报告问题!",
+    );
+    const got = getInput(ctx, "script");
+    return got.length > 0 ? got.join("\n") : "";
 }

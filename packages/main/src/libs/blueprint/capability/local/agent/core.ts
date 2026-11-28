@@ -71,14 +71,11 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
         return out;
     }
 
-    async run(ctx: IRunnerContext): Promise<string> {
+    async run(ctx: IRunnerContext, options?: RunOptions): Promise<string> {
         const mcpClients: McpClientCache = new Map();
         try {
             const prjdb = PrjDB.ensure(ctx.prj);
             const runAsRoot = this.runAsRoot;
-            // 非根 agent（由外部 PACFunctor 作为子能力调用）不应创建 assistant 消息，
-            // 也不应持久化 trace 到独立 messageId 下：它没有父 messageId 可挂，
-            // 写入只会产生孤立的空消息/孤立 trace。实时事件仍通过 ctx.report 发出。
             const persist = runAsRoot
                 && resolveEffectiveSettings(this.compiled.settings, ctx.settings).persist;
             const messageId = this.createAssistantMessageId(prjdb, ctx, persist);
@@ -98,7 +95,12 @@ export class PacAgent implements IPacAgent, IAgentExecutor {
                 prjdb,
                 this.inputsFromCtx(ctx),
                 {},
-                { validateInputs: false, isRoot: runAsRoot, stepPath: "1" },
+                {
+                    validateInputs: false,
+                    isRoot: runAsRoot,
+                    stepPath: "1",
+                    allowBodyFallback: options?.allowBodyFallback,
+                },
                 mcpClients,
                 state,
                 this,

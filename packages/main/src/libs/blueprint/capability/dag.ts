@@ -5,16 +5,23 @@ import Logger from 'electron-log/main.js';
 import { DirectedGraph } from 'graphology';
 import { forEachTopologicalGeneration, hasCycle } from 'graphology-dag';
 import { BaseFunctor } from './base.js';
+import type { CapaRunInput } from './type.js';
 
 export class DagFunctor extends BaseFunctor {
     constructor(capa: Capability, protected dag: DirectedGraph) {
         super(capa);
     }
 
-    private async execTask(ctx: IRunnerContext, id: string): Promise<string> {
+    private async execTask(
+        ctx: IRunnerContext,
+        id: string,
+        input?: CapaRunInput,
+    ): Promise<string> {
         const runner = ctx.loadFunctor(id);
         if (runner) {
-            return await runner.run(ctx);
+            // 同一代的兄弟节点并发共享同一 input；
+            // 各 functor 内部会各行其是地 scope，互不污染。
+            return await runner.run(ctx, input);
         } else {
             throwNotfound(`无法加载id为${id}的能力对象。`)
         }
@@ -41,7 +48,7 @@ export class DagFunctor extends BaseFunctor {
     }
 
     // 3. 核心运行函数：按“代”并行
-    async doTask(ctx: IRunnerContext): Promise<string> {
+    async doTask(ctx: IRunnerContext, input?: CapaRunInput): Promise<string> {
         // 收集计算出的“代”队列
         const generations: string[][] = [];
 
@@ -74,7 +81,7 @@ export class DagFunctor extends BaseFunctor {
             Logger.debug(`\n[第 ${i + 1} 代] 准备并行执行节点: ${JSON.stringify(currentGen)}`);
 
             // 2. 映射任务：建议修改 execTask 签名，将 ctx 或 ctx.signal 传入，以便底层任务能感知取消
-            const promises = currentGen.map(id => this.execTask(ctx, id));
+            const promises = currentGen.map(id => this.execTask(ctx, id, input));
 
             // 1. 提前定义好监听函数和 reject 引用
             let abortHandler: (() => void) | null = null;

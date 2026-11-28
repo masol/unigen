@@ -1,5 +1,5 @@
 {
-    "name": "Agent孵化器",
+    "name": "Agent制作器",
     "id": "_weaver",
     "icon": "IconPencilRuler",
     "description": "指定输入/输出，构建一个智能体。"
